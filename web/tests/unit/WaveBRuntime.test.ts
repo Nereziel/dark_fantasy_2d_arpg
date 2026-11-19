@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
+import { createPack, packTypesForWave } from '../../src/game/enemies/enemies';
+import { generateWorld } from '../../src/game/world/generator';
 
 const frame = 1000 / 60;
 const advance = (sim: GameSimulation, ticks: number) => {
@@ -70,4 +72,35 @@ describe('Wave B integrated Warrior abilities and status engine', () => {
     expect('warriorCooldowns' in character).toBe(false);
     expect('warriorAction' in character).toBe(false);
   });
+  it('spawns all Wave B family rosters deterministically after the tutorial', () => {
+    expect(packTypesForWave(0)).toEqual(['wraith', 'skeleton', 'wolf']);
+    expect(packTypesForWave(1)).toEqual(['wraith', 'skeleton', 'wolf']);
+    expect(packTypesForWave(2)).toEqual(['skeletonArcher', 'ghoul', 'zombie']);
+    expect(packTypesForWave(3)).toEqual(['spider', 'corruptedBoar', 'skeletonMage']);
+    expect(packTypesForWave(4)).toEqual(['banditFighter', 'banditArcher', 'banditRogue']);
+    expect(packTypesForWave(5)).toEqual(['fanatic', 'cultMage', 'cultHealer']);
+    const sim = new GameSimulation();
+    const state = sim.snapshot();
+    const encounter = createPack(2, 1, generateWorld(state.worldSeed).encounterPositions);
+    expect(sim.restore({ ...state, wave: 2, selectedTargetId: null, enemies: encounter })).toBe(true);
+    expect(sim.snapshot().enemies.map(u => u.actor.type)).toEqual(packTypesForWave(2));
+  });
+
+  it('cultist healer uses tactical AI to heal an injured nearby ally', () => {
+    const sim = new GameSimulation();
+    const state = sim.snapshot();
+    const pack = createPack(5, 1, generateWorld(state.worldSeed).encounterPositions);
+    pack[1]!.actor.health = Math.floor(pack[1]!.actor.maxHealth / 5);
+    for (const unit of pack) unit.cooldown = unit.actor.type === 'cultHealer' ? 0 : 10;
+    expect(sim.restore({
+      ...state, wave: 5, selectedTargetId: null,
+      player: { ...state.player, x: 860, y: 635 },
+      enemies: pack
+    })).toBe(true);
+    const damaged = sim.snapshot().enemies[1]!.actor.health;
+    advance(sim, 4);
+    expect(sim.snapshot().enemies[1]!.actor.health).toBeGreaterThan(damaged);
+    expect(sim.drainEvents().some(event => event.type === 'enemyHeal')).toBe(true);
+  });
+
 });
