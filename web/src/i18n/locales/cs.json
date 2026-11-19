@@ -29,7 +29,8 @@
     "inventory": "Inventář",
     "class": "Třída",
     "itemDrops": "Kořist",
-    "enemies": "Protivníci"
+    "enemies": "Protivníci",
+    "wave": "Vlna"
   },
   "status": {
     "ready": "Připraven",
