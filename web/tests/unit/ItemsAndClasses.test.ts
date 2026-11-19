@@ -83,6 +83,6 @@ describe('deterministic legacy-style loot and inventory', () => {
     expect(validateSnapshot({ ...current, version: 1 })).toBeNull();
     expect(validateSnapshot({ ...current, enemies: [current.enemies[0]] })).toBeNull();
     expect(validateSnapshot({ ...current, enemies: current.enemies.map((unit, i) => i === 0 ? { ...unit, actor: { ...unit.actor, type: 'invalid' } } : unit) })).toBeNull();
-    expect(validateSnapshot({ ...current, effects: { player: [], enemy: [{ id: 'burning', remaining: -5, magnitude: 4, tick: 0 }] } })).toBeNull();
+    expect(validateSnapshot({ ...current, enemies: current.enemies.map((unit, i) => i === 0 ? { ...unit, effects: [{ id: 'burning', remaining: -5, magnitude: 4, tick: 0 }] } : unit) })).toBeNull();
   });
 });
