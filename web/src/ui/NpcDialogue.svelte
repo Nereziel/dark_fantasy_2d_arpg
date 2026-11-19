@@ -14,7 +14,7 @@
 </script>
 
 <div class="npc-dialog-shield">
-  <section class="npc-dialog" role="dialog" aria-modal="true" aria-label={$t('npc.warden.name')}>
+  <div class="npc-dialog" role="dialog" aria-modal="true" aria-label={$t('npc.warden.name')}>
     <div class="npc-kicker">{$t('npc.warden.title')}</div>
     <h2>{$t('npc.warden.name')}</h2>
     <h3>{$t('quest.ashes.title')}</h3>
@@ -39,7 +39,7 @@
       {/if}
       <button class="secondary" onclick={close}>{$t('npc.leave')}</button>
     </div>
-  </section>
+  </div>
 </div>
 
 <style>
