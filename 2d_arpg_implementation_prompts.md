@@ -1,144 +1,214 @@
 # 2D Dark Fantasy ARPG — Sequential Implementation Prompts for Codex
 
-Use these prompts **in order**. Each prompt assumes the previous prompts were completed and the repository is in a runnable state.
+Use these **63 prompts in order**. Each step must preserve a playable, testable browser game and support deployment to GitHub Pages.
 
-The goal is to build a large 2D dark-fantasy ARPG with Diablo-style mouse controls, procedural wilderness and dungeons, persistent cities, six classes, loot progression, quests, bosses, crafting, talents, economy, and future multiplayer compatibility.
+This plan modernizes the **existing Aether & Ruin HTML5 Canvas prototype**. Reuse its functioning classes, quests, combat, inventory, world and saves instead of discarding them. The target is a top-down dark-fantasy ARPG with Diablo-like mouse movement, six classes, five acts, procedural locations and future multiplayer-readiness.
 
----
+## Required Technology Stack
 
-# Global Rules for Every Prompt
+This is the project's selected architecture. **Do not switch to Godot, React, Next.js, an SSR-only app or a monolithic HTML engine** without an explicit new decision.
 
-Apply these rules during every implementation task:
+| Layer | Technology | Responsibility |
+| --- | --- | --- |
+| UI | **Svelte 5** with runes | HUD, menus, inventory, equipment, talent trees, dialogue, merchants, settings |
+| Game rendering | **Phaser 4** | Scenes, spritesheets, tilemaps, camera, animation, particles, visual effects and input adapter |
+| Gameplay | **TypeScript** (strict) | Authoritative state, combat, entities, movement, AI, quests, item rules, deterministic generation |
+| Tooling | **Vite**, `@sveltejs/vite-plugin-svelte` | Development server, hot reload, client-side SPA and static production bundle |
+| UI state bridge | Typed commands/events and Svelte-facing read-only projections | Communication without tight coupling |
+| Persistence | **IndexedDB** (saves), `localStorage` (preferences only) | Versioned saves and legacy migration |
+| Tests | **Vitest**, **Playwright**, `svelte-check` | Logic tests, browser tests, static checks |
+| Deployment | **GitHub Actions → GitHub Pages** | Publish `dist/`, no runtime backend |
 
-1. Inspect the existing repository before changing anything.
-2. Reuse existing systems instead of duplicating them.
-3. Keep the game runnable after every task.
-4. Do not rewrite unrelated systems unless necessary.
-5. Prefer small focused classes/scripts over god classes.
-6. Keep gameplay logic separate from rendering/UI.
-7. Prefer data-driven systems for items, skills, enemies, quests, talents, loot tables, and world generation.
-8. Avoid hardcoded gameplay content where reusable definitions can be used.
-9. Centralize shared formulas such as damage, XP, rarity, scaling, resistances, and loot probabilities.
-10. Use deterministic RNG where practical.
-11. Keep systems compatible with future multiplayer, but **do not implement multiplayer yet**.
-12. Input should create gameplay commands; UI should never directly modify combat/world state.
-13. Add or update automated/debug tests where appropriate.
-14. Update documentation whenever architecture or data formats change.
-15. At the end of every task, report:
-   - files created
-   - files modified
-   - architecture changes
-   - tests performed
-   - known limitations
-   - recommended next step
+Use compatible stable versions and a committed `package-lock.json`; verify installed Phaser 4 APIs and plugins rather than copying Phaser 3-specific code. Prefer Svelte component CSS or installed/build-time Tailwind, **not** the Tailwind CDN in production.
 
-If the repository is empty, use **Godot 4.x + GDScript**.
+## Architecture Rules and Ownership
 
-The game should use an isometric/top-down 2D presentation.
+1. **Pure TypeScript simulation** (`src/game/core`, `entities`, `combat`, `systems`, `world`): Owns player HP, positions, cooldowns, damage, inventory, loot, NPC/quest state, RNG and saving. It must not import Phaser, Svelte or the DOM.
+2. **Phaser adapter** (`src/game/phaser`): Owns `Phaser.Game`, scenes, sprite and tilemap rendering, camera, pointer world-coordinate conversion, animation, VFX and audio adapters. Phaser GameObjects are **views**, not authoritative game entities.
+3. **Svelte UI** (`src/ui`): Owns menus, overlay modals, inventory display and HUD. Components observe read-only state projections and submit typed game commands. Never edit core game state or Phaser GameObjects directly.
+4. **Typed bridge** (`src/game/bridge`): `GameCommand` → simulation → `GameEvent`/`GameSnapshot` → Phaser visuals and Svelte projections. Avoid `window.gameApp`, cross-layer globals and circular imports.
+5. **Fixed-step simulation**: Keep rules and RNG deterministic; Phaser can interpolate visuals. Do not stream every sprite position into Svelte at 60 FPS; publish only meaningful UI updates.
+6. **Centralized input**: Phaser handles world clicks and configurable keyboard actions. Interactive Svelte overlays must prevent world click-through, keyboard shortcuts while typing and unwanted attacks under menus.
+7. **Data and assets**: Typed IDs and content definitions live in `src/data` / `src/shared`. Use image atlases, tilesets and licensed art in `public/assets`, or Vite-imported asset URLs. Do not hardcode leading-slash URLs that break the Pages subpath.
+8. **No backend in this phase**: Pages supports a static SPA. Offline browser saves work locally; multiplayer/cloud sync requires a separate future server.
+
+```text
+World pointer/keys → Phaser Input Adapter ─┐
+                                          ↓
+Svelte UI actions ───────────────────→ Typed Command Bus
+                                          ↓
+                               Pure TypeScript Simulation
+                                          ↓
+                              Events + read-only snapshots
+                                 ├──────────────┐
+                                 ↓              ↓
+                              Phaser views   Svelte stores
+                                 ↓              ↓
+                              World/FX        HUD/menus
+```
+
+## GitHub Pages Contract
+
+- Build a client-rendered Svelte/Vite SPA. The repository root `index.html` mounts `src/main.ts` / `src/App.svelte`. Production output is `dist/index.html` and versioned assets.
+- Configure `vite.config.ts` with `base: '/dark_fantasy_2d_arpg/'` for `https://nereziel.github.io/dark_fantasy_2d_arpg/`. Use `import.meta.env.BASE_URL` or Vite asset imports for textures, audio and data. Allow configurable base for forks/custom domains.
+- Use GitHub Actions on `main`: checkout → setup-node → `npm ci` → `npm run check` → `npm run test` → `npm run build` → configure Pages → upload **`dist`** artifact → deploy Pages. Do not upload the source root.
+- Do not require runtime Node.js, secrets, a database server, server rendering or an API to start the single-player game.
+- Test the **production build at the repository subpath**, not only the Vite dev server. Verify that the page, JS, CSS, Phaser textures and audio load without 404s, console errors or blank canvas.
+- Keep the currently working Pages entrypoint live until the migrated vertical slice passes smoke tests; use staging/preview during the transition. Avoid client routes that require unsupported SPA deep-link fallback.
+
+## Migration Strategy for Existing Files
+
+The repo already includes `dark_fantasy_2d_arpg_engine.html`, `visuals.js`, `visuals.css`, `index.html` and a Pages workflow. Treat these as a **reference implementation**, not dead code.
+
+1. Run/reference the original browser game; list working gameplay features, known defects and important interactions.
+2. Scaffold Svelte 5 / TypeScript / Phaser 4 / Vite **alongside** the legacy engine. Prove a Svelte-mounted Phaser scene and a static Pages-ready build.
+3. Extract typed content, simulation, stat/combat formulas, seeded RNG, command handling and save DTOs into testable TypeScript modules; preserve balance and IDs.
+4. Migrate scenes, pixel sprites, movement/input and graphical effects incrementally into Phaser. Replace UI panels with Svelte, communicating only through the typed bridge.
+5. Import existing legacy `localStorage` saves to versioned IndexedDB, with backup/fallback and tests.
+6. Complete a parity slice: town → NPC quest → mouse movement → combat → loot → inventory → save → reload. Switch the GitHub Pages `index.html` and workflow to the Vite `dist/` bundle **only after this works**.
+
+Never replace working systems with empty Phaser/Svelte placeholders just to satisfy file structure.
+
+## Global Rules for Every Prompt
+
+1. Inspect existing repository/code first; map existing features before implementing replacements.
+2. Reuse existing systems whenever feasible; do not duplicate authoritative state.
+3. Leave the app playable and buildable after each prompt, including during migration.
+4. No unrelated rewrites or broad changes without need.
+5. Prefer focused TypeScript modules, typed contracts and small Svelte components over god classes.
+6. Gameplay/domain logic remains independent of Phaser, Svelte and browser DOM.
+7. Prefer typed data definitions for items, skills, enemies, quests, loot and world generation.
+8. Centralize formulas for combat, stats, XP, rarity, affixes and resistances.
+9. Use deterministic RNG and stable IDs for simulation, saves and tests where practical.
+10. Maintain future multiplayer readiness, but **do not implement multiplayer**.
+11. Player/UI input emits commands; no UI-driven direct mutation of simulation entities.
+12. Add unit and browser regression tests for changes and migrated features.
+13. Update docs, save schemas and mappings when architecture/data formats change.
+14. Keep dependencies locked and respect Pages base paths for all assets.
+15. Prevent Svelte modal clicks from triggering Phaser world commands.
+16. Avoid per-frame Svelte store updates for sprites and particles.
+17. Run `npm run check`, applicable Vitest tests and `npm run build` on frontend changes.
+18. Use Playwright smoke tests for critical UI, gameplay and deployment milestones.
+19. Preserve existing class/quest functionality and old saves until verified migrated.
+20. At the end of each task report: created/modified files, architecture changes, gameplay changes, tests, Pages/deploy status, limitations and recommended next step.
+
+Use a consistent **dark-fantasy pixel-art** direction with legible silhouettes, proper spritesheets, tilemap layers, atmospheric lighting, visible telegraphs and responsive HUD. Gameplay correctness takes priority over decorative effects.
 
 ---
 
 # PROMPT 01 — Project Foundation and Architecture
 
-Inspect the repository and establish the initial architecture for a scalable 2D dark-fantasy ARPG.
+Inspect Aether & Ruin and establish a scalable **Svelte 5 + Phaser 4 + TypeScript + Vite** foundation. This is a **migration scaffold**; do not rebuild the entire game or remove the functioning legacy prototype.
 
-Do not build the entire game yet.
+Initialize a strict TypeScript Vite SPA with a Svelte root that mounts/unmounts a minimal Phaser game in `GameViewport.svelte`. Add Vitest, Playwright, `svelte-check`, a lockfile and GitHub Pages base path configuration.
 
-Create a clean project structure supporting:
-
-- player
-- enemies
-- combat
-- skills
-- talents
-- items
-- inventory
-- loot
-- quests
-- dialogue
-- world
-- procedural generation
-- dungeons
-- cities
-- NPCs
-- crafting
-- status effects
-- UI
-- audio
-- save system
-- debug tools
-- tests
-
-Suggested high-level structure:
+Required project structure (create only files needed now, expand by later prompts):
 
 ```text
-/game
-    /actors
-        /player
-        /enemies
-        /bosses
-
-    /combat
-    /skills
-    /talents
-    /items
-    /inventory
-    /loot
-    /quests
-    /dialogue
-
-    /world
-        /generation
-        /regions
-        /dungeons
-        /cities
-
-    /npc
-    /crafting
-    /effects
-    /ui
-    /audio
-    /save
-    /data
-    /debug
-    /tests
-
-/docs
+/
+├── index.html
+├── package.json
+├── package-lock.json
+├── tsconfig.json
+├── svelte.config.js
+├── vite.config.ts                   # base: /dark_fantasy_2d_arpg/
+├── playwright.config.ts
+├── .github/
+│   └── workflows/
+│       └── pages.yml               # npm ci/check/test/build → dist/
+├── public/
+│   └── assets/
+│       ├── sprites/                # Character/enemy spritesheets + atlases
+│       ├── tilesets/               # Terrain, props, buildings, dungeons
+│       ├── effects/                # VFX, decals, UI art
+│       └── audio/
+├── src/
+│   ├── main.ts                     # Mount Svelte
+│   ├── App.svelte                  # App shell / top-level menus
+│   ├── game/
+│   │   ├── core/                   # Deterministic simulation / clock / FSM
+│   │   ├── entities/
+│   │   │   ├── player/
+│   │   │   ├── enemies/
+│   │   │   ├── bosses/
+│   │   │   └── npc/
+│   │   ├── combat/
+│   │   ├── skills/
+│   │   ├── talents/
+│   │   ├── items/
+│   │   ├── inventory/
+│   │   ├── loot/
+│   │   ├── quests/
+│   │   ├── dialogue/
+│   │   ├── world/
+│   │   │   ├── generation/
+│   │   │   ├── regions/
+│   │   │   ├── dungeons/
+│   │   │   ├── cities/
+│   │   │   ├── navigation/
+│   │   │   └── streaming/
+│   │   ├── systems/                # Movement, AI, status, economy
+│   │   ├── bridge/                 # Commands, events, snapshots, UI state
+│   │   ├── phaser/
+│   │   │   ├── config.ts
+│   │   │   ├── scenes/             # Boot, Town, Wilderness, Dungeon
+│   │   │   ├── input/
+│   │   │   ├── rendering/          # Tilemaps, sprites, effects
+│   │   │   └── audio/
+│   │   └── debug/
+│   ├── ui/
+│   │   ├── GameViewport.svelte
+│   │   ├── hud/
+│   │   ├── inventory/
+│   │   ├── character/
+│   │   ├── talents/
+│   │   ├── dialogue/
+│   │   ├── merchants/
+│   │   ├── menus/
+│   │   ├── map/
+│   │   └── settings/
+│   ├── stores/                     # Svelte UI projections only
+│   ├── data/                       # Typed classes, items, skills, foes
+│   ├── persistence/                # IndexedDB and migrations
+│   └── shared/                     # Cross-layer interfaces / schemas
+├── tests/
+│   ├── unit/                       # Vitest
+│   └── e2e/                        # Playwright
+└── docs/
+    ├── ARCHITECTURE.md
+    ├── UI_GAME_BRIDGE.md
+    ├── COMBAT.md
+    ├── ITEMS.md
+    ├── SKILLS.md
+    ├── WORLD_GENERATION.md
+    ├── SAVE_SYSTEM.md
+    └── DEPLOYMENT.md
 ```
 
-Create initial architectural documentation:
+Establish application flow:
 
 ```text
-docs/ARCHITECTURE.md
-docs/COMBAT.md
-docs/ITEMS.md
-docs/SKILLS.md
-docs/WORLD_GENERATION.md
-docs/SAVE_SYSTEM.md
+Boot → Main Menu → Character Selection → Load World → Gameplay → Pause / Save / Exit
 ```
 
-Establish the core application/game state flow:
-
-```text
-Boot
-→ Main Menu
-→ Character Selection / New Character
-→ Load World
-→ Gameplay
-→ Pause
-→ Save / Exit
-```
-
-Create only minimal placeholder scenes/resources necessary to prove the project boots correctly.
+Responsibility contract:
+- **Svelte** mounts the game canvas and owns menus/HUD, not the simulation or world render loop.
+- **Phaser** manages scene and input lifecycle, camera, tilemaps, sprite views and rendering.
+- **TypeScript simulation** owns rules and authoritative state; define `GameCommand`, `GameEvent`, `GameSnapshot` and `GameBridge` interfaces before expanding systems.
+- Create one visible sample tile/sprite, one typed UI command and a read-only HUD value updated by a gameplay event.
+- Destroy Phaser and unsubscribe bridge listeners when the Svelte viewport unmounts/hot reloads. No duplicated canvas, global singleton or direct Svelte→Phaser logic.
+- Produce a legacy-module migration table. Keep the current deployed HTML game available until feature parity is tested.
 
 Acceptance criteria:
 
-- project starts without errors
-- main gameplay scene can load
-- architecture is documented
-- no huge all-purpose manager
-- systems are designed for future expansion
-- repository remains clean and runnable
+- `npm ci`, `npm run dev`, `npm run check`, `npm run test`, `npm run build` pass
+- `dist/index.html` and assets resolve under GitHub Pages `/dark_fantasy_2d_arpg/`
+- Svelte mounts and disposes a minimal Phaser scene without duplicate listeners/canvases
+- typed UI command reaches the pure TypeScript simulation and visibly updates the HUD
+- pure gameplay modules have no Phaser/Svelte imports
+- Vitest unit and Playwright boot/scene smoke tests pass
+- architecture, UI bridge, deployment and legacy migration are documented
+- current playable HTML reference remains runnable throughout this prompt
 
 ---
 
