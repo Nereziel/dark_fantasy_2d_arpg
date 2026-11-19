@@ -21,15 +21,19 @@ Levé tlačítko myši: pohyb, útok nebo interakce. Pravé tlačítko: sekundá
 - `visuals.js` – předgenerované textury krajiny, scenérie, světla, dekorace a render objektů
 - `visuals.css` – aktualizovaný vzhled menu, HUD a oken
 - `tests/site.test.mjs` – základní statická validace JavaScriptu a propojení souborů
-- `.github/workflows/pages.yml` – automatický deployment
+- `.github/workflows/pages.yml` – automatický deployment pouze při změně publikované hry
+- `.github/workflows/quality.yml` – samostatná validace pro pull requesty a změny testů bez deploymentu
+- `2d_arpg_implementation_prompts.md` – plán postupné migrace na Svelte 5 / Phaser 4 / TypeScript / Vite; nový projekt bude v `web/`
 
 ## Nasazení na GitHub Pages
 
 1. V repozitáři otevři **Settings → Pages**.
 2. V části **Build and deployment** vyber jako **Source** možnost **GitHub Actions**.
-3. Workflow se spustí automaticky při každém pushi do `main`. Ručně jej lze spustit v **Actions → Deploy Aether & Ruin to GitHub Pages → Run workflow**.
+3. Workflow se spustí při pushi do `main` **jen když se změní publikovaná hra** (`index.html`, herní HTML, `visuals.js`, `visuals.css`, herní assety či deploy workflow). Změny `README.md`, implementačních promptů, `docs/**`, testů nebo dosud nepublikovaného `web/` projektu **nespustí Pages rebuild**. Ruční nasazení je dostupné přes **Actions → Deploy Aether & Ruin to GitHub Pages → Run workflow**.
 4. Po úspěšném běhu bude hra dostupná na výše uvedené adrese.
 
 ## Technologie
 
-HTML5 Canvas, vanilla JavaScript, CSS a Tailwind CDN. GitHub Pages podporuje všechny součásti bez dalšího serveru.
+**Aktuálně:** HTML5 Canvas, vanilla JavaScript, CSS a Tailwind CDN. GitHub Pages podporuje všechny součásti bez dalšího serveru.
+
+**Plánovaná architektura:** Svelte 5 + Phaser 4 + TypeScript + Vite v samostatném `web/` projektu. Do vydání plnohodnotně hratelné verze běží současná HTML hra. Až bude migrace otestována, workflow přejde na publikování `web/dist/` a bude sledovat jen odpovídající zdrojové soubory a build konfiguraci.
