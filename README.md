@@ -44,3 +44,15 @@ Levé tlačítko myši: pohyb, útok nebo interakce. Pravé tlačítko: sekundá
 - Knihovna **`svelte-i18n`** bude součástí projektu od prvního implementačního promptu; slovníky budou v `web/src/i18n/locales/`.
 - Přepínač jazyka bude v hlavním menu a nastavení, bez opětovného načtení hry. Výchozí jazyk zohlední prohlížeč a uloženou volbu.
 - Původní HTML verze zatím zůstává beze změny; tyto funkce se vztahují k plánované migraci.
+
+## Licence / License
+
+**Aether & Ruin is licensed under the GNU General Public License v3.0 only (`GPL-3.0-only`).**
+
+Licence se vztahuje na **veškerý původní obsah projektu**, ke kterému mohou přispěvatelé udělit práva: zdrojový kód, grafiku, sprity, animace, zvuky, hudbu, herní data, příběh, dialogy, dokumentaci a české i anglické překlady. This includes all original project source code and game assets, unless expressly stated otherwise.
+
+Úplné znění licence / Full license text: [LICENSE](LICENSE).
+
+**Externí knihovny, fonty a převzaté assety si zachovávají vlastní licence.** Jejich licence, autoři a odkazy jsou v [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). GPL nepřelicencovává cizí díla. Third-party components retain their respective licenses and must be used in compliance with their own terms.
+
+Pokud budeš distribuovat upravenou verzi, dodrž podmínky GPL včetně poskytnutí odpovídajících zdrojových souborů a zachování licenčních upozornění. When distributing modified versions, follow GPLv3's source-availability and notice requirements.
