@@ -18,6 +18,7 @@ This is the project's selected architecture. **Do not switch to Godot, React, Ne
 | Persistence | **IndexedDB** (saves), `localStorage` (preferences only) | Versioned saves and legacy migration |
 | Tests | **Vitest**, **Playwright**, `svelte-check` | Logic tests, browser tests, static checks |
 | Deployment | **GitHub Actions → GitHub Pages** | Publish `dist/`, no runtime backend |
+| Localization | **`svelte-i18n`**, `cs` and `en` | Runtime language switching, ICU messages, localized game UI and content |
 
 Use compatible stable versions and a committed `package-lock.json`; verify installed Phaser 4 APIs and plugins rather than copying Phaser 3-specific code. Prefer Svelte component CSS or installed/build-time Tailwind, **not** the Tailwind CDN in production.
 
@@ -31,6 +32,7 @@ Use compatible stable versions and a committed `package-lock.json`; verify insta
 6. **Centralized input**: Phaser handles world clicks and configurable keyboard actions. Interactive Svelte overlays must prevent world click-through, keyboard shortcuts while typing and unwanted attacks under menus.
 7. **Data and assets**: Typed IDs and content definitions live in `src/data` / `src/shared`. Use image atlases, tilesets and licensed art in `public/assets`, or Vite-imported asset URLs. Do not hardcode leading-slash URLs that break the Pages subpath.
 8. **No backend in this phase**: Pages supports a static SPA. Offline browser saves work locally; multiplayer/cloud sync requires a separate future server.
+9. **i18n boundary**: All player-facing text resolves through `svelte-i18n` or a typed localization facade. Stable gameplay IDs, save DTOs, loot rolls and event payloads must never depend on translated display strings.
 
 ```text
 World pointer/keys → Phaser Input Adapter ─┐
@@ -46,6 +48,47 @@ Svelte UI actions ───────────────────→ T
                                  ↓              ↓
                               World/FX        HUD/menus
 ```
+
+## Localization Contract — Czech and English (Required)
+
+Use **`svelte-i18n`** as the project-wide i18n library in the **Svelte 5 + Vite SPA**, starting with **Prompt 01**. Do not implement a parallel home-grown translation system or postpone internationalization until the full campaign is complete. The supported locale codes are **`cs`** (Czech) and **`en`** (English). Both locales must work on the static GitHub Pages build, with no translation API/backend.
+
+**Required implementation:**
+
+1. Create `web/src/i18n/index.ts` to initialize `svelte-i18n` (locale, fallback, dictionary registration), and `web/src/i18n/locales/cs.json` and `en.json`. Configure ICU formatting for parameters, plurals, numbers and dates; use the browser's `Intl` APIs and locale-specific formatting. Keep messages as translation keys rather than inline literals.
+2. The game boots in the stored language preference, or falls back to the browser language (`cs` for `cs*`, `en` otherwise). If neither matches, use a documented default (English). Provide an obvious **Čeština / English** selector on the initial main menu and in Settings.
+3. Changing the language **immediately updates Svelte UI without reloading the page**, remounting Phaser, restarting gameplay or changing the save. Persist only the selected locale in versioned preferences (`localStorage` is acceptable); language is **not** part of the character/world save. Set `document.documentElement.lang`, page title, menus, tooltips and accessible labels on switch.
+4. Translate **all player-facing strings**, including character classes/descriptions, HP/resource labels, HUD, pause/menu buttons, inputs, errors, death/respawn screens, tooltips, item prefixes/suffixes, randomized item names, rarities, statistics, skill/talent names and descriptions, class-specific resources, NPC dialogue and dialogue choices, quest names/objectives/journal, map labels/waypoints, merchants, currencies, crafting, notifications, controls, settings, help and all five acts. Only intentional fantasy proper names may be left identical in both languages.
+5. **Never translate gameplay identifiers**. Item templates, affix IDs, NPC IDs, ability IDs, quest IDs, resource codes, zone IDs, command/event types and serialized save fields remain stable language-neutral IDs. Authoritative TypeScript simulation sends IDs and interpolation values; an i18n-aware presenter formats localized text on demand.
+6. Store dynamic content as structured definitions: e.g. `{ itemBaseId, prefixId, suffixId, rollValues }`; localize each segment and apply grammar-aware templates, **not** English-only word concatenation. For Czech handle gender, grammatical cases and plural categories where context requires; avoid awkward translated affix order. Use ICU plural/select messages instead of `count === 1` shortcuts.
+7. Phaser world labels, damage text, NPC bubbles and quest markers must get their display strings through a small typed i18n adapter, not directly import Svelte stores in simulation or keep stale cached English labels. Update labels on locale change, without recreating the world or losing input state. Numeric damage itself remains language-independent.
+8. Prevent missing translation keys and placeholder mismatches: add a **Vitest translation integrity suite** comparing `cs` and `en`, verifying non-empty messages, ICU parseability, required variables and basic Czech/English plural cases. Ensure Svelte's build/typecheck catches bad translation access where practical. Playwright must verify changing language mid-game updates visible UI and dialogue without a reload, then persists on browser refresh.
+9. Define consistent keys/namespaces such as `menu.start`, `hud.health`, `item.rarity.legendary`, `skill.warrior.whirlwind.name`, `quest.act1.corruption.title` and `npc.blacksmith.greeting`. Document naming, placeholders, translation review and fallback behavior in `docs/LOCALIZATION.md`.
+10. Translation file changes are **game build inputs**: once the new Svelte app becomes production, the Pages deploy path allowlist must cover `web/src/i18n/**` (already included by `web/src/**`) and any message catalogs moved outside `web/src`. In staging, i18n edits trigger quality CI **only**, not a production Pages deploy.
+
+**Example messages:**
+
+```json
+// en.json (illustrative fragment)
+{
+  "menu": { "continue": "Continue", "settings": "Settings" },
+  "hud": { "health": "Health", "gold": "Gold: {count}" },
+  "inventory": { "potions": "{count, plural, one {# potion} other {# potions}}" }
+}
+```
+
+```json
+// cs.json (illustrative fragment)
+{
+  "menu": { "continue": "Pokračovat", "settings": "Nastavení" },
+  "hud": { "health": "Životy", "gold": "Zlato: {count}" },
+  "inventory": { "potions": "{count, plural, one {# lektvar} few {# lektvary} other {# lektvarů}}" }
+}
+```
+
+The JSON blocks above are illustrative fragments (comments are documentation only; actual `.json` catalogs must be valid JSON).
+
+**Localization acceptance gate:** Boot, main menu, character creation, HUD, first inventory and first NPC/quest dialogue must already be bilingual during the initial vertical slice. Each subsequent content prompt delivers its Czech and English text **in the same task**, not in a final translation cleanup sprint.
 
 ## GitHub Pages Contract
 
@@ -78,11 +121,11 @@ All 63 prompts remain sequential, but major milestones are **quality gates** rat
 
 | Gate | Prompts | Evidence required |
 | --- | --- | --- |
-| Baseline and scaffold | 01–05 | Legacy game still playable; staged `web/` build and typed input/game bridge; browser boot and click-through smoke tests |
+| Baseline and scaffold | 01–05 | Legacy game still playable; staged `web/` build and typed input/game bridge; `svelte-i18n` initialized with `cs/en`, language selector, browser boot and click-through smoke tests |
 | Core combat slice | 06–17 | Mouse movement, attacks, damage, status effects, loot and inventory work together; deterministic unit tests |
-| Act I world slice | 18–29 | Reachable town/quest → wilderness → dungeon → boss → loot → return, in browser |
+| Act I world slice | 18–29 | Reachable town/quest → wilderness → dungeon → boss → loot → return, in browser, with bilingual NPC dialogue, objectives, item names and map labels |
 | Progression and classes | 30–44 | No duplicated item/skill rules; each class uses shared systems; representative builds tested |
-| Persistence and UI | 45–48 | Legacy saves imported safely; fresh and migrated saves survive reload; keyboard/UI interactions stable |
+| Persistence and UI | 45–48 | Legacy saves imported safely; fresh and migrated saves survive reload; keyboard/UI interactions stable; mid-game `cs`↔`en` switching and persistence verified |
 | Campaign and endgame | 49–56 | Region/act transitions and generated objectives are navigable, saveable, testable |
 | Release readiness | 57–63 | Profiler evidence, deterministic seed suite, combat tests, full vertical-slice E2E, no console errors and successful Pages preview |
 
@@ -123,6 +166,7 @@ Every implemented feature needs: a clearly owned TypeScript state, a Phaser pres
 17. Run `npm run check`, applicable Vitest tests and `npm run build` on frontend changes.
 18. Use Playwright smoke tests for critical UI, gameplay and deployment milestones, serving the production Vite bundle at the actual repository subpath.
 19. Preserve existing class/quest functionality and old saves until verified migrated.
+19a. For every player-facing message added or edited in a prompt, provide Czech and English translations in the same change and test the runtime locale switch; never store translated strings as gameplay IDs or save fields.
 20. At the end of each task report: created/modified files, architecture changes, gameplay changes, tests, Pages/deploy status, limitations and recommended next step.
 21. Do not redeploy GitHub Pages when only README, implementation prompts, docs, tests or unpublished staging files change. Maintain deployment allowlist and independent quality checks when files move or new asset locations are added.
 22. Never make a production deployment solely to validate a documentation change. Never skip a relevant staging/production test to make a release appear green.
@@ -135,7 +179,7 @@ Use a consistent **dark-fantasy pixel-art** direction with legible silhouettes, 
 
 Inspect Aether & Ruin and establish a scalable **Svelte 5 + Phaser 4 + TypeScript + Vite** foundation. This is a **migration scaffold**; do not rebuild the entire game or remove the functioning legacy prototype.
 
-Initialize a strict TypeScript Vite SPA **in `web/`** (not over the live root `index.html`) with a Svelte root mounting/unmounting Phaser in `GameViewport.svelte`. Add Vitest, Playwright, `svelte-check`, a lockfile and GitHub Pages base path configuration.
+Initialize a strict TypeScript Vite SPA **in `web/`** (not over the live root `index.html`) with a Svelte root mounting/unmounting Phaser in `GameViewport.svelte`. Add Vitest, Playwright, `svelte-check`, a lockfile, GitHub Pages base path configuration and **`svelte-i18n` with `cs`/`en` catalogs from day one**.
 
 Required project structure (the new frontend is permanently isolated under `web/`; create only files needed now):
 
@@ -205,6 +249,11 @@ Required project structure (the new frontend is permanently isolated under `web/
 │   │   │   ├── map/
 │   │   │   └── settings/
 │   │   ├── stores/                 # Read-only Svelte projections
+│   │   ├── i18n/                   # svelte-i18n initialization
+│   │   │   ├── index.ts
+│   │   │   └── locales/
+│   │   │       ├── cs.json
+│   │   │       └── en.json
 │   │   ├── data/                   # Classes / items / skills / enemies
 │   │   ├── persistence/            # IndexedDB and migrations
 │   │   └── shared/                 # Cross-layer types / schemas
@@ -219,6 +268,7 @@ Required project structure (the new frontend is permanently isolated under `web/
     ├── SKILLS.md
     ├── WORLD_GENERATION.md
     ├── SAVE_SYSTEM.md
+    ├── LOCALIZATION.md
     └── DEPLOYMENT.md
 ```
 
@@ -235,6 +285,7 @@ Responsibility contract:
 - **Phaser** manages scene and input lifecycle, camera, tilemaps, sprite views and rendering.
 - **TypeScript simulation** owns rules and authoritative state; define `GameCommand`, `GameEvent`, `GameSnapshot` and `GameBridge` interfaces before expanding systems.
 - Create one visible sample tile/sprite, one typed UI command and a read-only HUD value updated by a gameplay event.
+- Add a visible Czech/English selector to the Svelte main menu; both language dictionaries must include all initial menu, HUD and error strings. Change locale live without resetting the Phaser scene or simulation, and persist preference independently from character saves.
 - Destroy Phaser and unsubscribe bridge listeners when the Svelte viewport unmounts/hot reloads. No duplicated canvas, global singleton or direct Svelte→Phaser logic.
 - Produce a legacy-module migration table. Keep the current deployed HTML game available until feature parity is tested.
 
@@ -249,6 +300,8 @@ Acceptance criteria:
 - architecture, UI bridge, deployment and legacy migration are documented
 - current playable HTML reference remains runnable throughout this prompt
 - documentation/test/staging-only commits do not trigger a production Pages rebuild; published game changes still deploy
+- `svelte-i18n` renders Czech/English startup UI; changing language updates HUD/menu without a game restart, and locale persists across browser refresh
+- Vitest checks initial translation key/placeholder parity and Playwright checks switching languages without gameplay reset
 
 ---
 
@@ -959,6 +1012,8 @@ Create data definitions for:
 
 ### Implementation notes — Svelte / Phaser / TypeScript
 
+Localization requirement: all item base names, types, rarities, affixes and modifiers use stable IDs plus `cs`/`en` translation keys. Czech item grammar must not assume English prefix order.
+
 Use typed item templates, stable instance IDs and validated save schemas. Never use icon names as authoritative item identities.
 
 Acceptance criteria:
@@ -1013,6 +1068,8 @@ Use controlled RNG.
 
 
 ### Implementation notes — Svelte / Phaser / TypeScript
+
+Localization requirement: procedural names are assembled from typed segments with locale-specific formatting for Czech and English; changing language updates existing item display names without rerolling item properties.
 
 Use seeded TypeScript RNG and test loot/affix generators headlessly with Vitest.
 
@@ -1227,6 +1284,8 @@ Create centralized pricing/economy formulas.
 
 ### Implementation notes — Svelte / Phaser / TypeScript
 
+Localization requirement: vendor dialogue, prices, trade errors, currencies and purchase confirmations exist in `cs` and `en`; numeric amounts use locale formatting.
+
 Merchant UI is Svelte; prices, gold deductions, inventory rules and transactions are validated in TypeScript simulation.
 
 Acceptance criteria:
@@ -1280,6 +1339,8 @@ Do not embed quest logic directly inside NPC scripts.
 
 ### Implementation notes — Svelte / Phaser / TypeScript
 
+Localization requirement: quest IDs, NPC IDs and conditions remain language-neutral; every NPC utterance, dialogue option, quest title/objective/reward text has keys and complete `cs` + `en` catalogs. The open dialogue UI updates on locale switch without restarting the quest.
+
 Define quests/dialogue in typed data; Svelte renders choices/journal and dispatches commands, while simulation owns progress and rewards.
 
 Acceptance criteria:
@@ -1315,6 +1376,8 @@ Include meaningful narrative context instead of only numeric kill objectives.
 
 
 ### Implementation notes — Svelte / Phaser / TypeScript
+
+Localization acceptance: Act I main quests, objectives, NPC dialogue, journal entries and reward messages are readable and coherent in both Czech and English.
 
 Keep existing quest IDs, progress and rewards stable during migration. Svelte quest tracker consumes derived snapshots and tests cover completion.
 
@@ -2234,6 +2297,8 @@ Do not make a separate save implementation per class.
 
 ### Implementation notes — Svelte / Phaser / TypeScript
 
+Localization requirement: names, summaries, strengths and starting equipment descriptions of all six classes are translated to `cs`/`en` for the character selection menu.
+
 Create accessible CharacterSelect.svelte from typed class definitions. Use Phaser or atlas preview for art only; character creation emits a typed command.
 
 Acceptance criteria:
@@ -2279,6 +2344,8 @@ Use stable IDs.
 
 
 ### Implementation notes — Svelte / Phaser / TypeScript
+
+Language preference is a **UI/browser setting**, not part of the character/world save. Existing locale-independent entity/item/quest IDs must remain stable across switching and migrations; old saves load under both `cs` and `en`.
 
 Use versioned IndexedDB saves with atomic writes, validation, recovery and migrations. Import original localStorage saves without deleting them prematurely; never serialize Phaser/Svelte objects. Test legacy and new save round trips.
 
@@ -2334,6 +2401,8 @@ UI must observe gameplay state, not own it.
 
 ### Implementation notes — Svelte / Phaser / TypeScript
 
+Localization requirement: all HUD and menu strings, tooltips, combat notifications, class resources and numbers flow through `svelte-i18n` or a typed adapter. Re-render visible translations on locale switch but do not touch simulation state or remount Phaser.
+
 Write Svelte 5 HUD/menus as small components observing read-only selectors. Commands go through GameBridge. Avoid per-frame global UI updates and block click-through to Phaser.
 
 Acceptance criteria:
@@ -2368,6 +2437,8 @@ Do not assume left-handed/right-handed input layout permanently.
 
 
 ### Implementation notes — Svelte / Phaser / TypeScript
+
+Provide a clearly labeled language setting `Jazyk / Language` with `Čeština` and `English`; switching via `svelte-i18n` updates UI, accessible labels, document `lang` and Phaser text overlays live. Persist preference independently; honor browser locale only on first visit.
 
 Svelte owns settings and saved preferences; Phaser applies resolution scale, audio and effects. Browser VSync is not guaranteed configurable; fullscreen requires user gesture. Preserve Czech keyboard bindings.
 
@@ -2456,6 +2527,8 @@ Reuse existing systems.
 
 ### Implementation notes — Svelte / Phaser / TypeScript
 
+Ship Act II region names, quest/NPC dialogue, map markers, enemy and item UI descriptions in Czech and English in the same content change.
+
 Act II is typed region/biome content rendered through shared Phaser tilemap and scene infrastructure.
 
 Acceptance criteria:
@@ -2501,6 +2574,8 @@ Introduce fire hazards and new dungeon themes.
 
 ### Implementation notes — Svelte / Phaser / TypeScript
 
+Ship complete Czech/English region and Act III quest content; no English-only placeholder strings in released UI.
+
 Act III reuses the same TypeScript rules and Phaser region/scene adapters, not a separate game engine.
 
 Acceptance criteria:
@@ -2544,6 +2619,8 @@ Boss:
 
 
 ### Implementation notes — Svelte / Phaser / TypeScript
+
+Ship complete Czech/English Act IV location, NPC, quest and boss-facing text; verify UI and Phaser world labels switch in place.
 
 Act IV visual effects use Phaser while environmental combat/hazard outcomes stay testable in TypeScript.
 
@@ -2589,6 +2666,8 @@ Create:
 
 
 ### Implementation notes — Svelte / Phaser / TypeScript
+
+Ship full Czech/English localization for Act V and ending messages. Audit all campaign text for missing translations before declaring campaign complete.
 
 Act V reuses shared Svelte UI, Phaser scenes and game systems; check all new assets in static Pages build.
 
@@ -2961,6 +3040,8 @@ Do not add unrelated new features during this verification pass.
 
 ### Implementation notes — Svelte / Phaser / TypeScript
 
+Run Playwright in **both `cs` and `en`** for core game flow. Switch languages with a scene and dialogue open; verify no reload/game state loss, language persists on refresh, and menus, item tooltips, quests, combat text and errors remain translated.
+
 Run Playwright against the built Vite bundle on `/dark_fantasy_2d_arpg/`: verify click-through prevention, movement, combat, loot, inventory, save/reload, assets, console errors and resize. Compare with legacy game until parity.
 
 
@@ -3012,6 +3093,8 @@ At the end, produce a concise architecture summary and list the highest-value fu
 
 ### Implementation notes — Svelte / Phaser / TypeScript
 
+Audit `svelte-i18n` key parity, ICU plurals/placeholders, untranslated strings, Czech declension in generated item names, Phaser text refreshes, locale preference persistence and lack of localized strings in serialized game state.
+
 Audit Svelte component ownership, Phaser scene cleanup, simulation independence, typed bridge, IndexedDB migrations, Vite base URLs, GitHub Pages workflow and Vitest/Playwright coverage.
 
 
@@ -3019,7 +3102,7 @@ Audit Svelte component ownership, Phaser scene cleanup, simulation independence,
 
 # Final Target
 
-The finished application must be a **Svelte 5 + Phaser 4 + TypeScript + Vite static SPA**, housed in `web/`, with independent deterministic simulation, a typed UI/game bridge, versioned IndexedDB saves, static assets under the GitHub Pages repository path and passing Vitest/Playwright tests. Its release workflow deploys `web/dist/` only for changes to published game/build inputs; documentation-only commits do not redeploy.
+The finished application must be a **Svelte 5 + Phaser 4 + TypeScript + Vite static SPA**, housed in `web/`, with independent deterministic simulation, a typed UI/game bridge, **full Czech/English localization via `svelte-i18n`**, versioned IndexedDB saves, static assets under the GitHub Pages repository path and passing Vitest/Playwright tests. Its release workflow deploys `web/dist/` only for changes to published game/build inputs; documentation-only commits do not redeploy.
 
 The completed project should provide:
 
@@ -3066,6 +3149,8 @@ The completed project should provide:
 - difficulty modes
 - save/load
 - scalable UI
+- complete Czech and English localization (menus, HUD, NPC dialogue, all quests, items, skills and campaign)
+- in-game language switching without reloading
 - settings/input rebinding
 - debugging tools
 - performance-conscious world streaming
