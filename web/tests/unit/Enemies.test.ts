@@ -69,7 +69,9 @@ describe('group encounters with three independent opponents', () => {
     const warned = sim.snapshot();
     expect(warned.enemies[0]!.intent?.pattern).toBe('bolt');
     expect(warned.player.health).toBe(warned.player.maxHealth);
-    sim.command({ type: 'move', destination: { x: 350, y: 500 } });
+    // Dodge deeper into the wilderness, away from the safe camp; the
+    // enemy should finish its telegraph and register a miss.
+    sim.command({ type: 'move', destination: { x: 800, y: 800 } });
     advance(sim, 82);
     expect(sim.snapshot().player.health).toBe(warned.player.health);
     expect(sim.drainEvents().some(event => event.type === 'enemyAttack' && !event.hit)).toBe(true);
