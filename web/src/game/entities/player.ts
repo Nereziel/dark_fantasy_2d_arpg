@@ -14,6 +14,8 @@ export function spawnPlayer(classId: ClassId, equipment: Equipment, position: Po
 
 /** Preserve missing health when gear changes maximum health; do not revive corpses. */
 export function updateHealthLimit(player: ActorSnapshot, maxHealth: number): void {
+  // An invalid maximum must not corrupt any field of the actor.
+  if (!Number.isFinite(maxHealth) || maxHealth <= 0) return;
   const increase = maxHealth - player.maxHealth;
   player.maxHealth = maxHealth;
   if (player.alive) {
@@ -23,5 +25,9 @@ export function updateHealthLimit(player: ActorSnapshot, maxHealth: number): voi
 
 /** Resource regeneration/decay always runs on simulation ticks. */
 export function advanceResource(current: number, regenRate: number, cap: number, deltaSeconds: number): number {
-  return Math.max(0, Math.min(cap, current + regenRate * deltaSeconds));
+  if (!Number.isFinite(cap) || cap <= 0) return 0;
+  const safeCurrent = Number.isFinite(current) ? current : 0;
+  const safeRegen = Number.isFinite(regenRate) ? regenRate : 0;
+  const elapsed = Number.isFinite(deltaSeconds) && deltaSeconds > 0 ? deltaSeconds : 0;
+  return Math.max(0, Math.min(cap, safeCurrent + safeRegen * elapsed));
 }
