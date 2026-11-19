@@ -4,6 +4,14 @@ Use these **63 prompts in order**. Each step must preserve a playable, testable 
 
 This plan modernizes the **existing Aether & Ruin HTML5 Canvas prototype**. Reuse its functioning classes, quests, combat, inventory, world and saves instead of discarding them. The target is a top-down dark-fantasy ARPG with Diablo-like mouse movement, six classes, five acts, procedural locations and future multiplayer-readiness.
 
+## Project licensing and third-party material
+
+- All original Aether & Ruin code, graphics, animation, audio, narrative, game data, documentation, and CS/EN translations are licensed **GPL-3.0-only** as stated in the root `LICENSE` and `README.md`.
+- Third-party libraries, fonts, and assets **retain their own licenses**; do not silently relicense, remove copyright notices, or include content of unknown provenance. Maintain `THIRD_PARTY_LICENSES.md` as dependencies and artwork change.
+- When creating `web/package.json`, set `"license": "GPL-3.0-only"`. Record package-specific and asset-specific third-party notices separately; package metadata does not override dependency licenses.
+- Preserve editable/source forms of original asset files where available, and satisfy GPLv3 corresponding-source obligations when distributing the game.
+- Licensing-only changes to `LICENSE`, `THIRD_PARTY_LICENSES.md`, and `README.md` must not trigger a new GitHub Pages deployment unless deployed game content also changes.
+
 ## Required Technology Stack
 
 This is the project's selected architecture. **Do not switch to Godot, React, Next.js, an SSR-only app or a monolithic HTML engine** without an explicit new decision.
