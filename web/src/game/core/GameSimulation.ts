@@ -1032,6 +1032,9 @@ export class GameSimulation {
       const hit = distance(this.player, intent) <= intent.radius
         && this.dealPlayerDamage(def.baseDamage + this.level * 2,
           intent.pattern === 'leap' ? 'poison' : 'physical', actor.id);
+      if (hit && intent.pattern === 'sweep' && actor.type === 'spider' && this.player.alive) {
+        this.applyCanonicalStatus('player', 'poisoned', actor.id, 3, 4);
+      }
       if (hit && intent.pattern === 'leap' && this.player.alive) {
         this.applyEffect('player',
           { id: 'poisoned', remaining: 3, magnitude: 3, tick: 0 });
