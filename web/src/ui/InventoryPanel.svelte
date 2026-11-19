@@ -35,6 +35,9 @@
                 <div class="equipment-name" style:color={RARITIES[item.rarity].color}>
                   {item.icon} {$t('item.base.' + item.templateId)}
                 </div>
+                {#if item.upgrades > 0}
+                  <div class="item-temper">{$t('trade.tempering')} +{item.upgrades}/3</div>
+                {/if}
                 <button class="item-action" onclick={() => unequip(slot as keyof GameSnapshot['equipment'])}>
                   {$t('inventory.unequip')}
                 </button>
@@ -64,6 +67,9 @@
                   <div class="item-visual" style:color={RARITIES[item.rarity].color}>{item.icon}</div>
                   <div class="item-title" style:color={RARITIES[item.rarity].color}>{$t('item.base.' + item.templateId)}</div>
                   <div class="item-rarity">{$t('item.rarity.' + item.rarity)}</div>
+                  {#if item.upgrades > 0}
+                    <div class="item-temper">{$t('trade.tempering')} +{item.upgrades}/3</div>
+                  {/if}
                   {#each item.affixes as affix (affix.id)}
                     <div class="item-affix">{$t('item.affix.' + affix.id)} +{affix.value} {$t('stat.' + affix.stat)}</div>
                   {/each}
@@ -105,5 +111,6 @@
   .item-card{display:flex;flex-direction:column;gap:4px;min-height:90px}
   .item-visual{font-size:1.2rem}.item-title{font-size:.77rem}
   .item-rarity,.item-affix{font-size:.63rem;color:#adb5b8}
+  .item-temper{font-size:.66rem;color:#e8c080}
   @media(max-width:750px){.inventory-layout{grid-template-columns:1fr}.inventory-window{height:96vh}.bag-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 </style>
