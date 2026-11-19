@@ -6,7 +6,7 @@ Dark-fantasy 2D ARPG pro prohlížeč. Hra se postupně převádí z původního
 
 **https://nereziel.github.io/dark_fantasy_2d_arpg/**
 
-Na GitHub Pages se nyní publikuje **nová Svelte/Phaser verze**, která je stále ve vývoji. Obsahuje výběr šesti tříd, skupinové souboje se třemi nezávislými nepřáteli, kolize a obcházení překážek, dvě aktivní schopnosti pro každou ze šesti tříd (Q / pravé tlačítko a 1), efekty, tři archetypy nepřátel (přízrak, kostlivec a vlk) s nezávislou skupinovou AI a viditelným varováním před útokem, kořist, inventář, výbavu, zkušenosti, zlato a uložení nové hry. V táboře lze promluvit se strážkyní Vesnou, přijmout úvodní úkol **Popel u bran**, porazit tři nepřátele a odevzdat úkol za zlato a XP. Nově přibyli **obchodník Bram** (nákup a prodej vybavení) a **kovář Odan** (až tři trvalá vylepšení nasazené zbroje či zbraně za zlato). První hratelný dungeon **Krypta Duté koruny** má vlastní generovanou mapu, skupinu silnějších strážců a závěrečného bosse. Další dungeony, questy, talenty a rozsáhlejší herní svět se teprve převádějí.
+Na GitHub Pages se nyní publikuje **nová Svelte/Phaser verze**, která je stále ve vývoji. Obsahuje výběr šesti tříd, skupinové souboje se třemi nezávislými nepřáteli, kolize a obcházení překážek, dvě původní aktivní schopnosti pro všech šest tříd (Q / pravé tlačítko a 1), přičemž válečník má nově dalších pět schopností (klávesy 2–6), efekty, tři archetypy nepřátel (přízrak, kostlivec a vlk) s nezávislou skupinovou AI a viditelným varováním před útokem, kořist, inventář, výbavu, zkušenosti, zlato a uložení nové hry. V táboře lze promluvit se strážkyní Vesnou, přijmout úvodní úkol **Popel u bran**, porazit tři nepřátele a odevzdat úkol za zlato a XP. Nově přibyli **obchodník Bram** (nákup a prodej vybavení) a **kovář Odan** (až tři trvalá vylepšení nasazené zbroje či zbraně za zlato). První hratelný dungeon **Krypta Duté koruny** má vlastní generovanou mapu, skupinu silnějších strážců a závěrečného bosse. Další dungeony, questy, talenty a rozsáhlejší herní svět se teprve převádějí.
 
 ## Lokální spuštění
 
@@ -26,7 +26,7 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 - **Prostřední tlačítko myši:** vynucený pohyb (bez vybírání nepřátel a NPC). Přesun řeší kolize a překážky.
 - Klávesa **I**: inventář; Esc: zavření inventáře.
 - Klávesa **C**: přehled postavy a všech atributů; Esc: zavření přehledu.
-- **Q** nebo **pravé tlačítko myši**: první schopnost; **1** (včetně numerické klávesnice): druhá schopnost. Schopnosti používají polohu kurzoru (entity, oblast, směr či bod podle typu); vzdálenou oblast postava nejprve přiblíží. Další skill sloty a lektvary zůstávají připravené pro následující prompty.
+- **Q** nebo **pravé tlačítko myši**: první schopnost; **1** (včetně numerické klávesnice): druhá schopnost. Schopnosti používají polohu kurzoru (entity, oblast, směr či bod podle typu); vzdálenou oblast postava nejprve přiblíží. **Válečník:** klávesy **2–6** aktivují Úder do země, Válečný pokřik, Smršť čepelí, Popravu a Základní úder; každá má Rage/cooldown. Ostatní třídy stále mají dvě původní schopnosti; lektvary zůstávají plánované.
 - Kliknutí na konkrétního nepřítele nebo položku v seznamu cílů: vybere nepřítele k útoku.
 - Uhnutí před útokem: opusť červeně vyznačenou oblast před zásahem.
 - **Shift (držet):** postava útočí na místě a nesleduje nepřítele ani nevykoná útočný dash. **Mezerník:** úskok s cooldownem. **Esc:** pauza / návrat do hry nebo zavření otevřeného panelu. V pauze lze otevřít **Ovládání**, přemapovat klávesy či myš a uložit preference pro tento prohlížeč.
@@ -38,7 +38,7 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 
 ### Základy podle implementačních promptů
 
-Převod pokračuje **v pořadí 63 promptů** ze souboru `2d_arpg_implementation_prompts.md`. Funkční základy **promptů 02–06** jsou propojené: oddělené výpočty hráče, plynulý pohyb s omezením přepočtů, jednotný kontext interakcí, přemapování ovládání a typovaná soubojová pipeline. Podporuje elementální odolnosti u zásahů, úhyb, blokování, štíty, projektily, oblastní poškození a léčení. Rozšířené sady schopností, obsahové sloty a další mechaniky patří následujícím promptům. Přesný přehled dokončení základů je v `docs/IMPLEMENTATION_STATUS.md`.
+Převod pokračuje **v pořadí 63 promptů** ze souboru `2d_arpg_implementation_prompts.md`. Funkční základy **promptů 02–06** jsou propojené: oddělené výpočty hráče, plynulý pohyb s omezením přepočtů, jednotný kontext interakcí, přemapování ovládání a typovaná soubojová pipeline. Podporuje elementální odolnosti u zásahů, úhyb, blokování, štíty, projektily, oblastní poškození a léčení. Ve vlně B (Prompty 07–11) byly doplněny schopnosti válečníka, časované zásahy, bojové efekty, nové stavové efekty a další typy monster po úvodních vlnách. Plné rozpracování všech původních acceptance kritérií Promptů 07–11 pokračuje; viz `docs/IMPLEMENTATION_STATUS.md`. Přesný přehled dokončení základů je v `docs/IMPLEMENTATION_STATUS.md`.
 
 ## Současná architektura
 
