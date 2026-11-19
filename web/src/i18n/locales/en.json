@@ -47,7 +47,8 @@
     "pause": "Pause: spacebar",
     "hint": "Press I to open inventory. These are the first migrated systems; quests and dungeons will follow.",
     "pickup": "Loot: click a glowing item",
-    "skills": "Skills: Q / right mouse button and key 1"
+    "skills": "Skills: Q / right mouse button and key 1",
+    "avoid": "Dodge the red warning circle before the strike lands."
   },
   "battle": {
     "defeat": "Enemy defeated",
@@ -169,7 +170,9 @@
   },
   "combat": {
     "skills": "Abilities",
-    "effects": "Active effects"
+    "effects": "Active effects",
+    "warning": "Incoming attack",
+    "dodge": "Red ground markers show dangerous zones. Click outside to dodge."
   },
   "effects": {
     "stunned": "Stunned",
@@ -227,6 +230,20 @@
     "soulBurn": {
       "name": "Soul Burn",
       "desc": "Curse an enemy with lingering soulfire damage."
+    }
+  },
+  "enemies": {
+    "wraith": {
+      "name": "Wraith",
+      "desc": "A ranged foe. Casts a dark bolt and retreats from melee attackers."
+    },
+    "skeleton": {
+      "name": "Skeleton Warrior",
+      "desc": "A close-range fighter with a sweeping attack."
+    },
+    "wolf": {
+      "name": "Corrupted Wolf",
+      "desc": "A fast hunter. Leaps into a marked area and poisons anyone it catches."
     }
   }
 }

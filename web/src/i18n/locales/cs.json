@@ -47,7 +47,8 @@
     "pause": "Pauza: mezerník",
     "hint": "Klávesa I otevře inventář. Zatím jde o první převedené systémy; questy a dungeony budou následovat.",
     "pickup": "Kořist: kliknutí na zářící předmět",
-    "skills": "Schopnosti: Q / pravé tlačítko myši a klávesa 1"
+    "skills": "Schopnosti: Q / pravé tlačítko myši a klávesa 1",
+    "avoid": "Uhni z červené oblasti dříve, než útok dopadne."
   },
   "battle": {
     "defeat": "Nepřítel padl",
@@ -169,7 +170,9 @@
   },
   "combat": {
     "skills": "Schopnosti",
-    "effects": "Aktivní efekty"
+    "effects": "Aktivní efekty",
+    "warning": "Pozor – připravovaný útok",
+    "dodge": "Červené označení na zemi ukazuje nebezpečnou oblast. Ustup kliknutím mimo ni."
   },
   "effects": {
     "stunned": "Omráčení",
@@ -227,6 +230,20 @@
     "soulBurn": {
       "name": "Žár duší",
       "desc": "Prokleje nepřítele plamenem, který jej dále spaluje."
+    }
+  },
+  "enemies": {
+    "wraith": {
+      "name": "Přízrak",
+      "desc": "Vzdálený nepřítel. Sesílá temný výboj a ustupuje před bojovníkem."
+    },
+    "skeleton": {
+      "name": "Kostlivý bojovník",
+      "desc": "Útočí zblízka širokým rozmachem."
+    },
+    "wolf": {
+      "name": "Zkažený vlk",
+      "desc": "Rychle pronásleduje kořist, skáče do označeného místa a otráví cíl."
     }
   }
 }

@@ -157,6 +157,7 @@
         <div>{$t('controls.attack')}</div>
         <div>{$t('controls.pickup')}</div>
         <div>{$t('controls.skills')}</div>
+        <div>{$t('controls.avoid')}</div>
         <div class="world-guide-sub">{$t('controls.hint')}</div>
       </div>
 
@@ -172,8 +173,12 @@
           <div class="experience-track"><div style:width={`${100 * view.xp / (view.level * 80)}%`}></div></div>
         </div>
         <div class="status-panel">
-          <div class="status-label">{$t('hud.status')}</div>
-          <div class="status-value">{$t(`status.${view.status}`)}</div>
+          <div class="status-label">{$t('hud.enemy')}</div>
+          <div class="status-value enemy-name">{$t('enemies.' + view.enemy.type + '.name')}</div>
+          <div class="enemy-health">{view.enemy.alive
+            ? Math.round(100 * view.enemy.health / view.enemy.maxHealth) + '%'
+            : '—'}</div>
+          <div class="status-label">{$t('hud.status')}: {$t(`status.${view.status}`)}</div>
         </div>
         <div class="hud-actions">
           <button onclick={openInventory}>{$t('inventory.open')}</button>
@@ -182,6 +187,12 @@
         </div>
       </div>
 
+      {#if view.enemyIntent && !inventoryOpen}
+        <div class="danger-alert" role="status">
+          <strong>{$t('combat.warning')}</strong>
+          <span>{$t('combat.dodge')}</span>
+        </div>
+      {/if}
       {#if messageKey}
         <div class="toast" role="status">{$t(messageKey)}</div>
       {/if}

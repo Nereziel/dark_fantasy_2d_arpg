@@ -6,7 +6,7 @@ Dark-fantasy 2D ARPG pro prohlížeč. Hra se postupně převádí z původního
 
 **https://nereziel.github.io/dark_fantasy_2d_arpg/**
 
-Na GitHub Pages se nyní publikuje **nová Svelte/Phaser verze**, která je stále ve vývoji. Obsahuje výběr šesti tříd, základní boj a pohyb kliknutím, dvě aktivní schopnosti pro každou ze šesti tříd (Q / pravé tlačítko a 1), efekty, kořist, inventář, výbavu, zkušenosti, zlato a uložení nové hry. Původní plný herní obsah (dungeony, questy, talenty a další systémy) se teprve převádí.
+Na GitHub Pages se nyní publikuje **nová Svelte/Phaser verze**, která je stále ve vývoji. Obsahuje výběr šesti tříd, základní boj a pohyb kliknutím, dvě aktivní schopnosti pro každou ze šesti tříd (Q / pravé tlačítko a 1), efekty, tři archetypy nepřátel (přízrak, kostlivec a vlk) s viditelným varováním před útokem, kořist, inventář, výbavu, zkušenosti, zlato a uložení nové hry. Původní plný herní obsah (dungeony, questy, talenty a další systémy) se teprve převádí.
 
 ## Lokální spuštění
 
@@ -25,6 +25,7 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 - Levé tlačítko myši: pohyb po zemi, útok kliknutím na nepřítele, sebrání kořisti kliknutím na předmět.
 - Klávesa **I**: inventář; Esc: zavření inventáře.
 - **Q** nebo **pravé tlačítko myši**: první schopnost; **1**: druhá schopnost.
+- Uhnutí před útokem: opusť červeně vyznačenou oblast před zásahem.
 - Mezerník nebo Esc mimo inventář: pauza.
 - Přepnutí **Čeština / English** je v menu i při hraní.
 
@@ -35,11 +36,12 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 | `web/src/game/core` | Herní simulace, příkazy, XP, boj, kořist |
 | `web/src/game/skills` a `web/src/game/combat` | Schopnosti, cooldowny, stavové efekty a výpočty poškození |
 | `web/src/game/data` | Definice tříd, předmětů, afixů a výbavy |
+| `web/src/game/enemies` | Typy nepřátel, dosahy útoků, varování a parametry AI |
 | `web/src/game/phaser` | Phaser scéna, vykreslování a ovládání |
 | `web/src/game/bridge` | Typovaný most mezi simulací a Svelte |
 | `web/src/ui` | Svelte komponenty pro výběr třídy, inventář a HUD |
 | `web/src/i18n` | Překlady `cs` a `en` přes svelte-i18n |
-| `web/src/persistence` | IndexedDB uložení, migrace starší vývojové pozice |
+| `web/src/persistence` | IndexedDB uložení výhradně aktuálního formátu; bez migrace starých pozic |
 | `web/tests` | Vitest a Playwright |
 
 Z původní hry zůstaly v kořeni `dark_fantasy_2d_arpg_engine.html`, `visuals.js`, `visuals.css` a `index.html` jako **referenční implementace**. Na Pages se již nepoužívají; nedochází tedy k nechtěnému mísení starého a nového enginu.

@@ -11,9 +11,11 @@ test('switches Czech/English in the menu and game without losing the scene', asy
   await expect(page.locator('.game-hud')).toBeVisible();
   await expect(page.locator('.phaser-container canvas')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Poražení nepřátelé')).toBeVisible();
+  await expect(page.locator('.enemy-name')).toHaveText('Přízrak');
 
   await page.locator('#game-language').selectOption('en');
   await expect(page.getByText('Enemies defeated')).toBeVisible();
+  await expect(page.locator('.enemy-name')).toHaveText('Wraith');
   await expect(page.locator('.game-hud')).toBeVisible();
 
   await page.getByRole('button', { name: 'Save' }).click();

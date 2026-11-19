@@ -2,6 +2,7 @@
 import type { ClassId } from '../data/classes';
 import type { Equipment, GroundItem, Item, DerivedStats, EquipmentSlot } from '../data/items';
 import type { ActiveEffects, Cooldowns, SkillSlot } from '../skills/skills';
+import type { EnemySnapshot, EnemyIntent } from '../enemies/enemies';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
@@ -12,10 +13,12 @@ export interface ActorSnapshot extends Point {
   alive: boolean;
 }
 export interface GameSnapshot {
-  version: 3;
+  version: 4;
   classId: ClassId;
   player: ActorSnapshot;
-  enemy: ActorSnapshot;
+  enemy: EnemySnapshot;
+  enemyIntent: EnemyIntent | null;
+  enemyCooldown: number;
   kills: number;
   level: number;
   xp: number;
@@ -48,7 +51,9 @@ export type GameEvent =
   | { type: 'loot'; id: string }
   | { type: 'pickup'; id: string }
   | { type: 'levelUp'; level: number }
-  | { type: 'playerDeath' };
+  | { type: 'playerDeath' }
+  | { type: 'enemyWindup'; enemyId: string; pattern: 'bolt' | 'sweep' | 'leap' }
+  | { type: 'enemyAttack'; enemyId: string; hit: boolean };
 export interface GameStateReader {
   snapshot(): GameSnapshot;
   subscribe(listener: (state: GameSnapshot) => void): () => void;

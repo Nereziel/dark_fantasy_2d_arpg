@@ -67,3 +67,12 @@ h1 span,.brand-mark span{color:#b88b59}
 .experience-track{height:3px;margin-top:8px;background:#1a232c}
 .experience-track>div{height:100%;background:#c5a16b;transition:width .2s}
 @media(max-width:560px){.main-menu .menu-content{padding:12px}.main-menu h1{margin:9px 0;font-size:2.6rem}.ornament{margin:12px 0}.subtitle{margin:12px}.menu-actions{gap:5px}.menu-actions button{padding:8px 11px}.language-choice{margin:10px 0}.hint{margin:9px auto}.hud-actions button{font-size:.59rem;padding:5px}.game-hud{gap:5px}}
+
+/* Enemy archetype HUD and game-owned telegraph warning. */
+.enemy-name{font-size:.93rem;margin-top:4px}
+.enemy-health{color:#d09d95;font-size:.7rem;margin-top:4px;margin-bottom:8px}
+.danger-alert{position:absolute;z-index:3;top:93px;right:22px;width:min(310px,38vw);padding:10px 12px;display:flex;flex-direction:column;gap:5px;background:#361a20df;border:1px solid #d78574;box-shadow:0 8px 25px #000b;pointer-events:none}
+.danger-alert strong{color:#ffd4a9;font-size:.82rem}
+.danger-alert span{color:#efc8be;font-size:.7rem;line-height:1.45}
+.game-screen:has(.danger-alert) .toast{top:190px}
+@media(max-width:720px){.danger-alert{top:62px;right:8px;width:min(220px,46vw);padding:8px}.danger-alert strong{font-size:.7rem}.danger-alert span{font-size:.6rem}.game-screen:has(.danger-alert) .toast{top:140px}}

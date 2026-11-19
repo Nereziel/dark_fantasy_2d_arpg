@@ -1,6 +1,10 @@
 import type { ActorSnapshot, GameCommand, GameEvent, GameSnapshot, Point } from './types';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
-import { rollAttackDamage } from '../combat/damage';
+import { rollAttackDamage, mitigateDamage } from '../combat/damage';
+import {
+  createEncounter, encounterType, ENEMY_DEFINITIONS, validEnemyType, validIntent,
+  type EnemyIntent
+} from '../enemies/enemies';
 import {
   SKILLS, emptyCooldowns, emptyEffects, isSkillSlot, isActiveEffect,
   type ActiveEffect, type ActiveEffects, type Cooldowns, type SkillSlot
@@ -15,9 +19,6 @@ const WORLD_HEIGHT = 1400;
 const FIXED_STEP = 1 / 60;
 const MAX_FRAME_SECONDS = 0.1;
 const PLAYER_SPEED = 190;
-const ENEMY_SPEED = 62;
-const ENEMY_RANGE = 54;
-const ENEMY_COOLDOWN = 1.3;
 const INVENTORY_SIZE = 24;
 
 function makeActor(id: string, x: number, y: number, health: number): ActorSnapshot {
@@ -57,7 +58,8 @@ export class GameSimulation {
   private effects: ActiveEffects = emptyEffects();
   private pendingSkill: SkillSlot | null = null;
   private player = makeActor('hero', 390, 470, deriveStats('WARRIOR', this.equipment).maxHealth);
-  private enemy = makeActor('wraith-1', 780, 520, 72);
+  private enemy = createEncounter(0, 1);
+  private enemyIntent: EnemyIntent | null = null;
   private groundLoot: GroundItem[] = [];
   private moveTarget: Point | null = null;
   private attackTarget: string | null = null;
@@ -249,7 +251,7 @@ export class GameSimulation {
     for (const effect of this.effects.player) {
       effect.remaining -= dt;
       effect.tick += dt;
-      while (effect.tick >= 1 && effect.remaining > -0.0001) {
+      while (effect.tick >= 1 && effect.remaining > -0.0001 && this.player.alive) {
         effect.tick -= 1;
         if (effect.id === 'consecration') {
           this.player.health = Math.min(this.player.maxHealth,
@@ -257,10 +259,90 @@ export class GameSimulation {
           if (this.enemy.alive && distance(this.player, this.enemy) <= 135) this.applyDamage(effect.magnitude);
         } else if (effect.id === 'skeleton') {
           if (this.enemy.alive && distance(this.player, this.enemy) <= 280) this.applyDamage(effect.magnitude);
+        } else if (effect.id === 'poisoned' || effect.id === 'burning') {
+          this.hitPlayer(effect.magnitude);
         }
       }
     }
     this.effects.player = this.effects.player.filter(effect => effect.remaining > 0);
+  }
+
+  private hitPlayer(amount: number): void {
+    if (!this.player.alive || amount <= 0) return;
+    const applied = Math.max(1, Math.min(this.player.health, Math.round(amount)));
+    this.player.health -= applied;
+    this.events.push({ type: 'hit', targetId: this.player.id, damage: applied });
+    if (this.player.health === 0) {
+      this.player.alive = false;
+      this.enemyIntent = null;
+      this.pendingSkill = null;
+      this.moveTarget = null;
+      this.attackTarget = null;
+      this.pickupTarget = null;
+      this.events.push({ type: 'playerDeath' });
+    }
+  }
+
+  private updateEnemyAI(dt: number): void {
+    if (!this.enemy.alive || !this.player.alive) {
+      this.enemyIntent = null;
+      return;
+    }
+    const def = ENEMY_DEFINITIONS[this.enemy.type];
+    const stunned = this.effects.enemy.some(e => e.id === 'stunned');
+    if (stunned) {
+      // Stun interrupts a pending telegraphed attack.
+      if (this.enemyIntent) {
+        this.enemyIntent = null;
+        this.enemyTimer = Math.max(this.enemyTimer, 0.55);
+      }
+      return;
+    }
+    if (this.enemyIntent) {
+      const intent = this.enemyIntent;
+      intent.remaining -= dt;
+      if (intent.remaining > 0) return;
+
+      this.enemyIntent = null;
+      this.enemyTimer = def.cooldown;
+      if (intent.pattern === 'leap') {
+        // The landing spot is locked at telegraph time, so a dodge matters.
+        this.enemy.x = Math.max(28, Math.min(WORLD_WIDTH - 28, intent.x));
+        this.enemy.y = Math.max(28, Math.min(WORLD_HEIGHT - 28, intent.y));
+      }
+      const hit = distance(this.player, intent) <= intent.radius;
+      if (hit) {
+        const stats = deriveStats(this.classId, this.equipment);
+        const raw = def.baseDamage + this.level * 2;
+        this.hitPlayer(mitigateDamage(raw, stats.armor, this.level));
+        if (intent.pattern === 'leap' && this.player.alive) {
+          this.applyEffect('player', { id: 'poisoned', remaining: 3, magnitude: 3, tick: 0 });
+        }
+      }
+      this.events.push({ type: 'enemyAttack', enemyId: this.enemy.id, hit });
+      return;
+    }
+
+    const dist = distance(this.enemy, this.player);
+    if (dist > def.aggro) return;
+    const slowed = this.effects.enemy.some(e => e.id === 'chilled');
+    const speed = def.speed * (slowed ? 0.35 : 1);
+    if (dist > def.preferredRange + 10) {
+      toward(this.enemy, this.player, speed, dt, def.preferredRange);
+    } else if (def.attack === 'bolt' && dist > 0 && dist < def.preferredRange - 23) {
+      // Ranged wraiths kite instead of walking into melee range.
+      const ux = (this.enemy.x - this.player.x) / dist;
+      const uy = (this.enemy.y - this.player.y) / dist;
+      this.enemy.x = Math.max(28, Math.min(WORLD_WIDTH - 28, this.enemy.x + ux * speed * dt));
+      this.enemy.y = Math.max(28, Math.min(WORLD_HEIGHT - 28, this.enemy.y + uy * speed * dt));
+    }
+    if (this.enemyTimer > 0 || distance(this.enemy, this.player) > def.attackRange) return;
+    const center = def.attack === 'sweep' ? this.enemy : this.player;
+    this.enemyIntent = {
+      pattern: def.attack, x: center.x, y: center.y,
+      radius: def.dangerRadius, remaining: def.windup, total: def.windup
+    };
+    this.events.push({ type: 'enemyWindup', enemyId: this.enemy.id, pattern: def.attack });
   }
 
   advance(deltaMilliseconds: number): void {
@@ -284,7 +366,9 @@ export class GameSimulation {
     if (!this.enemy.alive) {
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) {
-        this.enemy = makeActor('wraith-1', 780 + (this.kills % 3) * 80, 520, 72 + this.level * 8);
+        this.enemy = createEncounter(this.kills, this.level);
+        this.enemyTimer = 0.7;
+        this.enemyIntent = null;
         this.effects.enemy = [];
       }
     }
@@ -318,28 +402,7 @@ export class GameSimulation {
       if (distance(this.player, this.moveTarget) <= 2) this.moveTarget = null;
     }
 
-    if (this.enemy.alive) {
-      const stunned = this.effects.enemy.some(e => e.id === 'stunned');
-      const chilled = this.effects.enemy.some(e => e.id === 'chilled');
-      if (!stunned && distance(this.player, this.enemy) < 275) {
-        toward(this.enemy, this.player, ENEMY_SPEED * (chilled ? 0.35 : 1), dt, ENEMY_RANGE - 3);
-      }
-      if (!stunned && distance(this.player, this.enemy) <= ENEMY_RANGE && this.enemyTimer <= 0) {
-        this.enemyTimer = ENEMY_COOLDOWN;
-        const stats = deriveStats(this.classId, this.equipment);
-        const raw = 9 + this.level * 2;
-        const hit = Math.max(1, Math.round(raw * (1 - stats.armor / (stats.armor + 50 * this.level))));
-        this.player.health = Math.max(0, this.player.health - hit);
-        this.events.push({ type: 'hit', targetId: this.player.id, damage: hit });
-        if (this.player.health === 0) {
-          this.player.alive = false;
-          this.moveTarget = null;
-          this.attackTarget = null;
-          this.pickupTarget = null;
-          this.events.push({ type: 'playerDeath' });
-        }
-      }
-    }
+    this.updateEnemyAI(dt);
   }
 
   private defeatEnemy(): void {
@@ -348,6 +411,7 @@ export class GameSimulation {
     this.respawnTimer = 2.8;
     this.attackTarget = null;
     this.pendingSkill = null;
+    this.enemyIntent = null;
     this.effects.enemy = [];
     this.gold += 12 + this.level * 3;
     this.xp += 40 + this.level * 12;
@@ -381,9 +445,11 @@ export class GameSimulation {
       : this.attackTarget && this.enemy.alive ? 'combat'
       : this.moveTarget || this.pickupTarget ? 'moving' : 'ready';
     return {
-      version: 3,
+      version: 4,
       classId: this.classId,
       player: { ...this.player }, enemy: { ...this.enemy },
+      enemyIntent: this.enemyIntent ? { ...this.enemyIntent } : null,
+      enemyCooldown: this.enemyTimer,
       kills: this.kills, level: this.level, xp: this.xp, gold: this.gold,
       resource: this.resource, rngState: this.rng.state,
       cooldowns: { ...this.cooldowns },
@@ -403,8 +469,15 @@ export class GameSimulation {
 
   restore(snapshot: GameSnapshot): boolean {
     const s = snapshot;
-    if (!s || s.version !== 3 || !isClassId(s.classId)
-      || !validActor(s.player, 'hero') || !validActor(s.enemy, 'wraith-1')
+    if (!s || s.version !== 4 || !isClassId(s.classId)
+      || !validActor(s.player, 'hero')
+      || !validEnemyType(s.enemy?.type)
+      || !validActor(s.enemy, `${s.enemy.type}-${s.kills + (s.enemy.alive ? 1 : 0)}`)
+      || s.enemy.type !== encounterType(s.enemy.alive ? s.kills : Math.max(0, s.kills - 1))
+      || !validIntent(s.enemyIntent)
+      || !Number.isFinite(s.enemyCooldown) || s.enemyCooldown < 0 || s.enemyCooldown > 20
+      || (s.enemyIntent !== null
+        && s.enemyIntent.pattern !== ENEMY_DEFINITIONS[s.enemy.type].attack)
       || !Number.isSafeInteger(s.kills) || s.kills < 0
       || !Number.isSafeInteger(s.level) || s.level < 1 || s.level > 1000
       || !Number.isSafeInteger(s.xp) || s.xp < 0 || s.xp >= s.level * 80
@@ -434,6 +507,8 @@ export class GameSimulation {
     this.groundLoot = s.groundLoot.map(g => ({ ...g, item: cloneItem(g.item)! }));
     this.player = { ...s.player };
     this.enemy = { ...s.enemy };
+    this.enemyIntent = s.enemyIntent ? { ...s.enemyIntent } : null;
+    this.enemyTimer = s.enemyCooldown;
     this.kills = s.kills;
     this.level = s.level;
     this.xp = s.xp;
@@ -451,7 +526,6 @@ export class GameSimulation {
     this.attackTarget = null;
     this.pickupTarget = null;
     this.attackTimer = 0;
-    this.enemyTimer = 0.5;
     this.accumulator = 0;
     this.respawnTimer = this.enemy.alive ? 0 : 2.8;
     this.events.splice(0);
@@ -468,7 +542,8 @@ export class GameSimulation {
     this.effects = emptyEffects();
     this.pendingSkill = null;
     this.player = makeActor('hero', 390, 470, deriveStats(classId, this.equipment).maxHealth);
-    this.enemy = makeActor('wraith-1', 780, 520, 72);
+    this.enemy = createEncounter(0, 1);
+    this.enemyIntent = null;
     this.groundLoot = [];
     this.moveTarget = null;
     this.attackTarget = null;

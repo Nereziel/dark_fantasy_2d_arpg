@@ -73,12 +73,15 @@ describe('deterministic legacy-style loot and inventory', () => {
     expect(sim.restore({ ...original, rngState: -1 })).toBe(false);
   });
 
-  it('accepts only the current v3 save format and ignores older snapshots', () => {
+  it('accepts only the current v4 save format and ignores older snapshots', () => {
     const sim = new GameSimulation();
     const current = sim.snapshot();
     expect(validateSnapshot(current)).toEqual(current);
+    expect(validateSnapshot({ ...current, version: 3 })).toBeNull();
     expect(validateSnapshot({ ...current, version: 2 })).toBeNull();
     expect(validateSnapshot({ ...current, version: 1 })).toBeNull();
+    expect(validateSnapshot({ ...current, enemyCooldown: -1 })).toBeNull();
+    expect(validateSnapshot({ ...current, enemy: { ...current.enemy, type: 'invalid' } })).toBeNull();
     expect(validateSnapshot({ ...current, effects: { player: [], enemy: [{ id: 'burning', remaining: -5, magnitude: 4, tick: 0 }] } })).toBeNull();
   });
 });

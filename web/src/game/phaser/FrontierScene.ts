@@ -4,6 +4,7 @@ import { CLASSES } from '../data/classes';
 import { RARITIES } from '../data/items';
 import { SKILLS } from '../skills/skills';
 import type { GameEvent } from '../core/types';
+import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
 
 const WIDTH = 2200;
 const HEIGHT = 1400;
@@ -19,6 +20,8 @@ export class FrontierScene extends Phaser.Scene {
   private healthBar!: Phaser.GameObjects.Graphics;
   private groundItems!: Phaser.GameObjects.Graphics;
   private statusVisuals!: Phaser.GameObjects.Graphics;
+  private telegraph!: Phaser.GameObjects.Graphics;
+  private renderedEnemyType: EnemyType | null = null;
 
   constructor(bridge: GameBridge) {
     super({ key: 'Frontier' });
@@ -36,16 +39,13 @@ export class FrontierScene extends Phaser.Scene {
     this.hero.lineStyle(4, 0xb7a77a).lineBetween(14, 5, 25, -22);
     this.hero.setDepth(50);
 
-    this.wraith = this.add.graphics();
-    this.wraith.fillStyle(0x1a1424, 0.6).fillEllipse(0, 17, 35, 12);
-    this.wraith.fillStyle(0x45313e).fillCircle(0, 0, 22);
-    this.wraith.fillStyle(0x887389).fillTriangle(-18, 14, 18, 14, 0, -28);
-    this.wraith.fillStyle(0xd99b68).fillCircle(-7, -8, 3).fillCircle(7, -8, 3);
-    this.wraith.setDepth(48);
+    this.wraith = this.add.graphics().setDepth(48);
+    this.drawEnemy(this.bridge.snapshot().enemy.type);
 
     this.healthBar = this.add.graphics().setDepth(60);
     this.groundItems = this.add.graphics().setDepth(44);
     this.statusVisuals = this.add.graphics().setDepth(47);
+    this.telegraph = this.add.graphics().setDepth(46);
 
     this.cameras.main.setBounds(0, 0, WIDTH, HEIGHT);
     this.cameras.main.setZoom(1);
@@ -96,6 +96,42 @@ export class FrontierScene extends Phaser.Scene {
     }
   }
 
+  private drawEnemy(type: EnemyType): void {
+    const g = this.wraith;
+    g.clear();
+    this.renderedEnemyType = type;
+    const color = ENEMY_DEFINITIONS[type].color;
+    if (type === 'wraith') {
+      g.fillStyle(0x080c13, 0.55).fillEllipse(0, 20, 49, 17);
+      g.fillStyle(0x3b314a).fillEllipse(0, 0, 44, 43);
+      g.fillStyle(color).fillTriangle(-20, 12, 20, 12, 0, -28);
+      g.fillStyle(0x24192e).fillEllipse(0, -8, 24, 22);
+      g.fillStyle(0xf4a9bc).fillCircle(-7, -9, 3).fillCircle(7, -9, 3);
+      g.lineStyle(2, 0xbc9ed8, 0.65).strokeEllipse(0, 4, 43, 42);
+    } else if (type === 'skeleton') {
+      g.fillStyle(0x080c13, 0.55).fillEllipse(0, 21, 49, 13);
+      g.lineStyle(5, 0x6f6b61).lineBetween(-19, 18, -15, -11)
+        .lineBetween(19, 18, 15, -11);
+      g.fillStyle(color).fillRoundedRect(-16, -4, 32, 24, 4);
+      g.lineStyle(2, 0x30333b).lineBetween(-10, 1, 10, 1)
+        .lineBetween(-11, 7, 11, 7).lineBetween(-10, 13, 10, 13);
+      g.fillStyle(0xe3dec8).fillCircle(0, -20, 19);
+      g.fillStyle(0x1c222c).fillCircle(-7, -24, 5).fillCircle(7, -24, 5);
+      g.fillStyle(0x7a6d5e).fillTriangle(-3, -16, 3, -16, 0, -9);
+      g.lineStyle(3, 0xbcb6a4).lineBetween(18, -11, 28, -34);
+    } else {
+      g.fillStyle(0x080c13, 0.58).fillEllipse(0, 18, 64, 14);
+      g.fillStyle(0x553b36).fillEllipse(-8, 0, 50, 26);
+      g.fillStyle(color).fillEllipse(12, -8, 28, 22);
+      g.fillStyle(0x6e4c41).fillTriangle(1, -15, 8, -34, 15, -16)
+        .fillTriangle(17, -16, 28, -30, 29, -7);
+      g.lineStyle(5, 0x59382d).lineBetween(-22, 4, -25, 23)
+        .lineBetween(-1, 6, 2, 25).lineBetween(10, 7, 13, 25);
+      g.fillStyle(0xecb5a0).fillCircle(21, -11, 3);
+      g.lineStyle(4, 0x644238).lineBetween(-29, -5, -39, -22);
+    }
+  }
+
   /** Visual feedback only: combat rules never rely on an animation frame. */
   private onGameEvent(event: GameEvent): void {
     if (event.type === 'cast') {
@@ -128,10 +164,25 @@ export class FrontierScene extends Phaser.Scene {
     const state = this.bridge.snapshot();
     this.hero.setPosition(state.player.x, state.player.y);
     this.hero.setVisible(state.player.alive);
-    this.wraith.setPosition(state.enemy.x, state.enemy.y);
+    if (this.renderedEnemyType !== state.enemy.type) this.drawEnemy(state.enemy.type);
+    const bob = state.enemy.type === 'wraith'
+      ? Math.sin(this.time.now * 0.0045) * 4
+      : Math.sin(this.time.now * (state.enemy.type === 'wolf' ? 0.015 : 0.008)) * 1.5;
+    this.wraith.setPosition(state.enemy.x, state.enemy.y + bob);
     this.wraith.setVisible(state.enemy.alive);
 
     this.healthBar.clear();
+    this.telegraph.clear();
+    if (state.enemy.alive && state.enemyIntent) {
+      const intent = state.enemyIntent;
+      const progress = 1 - intent.remaining / intent.total;
+      this.telegraph.fillStyle(0xde504e, 0.12 + progress * 0.24)
+        .fillCircle(intent.x, intent.y, intent.radius);
+      this.telegraph.lineStyle(3 + progress * 3, 0xf5b38b, 0.5 + progress * 0.5)
+        .strokeCircle(intent.x, intent.y, intent.radius);
+      this.telegraph.fillStyle(0xffd3a7, 0.55 + progress * 0.4)
+        .fillCircle(intent.x, intent.y, 4);
+    }
     this.statusVisuals.clear();
     if (state.enemy.alive) {
       const effects = state.effects.enemy;
