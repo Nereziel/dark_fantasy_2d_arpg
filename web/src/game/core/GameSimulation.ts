@@ -127,7 +127,8 @@ export class GameSimulation {
   constructor(seed = 0) { this.reset('WARRIOR', seed); }
 
   private get immobilized(): boolean {
-    return this.effects.player.some(e => e.id === 'stunned' || e.id === 'rooted');
+    return this.effects.player.some(e => e.id === 'stunned' || e.id === 'rooted')
+      || this.statusEffects.player.some(e => e.id === 'stunned' || e.id === 'frozen' || e.id === 'rooted');
   }
 
   private follow(actor: Point, target: Point, speed: number, dt: number, stop = 0): void {
@@ -511,6 +512,7 @@ export class GameSimulation {
       immunityTags: definition.immunityGroup ? [definition.immunityGroup] : [],
       visualHook: definition.visualHook,
       modifiers: definition.modifierKind === 'speedBoost' ? { moveSpeed: 1 }
+        : definition.modifierKind === 'movementSpeed' ? { moveSpeed: -1 }
         : definition.modifierKind === 'damageReduction' ? { damageReduction: 1 }
         : definition.modifierKind === 'damageTaken' ? { damageTaken: 1 } : {}
     };
@@ -696,7 +698,8 @@ export class GameSimulation {
     const result = resolveTypedDamage({
       type, base, multiplier, critChance,
       defenderArmor: 10 + this.level * 3, defenderLevel: this.level,
-      resistancePercent: this.enemyResistance(unit, type)
+      resistancePercent: Math.min(95, this.enemyResistance(unit, type) +
+        100 * Math.min(0.8, getStatusModifiers(this.statusEffects.enemies[unit.actor.id] ?? []).damageReduction ?? 0))
     }, this.rng);
     this.publishDamage(sourceId, unit.actor.id, type, result);
     return this.hitEnemy(result.damage, unit);
@@ -725,7 +728,9 @@ export class GameSimulation {
       : type === 'holy' ? stats.holyResist : 0;
     const result = resolveTypedDamage({
       type, base, defenderArmor: stats.armor, defenderLevel: this.level,
-      resistancePercent: resistance, dodgeChance: stats.dodgeChance,
+      resistancePercent: Math.min(95, resistance +
+        100 * Math.min(0.8, getStatusModifiers(this.statusEffects.player).damageReduction ?? 0)),
+      dodgeChance: stats.dodgeChance,
       blockChance: stats.blockChance, shield: this.shield
     }, this.rng);
     this.shield = result.shieldRemaining;
@@ -1182,7 +1187,7 @@ export class GameSimulation {
 
     const haste = getStatusModifiers(this.statusEffects.player).moveSpeed ?? 0;
     const speed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment).moveSpeed / 100)
-      * (1 + Math.min(0.6, haste));
+      * Math.max(0.25, Math.min(1.6, 1 + haste));
     const focus = this.focusedUnit;
     if (this.pendingPortal) {
       if (distance(this.player, this.portalPosition) <= 78) {
