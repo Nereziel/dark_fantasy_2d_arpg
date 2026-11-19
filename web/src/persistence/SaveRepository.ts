@@ -12,7 +12,7 @@ const SLOT = 'first-character';
  * Earlier world-snapshot formats are deliberately unsupported.
  */
 export interface SavedGame {
-  format: 6;
+  format: 7;
   characterId: string;
   savedAt: number;
   character: CharacterProgress;
@@ -29,13 +29,13 @@ export function validateCharacter(raw: unknown): CharacterProgress | null {
 export function createSaveRecord(raw: unknown, savedAt = Date.now()): SavedGame | null {
   const character = validateCharacter(raw);
   if (!character || !Number.isFinite(savedAt) || savedAt < 0) return null;
-  return { format: 6, characterId: 'hero', savedAt, character };
+  return { format: 7, characterId: 'hero', savedAt, character };
 }
 
 export function readSaveRecord(raw: unknown): CharacterProgress | null {
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as Partial<SavedGame>;
-  if (record.format !== 6 || record.characterId !== 'hero') return null;
+  if (record.format !== 7 || record.characterId !== 'hero') return null;
   return validateCharacter(record.character);
 }
 

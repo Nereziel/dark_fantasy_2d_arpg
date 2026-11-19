@@ -250,5 +250,30 @@
       "name": "Corrupted Wolf",
       "desc": "A fast hunter. Leaps into a marked area and poisons anyone it catches."
     }
+  },
+  "npc": {
+    "talk": "Speak to the warden",
+    "leave": "Leave",
+    "warden": {
+      "name": "Warden Vesna",
+      "title": "Commander of Emberwatch Camp"
+    }
+  },
+  "quest": {
+    "journal": "Quest journal",
+    "ashes": {
+      "title": "Ashes at the Gate",
+      "unstarted": "Warden Vesna has a task for you.",
+      "objective": "Defeat foes in the wilderness",
+      "intro": "Our last patrol vanished beyond the old road. Shadows draw close to camp, and the fires are fading. Slay three corrupted creatures in the wilderness, then return for your reward.",
+      "accept": "Accept quest",
+      "inProgress": "The fire still protects us, but danger waits beyond the stone road. Defeat three enemies and report back.",
+      "readyDialogue": "The road breathes again. I saw the shadows scatter. You have earned the watch's reward.",
+      "turnIn": "Complete quest",
+      "finishDialogue": "You have done more than we dared hope. Emberwatch is always open to you, wanderer.",
+      "completed": "Quest completed",
+      "readyHint": "Return to Warden Vesna.",
+      "reward": "Reward"
+    }
   }
 }

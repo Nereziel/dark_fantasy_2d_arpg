@@ -11,6 +11,9 @@
   import CharacterSelect from './ui/CharacterSelect.svelte';
   import InventoryPanel from './ui/InventoryPanel.svelte';
   import SkillBar from './ui/SkillBar.svelte';
+  import QuestJournal from './ui/QuestJournal.svelte';
+  import NpcDialogue from './ui/NpcDialogue.svelte';
+  import { WARDEN_ID } from './game/quests/firstQuest';
   import { CLASSES, type ClassId } from './game/data/classes';
 
   const bridge = new GameBridge();
@@ -20,11 +23,19 @@
   let busy = $state(false);
   let selectedClass: ClassId = $state('WARRIOR');
   let inventoryOpen = $state(false);
+  let dialogueOpen = $state(false);
   const autosaver = new CharacterAutosaver(saveGame, 1400, () => {
     messageKey = 'status.saveError';
   });
 
   onMount(() => {
+    const unsubscribeEvents = bridge.onEvent((event) => {
+      if (event.type === 'npcDialogue' && playing) {
+        inventoryOpen = false;
+        dialogueOpen = true;
+        bridge.command({ type: 'pause', value: true });
+      }
+    });
     const unsubscribe = bridge.subscribe((latest) => {
       view = latest;
       if (playing) autosaver.schedule(bridge.character());
@@ -39,6 +50,7 @@
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       unsubscribe();
+      unsubscribeEvents();
       window.removeEventListener('pagehide', flushOnExit);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       void autosaver.dispose().catch(() => {});
@@ -49,6 +61,7 @@
     bridge.command({ type: 'reset', classId: selectedClass });
     messageKey = '';
     inventoryOpen = false;
+    dialogueOpen = false;
     playing = true;
     void autosaver.saveNow(bridge.character()).catch(() => {
       messageKey = 'status.saveError';
@@ -59,17 +72,18 @@
     playing = true;
   }
   function menu(): void {
+    dialogueOpen = false;
     inventoryOpen = false;
     bridge.command({ type: 'pause', value: true });
     void autosaver.flush().catch(() => { messageKey = 'status.saveError'; });
     playing = false;
   }
   function togglePause(): void {
-    if (!inventoryOpen) bridge.command({ type: 'pause', value: !view.paused });
+    if (!inventoryOpen && !dialogueOpen) bridge.command({ type: 'pause', value: !view.paused });
   }
 
   function openInventory(): void {
-    if (inventoryOpen || view.paused || !view.player.alive) return;
+    if (dialogueOpen || inventoryOpen || view.paused || !view.player.alive) return;
     inventoryOpen = true;
     bridge.command({ type: 'pause', value: true });
   }
@@ -77,11 +91,30 @@
     inventoryOpen = false;
     bridge.command({ type: 'pause', value: false });
   }
+  function talkToWarden(): void {
+    if (inventoryOpen || dialogueOpen || view.paused) return;
+    bridge.command({ type: 'interactNpc', npcId: WARDEN_ID });
+  }
+  function acceptQuest(): void {
+    bridge.command({ type: 'questAccept' });
+  }
+  function turnInQuest(): void {
+    bridge.command({ type: 'questTurnIn' });
+  }
+  function closeDialogue(): void {
+    dialogueOpen = false;
+    bridge.command({ type: 'pause', value: false });
+  }
   function handleKeydown(event: KeyboardEvent): void {
     const target = event.target;
     if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return;
     if (!playing || event.repeat) return;
-    if (event.code === 'KeyI') {
+    if (event.code === 'Escape' && dialogueOpen) {
+      event.preventDefault();
+      closeDialogue();
+    } else if (dialogueOpen) {
+      return;
+    } else if (event.code === 'KeyI') {
       event.preventDefault();
       if (inventoryOpen) closeInventory();
       else openInventory();
@@ -113,6 +146,7 @@
       if (character && bridge.restoreCharacter(character)) {
         messageKey = 'status.loaded';
         inventoryOpen = false;
+        dialogueOpen = false;
         selectedClass = bridge.snapshot().classId;
         autosaver.prime(bridge.character());
         playing = true;
@@ -193,6 +227,7 @@
         <div class="world-guide-sub">{$t('controls.hint')}</div>
       </div>
 
+      <QuestJournal {view} talk={talkToWarden} />
       <aside class="enemy-roster" aria-label={$t('hud.enemies')}>
         <div class="enemy-roster-title">{$t('hud.enemies')} · {view.enemies.filter(unit => unit.actor.alive).length}/{view.enemies.length} · {$t('hud.wave')} {view.wave + 1}</div>
         {#each view.enemies as unit (unit.actor.id)}
@@ -244,7 +279,9 @@
       {#if messageKey}
         <div class="toast" role="status">{$t(messageKey)}</div>
       {/if}
-      {#if inventoryOpen}
+      {#if dialogueOpen}
+        <NpcDialogue quest={view.quest} accept={acceptQuest} turnIn={turnInQuest} close={closeDialogue} />
+      {:else if inventoryOpen}
         <InventoryPanel {view} {bridge} close={closeInventory} />
       {:else if view.paused}
         <div class="modal-shield">

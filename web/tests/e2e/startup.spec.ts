@@ -97,11 +97,11 @@ test('autosaves only the hero and generates fresh wilderness on reopening', asyn
         get.onsuccess = () => {
           const record = get.result as { format?: number; character?: { classId?: string } } | undefined;
           db.close();
-          resolve(record?.format === 6 && record.character?.classId === 'ROGUE' ? 6 : null);
+          resolve(record?.format === 7 && record.character?.classId === 'ROGUE' ? 6 : null);
         };
       };
     });
-  })).toBe(6);
+  })).toBe(7);
 
   await page.reload();
   await page.getByRole('button', { name: 'Load' }).click();
@@ -111,4 +111,33 @@ test('autosaves only the hero and generates fresh wilderness on reopening', asyn
   expect(secondSeed).not.toBe(firstSeed);
   await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
   await expect(page.locator('.effect-chip')).toHaveCount(0);
+});
+
+test('talks to Warden Vesna, accepts the quest and loads its persistent progress', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  const journal = page.locator('.quest-journal');
+  await expect(journal).toContainText('Ashes at the Gate');
+  await expect(journal).toContainText('Warden Vesna has a task');
+  await page.getByRole('button', { name: 'Speak to the warden' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Warden Vesna' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Our last patrol vanished');
+  await dialog.getByRole('button', { name: 'Accept quest' }).click();
+  await expect(dialog).toContainText('0/3');
+  await dialog.getByRole('button', { name: 'Leave' }).click();
+  await expect(journal).toContainText('0/3');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('status')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Load' }).click();
+  await expect(journal).toContainText('0/3');
+  await expect(journal).toContainText('Ashes at the Gate');
+  await page.getByRole('button', { name: 'Speak to the warden' }).click();
+  await expect(dialog).toContainText('The fire still protects us');
+  await expect(dialog.getByRole('button', { name: 'Accept quest' })).toHaveCount(0);
+  await page.locator('#game-language').selectOption('cs');
+  await expect(dialog).toHaveAttribute('aria-label', 'Strážkyně Vesna');
+  await expect(dialog).toContainText('Popel u bran');
 });

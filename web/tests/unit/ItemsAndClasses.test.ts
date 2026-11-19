@@ -79,10 +79,10 @@ describe('deterministic legacy-style loot and inventory', () => {
     const record = createSaveRecord(hero, 1234)!;
 
     expect(record).not.toBeNull();
-    expect(record.format).toBe(6);
+    expect(record.format).toBe(7);
     expect(record.savedAt).toBe(1234);
     expect(Object.keys(record.character).sort()).toEqual([
-      'classId', 'equipment', 'gold', 'inventory', 'kills', 'level', 'xp'
+      'classId', 'equipment', 'gold', 'inventory', 'kills', 'level', 'quest', 'xp'
     ].sort());
     expect('enemies' in record.character).toBe(false);
     expect('effects' in record.character).toBe(false);
@@ -91,6 +91,7 @@ describe('deterministic legacy-style loot and inventory', () => {
     expect(readSaveRecord(record)).toEqual(hero);
     expect(validateCharacter({ ...hero, inventory: [null] })).toBeNull();
     expect(readSaveRecord({ ...record, format: 5, snapshot: sim.snapshot() })).toBeNull();
+    expect(readSaveRecord({ ...record, format: 6 })).toBeNull();
     expect(readSaveRecord({ ...record, character: { ...hero, gold: -15 } })).toBeNull();
     expect(readSaveRecord({ ...record, characterId: 'wrong' })).toBeNull();
   });

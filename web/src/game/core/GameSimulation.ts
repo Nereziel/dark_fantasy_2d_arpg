@@ -11,6 +11,11 @@ import {
 } from '../enemies/enemies';
 import { ACTOR_RADIUS, canOccupy, findPath, moveActor, type Obstacle } from '../world/navigation';
 import { CAMP_RADIUS, generateWorld, type WorldLayout } from '../world/generator';
+import { nearWarden, WARDEN_INTERACT_RANGE, WARDEN_POSITION } from '../world/npcs';
+import {
+  freshQuest, validQuest, QUEST_REQUIRED_KILLS, QUEST_REWARD_GOLD, QUEST_REWARD_XP,
+  WARDEN_ID, type QuestProgress
+} from '../quests/firstQuest';
 import {
   SeededRng, createEquipment, deriveStats, isEquipmentSlot, isItem, rollItem,
   type Equipment, type EquipmentSlot, type GroundItem, type Item
@@ -77,6 +82,8 @@ export class GameSimulation {
   private world: WorldLayout = generateWorld(0);
   private units: EnemyUnit[] = createPack(0, 1);
   private selectedTargetId: string | null = null;
+  private quest: QuestProgress = freshQuest();
+  private pendingNpc = false;
   private pendingSkill: SkillSlot | null = null;
   private player = makeActor('hero', 390, 470, deriveStats('WARRIOR', this.equipment).maxHealth);
   private groundLoot: GroundItem[] = [];
@@ -124,7 +131,37 @@ export class GameSimulation {
     }
     if (command.type === 'equip') { this.equip(command.index); return; }
     if (command.type === 'unequip') { this.unequip(command.slot); return; }
+    // Dialogue pauses the world, not the quest interaction.
+    if (command.type === 'questAccept') {
+      if (this.player.alive && nearWarden(this.player) && this.quest.status === 'available') {
+        this.quest = { id: this.quest.id, status: 'active', defeated: 0 };
+        this.events.push({ type: 'questUpdated', status: this.quest.status, defeated: this.quest.defeated });
+      }
+      return;
+    }
+    if (command.type === 'questTurnIn') {
+      if (this.player.alive && nearWarden(this.player) && this.quest.status === 'ready') {
+        this.quest = { ...this.quest, status: 'completed' };
+        this.gold += QUEST_REWARD_GOLD;
+        this.awardExperience(QUEST_REWARD_XP);
+        this.events.push({ type: 'questUpdated', status: this.quest.status, defeated: this.quest.defeated });
+      }
+      return;
+    }
     if (!this.player.alive || this.paused) return;
+    if (command.type === 'interactNpc') {
+      if (command.npcId !== WARDEN_ID) return;
+      this.movePath = [];
+      this.attackTarget = null;
+      this.pickupTarget = null;
+      this.pendingSkill = null;
+      if (nearWarden(this.player)) {
+        this.events.push({ type: 'npcDialogue', npcId: WARDEN_ID });
+      } else {
+        this.pendingNpc = true;
+      }
+      return;
+    }
     if (command.type === 'cast') {
       if (isSkillSlot(command.slot)) this.requestCast(command.slot);
       return;
@@ -138,6 +175,7 @@ export class GameSimulation {
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingSkill = null;
+      this.pendingNpc = false;
     } else if (command.type === 'attack') {
       const selected = this.units.find(unit => unit.actor.id === command.targetId && unit.actor.alive);
       if (!selected) return;
@@ -146,11 +184,13 @@ export class GameSimulation {
       this.movePath = [];
       this.pickupTarget = null;
       this.pendingSkill = null;
+      this.pendingNpc = false;
     } else if (command.type === 'pickup' && this.groundLoot.some(loot => loot.id === command.id)) {
       this.pickupTarget = command.id;
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
+      this.pendingNpc = false;
     }
   }
 
@@ -192,6 +232,7 @@ export class GameSimulation {
     this.movePath = [];
     this.attackTarget = null;
     this.pickupTarget = null;
+    this.pendingNpc = false;
     if (distance(this.player, this.enemy) > skill.range) {
       this.pendingSkill = slot;
       return;
@@ -276,6 +317,7 @@ export class GameSimulation {
     if (this.player.health === 0) {
       this.player.alive = false;
       this.pendingSkill = null;
+      this.pendingNpc = false;
       this.movePath = [];
       this.attackTarget = null;
       this.pickupTarget = null;
@@ -425,7 +467,14 @@ export class GameSimulation {
 
     const speed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment).moveSpeed / 100);
     const focus = this.focusedUnit;
-    if (this.pendingSkill && focus.actor.alive) {
+    if (this.pendingNpc) {
+      if (nearWarden(this.player)) {
+        this.pendingNpc = false;
+        this.events.push({ type: 'npcDialogue', npcId: WARDEN_ID });
+      } else {
+        this.follow(this.player, WARDEN_POSITION, speed, dt, WARDEN_INTERACT_RANGE - 10);
+      }
+    } else if (this.pendingSkill && focus.actor.alive) {
       const skill = SKILLS[this.classId][this.pendingSkill];
       if (distance(this.player, focus.actor) > skill.range) {
         this.follow(this.player, focus.actor, speed, dt, Math.max(0, skill.range - 4));
@@ -463,6 +512,17 @@ export class GameSimulation {
     }
   }
 
+  private awardExperience(amount: number): void {
+    this.xp += amount;
+    while (this.xp >= this.level * 80) {
+      this.xp -= this.level * 80;
+      this.level++;
+      this.events.push({ type: 'levelUp', level: this.level });
+      this.player.health = Math.min(this.player.maxHealth,
+        this.player.health + Math.round(this.player.maxHealth * 0.25));
+    }
+  }
+
   private defeatEnemy(unit: EnemyUnit): void {
     unit.actor.alive = false;
     unit.intent = null;
@@ -474,13 +534,14 @@ export class GameSimulation {
     }
     this.kills++;
     this.gold += 12 + this.level * 3;
-    this.xp += 40 + this.level * 12;
-    while (this.xp >= this.level * 80) {
-      this.xp -= this.level * 80;
-      this.level++;
-      this.events.push({ type: 'levelUp', level: this.level });
-      this.player.health = Math.min(this.player.maxHealth,
-        this.player.health + Math.round(this.player.maxHealth * 0.25));
+    this.awardExperience(40 + this.level * 12);
+    if (this.quest.status === 'active') {
+      const defeated = Math.min(QUEST_REQUIRED_KILLS, this.quest.defeated + 1);
+      this.quest = {
+        ...this.quest, defeated,
+        status: defeated === QUEST_REQUIRED_KILLS ? 'ready' : 'active'
+      };
+      this.events.push({ type: 'questUpdated', status: this.quest.status, defeated });
     }
     const item = rollItem(this.kills, this.level, this.rng);
     this.groundLoot.push({
@@ -509,7 +570,8 @@ export class GameSimulation {
       gold: this.gold,
       kills: this.kills,
       inventory: this.inventory.map(cloneItem),
-      equipment: cloneEquipment(this.equipment)
+      equipment: cloneEquipment(this.equipment),
+      quest: { ...this.quest }
     };
   }
 
@@ -531,7 +593,8 @@ export class GameSimulation {
       gold: progress.gold,
       kills: progress.kills,
       inventory: progress.inventory,
-      equipment: progress.equipment
+      equipment: progress.equipment,
+      quest: progress.quest
     };
     if (!scratch.restore(candidate)) return false;
 
@@ -542,6 +605,7 @@ export class GameSimulation {
     this.kills = progress.kills;
     this.inventory = progress.inventory.map(cloneItem);
     this.equipment = cloneEquipment(progress.equipment);
+    this.quest = { ...progress.quest };
     this.refreshHealthLimit();
     this.player.health = this.player.maxHealth;
     this.units = createPack(0, this.level, this.world.encounterPositions);
@@ -581,6 +645,7 @@ export class GameSimulation {
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
       groundLoot: this.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! })),
+      quest: { ...this.quest },
       paused: this.paused,
       status
     };
@@ -600,6 +665,7 @@ export class GameSimulation {
       || !Number.isSafeInteger(s.level) || s.level < 1 || s.level > 1000
       || !Number.isSafeInteger(s.xp) || s.xp < 0 || s.xp >= s.level * 80
       || !Number.isSafeInteger(s.gold) || s.gold < 0
+      || !validQuest(s.quest)
       || !Number.isInteger(s.rngState) || s.rngState < 0 || s.rngState > 0xffffffff
       || !Number.isFinite(s.resource) || s.resource < 0 || s.resource > CLASSES[s.classId].resourceMax
       || !Number.isFinite(s.respawnTimer) || s.respawnTimer < 0 || s.respawnTimer > 5
@@ -631,6 +697,7 @@ export class GameSimulation {
 
     this.world = layout;
     this.classId = s.classId;
+    this.quest = { ...s.quest };
     this.equipment = cloneEquipment(s.equipment);
     this.inventory = s.inventory.map(cloneItem);
     this.groundLoot = s.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! }));
@@ -651,6 +718,7 @@ export class GameSimulation {
     this.movePath = [];
     this.attackTarget = null;
     this.pendingSkill = null;
+    this.pendingNpc = false;
     this.pickupTarget = null;
     this.attackTimer = 0;
     this.accumulator = 0;
@@ -666,6 +734,8 @@ export class GameSimulation {
     this.rng = new SeededRng(seed === 0 ? 0x49ac127b : ((seed ^ 0x49ac127b) >>> 0));
     this.cooldowns = emptyCooldowns();
     this.effects = emptyEffects();
+    this.quest = freshQuest();
+    this.pendingNpc = false;
     this.units = createPack(0, 1, this.world.encounterPositions);
     this.selectedTargetId = null;
     this.pendingSkill = null;

@@ -3,6 +3,7 @@ import type { ClassId } from '../data/classes';
 import type { Equipment, GroundItem, Item, DerivedStats, EquipmentSlot } from '../data/items';
 import type { ActiveEffects, Cooldowns, SkillSlot } from '../skills/skills';
 import type { EnemySnapshot, EnemyIntent, EnemyUnit } from '../enemies/enemies';
+import type { QuestProgress } from '../quests/firstQuest';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
@@ -24,6 +25,7 @@ export interface CharacterProgress {
   kills: number;
   inventory: Array<Item | null>;
   equipment: Equipment;
+  quest: QuestProgress;
 }
 
 export interface GameSnapshot {
@@ -52,6 +54,7 @@ export interface GameSnapshot {
   inventory: Array<Item | null>;
   equipment: Equipment;
   groundLoot: GroundItem[];
+  quest: QuestProgress;
   paused: boolean;
   status: GameStatus;
 }
@@ -59,6 +62,9 @@ export type GameCommand =
   | { type: 'move'; destination: Point }
   | { type: 'attack'; targetId: string }
   | { type: 'cast'; slot: SkillSlot }
+  | { type: 'interactNpc'; npcId: 'warden_vesna' }
+  | { type: 'questAccept' }
+  | { type: 'questTurnIn' }
   | { type: 'pickup'; id: string }
   | { type: 'equip'; index: number }
   | { type: 'unequip'; slot: EquipmentSlot }
@@ -73,6 +79,8 @@ export type GameEvent =
   | { type: 'pickup'; id: string }
   | { type: 'levelUp'; level: number }
   | { type: 'playerDeath' }
+  | { type: 'npcDialogue'; npcId: 'warden_vesna' }
+  | { type: 'questUpdated'; status: QuestProgress['status']; defeated: number }
   | { type: 'enemyWindup'; enemyId: string; pattern: 'bolt' | 'sweep' | 'leap' }
   | { type: 'enemyAttack'; enemyId: string; hit: boolean };
 export interface GameStateReader {

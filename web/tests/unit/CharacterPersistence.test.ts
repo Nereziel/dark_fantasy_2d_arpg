@@ -55,6 +55,7 @@ describe('Diablo-style character persistence', () => {
     expect(save.character.xp).toBe(42);
     expect(save.character.gold).toBe(555);
     expect(save.character.kills).toBe(8);
+    expect(save.character.quest).toEqual({ id: 'ashes_at_gate', status: 'available', defeated: 0 });
     expect(Object.values(save.character.equipment).filter(Boolean)).toHaveLength(1);
 
     const loaded = readSaveRecord(JSON.parse(savedText));
@@ -96,6 +97,8 @@ describe('Diablo-style character persistence', () => {
     expect(validateCharacter(null)).toBeNull();
     expect(createSaveRecord({ ...hero, inventory: [] })).toBeNull();
     expect(readSaveRecord({ format: 5, snapshot: current })).toBeNull();
+    expect(readSaveRecord({ format: 6, character: hero })).toBeNull();
+    expect(validateCharacter({ ...hero, quest: { id: 'ashes_at_gate', status: 'ready', defeated: 1 } })).toBeNull();
   });
 
   it('excludes snapshot-only data even if an untrusted caller supplies extra keys', () => {
@@ -109,7 +112,7 @@ describe('Diablo-style character persistence', () => {
     };
     const record = createSaveRecord(raw)!;
     expect(Object.keys(record.character).sort()).toEqual([
-      'classId', 'equipment', 'gold', 'inventory', 'kills', 'level', 'xp'
+      'classId', 'equipment', 'gold', 'inventory', 'kills', 'level', 'quest', 'xp'
     ].sort());
     expect(record.character).toEqual(sim.character());
   });

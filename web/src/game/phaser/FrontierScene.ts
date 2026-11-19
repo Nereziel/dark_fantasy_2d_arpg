@@ -6,6 +6,8 @@ import { SKILLS } from '../skills/skills';
 import type { GameEvent } from '../core/types';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
 import { CAMP_RADIUS, generateWorld } from '../world/generator';
+import { WARDEN_POSITION } from '../world/npcs';
+import { WARDEN_ID } from '../quests/firstQuest';
 
 const WIDTH = 2200;
 const HEIGHT = 1400;
@@ -17,6 +19,7 @@ const HEIGHT = 1400;
 export class FrontierScene extends Phaser.Scene {
   private readonly bridge: GameBridge;
   private hero!: Phaser.GameObjects.Graphics;
+  private wardenMarker!: Phaser.GameObjects.Text;
   private readonly enemyGraphics = new Map<string, Phaser.GameObjects.Graphics>();
   private healthBar!: Phaser.GameObjects.Graphics;
   private groundItems!: Phaser.GameObjects.Graphics;
@@ -32,6 +35,20 @@ export class FrontierScene extends Phaser.Scene {
 
   create(): void {
     this.paintWorld(this.bridge.snapshot().worldSeed);
+
+    // The warden is an in-world NPC. Interaction uses simulation commands.
+    const warden = this.add.graphics().setPosition(WARDEN_POSITION.x, WARDEN_POSITION.y).setDepth(49);
+    warden.fillStyle(0x080c11, 0.5).fillEllipse(0, 21, 46, 14);
+    warden.fillStyle(0x4b3639).fillTriangle(-16, 19, 16, 19, 0, -18);
+    warden.fillStyle(0x9e8570).fillRoundedRect(-11, -22, 22, 21, 4);
+    warden.fillStyle(0xd3b798).fillCircle(0, -24, 11);
+    warden.fillStyle(0x473939).fillTriangle(-13, -26, 13, -26, 0, -41);
+    warden.lineStyle(4, 0xa6a3a0).lineBetween(14, 15, 23, -31);
+    warden.fillStyle(0xe1ba75).fillCircle(23, -34, 5);
+    this.wardenMarker = this.add.text(WARDEN_POSITION.x, WARDEN_POSITION.y - 66, '!', {
+      fontFamily: 'Georgia, serif', fontSize: '24px', color: '#ffdc9b',
+      stroke: '#131923', strokeThickness: 4
+    }).setOrigin(0.5).setDepth(82);
 
     this.hero = this.add.graphics();
     this.hero.fillStyle(0x131f30).fillCircle(0, 3, 19);
@@ -83,6 +100,12 @@ export class FrontierScene extends Phaser.Scene {
     if (pointer.button !== 0) return;
     const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     const state = this.bridge.snapshot();
+    if (Phaser.Math.Distance.Between(
+      world.x, world.y, WARDEN_POSITION.x, WARDEN_POSITION.y
+    ) < 40) {
+      this.bridge.command({ type: 'interactNpc', npcId: WARDEN_ID });
+      return;
+    }
     const loot = state.groundLoot.find(g =>
       Phaser.Math.Distance.Between(world.x, world.y, g.x, g.y) < 30
     );
@@ -171,6 +194,9 @@ export class FrontierScene extends Phaser.Scene {
     const state = this.bridge.snapshot();
     if (this.renderedSeed !== state.worldSeed) this.paintWorld(state.worldSeed);
     this.hero.setPosition(state.player.x, state.player.y);
+    this.wardenMarker.setText(state.quest.status === 'ready' ? '?'
+      : state.quest.status === 'available' ? '!' : '·');
+    this.wardenMarker.setVisible(state.quest.status !== 'completed');
     this.hero.setVisible(state.player.alive);
     const ids = new Set(state.enemies.map(unit => unit.actor.id));
     for (const [id, sprite] of this.enemyGraphics) {

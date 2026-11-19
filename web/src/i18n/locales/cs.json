@@ -250,5 +250,30 @@
       "name": "Zkažený vlk",
       "desc": "Rychle pronásleduje kořist, skáče do označeného místa a otráví cíl."
     }
+  },
+  "npc": {
+    "talk": "Promluvit se strážkyní",
+    "leave": "Odejít",
+    "warden": {
+      "name": "Strážkyně Vesna",
+      "title": "Velitelka tábora Stráž uhelného žáru"
+    }
+  },
+  "quest": {
+    "journal": "Deník úkolů",
+    "ashes": {
+      "title": "Popel u bran",
+      "unstarted": "Strážkyně Vesna čeká s úkolem.",
+      "objective": "Poraz protivníky v divočině",
+      "intro": "Poslední hlídka zmizela za starou cestou. Stíny se blíží k táboru a ohně pohasínají. Znič tři znetvořené tvory v divočině a vrať se pro odměnu.",
+      "accept": "Přijmout úkol",
+      "inProgress": "Oheň nás ještě chrání, ale za kamennou cestou číhá nebezpečí. Poraz tři nepřátele a potom mi podej zprávu.",
+      "readyDialogue": "Cesta znovu dýchá. Viděla jsem, jak se stíny rozptýlily. Zasloužíš si výslužku hlídky.",
+      "turnIn": "Odevzdat úkol",
+      "finishDialogue": "Vykonal jsi víc, než jsme doufali. Tábor ti zůstane otevřený, poutníku.",
+      "completed": "Úkol dokončen",
+      "readyHint": "Vrať se ke strážkyni Vesně.",
+      "reward": "Odměna"
+    }
   }
 }
