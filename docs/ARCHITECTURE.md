@@ -5,8 +5,8 @@
 The site at `https://nereziel.github.io/dark_fantasy_2d_arpg/` now deploys **`web/dist/`** instead of the old root HTML engine. This is an intentionally early playable migration; full campaign parity remains future work. The original root HTML engine is kept for reference.
 
 - **Svelte 5:** menu, selection of six classes, HUD, inventory/equipment, localized NPC dialogue, merchant and blacksmith panels, quest journal and runtime locale.
-- **Phaser 4.2.1:** world canvas, camera, input picking, actor proxies, seeded wilderness terrain and safe starter camp, loot graphics, three simultaneous enemy silhouettes, selected-target indicators and telegraphs.
-- **Strict TypeScript simulation:** authoritative positions, movement, basic attacks, 12 first active class skills, cooldown/resource validation, status effects, three simultaneous data-driven enemy archetypes with individual AI, dodgeable attack windups, deterministic combat damage, XP/levels, loot, gold, inventory/equipment, first quest lifecycle and events.
+- **Phaser 4.2.1:** world canvas, camera, input picking, actor proxies, seeded wilderness and crypt terrain, portal drawings, safe starter camp, loot graphics, individual enemy/boss visuals, selected-target indicators and telegraphs.
+- **Strict TypeScript simulation:** authoritative positions, movement, basic attacks, 12 first active class skills, cooldown/resource validation, status effects, three wilderness archetypes plus a crypt boss, independent enemy AI and windups, two-phase dungeon encounters, zone transitions, XP/levels, loot, gold, inventory/equipment, first quest lifecycle and events.
 - **`svelte-i18n`:** Czech and English dictionaries, changed without reloading the game.
 - **IndexedDB:** automatic debounced plus manual character-only saves (format v8) with class, level, XP, gold, cumulative kills, inventory, equipment/tempering levels and persistent quest progress. Enemy state, effects, cooldowns, drops, positions, encounter wave and world seed are never persisted; old saves are not migrated.
 - **Vitest and Playwright:** headless domain unit tests, translation key tests and browser smoke tests.
@@ -51,6 +51,14 @@ The `CharacterProgress.quest` field is included in allowlisted character-only sa
 
 `Item.upgrades` (0–3) is a permanent part of purchased or dropped gear. A blacksmith upgrade adds armor or weapon damage and costs more after each temper. Character-only v8 saves include this gear and gold but not shop session state. Older saves are intentionally rejected instead of migrated.
 
+## First dungeon and zone transitions
+
+The `usePortal` command is the single authoritative path between the starting wilderness and the **Crypt of the Hollow Crown**. Phaser renders clickable stone gateways and the Svelte `DungeonPanel` offers the same action; the simulation automatically steers the hero within reach before travelling. `GameSnapshot.zone`, `dungeonStage` and `dungeonCleared` exist **only while the game is running**, never in `CharacterProgress`.
+
+`generateCrypt(seed)` builds a deterministic crypt area with boundaries, pillars, rubble and guaranteed traversable access between the exit, guardian spawns and boss arena. The area reuses the collision-aware A* engine with its own geometry. `createCryptPack` first spawns three tougher guardians, then the **Crypt Lord** plus two retainers. The boss has substantially more health, area damage and a longer telegraphed windup. A single clear reward is granted once the final pack is defeated; the crypt does not auto-respawn its boss until a new entry. Leaving the crypt discards its current enemies and uncollected ground loot, while character XP, gold, inventory, equipment and quest flags remain. Reloading a saved character always starts at camp.
+
+This is a playable procedural crypt environment, not a full multi-level, room-and-corridor generator. Further dungeon design, boss behavior and reward balancing are planned.
+
 ## Hosting and CI
 
 `.github/workflows/pages.yml` builds and tests the Svelte SPA on game/build input changes, runs Chromium E2E, then uploads **`web/dist` only** to GitHub Pages. GitHub Pages is static hosting and no backend is required.
@@ -61,7 +69,7 @@ The Vite base path is `/dark_fantasy_2d_arpg/`. All bundle and imported asset UR
 
 ## Technical gaps
 
-- The scene remains a small seeded wilderness with one three-enemy pack; complete biome/tile generation, large groups, additional quests, towns and bosses are not migrated.
+- The scene includes a seeded wilderness and first crypt with a boss; full biome generation, multi-level dungeons, larger enemy packs, additional quests and full towns are not migrated.
 - All six classes have two playable starter skills each; the complete original skill trees and advanced balance are not implemented yet.
 - Ground and hero remain procedural placeholder graphics. Replace with coherent spritesheets/tilemaps while preserving core state.
 - Obstacle-aware A* exists for click-to-move, but full navigation-mesh and dynamic obstacle handling remain future work.

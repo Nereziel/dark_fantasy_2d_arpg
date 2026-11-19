@@ -249,6 +249,10 @@
     "wolf": {
       "name": "Corrupted Wolf",
       "desc": "A fast hunter. Leaps into a marked area and poisons anyone it catches."
+    },
+    "crypt_lord": {
+      "name": "Crypt Lord",
+      "desc": "An ancient ruler of the tomb. Heavily armored with a sweeping attack."
     }
   },
   "npc": {
@@ -300,5 +304,18 @@
     "temperHint": "The blacksmith permanently improves equipped weapons and armor for gold (up to three times). Equip an item from your inventory first.",
     "maximum": "Fully tempered (3/3)",
     "noForgeable": "Equip a weapon or armor in your inventory, then return to the blacksmith."
+  },
+  "dungeon": {
+    "name": "Crypt of the Hollow Crown",
+    "gateHint": "A sealed crypt lies beyond the camp. Enter and purge its darkness.",
+    "enter": "Enter the crypt",
+    "return": "Return to camp",
+    "guards": "Crypt guardians",
+    "guardsHint": "Defeat three stronger guardians to awaken the ruler beneath",
+    "boss": "The Crypt Lord",
+    "bossHint": "Defeat the Crypt Lord and two retainers. Dodge its wide sweeping attacks.",
+    "cleared": "Crypt cleared",
+    "clearedHint": "The ruler has fallen. Keep your gold, loot and XP; the world resets next session.",
+    "clearedToast": "Crypt cleared! Rewards received."
   }
 }

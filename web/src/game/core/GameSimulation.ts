@@ -1,4 +1,4 @@
-import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point } from './types';
+import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point, ZoneId } from './types';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
 import { rollAttackDamage, mitigateDamage } from '../combat/damage';
 import {
@@ -6,11 +6,14 @@ import {
   type ActiveEffect, type ActiveEffects, type Cooldowns, type SkillSlot
 } from '../skills/skills';
 import {
-  ENEMY_DEFINITIONS, PACK_SIZE, createPack, validEnemyType, validIntent,
+  ENEMY_DEFINITIONS, PACK_SIZE, createPack, createCryptPack, validEnemyType, validIntent,
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
 import { ACTOR_RADIUS, canOccupy, findPath, moveActor, type Obstacle } from '../world/navigation';
-import { CAMP_RADIUS, generateWorld, type WorldLayout } from '../world/generator';
+import {
+  CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
+  generateWorld, generateCrypt, type WorldLayout
+} from '../world/generator';
 import {
   nearNpc, nearWarden, isNpcId, NPC_POSITIONS, NPC_INTERACT_RANGE,
   MERCHANT_ID, BLACKSMITH_ID, type NpcId
@@ -84,6 +87,10 @@ export class GameSimulation {
   private cooldowns: Cooldowns = emptyCooldowns();
   private effects: ActiveEffects = emptyEffects();
   private world: WorldLayout = generateWorld(0);
+  private zone: ZoneId = 'wilderness';
+  private dungeonStage: 0 | 1 = 0;
+  private dungeonCleared = false;
+  private pendingPortal = false;
   private units: EnemyUnit[] = createPack(0, 1);
   private selectedTargetId: string | null = null;
   private quest: QuestProgress = freshQuest();
@@ -151,14 +158,14 @@ export class GameSimulation {
     }
     // Dialogue pauses the world, not the quest interaction.
     if (command.type === 'questAccept') {
-      if (this.player.alive && nearWarden(this.player) && this.quest.status === 'available') {
+      if (this.zone === 'wilderness' && this.player.alive && nearWarden(this.player) && this.quest.status === 'available') {
         this.quest = { id: this.quest.id, status: 'active', defeated: 0 };
         this.events.push({ type: 'questUpdated', status: this.quest.status, defeated: this.quest.defeated });
       }
       return;
     }
     if (command.type === 'questTurnIn') {
-      if (this.player.alive && nearWarden(this.player) && this.quest.status === 'ready') {
+      if (this.zone === 'wilderness' && this.player.alive && nearWarden(this.player) && this.quest.status === 'ready') {
         this.quest = { ...this.quest, status: 'completed' };
         this.gold += QUEST_REWARD_GOLD;
         this.awardExperience(QUEST_REWARD_XP);
@@ -167,12 +174,23 @@ export class GameSimulation {
       return;
     }
     if (!this.player.alive || this.paused) return;
-    if (command.type === 'interactNpc') {
-      if (!isNpcId(command.npcId)) return;
+    if (command.type === 'usePortal') {
       this.movePath = [];
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingSkill = null;
+      this.pendingNpc = null;
+      this.pendingPortal = true;
+      if (distance(this.player, this.portalPosition) <= 78) this.changeZone();
+      return;
+    }
+    if (command.type === 'interactNpc') {
+      if (this.zone !== 'wilderness' || !isNpcId(command.npcId)) return;
+      this.movePath = [];
+      this.attackTarget = null;
+      this.pickupTarget = null;
+      this.pendingSkill = null;
+      this.pendingPortal = false;
       if (nearNpc(this.player, command.npcId)) {
         this.events.push({ type: 'npcDialogue', npcId: command.npcId });
       } else {
@@ -194,6 +212,7 @@ export class GameSimulation {
       this.pickupTarget = null;
       this.pendingSkill = null;
       this.pendingNpc = null;
+      this.pendingPortal = false;
     } else if (command.type === 'attack') {
       const selected = this.units.find(unit => unit.actor.id === command.targetId && unit.actor.alive);
       if (!selected) return;
@@ -203,17 +222,19 @@ export class GameSimulation {
       this.pickupTarget = null;
       this.pendingSkill = null;
       this.pendingNpc = null;
+      this.pendingPortal = false;
     } else if (command.type === 'pickup' && this.groundLoot.some(loot => loot.id === command.id)) {
       this.pickupTarget = command.id;
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
       this.pendingNpc = null;
+      this.pendingPortal = false;
     }
   }
 
   private shopAllowed(npcId: NpcId): boolean {
-    return this.player.alive && nearNpc(this.player, npcId);
+    return this.zone === 'wilderness' && this.player.alive && nearNpc(this.player, npcId);
   }
 
   private buyItem(offerId: string): void {
@@ -294,6 +315,7 @@ export class GameSimulation {
     this.attackTarget = null;
     this.pickupTarget = null;
     this.pendingNpc = null;
+    this.pendingPortal = false;
     if (distance(this.player, this.enemy) > skill.range) {
       this.pendingSkill = slot;
       return;
@@ -426,7 +448,7 @@ export class GameSimulation {
   private updateEnemyAI(unit: EnemyUnit, dt: number): void {
     if (!unit.actor.alive || !this.player.alive) { unit.intent = null; return; }
     // The starter camp is a sanctuary even if the player retreats mid-combat.
-    if (distance(this.player, this.world.camp) <= CAMP_RADIUS) {
+    if (this.zone === 'wilderness' && distance(this.player, this.world.camp) <= CAMP_RADIUS) {
       unit.intent = null;
       return;
     }
@@ -500,6 +522,40 @@ export class GameSimulation {
     this.events.push({ type: 'enemyWindup', enemyId: actor.id, pattern: def.attack });
   }
 
+  private get portalPosition(): Point {
+    return this.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT;
+  }
+
+  /** Switch areas without persisting any dungeon, enemy or world state. */
+  private changeZone(): void {
+    const destination: ZoneId = this.zone === 'wilderness' ? 'crypt' : 'wilderness';
+    const seed = this.world.seed;
+    this.zone = destination;
+    this.world = destination === 'crypt' ? generateCrypt(seed) : generateWorld(seed);
+    this.player.x = destination === 'crypt' ? CRYPT_EXIT.x : CAMP.x;
+    this.player.y = destination === 'crypt' ? CRYPT_EXIT.y : CAMP.y;
+    this.dungeonStage = 0;
+    this.dungeonCleared = false;
+    this.wave = 0;
+    this.units = destination === 'crypt'
+      ? createCryptPack(0, this.level, this.world.encounterPositions)
+      : createPack(0, this.level, this.world.encounterPositions);
+    this.respawnTimer = 0;
+    this.groundLoot = [];
+    this.effects = emptyEffects();
+    this.cooldowns = emptyCooldowns();
+    this.attackTimer = 0;
+    this.accumulator = 0;
+    this.movePath = [];
+    this.attackTarget = null;
+    this.pickupTarget = null;
+    this.pendingSkill = null;
+    this.pendingNpc = null;
+    this.pendingPortal = false;
+    this.selectedTargetId = null;
+    this.events.push({ type: 'zoneChanged', zone: destination });
+  }
+
   advance(deltaMilliseconds: number): void {
     if (this.paused || !this.player.alive || !Number.isFinite(deltaMilliseconds)) return;
     this.accumulator += Math.min(MAX_FRAME_SECONDS, Math.max(0, deltaMilliseconds / 1000));
@@ -517,18 +573,40 @@ export class GameSimulation {
       this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
     }
     this.tickEffects(dt);
-    if (this.aliveEnemies.length === 0) {
-      this.respawnTimer -= dt;
-      if (this.respawnTimer <= 0) {
-        this.wave++;
-        this.units = createPack(this.wave, this.level, this.world.encounterPositions);
-        this.selectedTargetId = null;
+    if (this.aliveEnemies.length === 0 && !this.dungeonCleared) {
+      if (this.zone === 'wilderness') {
+        this.respawnTimer -= dt;
+        if (this.respawnTimer <= 0) {
+          this.wave++;
+          this.units = createPack(this.wave, this.level, this.world.encounterPositions);
+          this.selectedTargetId = null;
+        }
+      } else if (this.dungeonStage === 0) {
+        this.respawnTimer -= dt;
+        if (this.respawnTimer <= 0) {
+          this.dungeonStage = 1;
+          this.wave = 1;
+          this.units = createCryptPack(1, this.level, CRYPT_BOSS_POSITIONS);
+          this.selectedTargetId = null;
+        }
+      } else {
+        this.dungeonCleared = true;
+        this.respawnTimer = 0;
+        this.gold += 200;
+        this.awardExperience(150);
+        this.events.push({ type: 'dungeonCleared' });
       }
     }
 
     const speed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment).moveSpeed / 100);
     const focus = this.focusedUnit;
-    if (this.pendingNpc) {
+    if (this.pendingPortal) {
+      if (distance(this.player, this.portalPosition) <= 78) {
+        this.changeZone();
+        return;
+      }
+      this.follow(this.player, this.portalPosition, speed, dt, 70);
+    } else if (this.pendingNpc) {
       if (nearNpc(this.player, this.pendingNpc)) {
         const id = this.pendingNpc;
         this.pendingNpc = null;
@@ -597,7 +675,7 @@ export class GameSimulation {
     this.kills++;
     this.gold += 12 + this.level * 3;
     this.awardExperience(40 + this.level * 12);
-    if (this.quest.status === 'active') {
+    if (this.zone === 'wilderness' && this.quest.status === 'active') {
       const defeated = Math.min(QUEST_REQUIRED_KILLS, this.quest.defeated + 1);
       this.quest = {
         ...this.quest, defeated,
@@ -605,14 +683,20 @@ export class GameSimulation {
       };
       this.events.push({ type: 'questUpdated', status: this.quest.status, defeated });
     }
-    const item = rollItem(this.kills, this.level, this.rng);
+    if (unit.actor.type === 'crypt_lord') {
+      this.gold += 100;
+      this.awardExperience(120);
+    }
+    const rolled = rollItem(this.kills, this.level, this.rng);
+    const item = unit.actor.type === 'crypt_lord' && rolled.rarity === 'COMMON'
+      ? { ...rolled, rarity: 'RARE' as const } : rolled;
     this.groundLoot.push({
       id: 'drop-' + this.kills, x: unit.actor.x, y: unit.actor.y, item
     });
     if (this.groundLoot.length > 30) this.groundLoot.shift();
     this.events.push({ type: 'defeat', targetId: unit.actor.id, kills: this.kills });
     this.events.push({ type: 'loot', id: 'drop-' + this.kills });
-    if (this.aliveEnemies.length === 0) this.respawnTimer = 3.2;
+    if (this.aliveEnemies.length === 0) this.respawnTimer = this.zone === 'crypt' && this.dungeonStage === 1 ? 0 : 3.2;
   }
   private collectLoot(loot: GroundItem): void {
     const index = this.inventory.findIndex(item => item === null);
@@ -683,6 +767,9 @@ export class GameSimulation {
     return {
       version: 5,
       worldSeed: this.world.seed,
+      zone: this.zone,
+      dungeonStage: this.dungeonStage,
+      dungeonCleared: this.dungeonCleared,
       classId: this.classId,
       player: { ...this.player },
       enemy: { ...focus.actor },
@@ -719,8 +806,17 @@ export class GameSimulation {
   restore(s: GameSnapshot): boolean {
     const layout = s && Number.isSafeInteger(s.worldSeed)
       && s.worldSeed >= 0 && s.worldSeed <= 0xffffffff
-      ? generateWorld(s.worldSeed) : null;
+      && (s.zone === 'wilderness' || s.zone === 'crypt')
+      ? (s.zone === 'crypt' ? generateCrypt(s.worldSeed) : generateWorld(s.worldSeed))
+      : null;
     if (!s || !layout || s.version !== 5 || !isClassId(s.classId)
+      || (s.dungeonStage !== 0 && s.dungeonStage !== 1)
+      || typeof s.dungeonCleared !== 'boolean'
+      || (s.zone === 'wilderness' && (s.dungeonStage !== 0 || s.dungeonCleared))
+      || (s.zone === 'crypt' && s.wave !== s.dungeonStage)
+      || (s.dungeonCleared && (s.zone !== 'crypt' || s.dungeonStage !== 1
+        || !Array.isArray(s.enemies)
+        || s.enemies.some(unit => unit?.actor?.alive)))
       || !validActor(s.player, 'hero', layout.obstacles)
       || !Number.isSafeInteger(s.kills) || s.kills < 0
       || !Number.isSafeInteger(s.wave) || s.wave < 0 || s.wave > 1000000
@@ -738,6 +834,11 @@ export class GameSimulation {
       || !Array.isArray(s.enemies) || s.enemies.length !== PACK_SIZE
       || !s.enemies.every((unit, index) =>
         !!unit && !!unit.actor && validEnemyType(unit.actor.type)
+        && (s.zone === 'crypt'
+          ? unit.actor.type === (s.dungeonStage === 0
+            ? (['skeleton', 'wolf', 'wraith'] as const)[index]
+            : (['crypt_lord', 'skeleton', 'wraith'] as const)[index])
+          : unit.actor.type === (['wraith', 'skeleton', 'wolf'] as const)[index])
         && validActor(unit.actor, unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && validIntent(unit.intent)
         && (unit.intent === null || unit.intent.pattern === ENEMY_DEFINITIONS[unit.actor.type].attack)
@@ -758,6 +859,9 @@ export class GameSimulation {
     ) return false;
 
     this.world = layout;
+    this.zone = s.zone;
+    this.dungeonStage = s.dungeonStage;
+    this.dungeonCleared = s.dungeonCleared;
     this.classId = s.classId;
     this.quest = { ...s.quest };
     this.equipment = cloneEquipment(s.equipment);
@@ -781,6 +885,7 @@ export class GameSimulation {
     this.attackTarget = null;
     this.pendingSkill = null;
     this.pendingNpc = null;
+    this.pendingPortal = false;
     this.pickupTarget = null;
     this.attackTimer = 0;
     this.accumulator = 0;
@@ -789,6 +894,10 @@ export class GameSimulation {
   }
 
   reset(classId: ClassId = 'WARRIOR', seed = this.world.seed): void {
+    this.zone = 'wilderness';
+    this.dungeonStage = 0;
+    this.dungeonCleared = false;
+    this.pendingPortal = false;
     this.world = generateWorld(seed);
     this.classId = classId;
     this.equipment = createEquipment();

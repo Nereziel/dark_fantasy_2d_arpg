@@ -2,7 +2,7 @@ import type { ActorSnapshot, Point } from '../core/types';
 import type { ActiveEffect } from '../skills/skills';
 
 /** All enemy movement and attack decisions stay in the TypeScript simulation. */
-export type EnemyType = 'wraith' | 'skeleton' | 'wolf';
+export type EnemyType = 'wraith' | 'skeleton' | 'wolf' | 'crypt_lord';
 export type AttackPattern = 'bolt' | 'sweep' | 'leap';
 
 export interface EnemyDefinition {
@@ -38,6 +38,12 @@ export const ENEMY_DEFINITIONS: Record<EnemyType, EnemyDefinition> = {
     health: 82, speed: 138, aggro: 380, preferredRange: 122,
     attackRange: 190, dangerRadius: 60, windup: 0.95, cooldown: 3.1,
     baseDamage: 13
+  },
+  crypt_lord: {
+    id: 'crypt_lord', attack: 'sweep', color: 0xc88364,
+    health: 395, speed: 96, aggro: 480, preferredRange: 82,
+    attackRange: 132, dangerRadius: 122, windup: 1.35, cooldown: 2.35,
+    baseDamage: 29
   }
 };
 
@@ -79,6 +85,30 @@ export function createPack(wave: number, level: number, positions: readonly Poin
         health: hp, maxHealth: hp, alive: true
       },
       intent: null, cooldown: 0.35 + index * 0.3, effects: []
+    };
+  });
+}
+
+/**
+ * Crypt has a guard encounter followed by a boss and two retainers.
+ * IDs match the normal per-wave contract, but the boss is unique to the crypt.
+ */
+export function createCryptPack(stage: 0 | 1, level: number, positions: readonly Point[]): EnemyUnit[] {
+  const types: readonly EnemyType[] = stage === 0
+    ? ['skeleton', 'wolf', 'wraith']
+    : ['crypt_lord', 'skeleton', 'wraith'];
+  return types.map((type, index) => {
+    const def = ENEMY_DEFINITIONS[type];
+    const point = positions[index]!;
+    const health = Math.round(def.health * (type === 'crypt_lord' ? 1.15 : 1.35)
+      + Math.max(0, level - 1) * (type === 'crypt_lord' ? 32 : 18));
+    return {
+      actor: {
+        id: `${type}-${stage * PACK_SIZE + index + 1}`,
+        type, x: point.x, y: point.y,
+        health, maxHealth: health, alive: true
+      },
+      intent: null, cooldown: 0.65 + index * 0.3, effects: []
     };
   });
 }

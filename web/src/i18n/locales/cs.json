@@ -249,6 +249,10 @@
     "wolf": {
       "name": "Zkažený vlk",
       "desc": "Rychle pronásleduje kořist, skáče do označeného místa a otráví cíl."
+    },
+    "crypt_lord": {
+      "name": "Vládce krypty",
+      "desc": "Prastarý vládce hrobek. Má mnoho životů a zasahuje širokou oblast."
     }
   },
   "npc": {
@@ -300,5 +304,18 @@
     "temperHint": "Kovář za zlato trvale posílí nasazenou zbraň nebo zbroj (maximálně třikrát). Nejprve si předmět nasaď v inventáři.",
     "maximum": "Maximální vylepšení (3/3)",
     "noForgeable": "Nasaď zbraň nebo zbroj v inventáři a vrať se ke kováři."
+  },
+  "dungeon": {
+    "name": "Krypta Duté koruny",
+    "gateHint": "Za táborem leží zapečetěná krypta. Vstup a očisti ji od temnoty.",
+    "enter": "Vstoupit do krypty",
+    "return": "Vrátit se do tábora",
+    "guards": "Strážci krypty",
+    "guardsHint": "Poraz tři silnější strážce a odhal vládce podzemí",
+    "boss": "Vládce krypty",
+    "bossHint": "Poraz vládce Duté koruny a jeho dva přisluhovače. Vyhýbej se širokým úderům.",
+    "cleared": "Krypta vyčištěna",
+    "clearedHint": "Vládce padl. Získané zlato, předměty a XP ti zůstanou; svět se při příštím spuštění obnoví.",
+    "clearedToast": "Krypta vyčištěna! Odměna připsána."
   }
 }

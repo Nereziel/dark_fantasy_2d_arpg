@@ -14,6 +14,7 @@
   import QuestJournal from './ui/QuestJournal.svelte';
   import NpcDialogue from './ui/NpcDialogue.svelte';
   import TradePanel from './ui/TradePanel.svelte';
+  import DungeonPanel from './ui/DungeonPanel.svelte';
   import {
     MERCHANT_ID, BLACKSMITH_ID, type NpcId, type TradeNpcId
   } from './game/world/npcs';
@@ -35,6 +36,8 @@
 
   onMount(() => {
     const unsubscribeEvents = bridge.onEvent((event) => {
+      if (event.type === 'dungeonCleared' && playing) messageKey = 'dungeon.clearedToast';
+      if (event.type === 'zoneChanged' && playing) messageKey = '';
       if (event.type === 'npcDialogue' && playing) {
         inventoryOpen = false;
         if (event.npcId === WARDEN_ID) {
@@ -213,13 +216,14 @@
       </div>
     </main>
   {:else}
-    <main class="game-screen" data-world-seed={view.worldSeed}>
+    <main class="game-screen" data-world-seed={view.worldSeed} data-zone={view.zone}>
       <GameViewport {bridge} />
       <div class="game-vignette" aria-hidden="true"></div>
 
       <header class="game-header">
         <div class="brand-mark">AETHER <span>&amp;</span> RUIN</div>
-        <div class="zone-name">{Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS
+        <div class="zone-name">{view.zone === 'crypt' ? $t('dungeon.name')
+          : Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS
           ? $t('hud.camp') : $t('hud.location')}</div>
         <div class="top-actions">
           <label for="game-language" class="visually-hidden">{ $t('menu.language') }</label>
@@ -244,7 +248,8 @@
       </div>
 
       <QuestJournal {view} talk={talkToWarden} />
-      {#if Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS + 40}
+      {#if view.zone === 'wilderness' &&
+        Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS + 40}
         <div class="camp-services" aria-label={$t('trade.campServices')}>
           <div class="camp-services-label">{$t('trade.campServices')}</div>
           <button disabled={!view.player.alive || view.paused}
@@ -253,6 +258,7 @@
             onclick={() => interact(BLACKSMITH_ID)}>{$t('trade.visitSmith')}</button>
         </div>
       {/if}
+      <DungeonPanel {view} {bridge} />
       <aside class="enemy-roster" aria-label={$t('hud.enemies')}>
         <div class="enemy-roster-title">{$t('hud.enemies')} · {view.enemies.filter(unit => unit.actor.alive).length}/{view.enemies.length} · {$t('hud.wave')} {view.wave + 1}</div>
         {#each view.enemies as unit (unit.actor.id)}

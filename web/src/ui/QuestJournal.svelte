@@ -21,7 +21,7 @@
   {#if view.quest.status === 'ready'}
     <div class="quest-ready">{$t('quest.ashes.readyHint')}</div>
   {/if}
-  <button class="quest-talk" disabled={!view.player.alive || view.paused} onclick={talk}>
+  <button class="quest-talk" disabled={!view.player.alive || view.paused || view.zone !== 'wilderness'} onclick={talk}>
     {$t('npc.talk')}
   </button>
 </aside>

@@ -9,6 +9,7 @@ import type { ShopOfferId } from '../trade/commerce';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
+export type ZoneId = 'wilderness' | 'crypt';
 export interface ActorSnapshot extends Point {
   id: string;
   health: number;
@@ -34,6 +35,10 @@ export interface GameSnapshot {
   version: 5;
   /** Ephemeral map seed. This is never included in CharacterProgress saves. */
   worldSeed: number;
+  /** All area and dungeon fields are transient and excluded from character saves. */
+  zone: ZoneId;
+  dungeonStage: 0 | 1;
+  dungeonCleared: boolean;
   classId: ClassId;
   player: ActorSnapshot;
   /** Focused enemy for the existing HUD; authoritative enemy state is in enemies. */
@@ -65,6 +70,7 @@ export type GameCommand =
   | { type: 'attack'; targetId: string }
   | { type: 'cast'; slot: SkillSlot }
   | { type: 'interactNpc'; npcId: NpcId }
+  | { type: 'usePortal' }
   | { type: 'buyItem'; offerId: ShopOfferId }
   | { type: 'sellItem'; index: number }
   | { type: 'temperItem'; slot: EquipmentSlot }
@@ -85,6 +91,8 @@ export type GameEvent =
   | { type: 'levelUp'; level: number }
   | { type: 'playerDeath' }
   | { type: 'npcDialogue'; npcId: NpcId }
+  | { type: 'zoneChanged'; zone: ZoneId }
+  | { type: 'dungeonCleared' }
   | { type: 'questUpdated'; status: QuestProgress['status']; defeated: number }
   | { type: 'enemyWindup'; enemyId: string; pattern: 'bolt' | 'sweep' | 'leap' }
   | { type: 'enemyAttack'; enemyId: string; hit: boolean };

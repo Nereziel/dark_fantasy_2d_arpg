@@ -3,9 +3,12 @@ import type { GameBridge } from '../bridge/GameBridge';
 import { CLASSES } from '../data/classes';
 import { RARITIES } from '../data/items';
 import { SKILLS } from '../skills/skills';
-import type { GameEvent } from '../core/types';
+import type { GameEvent, ZoneId } from '../core/types';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
-import { CAMP_RADIUS, generateWorld } from '../world/generator';
+import {
+  CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
+  generateWorld, generateCrypt
+} from '../world/generator';
 import {
   WARDEN_POSITION, NPC_POSITIONS, MERCHANT_ID, BLACKSMITH_ID, type NpcId
 } from '../world/npcs';
@@ -22,12 +25,14 @@ export class FrontierScene extends Phaser.Scene {
   private hero!: Phaser.GameObjects.Graphics;
   private wardenMarker!: Phaser.GameObjects.Text;
   private readonly enemyGraphics = new Map<string, Phaser.GameObjects.Graphics>();
+  private readonly campDecor: Array<Phaser.GameObjects.Graphics | Phaser.GameObjects.Text> = [];
   private healthBar!: Phaser.GameObjects.Graphics;
   private groundItems!: Phaser.GameObjects.Graphics;
   private statusVisuals!: Phaser.GameObjects.Graphics;
   private telegraph!: Phaser.GameObjects.Graphics;
   private terrain!: Phaser.GameObjects.Graphics;
   private renderedSeed: number | null = null;
+  private renderedZone: ZoneId | null = null;
 
   constructor(bridge: GameBridge) {
     super({ key: 'Frontier' });
@@ -35,10 +40,12 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.paintWorld(this.bridge.snapshot().worldSeed);
+    const entry = this.bridge.snapshot();
+    this.paintWorld(entry.worldSeed, entry.zone);
 
     // The warden is an in-world NPC. Interaction uses simulation commands.
     const warden = this.add.graphics().setPosition(WARDEN_POSITION.x, WARDEN_POSITION.y).setDepth(49);
+    this.campDecor.push(warden);
     warden.fillStyle(0x080c11, 0.5).fillEllipse(0, 21, 46, 14);
     warden.fillStyle(0x4b3639).fillTriangle(-16, 19, 16, 19, 0, -18);
     warden.fillStyle(0x9e8570).fillRoundedRect(-11, -22, 22, 21, 4);
@@ -50,12 +57,14 @@ export class FrontierScene extends Phaser.Scene {
       fontFamily: 'Georgia, serif', fontSize: '24px', color: '#ffdc9b',
       stroke: '#131923', strokeThickness: 4
     }).setOrigin(0.5).setDepth(82);
+    this.campDecor.push(this.wardenMarker);
 
     // Merchant and blacksmith use distinct silhouettes and world click targets.
     for (const id of [MERCHANT_ID, BLACKSMITH_ID] as const) {
       const pos = NPC_POSITIONS[id];
       const smith = id === BLACKSMITH_ID;
       const actor = this.add.graphics().setPosition(pos.x, pos.y).setDepth(49);
+      this.campDecor.push(actor);
       actor.fillStyle(0x080c11, 0.65).fillEllipse(0, 21, 42, 11);
       actor.fillStyle(smith ? 0x39404b : 0x486052)
         .fillTriangle(-15, 18, 15, 18, 0, -19);
@@ -70,10 +79,11 @@ export class FrontierScene extends Phaser.Scene {
         actor.fillStyle(0xc2a36d).fillCircle(-16, -1, 8);
         actor.lineStyle(3, 0x735846).strokeCircle(-16, -1, 8);
       }
-      this.add.text(pos.x, pos.y - 64, smith ? '⚒' : '¤', {
+      const vendorMarker = this.add.text(pos.x, pos.y - 64, smith ? '⚒' : '¤', {
         fontFamily: 'Georgia, serif', fontSize: '23px',
         color: '#e8c58c', stroke: '#0c121b', strokeThickness: 4
       }).setOrigin(0.5).setDepth(82);
+      this.campDecor.push(vendorMarker);
     }
 
     this.hero = this.add.graphics();
@@ -126,11 +136,17 @@ export class FrontierScene extends Phaser.Scene {
     if (pointer.button !== 0) return;
     const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     const state = this.bridge.snapshot();
-    const npc = (Object.keys(NPC_POSITIONS) as NpcId[]).find(id =>
+    const portal = state.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT;
+    if (Phaser.Math.Distance.Between(world.x, world.y, portal.x, portal.y) < 64) {
+      this.bridge.command({ type: 'usePortal' });
+      return;
+    }
+    const npc = state.zone === 'wilderness'
+      ? (Object.keys(NPC_POSITIONS) as NpcId[]).find(id =>
       Phaser.Math.Distance.Between(
         world.x, world.y, NPC_POSITIONS[id].x, NPC_POSITIONS[id].y
       ) < 40
-    );
+    ) : undefined;
     if (npc) {
       this.bridge.command({ type: 'interactNpc', npcId: npc });
       return;
@@ -176,7 +192,7 @@ export class FrontierScene extends Phaser.Scene {
       g.fillStyle(0x1c222c).fillCircle(-7, -24, 5).fillCircle(7, -24, 5);
       g.fillStyle(0x7a6d5e).fillTriangle(-3, -16, 3, -16, 0, -9);
       g.lineStyle(3, 0xbcb6a4).lineBetween(18, -11, 28, -34);
-    } else {
+    } else if (type === 'wolf') {
       g.fillStyle(0x080c13, 0.58).fillEllipse(0, 18, 64, 14);
       g.fillStyle(0x553b36).fillEllipse(-8, 0, 50, 26);
       g.fillStyle(color).fillEllipse(12, -8, 28, 22);
@@ -186,10 +202,26 @@ export class FrontierScene extends Phaser.Scene {
         .lineBetween(-1, 6, 2, 25).lineBetween(10, 7, 13, 25);
       g.fillStyle(0xecb5a0).fillCircle(21, -11, 3);
       g.lineStyle(4, 0x644238).lineBetween(-29, -5, -39, -22);
+    } else {
+      this.drawCryptLord(g);
     }
   }
 
-  /** Visual feedback only: combat rules never rely on an animation frame. */
+  // Brighter silhouette and crown for the unique crypt boss.
+  private drawCryptLord(g: Phaser.GameObjects.Graphics): void {
+    g.fillStyle(0x080b13, 0.65).fillEllipse(0, 28, 99, 25);
+    g.fillStyle(0x3b2831).fillEllipse(0, 0, 71, 78);
+    g.fillStyle(0x805053).fillTriangle(-35, 28, 35, 28, 0, -48);
+    g.fillStyle(0xd0b69c).fillCircle(0, -34, 24);
+    g.fillStyle(0x33242b).fillCircle(-10, -38, 5).fillCircle(10, -38, 5);
+    g.fillStyle(0xe2a466).fillTriangle(-23, -49, -17, -78, -8, -48)
+      .fillTriangle(-9, -51, 0, -87, 9, -51)
+      .fillTriangle(8, -48, 18, -78, 23, -49);
+    g.lineStyle(5, 0xd49362).lineBetween(33, 26, 50, -50);
+    g.fillStyle(0xad6952).fillRoundedRect(43, -60, 32, 12, 2);
+    g.lineStyle(3, 0xda9870, 0.7).strokeEllipse(0, 0, 76, 82);
+  }
+
   private onGameEvent(event: GameEvent): void {
     if (event.type === 'cast') {
       const definition = Object.values(SKILLS)
@@ -221,11 +253,14 @@ export class FrontierScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     this.bridge.tick(delta);
     const state = this.bridge.snapshot();
-    if (this.renderedSeed !== state.worldSeed) this.paintWorld(state.worldSeed);
+    if (this.renderedSeed !== state.worldSeed || this.renderedZone !== state.zone) {
+      this.paintWorld(state.worldSeed, state.zone);
+    }
+    for (const actor of this.campDecor) actor.setVisible(state.zone === 'wilderness');
     this.hero.setPosition(state.player.x, state.player.y);
     this.wardenMarker.setText(state.quest.status === 'ready' ? '?'
       : state.quest.status === 'available' ? '!' : '·');
-    this.wardenMarker.setVisible(state.quest.status !== 'completed');
+    this.wardenMarker.setVisible(state.zone === 'wilderness' && state.quest.status !== 'completed');
     this.hero.setVisible(state.player.alive);
     const ids = new Set(state.enemies.map(unit => unit.actor.id));
     for (const [id, sprite] of this.enemyGraphics) {
@@ -309,12 +344,74 @@ export class FrontierScene extends Phaser.Scene {
 
   }
 
-  private paintWorld(worldSeed: number): void {
-    const layout = generateWorld(worldSeed);
+  private paintPortal(g: Phaser.GameObjects.Graphics, x: number, y: number, glow: number): void {
+    g.fillStyle(0x090f17, 0.8).fillEllipse(x, y + 24, 115, 35);
+    g.fillStyle(0x30343f).fillRoundedRect(x - 50, y - 45, 100, 69, 8);
+    g.fillStyle(0x606a73).fillTriangle(x - 61, y - 44, x + 61, y - 44, x, y - 89);
+    g.fillStyle(0x0d121e).fillEllipse(x, y - 14, 67, 99);
+    g.fillStyle(glow, 0.2).fillEllipse(x, y - 14, 52, 82);
+    g.lineStyle(4, glow, 0.85).strokeEllipse(x, y - 14, 54, 85);
+    g.lineStyle(2, 0xd1d3c1, 0.45).strokeEllipse(x, y - 14, 75, 100);
+  }
+
+  private paintCrypt(
+    g: Phaser.GameObjects.Graphics, seed: number,
+    walls: readonly { x: number; y: number; width: number; height: number }[]
+  ): void {
+    g.fillStyle(0x0a0c14).fillRect(0, 0, WIDTH, HEIGHT);
+    let state = (seed ^ 0x7aa0b1c3) >>> 0;
+    const random = () => {
+      state = (Math.imul(1664525, state) + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+    for (let y = 0; y < HEIGHT; y += 52) {
+      for (let x = 0; x < WIDTH; x += 52) {
+        g.fillStyle(random() > 0.5 ? 0x1b1f29 : 0x24232e, 0.95)
+          .fillRect(x + 1, y + 1, 50, 50);
+        if (random() < 0.10) {
+          g.lineStyle(2, 0x4d4050, 0.32)
+            .lineBetween(x + 8, y + 9, x + 37, y + 31);
+        }
+      }
+    }
+    // Worn central processional path towards the tomb throne.
+    g.fillStyle(0x37303b, 0.55)
+      .fillRoundedRect(230, 560, 1490, 248, 35);
+    g.lineStyle(3, 0x6b515c, 0.4)
+      .strokeRoundedRect(235, 566, 1480, 238, 30);
+    for (const wall of walls) {
+      g.fillStyle(0x42434f).fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 4);
+      g.lineStyle(3, 0x77727a, 0.85)
+        .strokeRoundedRect(wall.x, wall.y, wall.width, wall.height, 4);
+      if (wall.width > 120) {
+        g.lineStyle(2, 0x232530, 0.8)
+          .lineBetween(wall.x + 13, wall.y + 14, wall.x + wall.width - 13, wall.y + 14);
+      }
+    }
+    // Boss arena sigil and the return portal.
+    const boss = CRYPT_BOSS_POSITIONS[0]!;
+    g.lineStyle(5, 0xa24f58, 0.52).strokeCircle(boss.x, boss.y, 174);
+    g.lineStyle(2, 0xcf8584, 0.48).strokeCircle(boss.x, boss.y, 141);
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      g.fillStyle(0xb56c65, 0.65)
+        .fillCircle(boss.x + Math.cos(a) * 155, boss.y + Math.sin(a) * 155, 5);
+    }
+    this.paintPortal(g, CRYPT_EXIT.x, CRYPT_EXIT.y, 0xa4c7b0);
+    g.lineStyle(12, 0x6a656d, 0.8).strokeRect(6, 6, WIDTH - 12, HEIGHT - 12);
+  }
+
+  private paintWorld(worldSeed: number, zone: ZoneId): void {
+    const layout = zone === 'crypt' ? generateCrypt(worldSeed) : generateWorld(worldSeed);
     if (!this.terrain) this.terrain = this.add.graphics().setDepth(-100);
     const ground = this.terrain;
     ground.clear();
     this.renderedSeed = worldSeed;
+    this.renderedZone = zone;
+    if (zone === 'crypt') {
+      this.paintCrypt(ground, worldSeed, layout.obstacles);
+      return;
+    }
     ground.fillStyle(0x131921).fillRect(0, 0, WIDTH, HEIGHT);
 
     // Deterministic visual variations; cosmetic only, never collision/loot state.
@@ -392,6 +489,9 @@ export class FrontierScene extends Phaser.Scene {
     ground.fillStyle(0x49535a).fillRoundedRect(1001, 345, 58, 60, 6);
     ground.fillStyle(0x737e83).fillTriangle(990, 350, 1070, 350, 1030, 315);
     ground.lineStyle(3, 0x92c2ac, 0.5).strokeCircle(1030, 385, 14);
+
+    // The old crypt gateway is a physical interaction point.
+    this.paintPortal(ground, CRYPT_GATE.x, CRYPT_GATE.y, 0x96afbc);
 
     // A visible playable border makes the initial sandbox readable.
     ground.lineStyle(9, 0x364149, 0.65).strokeRect(5, 5, WIDTH - 10, HEIGHT - 10);

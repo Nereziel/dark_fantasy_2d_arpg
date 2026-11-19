@@ -190,3 +190,31 @@ test('buys equipment, tempers it at the smith and reloads persistent upgrades', 
   await expect(merchantAgain.locator('.trade-gold')).toContainText('35');
   await expect(merchantAgain.getByRole('button', { name: 'Sell Studded War Belt' })).toHaveCount(0);
 });
+
+test('enters a separate procedurally generated crypt, returns to camp and reloads outdoors', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'wilderness');
+  const seed = await page.locator('.game-screen').getAttribute('data-world-seed');
+  await expect(page.getByRole('button', { name: 'Enter the crypt' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Enter the crypt' }).click();
+  await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'crypt', { timeout: 20_000 });
+  await expect(page.locator('.zone-name')).toHaveText('Crypt of the Hollow Crown');
+  await expect(page.getByText('Crypt guardians')).toBeVisible();
+  await expect(page.locator('.enemy-roster button')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Browse wares' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Speak to the warden' })).toBeDisabled();
+  await expect(page.locator('.game-screen')).toHaveAttribute('data-world-seed', seed!);
+
+  await page.getByRole('button', { name: 'Return to camp' }).click();
+  await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'wilderness');
+  await expect(page.locator('.zone-name')).toHaveText('Emberwatch Camp');
+  await expect(page.getByRole('button', { name: 'Browse wares' })).toBeVisible();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('status')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Load' }).click();
+  await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'wilderness');
+  await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
+});
