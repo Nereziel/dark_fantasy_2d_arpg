@@ -4,7 +4,7 @@ import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
 import { applyOrRefreshEffect } from '../status/effectStack';
 import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../skills/warriorKit';
 import { canActivateWarriorSkill, spendAndStartCooldown, advanceWarriorCooldowns, applyWarriorRageDelta, type WarriorActivationRequest } from '../skills/warriorEconomy';
-import { startCombatTimeline, advanceCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
+import { startCombatTimeline, advanceCombatTimeline, cancelCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
 import { STATUS_DEFINITIONS, type StatusId } from '../status/statusDefinitions';
 import { applyStatus, advanceStatuses, dispelStatuses, getStatusModifiers, type StatusInstance, type StatusRule } from '../status/statusRuntime';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
@@ -475,7 +475,8 @@ export class GameSimulation {
       skill: {
         id, cost: ability.rageCost, cooldown: ability.cooldown,
         range: ability.range, target: ability.target,
-        autoApproach: ability.autoApproach, silenceRestricted: false,
+        autoApproach: ability.autoApproach,
+        silenceRestricted: ability.tags.includes('BUFF') || ability.tags.includes('CHANNELING'),
         movementSkill: ability.tags.includes('MOVEMENT')
       },
       state: {
@@ -485,7 +486,8 @@ export class GameSimulation {
           charge: Math.max(this.warriorCooldowns.charge ?? 0, this.cooldowns.slot1) }
       },
       actor: this.player, target: actor ?? null,
-      stunned: this.effects.player.some(e => e.id === 'stunned'),
+      stunned: this.effects.player.some(e => e.id === 'stunned')
+        || this.statusEffects.player.some(e => e.id === 'stunned' || e.id === 'frozen'),
       silenced: this.statusEffects.player.some(e => e.id === 'silenced'),
       holdPosition: this.holdPosition, canMove: !this.immobilized
     };
@@ -630,6 +632,14 @@ export class GameSimulation {
   private tickWarriorTimeline(): void {
     const action = this.warriorAction;
     if (!action) return;
+    // Stun/freeze interrupts the windup and the remaining channel ticks.
+    // The cancelled timeline never emits an impact cue or applies damage.
+    if (this.effects.player.some(e => e.id === 'stunned')
+      || this.statusEffects.player.some(e => e.id === 'stunned' || e.id === 'frozen')) {
+      cancelCombatTimeline(action.timeline);
+      this.warriorAction = null;
+      return;
+    }
     const result = advanceCombatTimeline(action.timeline, 1);
     action.timeline = result.state;
     for (const event of result.events) {
