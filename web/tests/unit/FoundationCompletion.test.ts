@@ -102,6 +102,35 @@ describe('Prompt 05: typed skill aims', () => {
   });
 });
 
+describe('hold position and movement skills', () => {
+  it('does not spend a dash or move the hero while holding position', () => {
+    const sim = new GameSimulation();
+    sim.command({ type: 'holdPosition', value: true });
+    const before = sim.snapshot();
+    sim.command({
+      type: 'cast', slot: 'slot1',
+      aim: { mode: 'DIRECTION', direction: { x: 1, y: 0 } }
+    });
+    expect(sim.snapshot().player).toEqual(before.player);
+    expect(sim.snapshot().cooldowns.slot1).toBe(0);
+  });
+});
+
+describe('cursor skill travel and stationary casting', () => {
+  it('walks to the cast range of an aimed ground skill and resolves it once', () => {
+    const sim = new GameSimulation();
+    sim.command({ type: 'reset', classId: 'MAGE' });
+    sim.command({ type: 'cast', slot: 'rmb',
+      aim: { mode: 'GROUND_POSITION', position: { x: 780, y: 520 } } });
+    expect(sim.snapshot().cooldowns.rmb).toBe(0);
+    advance(sim, 140);
+    const s = sim.snapshot();
+    expect(s.player.x).toBeGreaterThan(430);
+    expect(s.cooldowns.rmb).toBeGreaterThan(0);
+    expect(s.enemies[0]!.actor.health).toBeLessThan(s.enemies[0]!.actor.maxHealth);
+  });
+});
+
 describe('Prompt 06: typed damage, shields and real projectiles', () => {
   it('uses a delayed authoritative projectile for a wraith bolt', () => {
     const sim = new GameSimulation();
@@ -123,7 +152,35 @@ describe('Prompt 06: typed damage, shields and real projectiles', () => {
     expect(sim.snapshot().player.health).toBe(hero.health);
     advance(sim, 120);
     expect(sim.snapshot().projectiles).toHaveLength(0);
-    expect(sim.drainEvents().some(e => e.type === 'projectileImpact')).toBe(true);
+    const events = sim.drainEvents();
+    expect(events.some(e => e.type === 'projectileImpact')).toBe(true);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'damageResolved', targetId: 'hero', damageType: 'shadow'
+    }));
+  });
+  it('records absorption through the combat event pipeline without lowering health', () => {
+    const sim = new GameSimulation();
+    sim.command({ type: 'reset', classId: 'PALADIN' });
+    sim.command({ type: 'cast', slot: 'slot1' });
+    const before = sim.snapshot();
+    const player = { ...before.player, x: 860, y: 635 };
+    expect(sim.restore({
+      ...before, player,
+      enemies: before.enemies.map((unit, index) => index === 1
+        ? { ...unit, cooldown: 0,
+          intent: { pattern: 'sweep' as const, x: player.x, y: player.y,
+            radius: 80, remaining: 0.001, total: 0.8 } }
+        : { ...unit, actor: { ...unit.actor, health: 0, alive: false },
+          intent: null, effects: [] })
+    })).toBe(true);
+    advance(sim, 1);
+    const after = sim.snapshot();
+    expect(after.player.health).toBe(player.health);
+    expect(after.shield).toBeLessThan(before.shield);
+    expect(sim.drainEvents()).toContainEqual(expect.objectContaining({
+      type: 'damageResolved', targetId: 'hero', damageType: 'physical',
+      damage: 0, absorbed: expect.any(Number)
+    }));
   });
   it('replenishes a shield from paladin consecration and resolves attacks against it', () => {
     const sim = new GameSimulation();

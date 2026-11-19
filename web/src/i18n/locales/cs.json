@@ -47,14 +47,14 @@
     "emptySave": "Není uložená žádná kompatibilní postava"
   },
   "controls": {
-    "move": "Pohyb: kliknutí na zem",
+    "move": "Pohyb: klikni nebo drž levé tlačítko",
     "attack": "Útok: kliknutí na nepřítele",
     "pause": "Pauza: Esc",
-    "hint": "Mezerník: úskok · Shift: držet pozici · prostřední klik: vynucený pohyb · Q/RMB a 1: schopnosti · I/C: panely",
+    "hint": "Mezerník: úskok · Shift: držet pozici · Q/RMB a 1: míření kurzorem · Esc → Ovládání",
     "pickup": "Kořist: kliknutí na zářící předmět",
     "skills": "Schopnosti: Q / pravé tlačítko myši a klávesa 1",
     "avoid": "Uhni z červené oblasti dříve, než útok dopadne.",
-    "navigate": "Kliknutím se přesuneš i k nejbližšímu dostupnému místu vedle překážky. Prostřední tlačítko vynutí pohyb."
+    "navigate": "Drž levé tlačítko a pohybuj kurzorem. Kliknutí do zdi najde dostupný bod; prostřední tlačítko vynutí pohyb."
   },
   "battle": {
     "defeat": "Nepřítel padl",

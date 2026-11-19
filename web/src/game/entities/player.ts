@@ -31,3 +31,18 @@ export function advanceResource(current: number, regenRate: number, cap: number,
   const elapsed = Number.isFinite(deltaSeconds) && deltaSeconds > 0 ? deltaSeconds : 0;
   return Math.max(0, Math.min(cap, safeCurrent + safeRegen * elapsed));
 }
+
+/** Whole-health-point regeneration with deterministic fractional carry. */
+export function regenerateHealth(
+  current: number, max: number, rate: number, dt: number, carry = 0
+): { health: number; carry: number } {
+  if (![current, max, rate, dt, carry].every(Number.isFinite) || max <= 0) {
+    return { health: Number.isFinite(current) ? Math.max(0, current) : 0, carry: 0 };
+  }
+  const health = Math.max(0, Math.min(max, current));
+  if (health >= max) return { health: max, carry: 0 };
+  const total = Math.max(0, carry) + Math.max(0, rate) * Math.max(0, dt);
+  const gained = Math.max(0, Math.min(Math.floor(total + 1e-9), Math.ceil(max - health)));
+  const next = Math.min(max, health + gained);
+  return { health: next, carry: next >= max ? 0 : Math.max(0, total - gained) };
+}

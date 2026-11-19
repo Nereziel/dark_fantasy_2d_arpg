@@ -332,6 +332,17 @@ export class FrontierScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.bridge.tick(delta);
+    // Camera-follow changes the world coordinate beneath a stationary held cursor.
+    // Update it at the same throttled cadence even without pointermove events.
+    if (this.heldMovement.active && this.input.activePointer.isDown) {
+      if (this.uiCapturesPointer()) this.heldMovement.release();
+      else {
+        const pointer = this.input.activePointer;
+        const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const goal = this.heldMovement.update(world, this.time.now);
+        if (goal) this.bridge.command({ type: 'move', destination: goal });
+      }
+    }
     const state = this.bridge.snapshot();
     if (this.renderedSeed !== state.worldSeed || this.renderedZone !== state.zone) {
       this.paintWorld(state.worldSeed, state.zone);
@@ -372,6 +383,16 @@ export class FrontierScene extends Phaser.Scene {
     this.healthBar.clear();
     this.telegraph.clear();
     this.statusVisuals.clear();
+    if (state.zone === 'wilderness' && this.hoveredId) {
+      const npc = NPC_POSITIONS[this.hoveredId as NpcId];
+      if (npc) this.statusVisuals.lineStyle(2, 0xf3d49e, 0.86)
+        .strokeCircle(npc.x, npc.y, 34);
+    }
+    const portal = state.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT;
+    if (this.hoveredId === 'crypt-portal') {
+      this.statusVisuals.lineStyle(3, 0xb8e6dc, 0.85)
+        .strokeCircle(portal.x, portal.y, 66);
+    }
     for (const unit of state.enemies) {
       const { actor, intent, effects } = unit;
       if (!actor.alive) continue;

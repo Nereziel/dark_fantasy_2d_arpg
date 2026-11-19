@@ -22,14 +22,14 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 
 ## Ovládání
 
-- **Levé tlačítko myši:** kontextový pohyb, útok na nepřítele, NPC, portál a sběr kořisti. Neprůchozí kliknutí nasměruje postavu na nejbližší dosažitelné místo.
+- **Levé tlačítko myši:** klik nebo **podržení pro průběžný pohyb za kurzorem**, kontextový útok, NPC, portály, truhly, svatyně a kořist. Zablokovaný cíl se přesměruje na nejbližší dosažitelné místo. Při držení je přepočet cesty omezen, aby pohyb necukal.
 - **Prostřední tlačítko myši:** vynucený pohyb (bez vybírání nepřátel a NPC). Přesun řeší kolize a překážky.
 - Klávesa **I**: inventář; Esc: zavření inventáře.
 - Klávesa **C**: přehled postavy a všech atributů; Esc: zavření přehledu.
-- **Q** nebo **pravé tlačítko myši**: první schopnost; **1** (včetně numerické klávesnice): druhá schopnost. Pravé kliknutí na nepřítele ho před sesláním vybere; další sloty a lektvary zatím nejsou implementované.
+- **Q** nebo **pravé tlačítko myši**: první schopnost; **1** (včetně numerické klávesnice): druhá schopnost. Schopnosti používají polohu kurzoru (entity, oblast, směr či bod podle typu); vzdálenou oblast postava nejprve přiblíží. Další skill sloty a lektvary zůstávají připravené pro následující prompty.
 - Kliknutí na konkrétního nepřítele nebo položku v seznamu cílů: vybere nepřítele k útoku.
 - Uhnutí před útokem: opusť červeně vyznačenou oblast před zásahem.
-- **Shift (držet):** drž pozici, nepokračuj v automatickém pronásledování nepřítele. **Mezerník:** úskok s cooldownem. **Esc:** pauza / návrat do hry nebo zavření otevřeného panelu.
+- **Shift (držet):** postava útočí na místě a nesleduje nepřítele ani nevykoná útočný dash. **Mezerník:** úskok s cooldownem. **Esc:** pauza / návrat do hry nebo zavření otevřeného panelu. V pauze lze otevřít **Ovládání**, přemapovat klávesy či myš a uložit preference pro tento prohlížeč.
 - Přepnutí **Čeština / English** je v menu i při hraní.
 - **Tábor:** bezpečná oblast bez útoků nepřátel. Kliknutím na NPC nebo tlačítkem v deníku úkolů lze zahájit rozhovor a přijmout úkol.
 - **Úvodní úkol:** Po přijetí poraz 3 nepřátele a vrať se ke strážkyni pro odměnu. Postup se automaticky ukládá.
@@ -38,7 +38,7 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 
 ### Základy podle implementačních promptů
 
-Převod pokračuje **v pořadí 63 promptů** ze souboru `2d_arpg_implementation_prompts.md`. V současnosti se dokončuje **Prompt 02 – Player Entity and Character Core**: jsou oddělené odvozené statistiky, vytvoření hráče a pravidla života/zdrojů a přibyl přehled postavy na klávese C. Souboj nyní používá typované fyzické a elementální poškození, výpočet úhybu, bloku a kritických zásahů; části sekundárních statistik (magické odolnosti pro budoucí útoky, štíty, life steal) zůstávají pro budoucí rozšíření. Přesný přehled dokončení základů je v `docs/IMPLEMENTATION_STATUS.md`.
+Převod pokračuje **v pořadí 63 promptů** ze souboru `2d_arpg_implementation_prompts.md`. Funkční základy **promptů 02–06** jsou propojené: oddělené výpočty hráče, plynulý pohyb s omezením přepočtů, jednotný kontext interakcí, přemapování ovládání a typovaná soubojová pipeline. Podporuje elementální odolnosti u zásahů, úhyb, blokování, štíty, projektily, oblastní poškození a léčení. Rozšířené sady schopností, obsahové sloty a další mechaniky patří následujícím promptům. Přesný přehled dokončení základů je v `docs/IMPLEMENTATION_STATUS.md`.
 
 ## Současná architektura
 

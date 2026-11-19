@@ -47,14 +47,14 @@
     "emptySave": "No compatible saved hero found"
   },
   "controls": {
-    "move": "Move: click the ground",
+    "move": "Move: click or hold left mouse",
     "attack": "Attack: click an enemy",
     "pause": "Pause: Esc",
-    "hint": "Space: evade · Shift: hold position · middle click: force move · Q/RMB and 1: skills · I/C: panels",
+    "hint": "Space: evade · Shift: stand still · Q/RMB and 1: cursor-aimed skills · Esc → Controls to remap",
     "pickup": "Loot: click a glowing item",
     "skills": "Skills: Q / right mouse button and key 1",
     "avoid": "Dodge the red warning circle before the strike lands.",
-    "navigate": "Click to navigate, including blocked ground (nearest reachable spot). Middle click forces movement past targets."
+    "navigate": "Hold left click to follow the cursor; click solid ground to move beside obstacles. Middle click forces movement."
   },
   "battle": {
     "defeat": "Enemy defeated",

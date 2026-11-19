@@ -2,9 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { nextMoveSpeed, moveToward } from '../../src/game/entities/playerMovement';
 import { playerAnimation } from '../../src/game/entities/playerAnimation';
 import { applyOrRefreshEffect } from '../../src/game/status/effectStack';
+import { regenerateHealth } from '../../src/game/entities/player';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
 
 describe('Prompt 02: reusable actor systems', () => {
+  it('regenerates whole hit points from 60 Hz ticks without leaking fractional health', () => {
+    let health = 40, carry = 0;
+    for (let tick = 0; tick < 120; tick++) {
+      const result = regenerateHealth(health, 100, 1.5, 1 / 60, carry);
+      health = result.health;
+      carry = result.carry;
+    }
+    expect(health).toBe(43);
+    expect(carry).toBeCloseTo(0, 7);
+    expect(regenerateHealth(100, 100, 5, 1, 0.8)).toEqual({ health: 100, carry: 0 });
+  });
+
   it('accelerates, brakes and rejects invalid motion without teleporting', () => {
     expect(nextMoveSpeed(0, 190, 300, 1 / 60)).toBeGreaterThan(0);
     expect(nextMoveSpeed(190, 190, 1, 1 / 60)).toBeLessThan(190);

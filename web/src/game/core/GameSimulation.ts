@@ -1,5 +1,5 @@
 import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point, ProjectileSnapshot, ZoneId } from './types';
-import { spawnPlayer, updateHealthLimit, advanceResource } from '../entities/player';
+import { spawnPlayer, updateHealthLimit, advanceResource, regenerateHealth } from '../entities/player';
 import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
 import { applyOrRefreshEffect } from '../status/effectStack';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
@@ -85,6 +85,7 @@ export class GameSimulation {
   private quest: QuestProgress = freshQuest();
   private pendingNpc: NpcId | null = null;
   private pendingSkill: SkillSlot | null = null;
+  private pendingAim: SkillAim | null = null;
   private player = spawnPlayer('WARRIOR', this.equipment, { x: 390, y: 470 });
   private groundLoot: GroundItem[] = [];
   private movePath: Point[] = [];
@@ -96,6 +97,7 @@ export class GameSimulation {
   private projectiles: ProjectileSnapshot[] = [];
   private nextProjectileId = 0;
   private movementSpeed = 0;
+  private healthRegenCarry = 0;
   private paused = false;
   private kills = 0;
   private wave = 0;
@@ -176,6 +178,7 @@ export class GameSimulation {
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pickupTarget = null;
       this.pendingNpc = null;
       this.pendingPortal = false;
@@ -223,6 +226,7 @@ export class GameSimulation {
       this.pickupTarget = null;
       this.pendingNpc = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingPortal = false;
       this.pendingObject = object.id;
       this.tryInteractObject();
@@ -233,6 +237,7 @@ export class GameSimulation {
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingNpc = null;
       this.pendingObject = null;
       this.pendingPortal = true;
@@ -245,6 +250,7 @@ export class GameSimulation {
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingObject = null;
       this.pendingPortal = false;
       if (nearNpc(this.player, command.npcId)) {
@@ -279,6 +285,7 @@ export class GameSimulation {
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingNpc = null;
       this.pendingObject = null;
       this.pendingPortal = false;
@@ -290,6 +297,7 @@ export class GameSimulation {
       this.movePath = [];
       this.pickupTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingNpc = null;
       this.pendingObject = null;
       this.pendingPortal = false;
@@ -298,6 +306,7 @@ export class GameSimulation {
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingNpc = null;
       this.pendingObject = null;
       this.pendingPortal = false;
@@ -397,15 +406,27 @@ export class GameSimulation {
 
   private requestCast(slot: SkillSlot, aim?: SkillAim): void {
     const skill = SKILLS[this.classId][slot];
+    if (skill.kind === 'dash' && this.holdPosition) return;
     if (this.effects.player.some(e => e.id === 'stunned')
       || this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
 
     // Aimed positions and directions are validated by the authoritative simulation.
     if (aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA') {
-      if (!Number.isFinite(aim.position.x) || !Number.isFinite(aim.position.y)
-        || distance(this.player, aim.position) > skill.range + 0.5) return;
+      if (!Number.isFinite(aim.position.x) || !Number.isFinite(aim.position.y)) return;
       if ((aim.mode === 'AREA' && skill.kind !== 'nova')
         || (aim.mode === 'GROUND_POSITION' && skill.id !== 'fireball')) return;
+      if (distance(this.player, aim.position) > skill.range + 0.5) {
+        if (this.holdPosition) return;
+        this.pendingSkill = slot;
+        this.pendingAim = { ...aim, position: { ...aim.position } };
+        this.movePath = [];
+        this.attackTarget = null;
+        this.pickupTarget = null;
+        this.pendingNpc = null;
+        this.pendingObject = null;
+        this.pendingPortal = false;
+        return;
+      }
       this.performCast(slot, aim);
       return;
     }
@@ -421,6 +442,7 @@ export class GameSimulation {
       if (!target) return;
       this.selectedTargetId = target.actor.id;
     }
+    this.pendingAim = null;
     if (skill.target === 'self') {
       this.performCast(slot);
       return;
@@ -571,6 +593,7 @@ export class GameSimulation {
     this.resource = Math.max(0, this.resource - skill.cost);
     this.cooldowns[slot] = skill.cooldown;
     this.pendingSkill = null;
+    this.pendingAim = null;
     const point = (aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA')
       ? aim.position : skill.target === 'enemy' ? unit.actor : this.player;
     this.events.push({ type: 'cast', skillId: skill.id, x: point.x, y: point.y });
@@ -639,6 +662,7 @@ export class GameSimulation {
     if (this.player.health === 0) {
       this.player.alive = false;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingNpc = null;
       this.movePath = [];
       this.attackTarget = null;
@@ -785,6 +809,7 @@ export class GameSimulation {
     this.projectiles = [];
     this.nextProjectileId = 0;
     this.movementSpeed = 0;
+    this.healthRegenCarry = 0;
     this.usedObjects.clear();
     this.pendingObject = null;
     this.wave = 0;
@@ -803,6 +828,7 @@ export class GameSimulation {
     this.attackTarget = null;
     this.pickupTarget = null;
     this.pendingSkill = null;
+    this.pendingAim = null;
     this.pendingNpc = null;
     this.pendingPortal = false;
     this.selectedTargetId = null;
@@ -826,6 +852,14 @@ export class GameSimulation {
       this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
     }
     this.tickEffects(dt);
+    if (this.player.alive) {
+      const regen = regenerateHealth(
+        this.player.health, this.player.maxHealth,
+        deriveStats(this.classId, this.equipment).healthRegen, dt, this.healthRegenCarry
+      );
+      this.player.health = regen.health;
+      this.healthRegenCarry = regen.carry;
+    }
     this.tickProjectiles(dt);
     if (this.aliveEnemies.length === 0 && !this.dungeonCleared) {
       if (this.zone === 'wilderness') {
@@ -875,9 +909,16 @@ export class GameSimulation {
       if (!object) this.pendingObject = null;
       else if (distance(this.player, object.position) <= object.reach) this.tryInteractObject();
       else this.follow(this.player, object.position, speed, dt, object.reach - 10);
-    } else if (this.pendingSkill && focus.actor.alive) {
+    } else if (this.pendingSkill && (focus.actor.alive || this.pendingAim !== null)) {
       const skill = SKILLS[this.classId][this.pendingSkill];
-      if (distance(this.player, focus.actor) > skill.range) {
+      const aim = this.pendingAim;
+      if (aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA') {
+        if (distance(this.player, aim.position) > skill.range) {
+          if (!this.holdPosition) {
+            this.follow(this.player, aim.position, speed, dt, Math.max(0, skill.range - 4));
+          }
+        } else this.performCast(this.pendingSkill, aim);
+      } else if (distance(this.player, focus.actor) > skill.range) {
         if (!this.holdPosition) {
           this.follow(this.player, focus.actor, speed, dt, Math.max(0, skill.range - 4));
         }
@@ -938,6 +979,7 @@ export class GameSimulation {
     if (this.selectedTargetId === unit.actor.id) {
       this.selectedTargetId = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
     }
     this.kills++;
     this.gold += 12 + this.level * 3;
@@ -1030,7 +1072,8 @@ export class GameSimulation {
     const focus = this.focusedUnit;
     const status = this.paused ? 'paused' : !this.player.alive ? 'dead'
       : this.attackTarget || this.pendingSkill ? 'combat'
-      : this.movePath.length || this.pickupTarget ? 'moving' : 'ready';
+      : this.movePath.length || this.pickupTarget || this.pendingObject
+        || this.pendingNpc || this.pendingPortal ? 'moving' : 'ready';
     return {
       version: 5,
       worldSeed: this.world.seed,
@@ -1185,12 +1228,14 @@ export class GameSimulation {
     this.movePath = [];
     this.attackTarget = null;
     this.pendingSkill = null;
+    this.pendingAim = null;
     this.pendingNpc = null;
     this.pendingPortal = false;
     this.pickupTarget = null;
     this.attackTimer = 0;
     this.accumulator = 0;
     this.movementSpeed = 0;
+    this.healthRegenCarry = 0;
     this.refreshHealthLimit();
     return true;
   }
@@ -1206,6 +1251,7 @@ export class GameSimulation {
     this.projectiles = [];
     this.nextProjectileId = 0;
     this.movementSpeed = 0;
+    this.healthRegenCarry = 0;
     this.world = generateWorld(seed);
     this.classId = classId;
     this.equipment = createEquipment();
@@ -1218,6 +1264,7 @@ export class GameSimulation {
     this.units = createPack(0, 1, this.world.encounterPositions);
     this.selectedTargetId = null;
     this.pendingSkill = null;
+    this.pendingAim = null;
     this.player = spawnPlayer(classId, this.equipment, this.world.camp);
     this.groundLoot = [];
     this.movePath = [];
