@@ -38,6 +38,22 @@ Levé tlačítko myši: pohyb, útok nebo interakce. Pravé tlačítko: sekundá
 
 **Plánovaná architektura:** Svelte 5 + Phaser 4 + TypeScript + Vite v samostatném `web/` projektu, včetně **české a anglické lokalizace přes `svelte-i18n`**. Jazyk půjde přepínat během hraní bez restartu a nastavení se uloží samostatně od herní pozice. Do vydání plnohodnotně hratelné verze běží současná HTML hra. Až bude migrace otestována, workflow přejde na publikování `web/dist/` a bude sledovat jen odpovídající zdrojové soubory a build konfiguraci.
 
+## Nový Svelte/Phaser projekt (staging)
+
+První **nezávislá vývojová verze** je implementována ve složce [`web/`](./web/). Obsahuje startovací menu, základní Phaser scénu s pohybem myší a soubojem, Svelte HUD, živé přepínání češtiny a angličtiny, IndexedDB save/load, typovanou herní simulaci a automatizované testy. **Není to ještě převod celé hry**; původní HTML verze zůstává nasazená na GitHub Pages.
+
+Lokální spuštění nové verze (Node.js 22+):
+
+```bash
+cd web
+npm ci
+npm run dev
+```
+
+Vite běží na portu 5173, výchozí cesta projektu je `http://localhost:5173/dark_fantasy_2d_arpg/`. Kontroly spustíš pomocí `npm run check`, `npm run test`, `npm run build` a `npm run test:e2e` (Playwright vyžaduje nainstalovaný Chromium přes `npx playwright install chromium`).
+
+CI [`quality.yml`](./.github/workflows/quality.yml) automaticky ověřuje typy, testy, build a Chromium smoke test bez deploymentu. GitHub Pages workflow publikuje dál pouze původní funkční HTML hru.
+
 ## Jazyky (plánovaná Svelte/Phaser verze)
 
 - **Čeština (`cs`) a angličtina (`en`)** pro menu, HUD, předměty, dovednosti, NPC, dialogy, questy a obsah kampaně.
