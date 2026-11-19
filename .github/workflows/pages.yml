@@ -71,7 +71,7 @@ jobs:
 
       - name: Install Chromium
         working-directory: web
-        run: npx playwright install chromium --with-deps
+        run: npx playwright install chromium
 
       - name: Browser smoke test
         working-directory: web
