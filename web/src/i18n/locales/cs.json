@@ -32,7 +32,8 @@
     "enemies": "Protivníci",
     "wave": "Vlna",
     "camp": "Tábor Stráž uhelného žáru",
-    "autosave": "Automatické ukládání postavy"
+    "autosave": "Automatické ukládání postavy",
+    "shield": "Štít"
   },
   "status": {
     "ready": "Připraven",
@@ -348,5 +349,41 @@
       "defense": "Obrana",
       "utility": "Ostatní vlastnosti"
     }
+  },
+  "bindings": {
+    "title": "Nastavení ovládání",
+    "open": "Ovládání",
+    "help": "Vyber akci, pak stiskni klávesu nebo tlačítko myši. Escape zruší přemapování.",
+    "press": "Čekám na vstup",
+    "pressShort": "Stiskni…",
+    "change": "Změnit",
+    "reset": "Výchozí ovládání",
+    "close": "Zpět",
+    "reserved": "Další schopnosti, lektvary a panely jsou vyhrazené pro příští prompty. Ovládání se ukládá v zařízení, odděleně od postavy.",
+    "CONFLICT": "Tato klávesa nebo tlačítko již má jinou akci.",
+    "INVALID": "Tato klávesa nebo tlačítko není podporované.",
+    "actions": {
+      "PRIMARY": "Primární / interakce",
+      "SECONDARY": "Sekundární schopnost",
+      "FORCE_MOVE": "Vynucený pohyb",
+      "HOLD_POSITION": "Držet pozici",
+      "SLOT_1": "Schopnost 1",
+      "SLOT_2": "Schopnost 2",
+      "SLOT_3": "Schopnost 3",
+      "SLOT_4": "Schopnost 4",
+      "POTION": "Lektvar (připravuje se)",
+      "EVADE": "Úskok",
+      "INVENTORY": "Inventář",
+      "CHARACTER": "Postava",
+      "SKILLS": "Schopnosti (připravují se)",
+      "TALENTS": "Talenty (připravují se)",
+      "MAP": "Mapa (připravuje se)",
+      "JOURNAL": "Deník (připravuje se)",
+      "MENU": "Menu / pauza"
+    }
+  },
+  "worldObjects": {
+    "shrine": "Svatyně duší ti dala ochranný štít.",
+    "chest": "Otevřel jsi truhlu."
   }
 }

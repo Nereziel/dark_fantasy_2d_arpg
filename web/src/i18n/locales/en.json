@@ -32,7 +32,8 @@
     "enemies": "Enemies",
     "wave": "Wave",
     "camp": "Emberwatch Camp",
-    "autosave": "Character autosave enabled"
+    "autosave": "Character autosave enabled",
+    "shield": "Shield"
   },
   "status": {
     "ready": "Ready",
@@ -348,5 +349,41 @@
       "defense": "Defense",
       "utility": "Utility"
     }
+  },
+  "bindings": {
+    "title": "Input bindings",
+    "open": "Controls",
+    "help": "Choose an action, then press a key or mouse button. Escape cancels capture.",
+    "press": "Waiting for input",
+    "pressShort": "Press…",
+    "change": "Change",
+    "reset": "Restore defaults",
+    "close": "Back",
+    "reserved": "Unimplemented skills, potion and panels are reserved for later prompts. Bindings are saved on this device, separately from your character.",
+    "CONFLICT": "This key or button is already assigned.",
+    "INVALID": "That key or button is not supported.",
+    "actions": {
+      "PRIMARY": "Primary / interact",
+      "SECONDARY": "Secondary skill",
+      "FORCE_MOVE": "Force move",
+      "HOLD_POSITION": "Hold position",
+      "SLOT_1": "Skill 1",
+      "SLOT_2": "Skill 2",
+      "SLOT_3": "Skill 3",
+      "SLOT_4": "Skill 4",
+      "POTION": "Potion (future)",
+      "EVADE": "Evade",
+      "INVENTORY": "Inventory",
+      "CHARACTER": "Character",
+      "SKILLS": "Skills (future)",
+      "TALENTS": "Talents (future)",
+      "MAP": "Map (future)",
+      "JOURNAL": "Journal (future)",
+      "MENU": "Menu / pause"
+    }
+  },
+  "worldObjects": {
+    "shrine": "The soul shrine grants a protective shield.",
+    "chest": "You opened a field chest."
   }
 }

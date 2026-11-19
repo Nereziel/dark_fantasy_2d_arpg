@@ -153,7 +153,7 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'holdPosition') {
-      if (!this.player.alive || this.paused) return;
+      if (!this.player.alive || (this.paused && command.value)) return;
       this.holdPosition = command.value;
       if (command.value) {
         this.movePath = [];

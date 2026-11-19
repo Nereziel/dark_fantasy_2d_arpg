@@ -4,7 +4,8 @@
   import { languageOptions, setLanguage, type Language } from './i18n';
   import { GameBridge } from './game/bridge/GameBridge';
   import type { GameSnapshot } from './game/core/types';
-  import { resolveKeyboardAction } from './game/input/bindings';
+  import { resolveKeyboardAction, rebindAction, type InputBinding, type InputAction } from './game/input/bindings';
+  import { GAME_BINDINGS } from './game/input/gameBindings';
   import { loadGame, saveGame } from './persistence/SaveRepository';
   import { CharacterAutosaver } from './persistence/CharacterAutosaver';
   import { CAMP, CAMP_RADIUS } from './game/world/generator';
@@ -12,6 +13,7 @@
   import CharacterSelect from './ui/CharacterSelect.svelte';
   import InventoryPanel from './ui/InventoryPanel.svelte';
   import CharacterSheet from './ui/CharacterSheet.svelte';
+  import ControlsPanel from './ui/ControlsPanel.svelte';
   import SkillBar from './ui/SkillBar.svelte';
   import QuestJournal from './ui/QuestJournal.svelte';
   import NpcDialogue from './ui/NpcDialogue.svelte';
@@ -31,6 +33,31 @@
   let selectedClass: ClassId = $state('WARRIOR');
   let inventoryOpen = $state(false);
   let characterOpen = $state(false);
+  let controlsOpen = $state(false);
+  let controlBindings: InputBinding[] = $state(GAME_BINDINGS.map(binding => ({ ...binding })));
+  const controlsStorage = 'aether-ruin-controls-v1';
+
+  function updateBindings(next: InputBinding[]): void {
+    const updated = next.length ? next : GAME_BINDINGS.map(binding => ({ ...binding }));
+    controlBindings = updated;
+    bridge.setBindings(updated);
+    const actions = new Set<InputAction>(updated.map(binding => binding.action));
+    const overrides: InputBinding[] = [];
+    for (const action of actions) {
+      const current = updated.filter(binding => binding.action === action);
+      const defaults = GAME_BINDINGS.filter(binding => binding.action === action);
+      if (JSON.stringify(current) !== JSON.stringify(defaults)) overrides.push(...current);
+    }
+    try {
+      window.localStorage.setItem(controlsStorage, JSON.stringify(overrides));
+    } catch { /* Settings may be unavailable in private browsing. */ }
+  }
+
+  function openControls(): void {
+    if (!playing || dialogueOpen || tradeNpc !== null || inventoryOpen || characterOpen) return;
+    bridge.command({ type: 'pause', value: true });
+    controlsOpen = true;
+  }
   let dialogueOpen = $state(false);
   let tradeNpc: TradeNpcId | null = $state(null);
   const heldShiftKeys = new Set<string>();
@@ -39,8 +66,24 @@
   });
 
   onMount(() => {
+    try {
+      const raw = JSON.parse(window.localStorage.getItem(controlsStorage) ?? '[]');
+      if (Array.isArray(raw) && raw.length <= 25) {
+        let result: readonly InputBinding[] = GAME_BINDINGS;
+        for (const value of raw) {
+          const applied = rebindAction(result, value as InputBinding);
+          if (!applied.ok) throw new Error('Invalid control mapping');
+          result = applied.bindings;
+        }
+        controlBindings = result.map(binding => ({ ...binding }));
+        bridge.setBindings(controlBindings);
+      }
+    } catch { /* Invalid settings fall back to defaults. */ }
     const unsubscribeEvents = bridge.onEvent((event) => {
       if (event.type === 'dungeonCleared' && playing) messageKey = 'dungeon.clearedToast';
+      if (event.type === 'worldInteract' && playing) {
+        messageKey = event.kind === 'shrine' ? 'worldObjects.shrine' : 'worldObjects.chest';
+      }
       if (event.type === 'zoneChanged' && playing) messageKey = '';
       if (event.type === 'npcDialogue' && playing) {
         inventoryOpen = false;
@@ -80,6 +123,7 @@
     messageKey = '';
     inventoryOpen = false;
     characterOpen = false;
+    controlsOpen = false;
     dialogueOpen = false;
     tradeNpc = null;
     playing = true;
@@ -92,6 +136,7 @@
     playing = true;
   }
   function menu(): void {
+    controlsOpen = false;
     heldShiftKeys.clear();
     bridge.command({ type: 'holdPosition', value: false });
     tradeNpc = null;
@@ -103,6 +148,7 @@
     playing = false;
   }
   function togglePause(): void {
+    if (controlsOpen) return;
     if (!inventoryOpen && !characterOpen && !dialogueOpen && tradeNpc === null) bridge.command({ type: 'pause', value: !view.paused });
   }
 
@@ -142,7 +188,7 @@
     bridge.command({ type: 'pause', value: false });
   }
   function handleKeydown(event: KeyboardEvent): void {
-    if (!playing) return;
+    if (!playing || controlsOpen) return;
     const target = event.target;
     const isTyping = target instanceof HTMLElement
       && !!target.closest('input, textarea, select, [contenteditable="true"]');
@@ -225,6 +271,7 @@
         messageKey = 'status.loaded';
         inventoryOpen = false;
         characterOpen = false;
+        controlsOpen = false;
         dialogueOpen = false;
         tradeNpc = null;
         selectedClass = bridge.snapshot().classId;
@@ -343,6 +390,9 @@
         <div class="vital-panel">
           <div class="vital-top"><span>{$t('hud.health')}</span><strong>{view.player.health} / {view.player.maxHealth}</strong></div>
           <div class="health-track"><div class="health-fill" style:width={`${100 * view.player.health / view.player.maxHealth}%`}></div></div>
+          {#if view.shield > 0}
+            <div class="vital-top resource-label"><span>{$t('hud.shield')}</span><strong>{view.shield}</strong></div>
+          {/if}
           <div class="vital-top resource-label"><span>{$t('resource.' + CLASSES[view.classId].resourceId)}</span><strong>{Math.round(view.resource)} / {CLASSES[view.classId].resourceMax}</strong></div>
           <div class="health-track resource-track"><div class="resource-fill" style:width={`${100 * view.resource / CLASSES[view.classId].resourceMax}%`}></div></div>
           <div class="hud-details"><span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
@@ -375,6 +425,11 @@
       {/if}
       {#if tradeNpc}
         <TradePanel {view} {bridge} npc={tradeNpc} close={closeDialogue} />
+      {:else if controlsOpen}
+        <div class="modal-shield">
+          <ControlsPanel bindings={controlBindings} save={updateBindings}
+            close={() => { controlsOpen = false; }} />
+        </div>
       {:else if dialogueOpen}
         <NpcDialogue quest={view.quest} accept={acceptQuest} turnIn={turnInQuest} close={closeDialogue} />
       {:else if inventoryOpen}
@@ -386,6 +441,7 @@
           <section class="pause-card" aria-label={$t('menu.paused')}>
             <h2>{$t('menu.paused')}</h2>
             <button class="primary" onclick={togglePause}>{$t('menu.resume')}</button>
+            <button class="secondary" onclick={openControls}>{$t('bindings.open')}</button>
             <button class="secondary" onclick={menu}>{$t('menu.back')}</button>
           </section>
         </div>
