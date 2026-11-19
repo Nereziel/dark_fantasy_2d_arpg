@@ -36,4 +36,11 @@ Levé tlačítko myši: pohyb, útok nebo interakce. Pravé tlačítko: sekundá
 
 **Aktuálně:** HTML5 Canvas, vanilla JavaScript, CSS a Tailwind CDN. GitHub Pages podporuje všechny součásti bez dalšího serveru.
 
-**Plánovaná architektura:** Svelte 5 + Phaser 4 + TypeScript + Vite v samostatném `web/` projektu. Do vydání plnohodnotně hratelné verze běží současná HTML hra. Až bude migrace otestována, workflow přejde na publikování `web/dist/` a bude sledovat jen odpovídající zdrojové soubory a build konfiguraci.
+**Plánovaná architektura:** Svelte 5 + Phaser 4 + TypeScript + Vite v samostatném `web/` projektu, včetně **české a anglické lokalizace přes `svelte-i18n`**. Jazyk půjde přepínat během hraní bez restartu a nastavení se uloží samostatně od herní pozice. Do vydání plnohodnotně hratelné verze běží současná HTML hra. Až bude migrace otestována, workflow přejde na publikování `web/dist/` a bude sledovat jen odpovídající zdrojové soubory a build konfiguraci.
+
+## Jazyky (plánovaná Svelte/Phaser verze)
+
+- **Čeština (`cs`) a angličtina (`en`)** pro menu, HUD, předměty, dovednosti, NPC, dialogy, questy a obsah kampaně.
+- Knihovna **`svelte-i18n`** bude součástí projektu od prvního implementačního promptu; slovníky budou v `web/src/i18n/locales/`.
+- Přepínač jazyka bude v hlavním menu a nastavení, bez opětovného načtení hry. Výchozí jazyk zohlední prohlížeč a uloženou volbu.
+- Původní HTML verze zatím zůstává beze změny; tyto funkce se vztahují k plánované migraci.
