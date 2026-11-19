@@ -5,6 +5,7 @@ import { generateWorld } from '../../src/game/world/generator';
 import { resolveReachableDestination } from '../../src/game/world/navigation';
 import { resolveTypedDamage } from '../../src/game/combat/typedDamage';
 import { SeededRng } from '../../src/game/data/items';
+import { ENEMY_DEFINITIONS } from '../../src/game/enemies/enemies';
 
 function frames(sim: GameSimulation, n: number): void {
   for (let i = 0; i < n; i++) sim.advance(16.667);
@@ -77,7 +78,7 @@ describe('integrated core prompt modules', () => {
     };
     expect(sim.restore(fixed)).toBe(true);
     const expected = resolveTypedDamage({
-      type: 'physical', base: 13 + original.level * 2,
+      type: 'physical', base: ENEMY_DEFINITIONS.skeleton.baseDamage + original.level * 2,
       defenderArmor: original.stats.armor, defenderLevel: original.level,
       dodgeChance: original.stats.dodgeChance, blockChance: original.stats.blockChance
     }, new SeededRng(1774));
