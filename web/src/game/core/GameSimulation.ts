@@ -17,8 +17,11 @@ import {
 } from '../skills/skills';
 import {
   ENEMY_DEFINITIONS, PACK_SIZE, createPack, createCryptPack, validEnemyType, validIntent,
+  packTypesForWave, enemyArchetype,
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
+import { planEnemyBehavior } from '../enemies/behaviorPlanner';
+import { getEnemyArchetype } from '../enemies/archetypeCatalog';
 import { ACTOR_RADIUS, canOccupy, findPath, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
@@ -1414,7 +1417,7 @@ export class GameSimulation {
           ? unit.actor.type === (s.dungeonStage === 0
             ? (['skeleton', 'wolf', 'wraith'] as const)[index]
             : (['crypt_lord', 'skeleton', 'wraith'] as const)[index])
-          : unit.actor.type === (['wraith', 'skeleton', 'wolf'] as const)[index])
+          : unit.actor.type === packTypesForWave(s.wave)[index])
         && validActor(unit.actor, unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && validIntent(unit.intent)
         && (unit.intent === null || unit.intent.pattern === ENEMY_DEFINITIONS[unit.actor.type].attack)
