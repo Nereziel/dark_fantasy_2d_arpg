@@ -308,18 +308,54 @@
       "name": "Vládce krypty",
       "desc": "Prastarý vládce hrobek. Má mnoho životů a zasahuje širokou oblast."
     },
-    "skeletonArcher": "Kostlivý lučištník",
-    "skeletonMage": "Kostlivý mág",
-    "ghoul": "Ghúl",
-    "zombie": "Zombie",
-    "spider": "Pavouk",
-    "corruptedBoar": "Zkažený kanec",
-    "banditFighter": "Bandita",
-    "banditArcher": "Bandita lučištník",
-    "banditRogue": "Bandita zabiják",
-    "fanatic": "Fanatik",
-    "cultMage": "Kultovní mág",
-    "cultHealer": "Kultovní léčitel"
+    "skeletonArcher": {
+      "name": "Kostlivý lučištník",
+      "desc": "Nepřítel z divočiny."
+    },
+    "skeletonMage": {
+      "name": "Kostlivý mág",
+      "desc": "Nepřítel z divočiny."
+    },
+    "ghoul": {
+      "name": "Ghúl",
+      "desc": "Nepřítel z divočiny."
+    },
+    "zombie": {
+      "name": "Zombie",
+      "desc": "Nepřítel z divočiny."
+    },
+    "spider": {
+      "name": "Pavouk",
+      "desc": "Nepřítel z divočiny."
+    },
+    "corruptedBoar": {
+      "name": "Zkažený kanec",
+      "desc": "Nepřítel z divočiny."
+    },
+    "banditFighter": {
+      "name": "Bandita",
+      "desc": "Nepřítel z divočiny."
+    },
+    "banditArcher": {
+      "name": "Bandita lučištník",
+      "desc": "Nepřítel z divočiny."
+    },
+    "banditRogue": {
+      "name": "Bandita zabiják",
+      "desc": "Nepřítel z divočiny."
+    },
+    "fanatic": {
+      "name": "Fanatik",
+      "desc": "Nepřítel z divočiny."
+    },
+    "cultMage": {
+      "name": "Kultovní mág",
+      "desc": "Nepřítel z divočiny."
+    },
+    "cultHealer": {
+      "name": "Kultovní léčitel",
+      "desc": "Nepřítel z divočiny."
+    }
   },
   "npc": {
     "talk": "Promluvit se strážkyní",
