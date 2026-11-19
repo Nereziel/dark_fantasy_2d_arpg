@@ -320,7 +320,7 @@ export class FrontierScene extends Phaser.Scene {
       });
     } else if (event.type === 'warriorImpact') {
       const ring = this.add.graphics().setPosition(event.x, event.y).setDepth(86);
-      ring.lineStyle(5, 0xf4ce80, 0.95).strokeCircle(0, 35);
+      ring.lineStyle(5, 0xf4ce80, 0.95).strokeCircle(0, 0, 35);
       this.tweens.add({
         targets: ring, alpha: 0, scaleX: 2.3, scaleY: 2.3, duration: 280,
         onComplete: () => ring.destroy()
