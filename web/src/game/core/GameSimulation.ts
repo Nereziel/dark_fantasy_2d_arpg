@@ -1059,7 +1059,15 @@ export class GameSimulation {
     for (const slot of ['rmb', 'slot1'] as const) {
       this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
     }
+    this.warriorCooldowns = { ...advanceWarriorCooldowns({
+      rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+      cooldowns: this.warriorCooldowns
+    }, dt).cooldowns } as Partial<Record<WarriorAbilityId, number>>;
+    this.warriorCooldowns.cleave = this.cooldowns.rmb;
+    this.warriorCooldowns.charge = this.cooldowns.slot1;
     this.tickEffects(dt);
+    this.tickCanonicalStatuses(dt);
+    this.tickWarriorTimeline();
     if (this.player.alive) {
       const regen = regenerateHealth(
         this.player.health, this.player.maxHealth,
@@ -1075,6 +1083,7 @@ export class GameSimulation {
         if (this.respawnTimer <= 0) {
           this.wave++;
           this.units = createPack(this.wave, this.level, this.world.encounterPositions);
+          this.statusEffects.enemies = {};
           this.respawnTimer = 0;
           this.selectedTargetId = null;
         }
@@ -1084,6 +1093,7 @@ export class GameSimulation {
           this.dungeonStage = 1;
           this.wave = 1;
           this.units = createCryptPack(1, this.level, CRYPT_BOSS_POSITIONS);
+          this.statusEffects.enemies = {};
           this.respawnTimer = 0;
           this.selectedTargetId = null;
         }
@@ -1096,7 +1106,9 @@ export class GameSimulation {
       }
     }
 
-    const speed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment).moveSpeed / 100);
+    const haste = getStatusModifiers(this.statusEffects.player).moveSpeed ?? 0;
+    const speed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment).moveSpeed / 100)
+      * (1 + Math.min(0.6, haste));
     const focus = this.focusedUnit;
     if (this.pendingPortal) {
       if (distance(this.player, this.portalPosition) <= 78) {
@@ -1117,6 +1129,16 @@ export class GameSimulation {
       if (!object) this.pendingObject = null;
       else if (distance(this.player, object.position) <= object.reach) this.tryInteractObject();
       else this.follow(this.player, object.position, speed, dt, object.reach - 10);
+    } else if (this.warriorAction?.timeline.movementLocked) {
+      this.movementSpeed = 0;
+    } else if (this.warriorPending) {
+      const pending = this.warriorPending;
+      const target = pending.targetId ? this.units.find(u => u.actor.alive && u.actor.id === pending.targetId) : null;
+      if (WARRIOR_ABILITIES[pending.id].target === 'enemy' && !target) this.warriorPending = null;
+      else if (target && distance(this.player, target.actor) > WARRIOR_ABILITIES[pending.id].range) {
+        if (this.holdPosition || this.immobilized) this.warriorPending = null;
+        else this.follow(this.player, target.actor, speed, dt, WARRIOR_ABILITIES[pending.id].range - 4);
+      } else this.requestWarriorAbility(pending.id, pending.targetId);
     } else if (this.pendingSkill && (focus.actor.alive || this.pendingAim !== null)) {
       const skill = SKILLS[this.classId][this.pendingSkill];
       const aim = this.pendingAim;
@@ -1183,6 +1205,7 @@ export class GameSimulation {
     unit.actor.alive = false;
     unit.intent = null;
     unit.effects = [];
+    delete this.statusEffects.enemies[unit.actor.id];
     if (this.attackTarget === unit.actor.id) this.attackTarget = null;
     if (this.selectedTargetId === unit.actor.id) {
       this.selectedTargetId = null;
@@ -1311,6 +1334,15 @@ export class GameSimulation {
       resource: this.resource,
       rngState: this.rng.state,
       cooldowns: { ...this.cooldowns },
+      warriorCooldowns: { ...this.warriorCooldowns },
+      warriorAction: this.warriorAction ? {
+        ...this.warriorAction, timeline: { ...this.warriorAction.timeline }
+      } : null,
+      statusEffects: {
+        player: this.statusEffects.player.map(s => ({ ...s, modifiers: { ...s.modifiers }, immunityTags: [...s.immunityTags] })),
+        enemies: Object.fromEntries(Object.entries(this.statusEffects.enemies)
+          .map(([id, values]) => [id, values.map(s => ({ ...s, modifiers: { ...s.modifiers }, immunityTags: [...s.immunityTags] }))]))
+      },
       effects: {
         player: this.effects.player.map(effect => ({ ...effect })),
         enemy: focus.effects.map(effect => ({ ...effect }))
@@ -1431,6 +1463,16 @@ export class GameSimulation {
     this.resource = s.resource;
     this.rng = new SeededRng(s.rngState);
     this.cooldowns = { ...s.cooldowns };
+    this.warriorCooldowns = s.warriorCooldowns ? { ...s.warriorCooldowns } : {};
+    this.warriorAction = s.warriorAction ? {
+      ...s.warriorAction, timeline: { ...s.warriorAction.timeline }
+    } : null;
+    this.warriorPending = null;
+    this.statusEffects = {
+      player: (s.statusEffects?.player ?? []).map(e => ({ ...e })),
+      enemies: Object.fromEntries(Object.entries(s.statusEffects?.enemies ?? {})
+        .map(([id, arr]) => [id, arr.map(e => ({ ...e }))]))
+    };
     this.effects = { player: s.effects.player.map(effect => ({ ...effect })), enemy: [] };
     this.paused = false;
     this.movePath = [];
@@ -1466,6 +1508,10 @@ export class GameSimulation {
     this.inventory = Array(INVENTORY_SIZE).fill(null);
     this.rng = new SeededRng(seed === 0 ? 0x49ac127b : ((seed ^ 0x49ac127b) >>> 0));
     this.cooldowns = emptyCooldowns();
+    this.warriorCooldowns = {};
+    this.warriorAction = null;
+    this.warriorPending = null;
+    this.statusEffects = { player: [], enemies: {} };
     this.effects = emptyEffects();
     this.quest = freshQuest();
     this.pendingNpc = null;
