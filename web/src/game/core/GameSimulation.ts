@@ -1388,7 +1388,7 @@ export class GameSimulation {
   snapshot(): GameSnapshot {
     const focus = this.focusedUnit;
     const status = this.paused ? 'paused' : !this.player.alive ? 'dead'
-      : this.attackTarget || this.pendingSkill ? 'combat'
+      : this.attackTarget || this.pendingSkill || this.warriorAction || this.warriorPending ? 'combat'
       : this.movePath.length || this.pickupTarget || this.pendingObject
         || this.pendingNpc || this.pendingPortal ? 'moving' : 'ready';
     return {
