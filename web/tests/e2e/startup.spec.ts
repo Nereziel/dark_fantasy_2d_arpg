@@ -308,3 +308,19 @@ test('holding mouse movement updates the destination without creating combat com
     .toBeGreaterThan(before + 12);
   await page.mouse.up();
 });
+
+test('Warrior War Cry uses the simulation timeline and localizes active buffs', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  const cry = page.getByRole('button', { name: 'War Cry' });
+  await expect(cry).toBeVisible();
+  await expect(cry).toBeEnabled();
+  await cry.click();
+  await expect(cry).toBeDisabled();
+  await expect(page.locator('.effect-chip.beneficial').filter({ hasText: 'Haste' })).toBeVisible();
+  await expect(page.locator('.effect-chip.beneficial').filter({ hasText: 'Fortified' })).toBeVisible();
+  await page.locator('#game-language').selectOption('cs');
+  await expect(page.getByRole('button', { name: 'Válečný pokřik' })).toBeDisabled();
+  await expect(page.locator('.effect-chip.beneficial').filter({ hasText: 'Spěch' })).toBeVisible();
+});
