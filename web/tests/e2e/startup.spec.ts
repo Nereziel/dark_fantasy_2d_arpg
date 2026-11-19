@@ -301,9 +301,9 @@ test('holding mouse movement updates the destination without creating combat com
   expect(bounds).not.toBeNull();
   const game = page.locator('.game-screen');
   const before = Number(await game.getAttribute('data-player-x'));
-  await page.mouse.move(bounds!.x + bounds!.width * 0.36, bounds!.y + bounds!.height * 0.62);
+  await page.mouse.move(bounds!.x + bounds!.width * 0.61, bounds!.y + bounds!.height * 0.40);
   await page.mouse.down();
-  await page.mouse.move(bounds!.x + bounds!.width * 0.72, bounds!.y + bounds!.height * 0.62, { steps: 8 });
+  await page.mouse.move(bounds!.x + bounds!.width * 0.77, bounds!.y + bounds!.height * 0.40, { steps: 8 });
   await expect.poll(async () => Number(await game.getAttribute('data-player-x')), { timeout: 5_000 })
     .toBeGreaterThan(before + 12);
   await page.mouse.up();

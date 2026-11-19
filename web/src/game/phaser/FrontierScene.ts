@@ -10,6 +10,7 @@ import {
 } from '../input/contextResolver';
 import { resolvePointerAction } from '../input/bindings';
 import { HeldPointerMovement } from '../input/heldMovement';
+import { playerAnimation } from '../entities/playerAnimation';
 import { ACTOR_RADIUS, canOccupy, type Obstacle } from '../world/navigation';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
 import {
@@ -337,6 +338,12 @@ export class FrontierScene extends Phaser.Scene {
     }
     for (const actor of this.campDecor) actor.setVisible(state.zone === 'wilderness');
     this.hero.setPosition(state.player.x, state.player.y);
+    const animation = playerAnimation(state);
+    const oscillation = Math.sin(this.time.now * 0.015);
+    this.hero.setScale(animation === 'running' ? 1 + oscillation * 0.045
+      : animation === 'attacking' ? 1 + oscillation * 0.025
+      : animation === 'evading' ? 0.9 : 1);
+    this.hero.setAlpha(animation === 'stunned' ? 0.72 : 1);
     this.wardenMarker.setText(state.quest.status === 'ready' ? '?'
       : state.quest.status === 'available' ? '!' : '·');
     this.wardenMarker.setVisible(state.zone === 'wilderness' && state.quest.status !== 'completed');

@@ -1,5 +1,7 @@
 import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point, ProjectileSnapshot, ZoneId } from './types';
 import { spawnPlayer, updateHealthLimit, advanceResource } from '../entities/player';
+import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
+import { applyOrRefreshEffect } from '../status/effectStack';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
 import { resolveTypedDamage, resolveHealing, type DamageType, type DamageResult } from '../combat/typedDamage';
 import type { SkillAim } from '../input/skillAiming';
@@ -62,19 +64,6 @@ function validActor(actor: ActorSnapshot, id: string, obstacles: readonly Obstac
     && actor.alive === (actor.health > 0);
 }
 
-/** Advances actors with collision and uses local A* only when a direct route is blocked. */
-function toward(actor: Point, target: Point, speed: number, dt: number, stop: number, obstacles: readonly Obstacle[]): void {
-  const remaining = distance(actor, target);
-  if (remaining <= stop || remaining < 0.001) return;
-  const amount = Math.max(0, Math.min(speed * dt, remaining - stop));
-  const before = { ...actor };
-  moveActor(actor, target, amount, ACTOR_RADIUS, obstacles);
-  if (distance(before, actor) < amount * 0.15 && amount > 0.01) {
-    const path = findPath(actor, target, ACTOR_RADIUS, obstacles);
-    if (path.length) moveActor(actor, path[0]!, amount, ACTOR_RADIUS, obstacles);
-  }
-}
-
 /**
  * Renderer-independent multi-enemy simulation. All damage and attack windows
  * are resolved on fixed ticks; the Phaser scene only visualizes snapshots.
@@ -106,6 +95,7 @@ export class GameSimulation {
   private shield = 0;
   private projectiles: ProjectileSnapshot[] = [];
   private nextProjectileId = 0;
+  private movementSpeed = 0;
   private paused = false;
   private kills = 0;
   private wave = 0;
@@ -127,8 +117,13 @@ export class GameSimulation {
   }
 
   private follow(actor: Point, target: Point, speed: number, dt: number, stop = 0): void {
-    if (actor === this.player && this.immobilized) return;
-    toward(actor, target, speed, dt, stop, this.world.obstacles);
+    if (actor === this.player) {
+      if (this.immobilized) { this.movementSpeed = 0; return; }
+      const left = Math.max(0, distance(actor, target) - stop);
+      this.movementSpeed = nextMoveSpeed(this.movementSpeed, speed, left, dt);
+      moveToward(actor, target, this.movementSpeed, dt, stop, this.world.obstacles);
+      if (left <= 0.01) this.movementSpeed = 0;
+    } else moveToward(actor, target, speed, dt, stop, this.world.obstacles);
   }
 
   private get focusedUnit(): EnemyUnit {
@@ -327,6 +322,7 @@ export class GameSimulation {
         id: 'cache-' + object.id, x: object.position.x, y: object.position.y,
         item: { ...item, id: 'cache-' + object.id + '-item' }
       });
+      if (this.groundLoot.length > 30) this.groundLoot.shift();
     }
     this.events.push({ type: 'worldInteract', id: object.id, kind: object.kind });
   }
@@ -444,14 +440,10 @@ export class GameSimulation {
   }
 
   private applyEffect(target: 'enemy' | 'player', effect: ActiveEffect, unit = this.focusedUnit): void {
-    const list = target === 'enemy' ? unit.effects : this.effects.player;
-    const existing = list.find(active => active.id === effect.id);
-    if (existing) {
-      existing.remaining = Math.max(existing.remaining, effect.remaining);
-      existing.magnitude = Math.max(existing.magnitude, effect.magnitude);
-      existing.tick = 0;
-    } else list.push(effect);
+    if (target === 'player') this.effects.player = applyOrRefreshEffect(this.effects.player, effect);
+    else unit.effects = applyOrRefreshEffect(unit.effects, effect);
   }
+
   private enemyResistance(unit: EnemyUnit, type: DamageType): number {
     if (unit.actor.type === 'wraith' && type === 'shadow') return 35;
     if (unit.actor.type === 'wolf' && type === 'poison') return 30;
@@ -792,6 +784,7 @@ export class GameSimulation {
     this.shield = 0;
     this.projectiles = [];
     this.nextProjectileId = 0;
+    this.movementSpeed = 0;
     this.usedObjects.clear();
     this.pendingObject = null;
     this.wave = 0;
@@ -1197,6 +1190,7 @@ export class GameSimulation {
     this.pickupTarget = null;
     this.attackTimer = 0;
     this.accumulator = 0;
+    this.movementSpeed = 0;
     this.refreshHealthLimit();
     return true;
   }
@@ -1211,6 +1205,7 @@ export class GameSimulation {
     this.shield = 0;
     this.projectiles = [];
     this.nextProjectileId = 0;
+    this.movementSpeed = 0;
     this.world = generateWorld(seed);
     this.classId = classId;
     this.equipment = createEquipment();

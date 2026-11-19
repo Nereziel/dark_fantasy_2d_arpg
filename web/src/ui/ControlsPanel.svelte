@@ -45,7 +45,7 @@
 
 <svelte:window onkeydown={captureKey} onmousedown={captureMouse} />
 
-<section class="controls-card" role="dialog" aria-modal="true" aria-label={$t('bindings.title')}>
+<div class="controls-card" role="dialog" aria-modal="true" aria-label={$t('bindings.title')}>
   <h2>{$t('bindings.title')}</h2>
   <p>{$t('bindings.help')}</p>
   {#if capturing}
@@ -69,7 +69,7 @@
     <button class="primary" onclick={close}>{$t('bindings.close')}</button>
   </div>
   <small>{$t('bindings.reserved')}</small>
-</section>
+</div>
 
 <style>
   .controls-card{width:min(96vw,650px);max-height:85vh;overflow:auto;padding:18px 22px;background:#141b24;border:1px solid #b39366;box-shadow:0 25px 60px #000;text-align:left}
