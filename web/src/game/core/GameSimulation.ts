@@ -923,6 +923,73 @@ export class GameSimulation {
     this.effects.player = this.effects.player.filter(effect => effect.remaining > 0);
   }
 
+
+  /** Data-driven Wave B AI runs in the deterministic TypeScript simulation. */
+  private updateMonsterTactics(unit: EnemyUnit, dt: number): void {
+    const actor = unit.actor;
+    const def = ENEMY_DEFINITIONS[actor.type];
+    const profile = getEnemyArchetype(enemyArchetype(actor.type));
+    if (!profile || !actor.alive || !this.player.alive) return;
+    const index = this.units.indexOf(unit);
+    const spawn = this.world.encounterPositions[index];
+    if (!spawn) return;
+    const origin = { x: spawn.x, y: spawn.y + (this.wave % 2) * 25 };
+    const role = enemyArchetype(actor.type);
+    const allies = this.units.filter(u => u !== unit && u.actor.alive).map(u => ({
+      ...u.actor, lineOfSight: true,
+      reachable: distance(actor, u.actor) <= profile.aggroRange
+    }));
+    const decision = planEnemyBehavior({
+      actor, origin, target: this.player, allies,
+      config: {
+        archetypeId: role, aggroRange: def.aggro,
+        attackRange: def.attackRange,
+        preferredDistance: Math.min(def.preferredRange, def.attackRange),
+        leashRange: Math.max(profile.leashRange, def.aggro + 100),
+        specialRange: role === 'healer' ? 220 : Math.min(def.aggro, Math.max(def.attackRange, 230)),
+        healHealthRatio: 0.88,
+        fleeHealthRatio: profile.retreatThreshold
+      },
+      attackCooldown: unit.cooldown, abilityCooldown: unit.cooldown,
+      lineOfSight: true,
+      navigation: {
+        targetReachable: canOccupy(this.player, ACTOR_RADIUS, this.world.obstacles),
+        originReachable: canOccupy(origin, ACTOR_RADIUS, this.world.obstacles),
+        repositionReachable: true, retreatReachable: true, patrolReachable: true
+      }
+    });
+    if (decision.action === 'heal') {
+      const ally = this.units.find(u => u.actor.id === decision.targetId && u.actor.alive);
+      if (ally && unit.cooldown <= 0 && distance(actor, ally.actor) <= 220) {
+        ally.actor.health = resolveHealing(ally.actor.health, ally.actor.maxHealth, 36).health;
+        unit.cooldown = 6.5;
+        this.events.push({ type: 'enemyHeal', enemyId: actor.id, targetId: ally.actor.id, amount: 36 });
+      }
+    } else if (decision.action === 'cast' && decision.targetId !== this.player.id) {
+      const ally = this.units.find(u => u.actor.id === decision.targetId && u.actor.alive);
+      if (ally && unit.cooldown <= 0) {
+        this.applyCanonicalStatus('enemy', 'fortified', actor.id, 0.2, 6, ally);
+        unit.cooldown = 8;
+      }
+    } else if (decision.action === 'attack' || decision.action === 'cast') {
+      if (unit.cooldown > 0) return;
+      const center = def.attack === 'sweep' ? actor : this.player;
+      unit.intent = {
+        pattern: def.attack, x: center.x, y: center.y,
+        radius: def.dangerRadius, remaining: def.windup, total: def.windup
+      };
+      this.events.push({ type: 'enemyWindup', enemyId: actor.id, pattern: def.attack });
+    } else if ('destination' in decision) {
+      const point = decision.destination;
+      if (canOccupy(point, ACTOR_RADIUS, this.world.obstacles)) {
+        const pace = def.speed * profile.speedMultiplier
+          * (this.statusEffects.enemies[actor.id]?.some(e => e.id === 'slowed') ? 0.7 : 1);
+        const stop = decision.action === 'chase' ? Math.max(0, def.preferredRange - 4) : 0;
+        this.follow(actor, point, pace, dt, stop);
+      }
+    }
+  }
+
   private updateEnemyAI(unit: EnemyUnit, dt: number): void {
     if (!unit.actor.alive || !this.player.alive) { unit.intent = null; return; }
     // The starter camp is a sanctuary even if the player retreats mid-combat.
@@ -968,6 +1035,10 @@ export class GameSimulation {
       return;
     }
 
+    if (this.zone === 'wilderness' && this.wave >= 2) {
+      this.updateMonsterTactics(unit, dt);
+      return;
+    }
     const dist = distance(actor, this.player);
     if (dist > def.aggro) return;
     const slowed = unit.effects.some(effect => effect.id === 'chilled');
