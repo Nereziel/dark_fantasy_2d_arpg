@@ -49,6 +49,9 @@ export interface GameSnapshot {
   selectedTargetId: string | null;
   wave: number;
   respawnTimer: number;
+  /** Session-only movement and dodge input state. */
+  holdPosition: boolean;
+  evadeCooldown: number;
   kills: number;
   level: number;
   xp: number;
@@ -67,8 +70,10 @@ export interface GameSnapshot {
 }
 export type GameCommand =
   | { type: 'move'; destination: Point }
+  | { type: 'holdPosition'; value: boolean }
+  | { type: 'evade' }
   | { type: 'attack'; targetId: string }
-  | { type: 'cast'; slot: SkillSlot }
+  | { type: 'cast'; slot: SkillSlot; targetId?: string }
   | { type: 'interactNpc'; npcId: NpcId }
   | { type: 'usePortal' }
   | { type: 'buyItem'; offerId: ShopOfferId }

@@ -244,3 +244,26 @@ test('opens the derived character sheet, switches locales live, and closes with 
   await expect(page.getByRole('dialog', { name: 'Postava a atributy' })).toHaveCount(0);
   await expect(page.locator('.game-hud')).toBeVisible();
 });
+
+test('new input mappings evade on Space and toggle pause on Escape', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  const game = page.locator('.game-screen');
+  const x = Number(await game.getAttribute('data-player-x'));
+  await page.keyboard.press('Space');
+  await expect.poll(async () => Number(await game.getAttribute('data-player-x')))
+    .toBeGreaterThan(x + 50);
+  const afterEvade = Number(await game.getAttribute('data-player-x'));
+  await page.keyboard.press('Space');
+  await expect.poll(async () => Number(await game.getAttribute('data-player-x')))
+    .toBe(afterEvade);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.modal-shield')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.modal-shield')).toHaveCount(0);
+  await page.keyboard.press('c');
+  await expect(page.getByRole('dialog', { name: 'Character and Attributes' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'Character and Attributes' })).toHaveCount(0);
+});

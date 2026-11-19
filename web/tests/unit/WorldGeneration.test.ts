@@ -42,8 +42,11 @@ describe('fresh procedural sessions', () => {
     const sim = new GameSimulation(world.seed);
     const before = sim.snapshot().player;
     sim.command({ type: 'move', destination: blocked });
+    expect(sim.snapshot().status).toBe('moving');
     for (let i = 0; i < 30; i++) sim.advance(16.667);
-    expect(sim.snapshot().player).toEqual(before);
+    expect(Math.hypot(sim.snapshot().player.x - before.x,
+      sim.snapshot().player.y - before.y)).toBeGreaterThan(30);
+    expect(canOccupy(sim.snapshot().player, 18, world.obstacles)).toBe(true);
   });
 
   it('starts a new seed without losing permanent progression', () => {

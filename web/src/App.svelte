@@ -4,6 +4,8 @@
   import { languageOptions, setLanguage, type Language } from './i18n';
   import { GameBridge } from './game/bridge/GameBridge';
   import type { GameSnapshot } from './game/core/types';
+  import { resolveKeyboardAction } from './game/input/bindings';
+  import { GAME_BINDINGS } from './game/input/gameBindings';
   import { loadGame, saveGame } from './persistence/SaveRepository';
   import { CharacterAutosaver } from './persistence/CharacterAutosaver';
   import { CAMP, CAMP_RADIUS } from './game/world/generator';
@@ -32,6 +34,7 @@
   let characterOpen = $state(false);
   let dialogueOpen = $state(false);
   let tradeNpc: TradeNpcId | null = $state(null);
+  const heldShiftKeys = new Set<string>();
   const autosaver = new CharacterAutosaver(saveGame, 1400, () => {
     messageKey = 'status.saveError';
   });
@@ -90,6 +93,8 @@
     playing = true;
   }
   function menu(): void {
+    heldShiftKeys.clear();
+    bridge.command({ type: 'holdPosition', value: false });
     tradeNpc = null;
     dialogueOpen = false;
     inventoryOpen = false;
@@ -138,35 +143,64 @@
     bridge.command({ type: 'pause', value: false });
   }
   function handleKeydown(event: KeyboardEvent): void {
+    if (!playing) return;
     const target = event.target;
-    if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return;
-    if (!playing || event.repeat) return;
-    if (event.code === 'Escape' && (dialogueOpen || tradeNpc !== null)) {
+    const isTyping = target instanceof HTMLElement
+      && !!target.closest('input, textarea, select, [contenteditable="true"]');
+    const action = resolveKeyboardAction({
+      code: event.code, repeat: event.repeat, isTyping, uiCaptured: false
+    }, GAME_BINDINGS);
+    if (!action) return;
+
+    if (action === 'MENU') {
       event.preventDefault();
-      closeDialogue();
-    } else if (dialogueOpen || tradeNpc !== null) {
+      if (dialogueOpen || tradeNpc !== null) closeDialogue();
+      else if (inventoryOpen) closeInventory();
+      else if (characterOpen) closeCharacterSheet();
+      else togglePause();
       return;
-    } else if (event.code === 'Escape' && characterOpen) {
-      event.preventDefault();
-      closeCharacterSheet();
-    } else if (event.code === 'KeyC') {
-      event.preventDefault();
-      if (characterOpen) closeCharacterSheet();
-      else openCharacterSheet();
-    } else if (characterOpen) {
-      return;
-    } else if (event.code === 'KeyI') {
+    }
+    if (action === 'INVENTORY') {
+      if (dialogueOpen || tradeNpc !== null || characterOpen) return;
       event.preventDefault();
       if (inventoryOpen) closeInventory();
       else openInventory();
-    } else if (event.code === 'Escape' && inventoryOpen) {
-      event.preventDefault();
-      closeInventory();
-    } else if (!inventoryOpen && !view.paused && view.player.alive &&
-      (event.code === 'KeyQ' || event.code === 'Digit1' || event.code === 'Numpad1')) {
-      event.preventDefault();
-      bridge.command({ type: 'cast', slot: event.code === 'KeyQ' ? 'rmb' : 'slot1' });
+      return;
     }
+    if (action === 'CHARACTER') {
+      if (dialogueOpen || tradeNpc !== null || inventoryOpen) return;
+      event.preventDefault();
+      if (characterOpen) closeCharacterSheet();
+      else openCharacterSheet();
+      return;
+    }
+    if (dialogueOpen || tradeNpc !== null || inventoryOpen || characterOpen
+      || view.paused || !view.player.alive) return;
+
+    if (action === 'HOLD_POSITION') {
+      event.preventDefault();
+      heldShiftKeys.add(event.code);
+      bridge.command({ type: 'holdPosition', value: true });
+    } else if (action === 'EVADE') {
+      event.preventDefault();
+      bridge.command({ type: 'evade' });
+    } else if (action === 'SECONDARY') {
+      event.preventDefault();
+      bridge.command({ type: 'cast', slot: 'rmb' });
+    } else if (action === 'SLOT_1') {
+      event.preventDefault();
+      bridge.command({ type: 'cast', slot: 'slot1' });
+    }
+    // Other mapped actions have no corresponding skills/UI yet and stay inert.
+  }
+  function handleKeyup(event: KeyboardEvent): void {
+    if (!heldShiftKeys.delete(event.code)) return;
+    bridge.command({ type: 'holdPosition', value: heldShiftKeys.size > 0 });
+  }
+  function handleBlur(): void {
+    if (heldShiftKeys.size === 0) return;
+    heldShiftKeys.clear();
+    bridge.command({ type: 'holdPosition', value: false });
   }
   async function save(): Promise<void> {
     busy = true;
@@ -204,7 +238,7 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onkeyup={handleKeyup} onblur={handleBlur} />
 
 <svelte:head>
   <title>Aether &amp; Ruin</title>
@@ -240,7 +274,8 @@
       </div>
     </main>
   {:else}
-    <main class="game-screen" data-world-seed={view.worldSeed} data-zone={view.zone}>
+    <main class="game-screen" data-world-seed={view.worldSeed} data-zone={view.zone}
+      data-player-x={view.player.x} data-player-y={view.player.y}>
       <GameViewport {bridge} />
       <div class="game-vignette" aria-hidden="true"></div>
 

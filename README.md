@@ -22,13 +22,14 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 
 ## Ovládání
 
-- Levé tlačítko myši: pohyb po zemi, útok kliknutím na nepřítele, sebrání kořisti kliknutím na předmět.
+- **Levé tlačítko myši:** kontextový pohyb, útok na nepřítele, NPC, portál a sběr kořisti. Neprůchozí kliknutí nasměruje postavu na nejbližší dosažitelné místo.
+- **Prostřední tlačítko myši:** vynucený pohyb (bez vybírání nepřátel a NPC). Přesun řeší kolize a překážky.
 - Klávesa **I**: inventář; Esc: zavření inventáře.
 - Klávesa **C**: přehled postavy a všech atributů; Esc: zavření přehledu.
-- **Q** nebo **pravé tlačítko myši**: první schopnost; **1**: druhá schopnost.
+- **Q** nebo **pravé tlačítko myši**: první schopnost; **1** (včetně numerické klávesnice): druhá schopnost. Pravé kliknutí na nepřítele ho před sesláním vybere; další sloty a lektvary zatím nejsou implementované.
 - Kliknutí na konkrétního nepřítele nebo položku v seznamu cílů: vybere nepřítele k útoku.
 - Uhnutí před útokem: opusť červeně vyznačenou oblast před zásahem.
-- Mezerník nebo Esc mimo inventář: pauza.
+- **Shift (držet):** drž pozici, nepokračuj v automatickém pronásledování nepřítele. **Mezerník:** úskok s cooldownem. **Esc:** pauza / návrat do hry nebo zavření otevřeného panelu.
 - Přepnutí **Čeština / English** je v menu i při hraní.
 - **Tábor:** bezpečná oblast bez útoků nepřátel. Kliknutím na NPC nebo tlačítkem v deníku úkolů lze zahájit rozhovor a přijmout úkol.
 - **Úvodní úkol:** Po přijetí poraz 3 nepřátele a vrať se ke strážkyni pro odměnu. Postup se automaticky ukládá.
@@ -37,7 +38,7 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 
 ### Základy podle implementačních promptů
 
-Převod pokračuje **v pořadí 63 promptů** ze souboru `2d_arpg_implementation_prompts.md`. V současnosti se dokončuje **Prompt 02 – Player Entity and Character Core**: jsou oddělené odvozené statistiky, vytvoření hráče a pravidla života/zdrojů a přibyl přehled postavy na klávese C. Některé sekundární vlastnosti (odolnosti, úhyb, blok, life steal) zatím slouží k inspekci; jejich zapojení do soubojové pipeline je úkolem Promptu 06. Přesný přehled dokončení základů je v `docs/IMPLEMENTATION_STATUS.md`.
+Převod pokračuje **v pořadí 63 promptů** ze souboru `2d_arpg_implementation_prompts.md`. V současnosti se dokončuje **Prompt 02 – Player Entity and Character Core**: jsou oddělené odvozené statistiky, vytvoření hráče a pravidla života/zdrojů a přibyl přehled postavy na klávese C. Souboj nyní používá typované fyzické a elementální poškození, výpočet úhybu, bloku a kritických zásahů; části sekundárních statistik (magické odolnosti pro budoucí útoky, štíty, life steal) zůstávají pro budoucí rozšíření. Přesný přehled dokončení základů je v `docs/IMPLEMENTATION_STATUS.md`.
 
 ## Současná architektura
 

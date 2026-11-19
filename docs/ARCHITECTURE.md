@@ -6,7 +6,7 @@ The site at `https://nereziel.github.io/dark_fantasy_2d_arpg/` now deploys **`we
 
 - **Svelte 5:** menu, selection of six classes, HUD, inventory/equipment, localized NPC dialogue, merchant and blacksmith panels, quest journal and runtime locale.
 - **Phaser 4.2.1:** world canvas, camera, input picking, actor proxies, seeded wilderness and crypt terrain, portal drawings, safe starter camp, loot graphics, individual enemy/boss visuals, selected-target indicators and telegraphs.
-- **Character model (Prompt 02):** `web/src/game/stats/deriveStats.ts` owns primary and derived character stats; `web/src/game/entities/player.ts` owns spawn, max-health adjustments and resource regeneration. All derive on demand from class base values and equipped items. Svelte `CharacterSheet` is an read-only projection opened with C and is translated in CS/EN. Advanced resistances, dodge and some secondary stats are displayed but not yet wired to defensive combat rules (planned Prompt 06).
+- **Character model (Prompt 02):** `web/src/game/stats/deriveStats.ts` owns primary and derived character stats; `web/src/game/entities/player.ts` owns spawn, max-health adjustments and resource regeneration. All derive on demand from class base values and equipped items. Svelte `CharacterSheet` is an read-only projection opened with C and is translated in CS/EN. Dodge and block now affect incoming enemy attacks via the typed damage pipeline; resistance to future nonphysical enemy attacks, shields and other secondary stats remain in progress for Prompt 06.
 - **Strict TypeScript simulation:** authoritative positions, movement, basic attacks, 12 first active class skills, cooldown/resource validation, status effects, three wilderness archetypes plus a crypt boss, independent enemy AI and windups, two-phase dungeon encounters, zone transitions, XP/levels, loot, gold, inventory/equipment, first quest lifecycle and events.
 - **`svelte-i18n`:** Czech and English dictionaries, changed without reloading the game.
 - **IndexedDB:** automatic debounced plus manual character-only saves (format v8) with class, level, XP, gold, cumulative kills, inventory, equipment/tempering levels and persistent quest progress. Enemy state, effects, cooldowns, drops, positions, encounter wave and world seed are never persisted; old saves are not migrated.
@@ -29,6 +29,16 @@ Phaser world clicks ----> typed command bus <---- Svelte panels
 Neither Phaser GameObjects nor translated labels are serialized into saved state. Persistent IDs are independent of locale. Inventory equip and world pickup are typed commands.
 
 The starter base attributes for Warrior, Paladin, Mage, Rogue, Necromancer and Warlock are taken from the original `CLASS_DEFINITIONS`. Item bases and rarity distribution follow the original `ItemGenerator`; generated affix IDs/values are stored, while UI names and labels are rendered from `cs`/`en` dictionaries.
+
+## Integrated foundational modules (Prompts 02–06)
+
+- `web/src/game/entities/player.ts` and `web/src/game/stats/deriveStats.ts` are used by the simulation for hero creation, equipment-driven statistics, health and regeneration (Agent 01).
+- `resolveReachableDestination` in `web/src/game/world/navigation.ts` finds the closest reachable point for blocked ground destinations. The simulation computes an A* route to this point, so clicking a wall is not silently ignored (Agent 02).
+- `web/src/game/input/contextResolver.ts` resolves terrain, enemy, loot, NPC and portal targets deterministically. `FrontierScene` uses it for both click commands and contextual cursor hints; blocked ground is forwarded to reachability resolution (Agent 03).
+- `web/src/game/input/bindings.ts` maps browser `KeyboardEvent.code` and mouse buttons into actions. `gameBindings.ts` keeps the two currently implemented ability slots compatible with Q/RMB and 1, alongside C/I, Shift to hold position, middle-click force move, Space to evade and Escape to pause. Unimplemented slots and potion actions remain inert (Agent 04).
+- `web/src/game/combat/typedDamage.ts` now drives the simulation's physical attacks, offensive elemental skill damage, incoming physical enemy attacks with dodge/block, and healing. Damage still resolves on deterministic fixed ticks; no combat data enters the v8 character save (Agent 05).
+
+These integrations are **functional slices**, not full acceptance of Prompts 03–06. Held LMB movement and repath throttling, additional target categories, fully remappable on-screen controls, nonphysical enemy resistances, shields and other advanced combat mechanics remain work.
 
 ## Enemy combat and navigation
 
