@@ -86,8 +86,8 @@
 
 <style>
   .skill-ui{position:absolute;z-index:3;left:50%;bottom:144px;transform:translateX(-50%);pointer-events:none;width:min(930px,96vw)}
-  .skill-toolbar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;pointer-events:auto}
-  .skill-button{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:170px;min-height:83px;padding:9px 8px;border:1px solid #88704e;background:linear-gradient(#222b36eb,#10141be9);box-shadow:0 10px 25px #000c}
+  .skill-toolbar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;pointer-events:none}
+  .skill-button{pointer-events:auto;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:170px;min-height:83px;padding:9px 8px;border:1px solid #88704e;background:linear-gradient(#222b36eb,#10141be9);box-shadow:0 10px 25px #000c}
   .skill-button.extra{width:90px;min-height:80px}
   .skill-button.extra .skill-icon{font-size:1.3rem}
   .skill-button.extra .skill-title{font-size:.65rem}
