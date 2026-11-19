@@ -10,7 +10,7 @@ import {
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
 import { ACTOR_RADIUS, canOccupy, findPath, moveActor, type Obstacle } from '../world/navigation';
-import { generateWorld, type WorldLayout } from '../world/generator';
+import { CAMP_RADIUS, generateWorld, type WorldLayout } from '../world/generator';
 import {
   SeededRng, createEquipment, deriveStats, isEquipmentSlot, isItem, rollItem,
   type Equipment, type EquipmentSlot, type GroundItem, type Item
@@ -323,7 +323,7 @@ export class GameSimulation {
   private updateEnemyAI(unit: EnemyUnit, dt: number): void {
     if (!unit.actor.alive || !this.player.alive) { unit.intent = null; return; }
     // The starter camp is a sanctuary even if the player retreats mid-combat.
-    if (distance(this.player, this.world.camp) <= 165) {
+    if (distance(this.player, this.world.camp) <= CAMP_RADIUS) {
       unit.intent = null;
       return;
     }
