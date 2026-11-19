@@ -2,7 +2,6 @@
   import { _ as t } from 'svelte-i18n';
   import type { GameSnapshot } from '../game/core/types';
   import { QUEST_REQUIRED_KILLS } from '../game/quests/firstQuest';
-  import { nearWarden } from '../game/world/npcs';
 
   let { view, talk }: { view: GameSnapshot; talk: () => void } = $props();
 </script>
@@ -22,7 +21,7 @@
   {#if view.quest.status === 'ready'}
     <div class="quest-ready">{$t('quest.ashes.readyHint')}</div>
   {/if}
-  <button class="quest-talk" disabled={!view.player.alive || view.paused || !nearWarden(view.player)} onclick={talk}>
+  <button class="quest-talk" disabled={!view.player.alive || view.paused} onclick={talk}>
     {$t('npc.talk')}
   </button>
 </aside>

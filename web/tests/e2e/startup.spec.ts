@@ -97,7 +97,7 @@ test('autosaves only the hero and generates fresh wilderness on reopening', asyn
         get.onsuccess = () => {
           const record = get.result as { format?: number; character?: { classId?: string } } | undefined;
           db.close();
-          resolve(record?.format === 7 && record.character?.classId === 'ROGUE' ? 6 : null);
+          resolve(record?.format === 7 && record.character?.classId === 'ROGUE' ? 7 : null);
         };
       };
     });
@@ -138,6 +138,6 @@ test('talks to Warden Vesna, accepts the quest and loads its persistent progress
   await expect(dialog).toContainText('The fire still protects us');
   await expect(dialog.getByRole('button', { name: 'Accept quest' })).toHaveCount(0);
   await page.locator('#game-language').selectOption('cs');
-  await expect(dialog).toHaveAttribute('aria-label', 'Strážkyně Vesna');
-  await expect(dialog).toContainText('Popel u bran');
+  await expect(page.getByRole('dialog', { name: 'Strážkyně Vesna' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Strážkyně Vesna' })).toContainText('Popel u bran');
 });
