@@ -7,7 +7,7 @@
  */
 export type InputAction =
   | 'PRIMARY' | 'SECONDARY' | 'FORCE_MOVE' | 'HOLD_POSITION'
-  | 'SLOT_1' | 'SLOT_2' | 'SLOT_3' | 'SLOT_4'
+  | 'SLOT_1' | 'SLOT_2' | 'SLOT_3' | 'SLOT_4' | 'SLOT_5' | 'SLOT_6'
   | 'POTION' | 'EVADE' | 'INVENTORY' | 'CHARACTER'
   | 'SKILLS' | 'TALENTS' | 'MAP' | 'JOURNAL' | 'MENU';
 
@@ -26,7 +26,7 @@ export type PointerInput = { button: number; uiCaptured: boolean };
 
 const INPUT_ACTIONS: ReadonlySet<string> = new Set<InputAction>([
   'PRIMARY', 'SECONDARY', 'FORCE_MOVE', 'HOLD_POSITION',
-  'SLOT_1', 'SLOT_2', 'SLOT_3', 'SLOT_4',
+  'SLOT_1', 'SLOT_2', 'SLOT_3', 'SLOT_4', 'SLOT_5', 'SLOT_6',
   'POTION', 'EVADE', 'INVENTORY', 'CHARACTER',
   'SKILLS', 'TALENTS', 'MAP', 'JOURNAL', 'MENU'
 ]);
@@ -81,6 +81,8 @@ const defaultValues: InputBinding[] = [
   { action: 'SLOT_2', device: 'keyboard', code: 'Digit2' },
   { action: 'SLOT_3', device: 'keyboard', code: 'Digit3' },
   { action: 'SLOT_4', device: 'keyboard', code: 'Digit4' },
+  { action: 'SLOT_5', device: 'keyboard', code: 'Digit5' },
+  { action: 'SLOT_6', device: 'keyboard', code: 'Digit6' },
   { action: 'POTION', device: 'keyboard', code: 'KeyQ' },
   { action: 'EVADE', device: 'keyboard', code: 'Space' },
   { action: 'INVENTORY', device: 'keyboard', code: 'KeyI' },
