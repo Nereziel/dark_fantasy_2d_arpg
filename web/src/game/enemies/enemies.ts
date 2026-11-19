@@ -76,7 +76,7 @@ const FAMILY_DEFINITIONS = Object.fromEntries(FAMILY_MONSTERS
       health: monster.health, speed: monster.speed, aggro: monster.aggroRange,
       preferredRange: monster.preferredDistance, attackRange: monster.attackRange,
       dangerRadius: attack === 'sweep' ? 82 : attack === 'leap' ? 64 : 48,
-      windup, cooldown, baseDamage: monster.baseDamage
+      windup: Math.max(0.6, windup), cooldown, baseDamage: monster.baseDamage
     }];
   })) as Record<Exclude<EnemyType, 'wraith' | 'skeleton' | 'wolf' | 'crypt_lord'>, EnemyDefinition>;
 
