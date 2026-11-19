@@ -93,7 +93,27 @@
     "maxDmg": "Max. poškození",
     "blockChance": "Šance na blok",
     "critChance": "Kritický zásah",
-    "moveSpeed": "Rychlost pohybu"
+    "moveSpeed": "Rychlost pohybu",
+    "damageMin": "Minimální poškození",
+    "damageMax": "Maximální poškození",
+    "maxHealth": "Maximální životy",
+    "healthRegen": "Obnova životů / s",
+    "maxResource": "Maximum zdroje",
+    "resourceRegen": "Obnova zdroje / s",
+    "physicalResist": "Fyzická odolnost",
+    "fireResist": "Odolnost proti ohni",
+    "frostResist": "Odolnost proti mrazu",
+    "lightningResist": "Odolnost proti blesku",
+    "poisonResist": "Odolnost proti jedu",
+    "shadowResist": "Odolnost proti stínu",
+    "holyResist": "Odolnost proti svatému poškození",
+    "attackSpeed": "Rychlost útoku",
+    "critDamage": "Bonus kritického poškození",
+    "dodgeChance": "Šance na úhyb",
+    "cooldownReduction": "Zkrácení cooldownů",
+    "lifeSteal": "Vysátí života",
+    "magicFind": "Šance na magické předměty",
+    "goldFind": "Bonus nalezeného zlata"
   },
   "resource": {
     "rage": "Hněv",
@@ -317,5 +337,16 @@
     "cleared": "Krypta vyčištěna",
     "clearedHint": "Vládce padl. Získané zlato, předměty a XP ti zůstanou; svět se při příštím spuštění obnoví.",
     "clearedToast": "Krypta vyčištěna! Odměna připsána."
+  },
+  "character": {
+    "title": "Postava a atributy",
+    "open": "Postava (C)",
+    "derivedHint": "Atributy se vypočítávají podle povolání a nasazené výbavy. Odolnosti, úhyb, blok a některé vedlejší statistiky jsou zatím informativní; jejich zapojení do boje je součástí dalšího promptu.",
+    "groups": {
+      "primary": "Základní atributy",
+      "offense": "Útok",
+      "defense": "Obrana",
+      "utility": "Ostatní vlastnosti"
+    }
   }
 }

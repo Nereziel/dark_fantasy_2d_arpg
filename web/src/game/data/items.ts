@@ -1,6 +1,6 @@
 /** Item templates, rarities and affixes ported from the original ItemGenerator. */
-import type { ClassId, PrimaryStats } from './classes';
-import { CLASSES } from './classes';
+export { deriveStats } from '../stats/deriveStats';
+export type { DerivedStats } from '../stats/deriveStats';
 
 export type EquipmentSlot = 'HELMET' | 'AMULET' | 'CHEST' | 'MAIN_HAND' | 'OFF_HAND' |
   'GLOVES' | 'BELT' | 'BOOTS' | 'RING_1' | 'RING_2';
@@ -116,51 +116,6 @@ export function rollItem(killIndex: number, level: number, rng: SeededRng): Item
     block: template.block ?? 0,
     affixes,
     upgrades: 0
-  };
-}
-export interface DerivedStats extends PrimaryStats {
-  maxHealth: number;
-  armor: number;
-  physicalResist: number;
-  critChance: number;
-  damageMin: number;
-  damageMax: number;
-  attackSpeed: number;
-  moveSpeed: number;
-}
-export function deriveStats(classId: ClassId, equipment: Equipment): DerivedStats {
-  const base = CLASSES[classId].primary;
-  const primary: PrimaryStats = { ...base };
-  let armor = 0, minDmg = 4, maxDmg = 8, block = 0, crit = 0, move = 0;
-  for (const item of Object.values(equipment)) {
-    if (!item) continue;
-    armor += item.armor;
-    minDmg += item.minDmg;
-    maxDmg += item.maxDmg;
-    block += item.block;
-    for (const affix of item.affixes) {
-      if (affix.stat === 'armor') armor += affix.value;
-      if (affix.stat === 'minDmg') minDmg += affix.value;
-      if (affix.stat === 'maxDmg') maxDmg += affix.value;
-      if (affix.stat === 'critChance') crit += affix.value;
-      if (affix.stat === 'moveSpeed') move += affix.value;
-      if (affix.stat === 'strength') primary.strength += affix.value;
-      if (affix.stat === 'dexterity') primary.dexterity += affix.value;
-      if (affix.stat === 'vitality') primary.vitality += affix.value;
-    }
-  }
-  const { strength, dexterity, vitality } = primary;
-  armor += Math.round(5 + strength * 1.8 + vitality * 0.4);
-  return {
-    ...primary,
-    maxHealth: Math.round(50 + vitality * 12 + strength * 2),
-    armor,
-    physicalResist: Math.round(100 * armor / (armor + 250)),
-    critChance: Number(Math.min(75, 5 + dexterity * 0.2 + crit).toFixed(1)),
-    damageMin: minDmg,
-    damageMax: Math.max(minDmg, maxDmg),
-    attackSpeed: Number((1 + dexterity * 0.008).toFixed(2)),
-    moveSpeed: Number((100 + dexterity * 0.25 + move).toFixed(1))
   };
 }
 export function isEquipmentSlot(value: unknown): value is EquipmentSlot {

@@ -1,4 +1,5 @@
 import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point, ZoneId } from './types';
+import { spawnPlayer, updateHealthLimit, advanceResource } from '../entities/player';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
 import { rollAttackDamage, mitigateDamage } from '../combat/damage';
 import {
@@ -34,9 +35,6 @@ const PLAYER_SPEED = 190;
 const INVENTORY_SIZE = 24;
 const ENEMY_SEPARATION = 44;
 
-function makeActor(id: string, x: number, y: number, health: number): ActorSnapshot {
-  return { id, x, y, health, maxHealth: health, alive: true };
-}
 function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
@@ -96,7 +94,7 @@ export class GameSimulation {
   private quest: QuestProgress = freshQuest();
   private pendingNpc: NpcId | null = null;
   private pendingSkill: SkillSlot | null = null;
-  private player = makeActor('hero', 390, 470, deriveStats('WARRIOR', this.equipment).maxHealth);
+  private player = spawnPlayer('WARRIOR', this.equipment, { x: 390, y: 470 });
   private groundLoot: GroundItem[] = [];
   private movePath: Point[] = [];
   private attackTarget: string | null = null;
@@ -298,9 +296,7 @@ export class GameSimulation {
   }
   private refreshHealthLimit(): void {
     const max = deriveStats(this.classId, this.equipment).maxHealth;
-    const delta = max - this.player.maxHealth;
-    this.player.maxHealth = max;
-    if (this.player.alive) this.player.health = Math.max(1, Math.min(max, this.player.health + delta));
+    updateHealthLimit(this.player, max);
   }
 
   private requestCast(slot: SkillSlot): void {
@@ -566,8 +562,7 @@ export class GameSimulation {
   }
   private step(dt: number): void {
     const definition = CLASSES[this.classId];
-    this.resource = Math.min(definition.resourceMax,
-      Math.max(0, this.resource + definition.regenRate * dt));
+    this.resource = advanceResource(this.resource, definition.regenRate, definition.resourceMax, dt);
     this.attackTimer = Math.max(0, this.attackTimer - dt);
     for (const slot of ['rmb', 'slot1'] as const) {
       this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
@@ -912,7 +907,7 @@ export class GameSimulation {
     this.units = createPack(0, 1, this.world.encounterPositions);
     this.selectedTargetId = null;
     this.pendingSkill = null;
-    this.player = makeActor('hero', this.world.camp.x, this.world.camp.y, deriveStats(classId, this.equipment).maxHealth);
+    this.player = spawnPlayer(classId, this.equipment, this.world.camp);
     this.groundLoot = [];
     this.movePath = [];
     this.attackTarget = null;

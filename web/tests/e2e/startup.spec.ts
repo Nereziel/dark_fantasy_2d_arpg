@@ -218,3 +218,29 @@ test('enters a separate procedurally generated crypt, returns to camp and reload
   await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'wilderness');
   await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
 });
+
+test('opens the derived character sheet, switches locales live, and closes with C or Escape', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await page.getByRole('button', { name: 'Character (C)' }).click();
+  const english = page.getByRole('dialog', { name: 'Character and Attributes' });
+  await expect(english).toBeVisible();
+  await expect(english).toContainText('Primary attributes');
+  await expect(english).toContainText('Offense');
+  await expect(english).toContainText('Fire resistance');
+  await expect(english).toContainText('Maximum health');
+  await expect(english).toContainText('Strength');
+  await page.locator('#game-language').selectOption('cs');
+  const czech = page.getByRole('dialog', { name: 'Postava a atributy' });
+  await expect(czech).toBeVisible();
+  await expect(czech).toContainText('Odolnost proti ohni');
+  await expect(czech).toContainText('Maximální životy');
+  await page.keyboard.press('Escape');
+  await expect(czech).toHaveCount(0);
+  await page.keyboard.press('c');
+  await expect(page.getByRole('dialog', { name: 'Postava a atributy' })).toBeVisible();
+  await page.keyboard.press('c');
+  await expect(page.getByRole('dialog', { name: 'Postava a atributy' })).toHaveCount(0);
+  await expect(page.locator('.game-hud')).toBeVisible();
+});

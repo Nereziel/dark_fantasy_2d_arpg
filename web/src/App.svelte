@@ -10,6 +10,7 @@
   import GameViewport from './ui/GameViewport.svelte';
   import CharacterSelect from './ui/CharacterSelect.svelte';
   import InventoryPanel from './ui/InventoryPanel.svelte';
+  import CharacterSheet from './ui/CharacterSheet.svelte';
   import SkillBar from './ui/SkillBar.svelte';
   import QuestJournal from './ui/QuestJournal.svelte';
   import NpcDialogue from './ui/NpcDialogue.svelte';
@@ -28,6 +29,7 @@
   let busy = $state(false);
   let selectedClass: ClassId = $state('WARRIOR');
   let inventoryOpen = $state(false);
+  let characterOpen = $state(false);
   let dialogueOpen = $state(false);
   let tradeNpc: TradeNpcId | null = $state(null);
   const autosaver = new CharacterAutosaver(saveGame, 1400, () => {
@@ -75,6 +77,7 @@
     bridge.command({ type: 'reset', classId: selectedClass });
     messageKey = '';
     inventoryOpen = false;
+    characterOpen = false;
     dialogueOpen = false;
     tradeNpc = null;
     playing = true;
@@ -90,16 +93,17 @@
     tradeNpc = null;
     dialogueOpen = false;
     inventoryOpen = false;
+    characterOpen = false;
     bridge.command({ type: 'pause', value: true });
     void autosaver.flush().catch(() => { messageKey = 'status.saveError'; });
     playing = false;
   }
   function togglePause(): void {
-    if (!inventoryOpen && !dialogueOpen && tradeNpc === null) bridge.command({ type: 'pause', value: !view.paused });
+    if (!inventoryOpen && !characterOpen && !dialogueOpen && tradeNpc === null) bridge.command({ type: 'pause', value: !view.paused });
   }
 
   function openInventory(): void {
-    if (dialogueOpen || tradeNpc !== null || inventoryOpen || view.paused || !view.player.alive) return;
+    if (dialogueOpen || tradeNpc !== null || inventoryOpen || characterOpen || view.paused || !view.player.alive) return;
     inventoryOpen = true;
     bridge.command({ type: 'pause', value: true });
   }
@@ -107,8 +111,18 @@
     inventoryOpen = false;
     bridge.command({ type: 'pause', value: false });
   }
+  function openCharacterSheet(): void {
+    if (dialogueOpen || tradeNpc !== null || inventoryOpen || characterOpen ||
+      view.paused || !view.player.alive) return;
+    characterOpen = true;
+    bridge.command({ type: 'pause', value: true });
+  }
+  function closeCharacterSheet(): void {
+    characterOpen = false;
+    bridge.command({ type: 'pause', value: false });
+  }
   function interact(npcId: NpcId): void {
-    if (inventoryOpen || dialogueOpen || tradeNpc !== null || view.paused) return;
+    if (inventoryOpen || characterOpen || dialogueOpen || tradeNpc !== null || view.paused) return;
     bridge.command({ type: 'interactNpc', npcId });
   }
   function talkToWarden(): void { interact(WARDEN_ID); }
@@ -131,6 +145,15 @@
       event.preventDefault();
       closeDialogue();
     } else if (dialogueOpen || tradeNpc !== null) {
+      return;
+    } else if (event.code === 'Escape' && characterOpen) {
+      event.preventDefault();
+      closeCharacterSheet();
+    } else if (event.code === 'KeyC') {
+      event.preventDefault();
+      if (characterOpen) closeCharacterSheet();
+      else openCharacterSheet();
+    } else if (characterOpen) {
       return;
     } else if (event.code === 'KeyI') {
       event.preventDefault();
@@ -164,6 +187,7 @@
       if (character && bridge.restoreCharacter(character)) {
         messageKey = 'status.loaded';
         inventoryOpen = false;
+        characterOpen = false;
         dialogueOpen = false;
         tradeNpc = null;
         selectedClass = bridge.snapshot().classId;
@@ -296,6 +320,7 @@
         </div>
         <div class="hud-actions">
           <button onclick={openInventory}>{$t('inventory.open')}</button>
+          <button onclick={openCharacterSheet}>{$t('character.open')}</button>
           <button disabled={busy} onclick={save}>{$t('menu.save')}</button>
           <button disabled={busy} onclick={load}>{$t('menu.load')}</button>
         </div>
@@ -316,6 +341,8 @@
         <NpcDialogue quest={view.quest} accept={acceptQuest} turnIn={turnInQuest} close={closeDialogue} />
       {:else if inventoryOpen}
         <InventoryPanel {view} {bridge} close={closeInventory} />
+      {:else if characterOpen}
+        <CharacterSheet {view} close={closeCharacterSheet} />
       {:else if view.paused}
         <div class="modal-shield">
           <section class="pause-card" aria-label={$t('menu.paused')}>

@@ -93,7 +93,27 @@
     "maxDmg": "Max damage",
     "blockChance": "Block chance",
     "critChance": "Critical chance",
-    "moveSpeed": "Movement speed"
+    "moveSpeed": "Movement speed",
+    "damageMin": "Minimum damage",
+    "damageMax": "Maximum damage",
+    "maxHealth": "Maximum health",
+    "healthRegen": "Health regeneration / s",
+    "maxResource": "Maximum resource",
+    "resourceRegen": "Resource regeneration / s",
+    "physicalResist": "Physical resistance",
+    "fireResist": "Fire resistance",
+    "frostResist": "Frost resistance",
+    "lightningResist": "Lightning resistance",
+    "poisonResist": "Poison resistance",
+    "shadowResist": "Shadow resistance",
+    "holyResist": "Holy resistance",
+    "attackSpeed": "Attack speed",
+    "critDamage": "Critical damage bonus",
+    "dodgeChance": "Dodge chance",
+    "cooldownReduction": "Cooldown reduction",
+    "lifeSteal": "Life steal",
+    "magicFind": "Magic find",
+    "goldFind": "Gold find"
   },
   "resource": {
     "rage": "Rage",
@@ -317,5 +337,16 @@
     "cleared": "Crypt cleared",
     "clearedHint": "The ruler has fallen. Keep your gold, loot and XP; the world resets next session.",
     "clearedToast": "Crypt cleared! Rewards received."
+  },
+  "character": {
+    "title": "Character and Attributes",
+    "open": "Character (C)",
+    "derivedHint": "Stats are derived from class and equipped items. Resistances, dodge, block and some secondary values are informational for now; applying them in combat belongs to the next prompt.",
+    "groups": {
+      "primary": "Primary attributes",
+      "offense": "Offense",
+      "defense": "Defense",
+      "utility": "Utility"
+    }
   }
 }

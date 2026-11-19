@@ -24,6 +24,7 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 
 - Levé tlačítko myši: pohyb po zemi, útok kliknutím na nepřítele, sebrání kořisti kliknutím na předmět.
 - Klávesa **I**: inventář; Esc: zavření inventáře.
+- Klávesa **C**: přehled postavy a všech atributů; Esc: zavření přehledu.
 - **Q** nebo **pravé tlačítko myši**: první schopnost; **1**: druhá schopnost.
 - Kliknutí na konkrétního nepřítele nebo položku v seznamu cílů: vybere nepřítele k útoku.
 - Uhnutí před útokem: opusť červeně vyznačenou oblast před zásahem.
@@ -34,6 +35,10 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 - **Obchod a kovář:** Klikni na NPC ve světě nebo použij tlačítka „Prohlédnout zboží“ / „Navštívit kováře“ v táboře. U Brama lze nakupovat a prodávat předměty z batohu, u Odana vylepšovat **nasazené** zbraně a zbroj.
 - **Krypta Duté koruny:** Klikni na kamenný portál za táborem nebo na tlačítko „Vstoupit do krypty“. Poraz tři strážce, poté vládce krypty a jeho doprovod. Tlačítko „Vrátit se do tábora“ funguje také během boje.
 
+### Základy podle implementačních promptů
+
+Převod pokračuje **v pořadí 63 promptů** ze souboru `2d_arpg_implementation_prompts.md`. V současnosti se dokončuje **Prompt 02 – Player Entity and Character Core**: jsou oddělené odvozené statistiky, vytvoření hráče a pravidla života/zdrojů a přibyl přehled postavy na klávese C. Některé sekundární vlastnosti (odolnosti, úhyb, blok, life steal) zatím slouží k inspekci; jejich zapojení do soubojové pipeline je úkolem Promptu 06. Přesný přehled dokončení základů je v `docs/IMPLEMENTATION_STATUS.md`.
+
 ## Současná architektura
 
 | Složka | Účel |
@@ -41,6 +46,7 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 | `web/src/game/core` | Herní simulace, příkazy, XP, boj, kořist |
 | `web/src/game/skills` a `web/src/game/combat` | Schopnosti, cooldowny, stavové efekty a výpočty poškození |
 | `web/src/game/data` | Definice tříd, předmětů, afixů a výbavy |
+| `web/src/game/stats` a `web/src/game/entities` | Odvozené statistiky, vznik hráče a pravidla života/zdrojů |
 | `web/src/game/enemies` | Skupiny nepřátel, nezávislé útoky, varování a parametry AI |
 | `web/src/game/quests` | Trvalé questové stavy, cíl úkolu a definice odměny |
 | `web/src/game/trade` | Ceník obchodu, výkupní ceny, kovářské vylepšení a pravidla transakcí |
