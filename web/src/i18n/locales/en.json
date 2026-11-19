@@ -49,7 +49,7 @@
     "move": "Move: click the ground",
     "attack": "Attack: click an enemy",
     "pause": "Pause: spacebar",
-    "hint": "Press I to open inventory. These are the first migrated systems; quests and dungeons will follow.",
+    "hint": "Press I for inventory and C for the character sheet. Skills: Q and 1. Escape closes panels.",
     "pickup": "Loot: click a glowing item",
     "skills": "Skills: Q / right mouse button and key 1",
     "avoid": "Dodge the red warning circle before the strike lands.",
