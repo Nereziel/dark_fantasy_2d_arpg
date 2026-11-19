@@ -163,7 +163,7 @@
       </div>
 
       <aside class="enemy-roster" aria-label={$t('hud.enemies')}>
-        <div class="enemy-roster-title">{$t('hud.enemies')} · {view.enemies.filter(unit => unit.actor.alive).length}/{view.enemies.length}</div>
+        <div class="enemy-roster-title">{$t('hud.enemies')} · {view.enemies.filter(unit => unit.actor.alive).length}/{view.enemies.length} · {$t('hud.wave')} {view.wave + 1}</div>
         {#each view.enemies as unit (unit.actor.id)}
           <button
             class:targeted={unit.actor.id === view.selectedTargetId}
