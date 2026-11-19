@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { Script } from 'node:vm';
+import { Script, runInNewContext } from 'node:vm';
 
 const engine = readFileSync('dark_fantasy_2d_arpg_engine.html', 'utf8');
 const index = readFileSync('index.html', 'utf8');
@@ -16,4 +16,31 @@ const inline = [...engine.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
 assert.ok(inline.length > 0, 'no inline game engine found');
 inline.forEach((source, i) => new Script(source, { filename: 'inline-' + i + '.js' }));
 new Script(visuals, { filename: 'visuals.js' });
-console.log('Aether & Ruin: static validation passed.');
+
+// Run the game's real sprite generator against a minimal canvas stub.
+// This detects invisible sprites even when the JavaScript syntax is valid.
+const sandbox = {
+  window: { addEventListener() {} },
+  document: {
+    createElement() {
+      let paintedPixels = 0;
+      return {
+        width: 0, height: 0,
+        get paintedPixels() { return paintedPixels; },
+        getContext() { return { fillRect() { paintedPixels++; } }; }
+      };
+    }
+  }
+};
+const PixelSpriteBank = runInNewContext(inline[0] + '\nPixelSpriteBank;', sandbox, { timeout: 5000 });
+const spriteBank = new PixelSpriteBank();
+assert.ok(spriteBank.cache.size >= 17, 'expected all hero, monster and NPC sprites');
+for (const [name, animations] of spriteBank.cache) {
+  for (const frames of Object.values(animations)) {
+    for (const frame of frames) {
+      assert.ok(frame.normal.paintedPixels > 15, name + ' has an invisible sprite frame');
+      assert.ok(frame.flash.paintedPixels > 15, name + ' has an invisible hit-flash frame');
+    }
+  }
+}
+console.log('Aether & Ruin: syntax and all ' + spriteBank.cache.size + ' sprite families validated.');
