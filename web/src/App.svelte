@@ -234,13 +234,22 @@
       const slot = action === 'SECONDARY' ? 'rmb' : 'slot1';
       const aim = bridge.skillAim(slot);
       bridge.command({ type: 'cast', slot, ...(aim ? { aim } : {}) });
+    } else if (view.classId === 'WARRIOR'
+      && ['SLOT_2', 'SLOT_3', 'SLOT_4', 'SLOT_5', 'SLOT_6'].includes(action)) {
+      const slots = {
+        SLOT_2: 'groundSlam', SLOT_3: 'warCry', SLOT_4: 'whirlwind',
+        SLOT_5: 'execute', SLOT_6: 'basicAttack'
+      } as const;
+      const id = slots[action as keyof typeof slots];
+      event.preventDefault();
+      bridge.command({ type: 'warriorAbility', id, targetId: view.selectedTargetId ?? view.enemy.id });
     } else if (action === 'FORCE_MOVE' || action === 'PRIMARY') {
       const position = bridge.pointerPosition();
       if (!position) return;
       event.preventDefault();
       bridge.command({ type: 'move', destination: position });
     }
-    // Remaining mapped slots become active when their skills and UI exist.
+    // Non-Warrior classes retain reserved slots until their class kits are complete.
   }
   function handleKeyup(event: KeyboardEvent): void {
     if (!heldShiftKeys.delete(event.code)) return;
