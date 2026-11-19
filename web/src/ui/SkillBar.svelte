@@ -72,6 +72,13 @@
       {/each}
     </div>
   {/if}
+  {#if view.statusEffects?.enemies?.[view.enemy.id]?.length}
+    <div class="active-effects" aria-label={$t('combat.effects')}>
+      {#each view.statusEffects.enemies[view.enemy.id] as status (status.id)}
+        <span class="effect-chip hostile">{$t('effects.' + status.id)} {Math.ceil(status.remaining)}s</span>
+      {/each}
+    </div>
+  {/if}
   {#if view.effects.player.length > 0 || view.effects.enemy.length > 0}
     <div class="active-effects" aria-label={$t('combat.effects')}>
       {#each view.effects.player as effect (effect.id)}
