@@ -1,4 +1,7 @@
 import Phaser from 'phaser';
+import { get } from 'svelte/store';
+import { _ as translate } from 'svelte-i18n';
+import { planCombatVfx } from './combatVfxPlan';
 import type { GameBridge } from '../bridge/GameBridge';
 import { CLASSES } from '../data/classes';
 import { RARITIES } from '../data/items';
@@ -254,14 +257,16 @@ export class FrontierScene extends Phaser.Scene {
   private drawEnemy(type: EnemyType, g: Phaser.GameObjects.Graphics): void {
     g.clear();
     const color = ENEMY_DEFINITIONS[type].color;
-    if (type === 'wraith') {
+    if (type === 'wraith' || (type !== 'crypt_lord' && ENEMY_DEFINITIONS[type].attack === 'bolt' && !type.toLowerCase().includes('skeleton'))) {
       g.fillStyle(0x080c13, 0.55).fillEllipse(0, 20, 49, 17);
       g.fillStyle(0x3b314a).fillEllipse(0, 0, 44, 43);
       g.fillStyle(color).fillTriangle(-20, 12, 20, 12, 0, -28);
       g.fillStyle(0x24192e).fillEllipse(0, -8, 24, 22);
       g.fillStyle(0xf4a9bc).fillCircle(-7, -9, 3).fillCircle(7, -9, 3);
       g.lineStyle(2, 0xbc9ed8, 0.65).strokeEllipse(0, 4, 43, 42);
-    } else if (type === 'skeleton') {
+    } else if (type === 'skeleton' || type.toLowerCase().includes('skeleton')
+      || type.toLowerCase().includes('bandit') || type.toLowerCase().includes('cult')
+      || type === 'zombie' || type === 'ghoul' || type === 'fanatic') {
       g.fillStyle(0x080c13, 0.55).fillEllipse(0, 21, 49, 13);
       g.lineStyle(5, 0x6f6b61).lineBetween(-19, 18, -15, -11)
         .lineBetween(19, 18, 15, -11);
@@ -272,7 +277,7 @@ export class FrontierScene extends Phaser.Scene {
       g.fillStyle(0x1c222c).fillCircle(-7, -24, 5).fillCircle(7, -24, 5);
       g.fillStyle(0x7a6d5e).fillTriangle(-3, -16, 3, -16, 0, -9);
       g.lineStyle(3, 0xbcb6a4).lineBetween(18, -11, 28, -34);
-    } else if (type === 'wolf') {
+    } else if (type === 'wolf' || type === 'spider' || type === 'corruptedBoar') {
       g.fillStyle(0x080c13, 0.58).fillEllipse(0, 18, 64, 14);
       g.fillStyle(0x553b36).fillEllipse(-8, 0, 50, 26);
       g.fillStyle(color).fillEllipse(12, -8, 28, 22);
@@ -313,20 +318,53 @@ export class FrontierScene extends Phaser.Scene {
         targets: ring, alpha: 0, scaleX: 3.3, scaleY: 3.3, duration: 470,
         onComplete: () => ring.destroy()
       });
-    } else if (event.type === 'hit') {
+    } else if (event.type === 'warriorImpact') {
+      const ring = this.add.graphics().setPosition(event.x, event.y).setDepth(86);
+      ring.lineStyle(5, 0xf4ce80, 0.95).strokeCircle(0, 35);
+      this.tweens.add({
+        targets: ring, alpha: 0, scaleX: 2.3, scaleY: 2.3, duration: 280,
+        onComplete: () => ring.destroy()
+      });
+    } else if (event.type === 'damageResolved') {
       const state = this.bridge.snapshot();
       const actor = event.targetId === 'hero' ? state.player
         : state.enemies.find(unit => unit.actor.id === event.targetId)?.actor;
       if (!actor) return;
-      const label = this.add.text(actor.x, actor.y - 39, '-' + event.damage, {
-        fontFamily: 'Georgia, serif', fontSize: '17px',
-        color: event.targetId === 'hero' ? '#ff8d8d' : '#f6d29a',
-        stroke: '#070b11', strokeThickness: 3
-      }).setOrigin(0.5).setDepth(90);
-      this.tweens.add({
-        targets: label, y: label.y - 32, alpha: 0, duration: 750,
-        onComplete: () => label.destroy()
+      const cues = planCombatVfx({
+        type: 'impact', position: { x: actor.x, y: actor.y },
+        damage: event.damage, absorbed: event.absorbed,
+        outcome: event.dodged ? 'dodged' : event.blocked ? 'blocked' : 'hit',
+        delivery: event.sourceId.includes('projectile') ? 'projectile' : 'melee',
+        critical: event.critical, strong: event.critical || event.damage >= 45
       });
+      for (const cue of cues) {
+        if (cue.type === 'screenShake') {
+          this.cameras.main.shake(cue.durationMs, 0.0025 * cue.intensity);
+        } else if (cue.type === 'floatText') {
+          const text = cue.content.kind === 'damage'
+            ? '-' + cue.content.amount : get(translate)(cue.content.key);
+          const label = this.add.text(cue.position.x, cue.position.y - 39, text, {
+            fontFamily: 'Georgia, serif',
+            fontSize: cue.emphasis === 'critical' ? '21px' : '17px',
+            color: event.targetId === 'hero' ? '#ff8d8d' : cue.emphasis === 'critical' ? '#ffe2a0' : '#f6d29a',
+            stroke: '#070b11', strokeThickness: 3
+          }).setOrigin(0.5).setDepth(90);
+          this.tweens.add({
+            targets: label, y: label.y - 32, alpha: 0, duration: cue.durationMs,
+            onComplete: () => label.destroy()
+          });
+        } else if (cue.type === 'impactFlash' || cue.type === 'particles' || cue.type === 'weaponTrail') {
+          const flash = this.add.graphics().setPosition(cue.position.x, cue.position.y).setDepth(84);
+          const color = cue.type === 'impactFlash' && cue.tone === 'critical' ? 0xffedaa
+            : cue.type === 'impactFlash' && cue.tone === 'blocked' ? 0x9fbde5 : 0xf1b88b;
+          flash.lineStyle(cue.type === 'weaponTrail' ? 2 : 3, color, 0.85)
+            .strokeCircle(0, 0, cue.type === 'particles' ? 17 : 12);
+          this.tweens.add({
+            targets: flash, alpha: 0, scaleX: 2.2, scaleY: 2.2,
+            duration: cue.durationMs, onComplete: () => flash.destroy()
+          });
+        }
+      }
     }
   }
 
