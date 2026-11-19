@@ -1,0 +1,53 @@
+{
+  "menu": {
+    "subtitle": "Temná země čeká",
+    "start": "Vstoupit do světa",
+    "continue": "Pokračovat v průzkumu",
+    "new": "Nový průzkum",
+    "help": "Klikni do světa pro pohyb. Kliknutím na nepřítele ho napadneš.",
+    "current": "První hratelná ukázka nové architektury",
+    "language": "Jazyk",
+    "back": "Zpět do menu",
+    "paused": "Pozastaveno",
+    "resume": "Pokračovat",
+    "restart": "Začít znovu",
+    "save": "Uložit",
+    "load": "Načíst"
+  },
+  "hud": {
+    "health": "Životy",
+    "kills": "Poražení nepřátelé",
+    "status": "Stav",
+    "level": "Úroveň",
+    "enemy": "Nepřítel",
+    "location": "Zpustošená hranice",
+    "resource": "Výdrž",
+    "gameOver": "Padl jsi"
+  },
+  "status": {
+    "ready": "Připraven",
+    "moving": "Pohyb",
+    "combat": "Boj",
+    "dead": "Smrt",
+    "paused": "Pauza",
+    "saved": "Hra uložena",
+    "loaded": "Hra načtena",
+    "saveError": "Uložení není dostupné",
+    "emptySave": "Uložená hra nebyla nalezena"
+  },
+  "controls": {
+    "move": "Pohyb: kliknutí na zem",
+    "attack": "Útok: kliknutí na nepřítele",
+    "pause": "Pauza: mezerník",
+    "hint": "Tato oblast je počáteční testovací scéna. Plný obsah původní hry se teprve převádí."
+  },
+  "battle": {
+    "defeat": "Nepřítel padl",
+    "damage": "Zásah: {count}",
+    "respawn": "Obnovit hrdinu"
+  },
+  "footer": {
+    "prototype": "Zkušební scéna • Svelte 5 / Phaser 4 / TypeScript",
+    "legacy": "Původní hra zatím běží samostatně na GitHub Pages"
+  }
+}

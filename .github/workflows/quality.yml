@@ -1,16 +1,14 @@
 name: Validate Aether & Ruin
 
 on:
-  # PR quality checks are independent of publishing and always report a result,
-  # including for documentation-only pull requests.
+  # Always produce a reliable PR check, even for documentation-only PRs.
   pull_request:
     branches: [main]
-
-  # Test-only pushes should run checks without rebuilding/redeploying Pages.
-  # Published game changes are already checked by pages.yml before deployment.
+  # Staging changes are tested without triggering the Pages deploy workflow.
   push:
     branches: [main]
     paths:
+      - 'web/**'
       - 'tests/**'
       - '.github/workflows/quality.yml'
 
@@ -18,14 +16,63 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  legacy-check:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Validate current browser game
+      - uses: actions/checkout@v4
+      - name: Validate published legacy engine
         run: node tests/site.test.mjs
 
-      # At Svelte/Phaser migration: extend this workflow to validate the
-      # staging web/ project with npm ci/check/test/build on relevant changes.
+  staging-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install staging dependencies
+        working-directory: web
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+      - name: Typecheck Svelte and TypeScript
+        working-directory: web
+        run: npm run check
+      - name: Test simulation and localization
+        working-directory: web
+        run: npm run test
+      - name: Compile Vite production bundle
+        working-directory: web
+        run: npm run build
+      - name: Verify static output
+        run: |
+          test -s web/dist/index.html
+          grep -q '/dark_fantasy_2d_arpg/' web/dist/index.html
+
+  # Generate the initial npm lockfile on a trusted main-branch push only,
+  # after the staging checks succeeded. Subsequent installs use npm ci.
+  lockfile-bootstrap:
+    needs: staging-check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Commit initial dependency lockfile if missing
+        working-directory: web
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --no-audit --no-fund
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "chore(web): lock staging dependencies [skip ci]"
+            git push
+          fi

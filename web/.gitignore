@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.svelte-kit/
+playwright-report/
+test-results/
+*.tsbuildinfo

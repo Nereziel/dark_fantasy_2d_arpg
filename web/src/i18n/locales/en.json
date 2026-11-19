@@ -1,0 +1,53 @@
+{
+  "menu": {
+    "subtitle": "The dark frontier awaits",
+    "start": "Enter the world",
+    "continue": "Continue exploring",
+    "new": "New expedition",
+    "help": "Click the ground to move. Click an enemy to attack.",
+    "current": "First playable slice of the new architecture",
+    "language": "Language",
+    "back": "Main menu",
+    "paused": "Paused",
+    "resume": "Resume",
+    "restart": "Start over",
+    "save": "Save",
+    "load": "Load"
+  },
+  "hud": {
+    "health": "Health",
+    "kills": "Enemies defeated",
+    "status": "Status",
+    "level": "Level",
+    "enemy": "Enemy",
+    "location": "Ravaged Frontier",
+    "resource": "Stamina",
+    "gameOver": "You have fallen"
+  },
+  "status": {
+    "ready": "Ready",
+    "moving": "Moving",
+    "combat": "Combat",
+    "dead": "Dead",
+    "paused": "Paused",
+    "saved": "Game saved",
+    "loaded": "Game loaded",
+    "saveError": "Saving is unavailable",
+    "emptySave": "No saved game found"
+  },
+  "controls": {
+    "move": "Move: click the ground",
+    "attack": "Attack: click an enemy",
+    "pause": "Pause: spacebar",
+    "hint": "This is the initial test scene. The full legacy game is still being migrated."
+  },
+  "battle": {
+    "defeat": "Enemy defeated",
+    "damage": "Hit: {count}",
+    "respawn": "Revive hero"
+  },
+  "footer": {
+    "prototype": "Prototype scene • Svelte 5 / Phaser 4 / TypeScript",
+    "legacy": "The original game is still available separately on GitHub Pages"
+  }
+}
