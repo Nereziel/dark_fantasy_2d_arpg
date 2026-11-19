@@ -1,0 +1,123 @@
+import type { Point } from '../core/types';
+
+export interface Obstacle { id: string; x: number; y: number; width: number; height: number }
+export const WORLD_WIDTH = 2200;
+export const WORLD_HEIGHT = 1400;
+export const ACTOR_RADIUS = 18;
+export const OBSTACLES: readonly Obstacle[] = [
+  { id: 'shrine', x: 988, y: 320, width: 88, height: 91 },
+  { id: 'collapsed-wall', x: 470, y: 715, width: 230, height: 58 },
+  { id: 'fallen-tower', x: 1260, y: 575, width: 86, height: 220 },
+  { id: 'north-barricade', x: 270, y: 215, width: 190, height: 70 }
+];
+const CELL = 40;
+const COLS = Math.ceil(WORLD_WIDTH / CELL);
+const ROWS = Math.ceil(WORLD_HEIGHT / CELL);
+const KEY = (x: number, y: number): number => y * COLS + x;
+
+export function canOccupy(point: Point, radius = ACTOR_RADIUS): boolean {
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false;
+  if (point.x < radius || point.y < radius
+      || point.x > WORLD_WIDTH - radius || point.y > WORLD_HEIGHT - radius) return false;
+  return !OBSTACLES.some(wall => point.x + radius > wall.x
+    && point.x - radius < wall.x + wall.width
+    && point.y + radius > wall.y
+    && point.y - radius < wall.y + wall.height);
+}
+
+/** Collision-aware sliding, stepped so fast moves cannot tunnel through walls. */
+export function moveActor(actor: Point, goal: Point, distance: number, radius = ACTOR_RADIUS): void {
+  if (!(distance > 0) || !Number.isFinite(distance)) return;
+  const dx = goal.x - actor.x, dy = goal.y - actor.y;
+  const length = Math.hypot(dx, dy);
+  if (length <= 0) return;
+  const total = Math.min(distance, length);
+  const steps = Math.max(1, Math.ceil(total / (radius * 0.6)));
+  const sx = dx / length * total / steps;
+  const sy = dy / length * total / steps;
+  for (let i = 0; i < steps; i++) {
+    if (canOccupy({ x: actor.x + sx, y: actor.y + sy }, radius)) {
+      actor.x += sx; actor.y += sy;
+    } else if (canOccupy({ x: actor.x + sx, y: actor.y }, radius)) {
+      actor.x += sx;
+    } else if (canOccupy({ x: actor.x, y: actor.y + sy }, radius)) {
+      actor.y += sy;
+    }
+  }
+}
+
+const center = (col: number, row: number): Point => ({ x: col * CELL + CELL / 2, y: row * CELL + CELL / 2 });
+function grid(point: Point): [number, number] {
+  return [
+    Math.max(0, Math.min(COLS - 1, Math.floor(point.x / CELL))),
+    Math.max(0, Math.min(ROWS - 1, Math.floor(point.y / CELL)))
+  ];
+}
+function lineClear(start: Point, end: Point, radius: number): boolean {
+  const length = Math.hypot(end.x - start.x, end.y - start.y);
+  const steps = Math.max(1, Math.ceil(length / 15));
+  for (let i = 1; i <= steps; i++) {
+    const ratio = i / steps;
+    if (!canOccupy({ x: start.x + (end.x - start.x) * ratio, y: start.y + (end.y - start.y) * ratio }, radius)) return false;
+  }
+  return true;
+}
+
+/** Bounded, deterministic A* on the static walkability grid. */
+export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS): Point[] {
+  if (!canOccupy(goal, radius)) return [];
+  if (lineClear(from, goal, radius)) return [{ ...goal }];
+  const [startX, startY] = grid(from);
+  const [endX, endY] = grid(goal);
+  const start = KEY(startX, startY), end = KEY(endX, endY);
+  const cost = new Float64Array(COLS * ROWS).fill(Infinity);
+  const parent = new Int32Array(COLS * ROWS).fill(-1);
+  const closed = new Uint8Array(COLS * ROWS);
+  const frontier: Array<{ key: number; score: number }> = [];
+  const heuristic = (x: number, y: number) => Math.hypot(x - endX, y - endY);
+  cost[start] = 0;
+  frontier.push({ key: start, score: heuristic(startX, startY) });
+  let attempts = 0;
+  while (frontier.length && attempts++ < COLS * ROWS * 5) {
+    frontier.sort((a, b) => a.score - b.score || a.key - b.key);
+    const current = frontier.shift()!.key;
+    if (closed[current]) continue;
+    if (current === end) {
+      const points: Point[] = [];
+      let node = end;
+      while (node !== start && node !== -1) {
+        points.push(center(node % COLS, Math.floor(node / COLS)));
+        node = parent[node]!;
+      }
+      points.reverse();
+      points.push({ ...goal });
+      // Remove redundant route waypoints when line of sight exists.
+      const reduced: Point[] = [];
+      let anchor = from;
+      for (let i = 0; i < points.length; i++) {
+        if (i === points.length - 1 || !lineClear(anchor, points[i + 1]!, radius)) {
+          reduced.push(points[i]!);
+          anchor = points[i]!;
+        }
+      }
+      return reduced;
+    }
+    closed[current] = 1;
+    const x = current % COLS, y = Math.floor(current / COLS);
+    for (const [vx, vy] of [[-1, 0], [1, 0], [0, -1], [0, 1],
+      [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const nx = x + vx, ny = y + vy;
+      if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+      const candidate = KEY(nx, ny);
+      if (closed[candidate] || !canOccupy(center(nx, ny), radius)) continue;
+      if (vx !== 0 && vy !== 0 &&
+        (!canOccupy(center(x + vx, y), radius) || !canOccupy(center(x, y + vy), radius))) continue;
+      const updated = cost[current]! + Math.hypot(vx, vy);
+      if (updated >= cost[candidate]!) continue;
+      cost[candidate] = updated;
+      parent[candidate] = current;
+      frontier.push({ key: candidate, score: updated + heuristic(nx, ny) });
+    }
+  }
+  return [];
+}

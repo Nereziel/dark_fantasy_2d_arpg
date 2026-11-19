@@ -158,9 +158,26 @@
         <div>{$t('controls.pickup')}</div>
         <div>{$t('controls.skills')}</div>
         <div>{$t('controls.avoid')}</div>
+        <div>{$t('controls.navigate')}</div>
         <div class="world-guide-sub">{$t('controls.hint')}</div>
       </div>
 
+      <aside class="enemy-roster" aria-label={$t('hud.enemies')}>
+        <div class="enemy-roster-title">{$t('hud.enemies')} · {view.enemies.filter(unit => unit.actor.alive).length}/{view.enemies.length}</div>
+        {#each view.enemies as unit (unit.actor.id)}
+          <button
+            class:targeted={unit.actor.id === view.selectedTargetId}
+            disabled={!unit.actor.alive || !view.player.alive || view.paused}
+            aria-pressed={unit.actor.id === view.selectedTargetId}
+            onclick={() => bridge.command({ type: 'attack', targetId: unit.actor.id })}
+          >
+            <span>{$t('enemies.' + unit.actor.type + '.name')}</span>
+            <span class="roster-health">{unit.actor.alive
+              ? Math.ceil(100 * unit.actor.health / unit.actor.maxHealth) + '%'
+              : '—'}</span>
+          </button>
+        {/each}
+      </aside>
       <SkillBar {bridge} {view} />
       <div class="game-hud">
         <div class="portrait"><span>✦</span></div>
@@ -187,7 +204,7 @@
         </div>
       </div>
 
-      {#if view.enemyIntent && !inventoryOpen}
+      {#if view.enemies.some(unit => unit.intent !== null) && !inventoryOpen}
         <div class="danger-alert" role="status">
           <strong>{$t('combat.warning')}</strong>
           <span>{$t('combat.dodge')}</span>

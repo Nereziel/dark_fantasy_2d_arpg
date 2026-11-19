@@ -7,14 +7,14 @@ const SLOT = 'first-character';
 
 /** Saves only the current game format; older demo/HTML saves are intentionally unsupported. */
 export interface SavedGame {
-  format: 4;
+  format: 5;
   characterId: string;
   savedAt: number;
   snapshot: GameSnapshot;
 }
 
 export function validateSnapshot(raw: unknown): GameSnapshot | null {
-  if (!raw || typeof raw !== 'object' || (raw as { version?: unknown }).version !== 4) return null;
+  if (!raw || typeof raw !== 'object' || (raw as { version?: unknown }).version !== 5) return null;
   const simulation = new GameSimulation();
   return simulation.restore(raw as GameSnapshot) ? simulation.snapshot() : null;
 }
@@ -49,7 +49,7 @@ async function perform<T>(
 
 export function saveGame(snapshot: GameSnapshot): Promise<void> {
   const payload: SavedGame = {
-    format: 4,
+    format: 5,
     characterId: snapshot.player.id,
     savedAt: Date.now(),
     snapshot
@@ -62,7 +62,7 @@ export function loadGame(): Promise<GameSnapshot | null> {
     const request = store.get(SLOT);
     request.onsuccess = () => {
       const data = request.result as Partial<SavedGame> | undefined;
-      setResult(data?.format === 4 ? validateSnapshot(data.snapshot) : null);
+      setResult(data?.format === 5 ? validateSnapshot(data.snapshot) : null);
     };
   });
 }

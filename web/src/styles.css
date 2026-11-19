@@ -76,3 +76,12 @@ h1 span,.brand-mark span{color:#b88b59}
 .danger-alert span{color:#efc8be;font-size:.7rem;line-height:1.45}
 .game-screen:has(.danger-alert) .toast{top:190px}
 @media(max-width:720px){.danger-alert{top:62px;right:8px;width:min(220px,46vw);padding:8px}.danger-alert strong{font-size:.7rem}.danger-alert span{font-size:.6rem}.game-screen:has(.danger-alert) .toast{top:140px}}
+
+/* Playable three-enemy encounter selector. */
+.enemy-roster{position:absolute;z-index:3;right:18px;top:150px;width:205px;display:flex;flex-direction:column;gap:5px;padding:9px;background:#0b121bd9;border:1px solid #746850;box-shadow:0 12px 30px #000b}
+.enemy-roster-title{color:#cbbb9b;font-size:.72rem;letter-spacing:.03em;margin-bottom:3px}
+.enemy-roster button{display:flex;align-items:center;justify-content:space-between;gap:7px;padding:7px 9px;text-align:left;background:#171e27;color:#d6d6d0;border:1px solid #44505c;font-size:.71rem}
+.enemy-roster button.targeted{border-color:#f3bd6b;color:#ffe3b4;background:#393126}
+.enemy-roster button:disabled{opacity:.35}
+.roster-health{color:#dc8e85;flex-shrink:0;font-variant-numeric:tabular-nums}
+@media(max-width:720px){.enemy-roster{right:7px;top:167px;width:min(178px,45vw);padding:6px}.enemy-roster button{padding:5px;font-size:.6rem}.enemy-roster-title{font-size:.63rem}.danger-alert{top:62px}}

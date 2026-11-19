@@ -5,6 +5,7 @@ import { RARITIES } from '../data/items';
 import { SKILLS } from '../skills/skills';
 import type { GameEvent } from '../core/types';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
+import { OBSTACLES } from '../world/navigation';
 
 const WIDTH = 2200;
 const HEIGHT = 1400;
@@ -16,12 +17,11 @@ const HEIGHT = 1400;
 export class FrontierScene extends Phaser.Scene {
   private readonly bridge: GameBridge;
   private hero!: Phaser.GameObjects.Graphics;
-  private wraith!: Phaser.GameObjects.Graphics;
+  private readonly enemyGraphics = new Map<string, Phaser.GameObjects.Graphics>();
   private healthBar!: Phaser.GameObjects.Graphics;
   private groundItems!: Phaser.GameObjects.Graphics;
   private statusVisuals!: Phaser.GameObjects.Graphics;
   private telegraph!: Phaser.GameObjects.Graphics;
-  private renderedEnemyType: EnemyType | null = null;
 
   constructor(bridge: GameBridge) {
     super({ key: 'Frontier' });
@@ -38,9 +38,6 @@ export class FrontierScene extends Phaser.Scene {
     this.hero.fillStyle(0xd7c3a0).fillCircle(0, -13, 5);
     this.hero.lineStyle(4, 0xb7a77a).lineBetween(14, 5, 25, -22);
     this.hero.setDepth(50);
-
-    this.wraith = this.add.graphics().setDepth(48);
-    this.drawEnemy(this.bridge.snapshot().enemy.type);
 
     this.healthBar = this.add.graphics().setDepth(60);
     this.groundItems = this.add.graphics().setDepth(44);
@@ -61,6 +58,8 @@ export class FrontierScene extends Phaser.Scene {
       this.input.keyboard?.off('keydown-SPACE', this.onSpace, this);
       this.input.keyboard?.off('keydown-ESC', this.onSpace, this);
       unsubscribeEvents();
+      for (const actor of this.enemyGraphics.values()) actor.destroy();
+      this.enemyGraphics.clear();
     });
   }
 
@@ -87,19 +86,23 @@ export class FrontierScene extends Phaser.Scene {
     );
     if (loot) {
       this.bridge.command({ type: 'pickup', id: loot.id });
-    } else if (state.enemy.alive && Phaser.Math.Distance.Between(
-      world.x, world.y, state.enemy.x, state.enemy.y
-    ) < 46) {
-      this.bridge.command({ type: 'attack', targetId: state.enemy.id });
     } else {
-      this.bridge.command({ type: 'move', destination: { x: world.x, y: world.y } });
+      const target = state.enemies
+        .filter(unit => unit.actor.alive)
+        .map(unit => unit.actor)
+        .find(enemy => Phaser.Math.Distance.Between(
+          world.x, world.y, enemy.x, enemy.y
+        ) < 43);
+      if (target) {
+        this.bridge.command({ type: 'attack', targetId: target.id });
+      } else {
+        this.bridge.command({ type: 'move', destination: { x: world.x, y: world.y } });
+      }
     }
   }
 
-  private drawEnemy(type: EnemyType): void {
-    const g = this.wraith;
+  private drawEnemy(type: EnemyType, g: Phaser.GameObjects.Graphics): void {
     g.clear();
-    this.renderedEnemyType = type;
     const color = ENEMY_DEFINITIONS[type].color;
     if (type === 'wraith') {
       g.fillStyle(0x080c13, 0.55).fillEllipse(0, 20, 49, 17);
@@ -146,7 +149,9 @@ export class FrontierScene extends Phaser.Scene {
       });
     } else if (event.type === 'hit') {
       const state = this.bridge.snapshot();
-      const actor = event.targetId === 'hero' ? state.player : state.enemy;
+      const actor = event.targetId === 'hero' ? state.player
+        : state.enemies.find(unit => unit.actor.id === event.targetId)?.actor;
+      if (!actor) return;
       const label = this.add.text(actor.x, actor.y - 39, '-' + event.damage, {
         fontFamily: 'Georgia, serif', fontSize: '17px',
         color: event.targetId === 'hero' ? '#ff8d8d' : '#f6d29a',
@@ -164,46 +169,72 @@ export class FrontierScene extends Phaser.Scene {
     const state = this.bridge.snapshot();
     this.hero.setPosition(state.player.x, state.player.y);
     this.hero.setVisible(state.player.alive);
-    if (this.renderedEnemyType !== state.enemy.type) this.drawEnemy(state.enemy.type);
-    const bob = state.enemy.type === 'wraith'
-      ? Math.sin(this.time.now * 0.0045) * 4
-      : Math.sin(this.time.now * (state.enemy.type === 'wolf' ? 0.015 : 0.008)) * 1.5;
-    this.wraith.setPosition(state.enemy.x, state.enemy.y + bob);
-    this.wraith.setVisible(state.enemy.alive);
+    const ids = new Set(state.enemies.map(unit => unit.actor.id));
+    for (const [id, sprite] of this.enemyGraphics) {
+      if (!ids.has(id)) {
+        sprite.destroy();
+        this.enemyGraphics.delete(id);
+      }
+    }
+    for (const { actor } of state.enemies) {
+      let sprite = this.enemyGraphics.get(actor.id);
+      if (!sprite) {
+        sprite = this.add.graphics().setDepth(48);
+        this.drawEnemy(actor.type, sprite);
+        this.enemyGraphics.set(actor.id, sprite);
+      }
+      const bob = actor.type === 'wraith'
+        ? Math.sin(this.time.now * 0.0045 + actor.x) * 4
+        : Math.sin(this.time.now * (actor.type === 'wolf' ? 0.015 : 0.008) + actor.y) * 1.5;
+      sprite.setPosition(actor.x, actor.y + bob);
+      sprite.setVisible(actor.alive);
+    }
 
     this.healthBar.clear();
     this.telegraph.clear();
-    if (state.enemy.alive && state.enemyIntent) {
-      const intent = state.enemyIntent;
-      const progress = 1 - intent.remaining / intent.total;
-      this.telegraph.fillStyle(0xde504e, 0.12 + progress * 0.24)
-        .fillCircle(intent.x, intent.y, intent.radius);
-      this.telegraph.lineStyle(3 + progress * 3, 0xf5b38b, 0.5 + progress * 0.5)
-        .strokeCircle(intent.x, intent.y, intent.radius);
-      this.telegraph.fillStyle(0xffd3a7, 0.55 + progress * 0.4)
-        .fillCircle(intent.x, intent.y, 4);
-    }
     this.statusVisuals.clear();
-    if (state.enemy.alive) {
-      const effects = state.effects.enemy;
-      if (effects.some(e => e.id === 'stunned')) {
-        this.statusVisuals.lineStyle(4, 0xf6cc73, 0.95).strokeCircle(state.enemy.x, state.enemy.y, 30);
-      } else if (effects.some(e => e.id === 'chilled')) {
-        this.statusVisuals.lineStyle(4, 0x89d8ff, 0.8).strokeCircle(state.enemy.x, state.enemy.y, 28);
+    for (const unit of state.enemies) {
+      const { actor, intent, effects } = unit;
+      if (!actor.alive) continue;
+      if (intent) {
+        const progress = Math.max(0, 1 - intent.remaining / intent.total);
+        this.telegraph.fillStyle(0xde504e, 0.12 + progress * 0.24)
+          .fillCircle(intent.x, intent.y, intent.radius);
+        this.telegraph.lineStyle(3 + progress * 3, 0xf5b38b, 0.5 + progress * 0.5)
+          .strokeCircle(intent.x, intent.y, intent.radius);
+        this.telegraph.fillStyle(0xffd3a7, 0.55 + progress * 0.4)
+          .fillCircle(intent.x, intent.y, 4);
       }
-      if (effects.some(e => e.id === 'burning')) {
-        this.statusVisuals.fillStyle(0xff7041, 0.22).fillCircle(state.enemy.x, state.enemy.y, 31);
+      if (effects.some(effect => effect.id === 'stunned')) {
+        this.statusVisuals.lineStyle(4, 0xf6cc73, 0.95)
+          .strokeCircle(actor.x, actor.y, 30);
+      } else if (effects.some(effect => effect.id === 'chilled')) {
+        this.statusVisuals.lineStyle(4, 0x89d8ff, 0.8)
+          .strokeCircle(actor.x, actor.y, 28);
       }
-      if (effects.some(e => e.id === 'poisoned')) {
-        this.statusVisuals.fillStyle(0x73d478, 0.24).fillCircle(state.enemy.x, state.enemy.y, 31);
+      if (effects.some(effect => effect.id === 'burning')) {
+        this.statusVisuals.fillStyle(0xff7041, 0.22).fillCircle(actor.x, actor.y, 31);
+      }
+      if (effects.some(effect => effect.id === 'poisoned')) {
+        this.statusVisuals.fillStyle(0x73d478, 0.24).fillCircle(actor.x, actor.y, 31);
+      }
+      this.healthBar.fillStyle(0x080a10, 0.9)
+        .fillRect(actor.x - 26, actor.y - 45, 52, 8);
+      this.healthBar.fillStyle(0xa3494c)
+        .fillRect(actor.x - 24, actor.y - 43, 48 * (actor.health / actor.maxHealth), 4);
+      if (state.selectedTargetId === actor.id) {
+        this.healthBar.lineStyle(2, 0xf0c783, 0.95).strokeEllipse(actor.x, actor.y + 8, 63, 43);
+        this.healthBar.lineStyle(1, 0xf6e0ae, 0.75)
+          .strokeRect(actor.x - 30, actor.y - 49, 60, 16);
       }
     }
-    if (state.effects.player.some(e => e.id === 'consecration')) {
+    if (state.effects.player.some(effect => effect.id === 'consecration')) {
       this.statusVisuals.lineStyle(3, 0xffe0a1, 0.48)
         .strokeCircle(state.player.x, state.player.y, 105);
     }
-    if (state.effects.player.some(e => e.id === 'skeleton')) {
-      this.statusVisuals.fillStyle(0x79d0bc, 0.65).fillCircle(state.player.x - 32, state.player.y + 30, 10);
+    if (state.effects.player.some(effect => effect.id === 'skeleton')) {
+      this.statusVisuals.fillStyle(0x79d0bc, 0.65)
+        .fillCircle(state.player.x - 32, state.player.y + 30, 10);
       this.statusVisuals.fillStyle(0x0b2830, 1)
         .fillCircle(state.player.x - 35, state.player.y + 27, 2)
         .fillCircle(state.player.x - 29, state.player.y + 27, 2);
@@ -217,10 +248,7 @@ export class FrontierScene extends Phaser.Scene {
       this.groundItems.fillStyle(color).fillRect(drop.x - 7, drop.y - 7, 14, 14);
       this.groundItems.lineStyle(2, 0xece6d7, 0.5).strokeRect(drop.x - 7, drop.y - 7, 14, 14);
     }
-    if (state.enemy.alive) {
-      this.healthBar.fillStyle(0x080a10, 0.9).fillRect(state.enemy.x - 26, state.enemy.y - 43, 52, 8);
-      this.healthBar.fillStyle(0xa3494c).fillRect(state.enemy.x - 24, state.enemy.y - 41, 48 * (state.enemy.health / state.enemy.maxHealth), 4);
-    }
+
   }
 
   private paintWorld(): void {
@@ -260,6 +288,17 @@ export class FrontierScene extends Phaser.Scene {
       if (random() < 0.15) {
         ground.fillStyle(0x64745a, 0.25).fillCircle(x, y - size * 0.6, size * 0.55);
       }
+    }
+
+    // Walkability and visuals share the same authoritative obstacle definitions.
+    for (const wall of OBSTACLES) {
+      if (wall.id === 'shrine') continue;
+      ground.fillStyle(0x48515a, 0.95)
+        .fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 5);
+      ground.lineStyle(4, 0x747c7e, 0.75)
+        .strokeRoundedRect(wall.x, wall.y, wall.width, wall.height, 5);
+      ground.lineStyle(2, 0x27313d, 0.75)
+        .lineBetween(wall.x + 20, wall.y + 8, wall.x + wall.width - 16, wall.y + wall.height - 9);
     }
 
     // Cracked shrine and runic wisps; animation can be introduced later.

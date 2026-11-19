@@ -5,10 +5,10 @@
 The site at `https://nereziel.github.io/dark_fantasy_2d_arpg/` now deploys **`web/dist/`** instead of the old root HTML engine. This is an intentionally early playable migration; full campaign parity remains future work. The original root HTML engine is kept for reference.
 
 - **Svelte 5:** menu, selection of six original classes, HUD, inventory/equipment, runtime locale.
-- **Phaser 4.2.1:** world canvas, camera, input picking, actor proxies, procedurally drawn test environment, loot graphics, three distinct enemy silhouettes and ground attack telegraphs.
-- **Strict TypeScript simulation:** authoritative positions, movement, basic attacks, 12 first active class skills, cooldown/resource validation, status effects, three data-driven sequential enemy archetypes, dodgeable attack windups, deterministic combat damage, XP/levels, loot, gold, inventory/equipment and events.
+- **Phaser 4.2.1:** world canvas, camera, input picking, actor proxies, procedurally drawn test environment, loot graphics, three simultaneous enemy silhouettes, individual health/status overlays, selected-target indicators and ground attack telegraphs.
+- **Strict TypeScript simulation:** authoritative positions, movement, basic attacks, 12 first active class skills, cooldown/resource validation, status effects, three simultaneous data-driven enemy archetypes with individual AI, dodgeable attack windups, deterministic combat damage, XP/levels, loot, gold, inventory/equipment and events.
 - **`svelte-i18n`:** Czech and English dictionaries, changed without reloading the game.
-- **IndexedDB:** current web game snapshots (v4), including active effects, cooldowns, enemy archetype, pending telegraph and attack cooldown. Previous web demo and original HTML-game save versions are **not supported or migrated**.
+- **IndexedDB:** current web game snapshots (v5), including active effects, cooldowns, three enemy units, individually pending telegraphs, selected target and encounter wave. Previous web demo and original HTML-game save versions are **not supported or migrated**.
 - **Vitest and Playwright:** headless domain unit tests, translation key tests and browser smoke tests.
 
 ## Data ownership
@@ -29,9 +29,15 @@ Neither Phaser GameObjects nor translated labels are serialized into saved state
 
 The starter base attributes for Warrior, Paladin, Mage, Rogue, Necromancer and Warlock are taken from the original `CLASS_DEFINITIONS`. Item bases and rarity distribution follow the original `ItemGenerator`; generated affix IDs/values are stored, while UI names and labels are rendered from `cs`/`en` dictionaries.
 
-## Enemy combat
+## Enemy combat and navigation
 
-`web/src/game/enemies/enemies.ts` defines three encounter archetypes: Wraith (ranged bolt and kiting), Skeleton Warrior (close sweep), and Corrupted Wolf (fast pursuit, telegraphed leap and poison). Only **one opponent is active at a time**; after defeat the next type spawns. That is deliberate until multi-enemy targeting and navigation are implemented. Enemy decision-making, attack target locking and damage timings run in the fixed-step game simulation. Phaser shows a warning circle and draws simple archetype-specific silhouettes; visuals do not decide whether an attack hits. A stun cancels a windup. When saving, the active archetype and any pending attack are serialized as v4 data.
+`web/src/game/enemies/enemies.ts` defines three enemy archetypes: Wraith (ranged bolt and kiting), Skeleton Warrior (close sweep) and Corrupted Wolf (fast pursuit, telegraphed leap and poison). All three spawn **simultaneously** as an encounter pack; the next full wave spawns after all three are defeated. Their actor states, effects, cooldowns and windups are independent, with unique IDs. Target selection is explicit and supports clicking a sprite or a Svelte target-list entry.
+
+The game simulation owns attack decisions, locked danger zones and damage on fixed ticks. Phaser only draws warnings, enemy outlines and effects. Stuns interrupt the affected enemy's windup without affecting unrelated actors.
+
+`web/src/game/world/navigation.ts` owns fixed obstacle rectangles. Its collision-aware movement prevents tunneling; player click-to-move uses deterministic A* waypoints around obstacles. Enemy steering applies collision and separation so opponents do not occupy exactly the same position. The renderer draws barricades and ruins from the same obstacle definitions.
+
+`GameSnapshot` version 5 is the sole supported save contract. Old saves are rejected gracefully and no import code is maintained.
 
 ## Hosting and CI
 
@@ -43,7 +49,7 @@ The Vite base path is `/dark_fantasy_2d_arpg/`. All bundle and imported asset UR
 
 ## Technical gaps
 
-- The scene remains a test wilderness with one active enemy at a time; the original world generation, groups of enemies, quests, towns and bosses are not migrated.
+- The scene remains a fixed test wilderness with one simultaneous three-enemy pack; full world generation, dynamic large groups, quests, towns and bosses are not migrated.
 - All six classes have two playable starter skills each; the complete original skill trees and advanced balance are not implemented yet.
 - Ground and hero remain procedural placeholder graphics. Replace with coherent spritesheets/tilemaps while preserving core state.
 - Direct movement has no pathfinding around obstacles yet.

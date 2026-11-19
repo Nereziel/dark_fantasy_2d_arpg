@@ -1,4 +1,5 @@
 import type { ActorSnapshot, Point } from '../core/types';
+import type { ActiveEffect } from '../skills/skills';
 
 /** All enemy movement and attack decisions stay in the TypeScript simulation. */
 export type EnemyType = 'wraith' | 'skeleton' | 'wolf';
@@ -49,6 +50,37 @@ export interface EnemyIntent extends Point {
   radius: number;
   remaining: number;
   total: number;
+}
+
+export interface EnemyUnit {
+  actor: EnemySnapshot;
+  intent: EnemyIntent | null;
+  cooldown: number;
+  effects: ActiveEffect[];
+}
+export const PACK_SIZE = 3;
+const PACK_POSITIONS: readonly Point[] = [
+  { x: 780, y: 520 },
+  { x: 910, y: 635 },
+  { x: 1050, y: 535 }
+];
+
+/** Three enemies simultaneously; IDs remain unique across successive waves. */
+export function createPack(wave: number, level: number): EnemyUnit[] {
+  const types: readonly EnemyType[] = ['wraith', 'skeleton', 'wolf'];
+  return types.map((type, index) => {
+    const def = ENEMY_DEFINITIONS[type];
+    const pos = PACK_POSITIONS[index]!;
+    const hp = def.health + Math.max(0, level - 1) * 12;
+    return {
+      actor: {
+        id: `${type}-${wave * PACK_SIZE + index + 1}`,
+        type, x: pos.x, y: pos.y + (wave % 2) * 25,
+        health: hp, maxHealth: hp, alive: true
+      },
+      intent: null, cooldown: 0.35 + index * 0.3, effects: []
+    };
+  });
 }
 
 const ENCOUNTERS: readonly EnemyType[] = ['wraith', 'skeleton', 'wolf'];

@@ -1,156 +1,184 @@
 import { describe, expect, it } from 'vitest';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
-import { createEncounter, ENEMY_DEFINITIONS, encounterType, validIntent } from '../../src/game/enemies/enemies';
+import { createEncounter, createPack, ENEMY_DEFINITIONS, validIntent } from '../../src/game/enemies/enemies';
 import type { GameSnapshot } from '../../src/game/core/types';
 
 const frame = 16.667;
 function advance(sim: GameSimulation, frames: number): void {
   for (let i = 0; i < frames; i++) sim.advance(frame);
 }
-function nearby(sim: GameSimulation, x = 710, y = 520): void {
-  const state = sim.snapshot();
+function disableOthers(sim: GameSimulation, index: number, x: number, y: number): void {
+  const s = sim.snapshot();
   expect(sim.restore({
-    ...state,
-    player: { ...state.player, x, y },
-    enemyCooldown: 0
+    ...s,
+    player: { ...s.player, x, y },
+    enemies: s.enemies.map((unit, i) => i === index ? {
+      ...unit, cooldown: 0
+    } : {
+      ...unit,
+      actor: { ...unit.actor, health: 0, alive: false },
+      intent: null, effects: []
+    })
   })).toBe(true);
 }
 
-describe('deterministic enemy encounters and AI', () => {
-  it('rotates through three enemy archetypes with stable IDs', () => {
-    expect(encounterType(0)).toBe('wraith');
-    expect(encounterType(1)).toBe('skeleton');
-    expect(encounterType(2)).toBe('wolf');
-    expect(encounterType(3)).toBe('wraith');
-    expect(createEncounter(0, 1).id).toBe('wraith-1');
-    expect(createEncounter(1, 1).id).toBe('skeleton-2');
-    expect(createEncounter(2, 1).id).toBe('wolf-3');
-    expect(createEncounter(2, 3).maxHealth).toBeGreaterThan(createEncounter(2, 1).maxHealth);
-    for (const def of Object.values(ENEMY_DEFINITIONS)) {
-      expect(def.windup).toBeGreaterThan(0.5);
-      expect(def.dangerRadius).toBeGreaterThan(30);
-      expect(def.cooldown).toBeGreaterThan(def.windup);
-    }
-  });
-
-  it('telegraphs a ranged wraith attack, locks the danger zone, and permits dodging', () => {
-    const sim = new GameSimulation();
-    nearby(sim);
-    advance(sim, 2);
-    const warning = sim.snapshot();
-    expect(warning.enemy.type).toBe('wraith');
-    expect(warning.enemyIntent?.pattern).toBe('bolt');
-    expect(warning.enemyIntent?.remaining).toBeGreaterThan(0);
-    const originalHealth = warning.player.health;
-    const destination = { x: 350, y: 500 };
-    sim.command({ type: 'move', destination });
-    advance(sim, 80);
-    const dodged = sim.snapshot();
-    expect(dodged.enemyIntent).toBeNull();
-    expect(dodged.player.health).toBe(originalHealth);
-    expect(sim.drainEvents().some(e => e.type === 'enemyAttack' && !e.hit)).toBe(true);
-  });
-
-  it('hits the player who stays inside the warning, but does not deal instant damage', () => {
-    const sim = new GameSimulation();
-    nearby(sim);
-    advance(sim, 2);
-    const before = sim.snapshot();
-    expect(before.enemyIntent).not.toBeNull();
-    expect(before.player.health).toBe(before.player.maxHealth);
-    advance(sim, 75);
-    const after = sim.snapshot();
-    expect(after.player.health).toBeLessThan(before.player.health);
-    expect(sim.drainEvents().some(e => e.type === 'enemyAttack' && e.hit)).toBe(true);
-  });
-
-  it('skeleton strikes around its current position and wolf leaps to a marked target', () => {
-    for (const [kills, expected] of [[1, 'sweep'], [2, 'leap']] as const) {
-      const sim = new GameSimulation();
-      const state = sim.snapshot();
-      const encounter = createEncounter(kills, 1);
-      const nearPlayer = { ...state.player, x: encounter.x - 48, y: encounter.y };
-      const restored: GameSnapshot = {
-        ...state, kills, enemy: encounter,
-        player: nearPlayer, enemyCooldown: 0,
-        effects: { player: [], enemy: [] }, enemyIntent: null
-      };
-      expect(sim.restore(restored)).toBe(true);
-      advance(sim, 2);
-      const telegraph = sim.snapshot();
-      expect(telegraph.enemyIntent?.pattern).toBe(expected);
-      advance(sim, 90);
-      const attacked = sim.snapshot();
-      expect(attacked.enemyIntent).toBeNull();
-      if (expected === 'leap') {
-        expect(attacked.enemy.x).toBeCloseTo(nearPlayer.x, 0);
-        expect(attacked.enemy.y).toBeCloseTo(nearPlayer.y, 0);
-        expect(attacked.effects.player.some(e => e.id === 'poisoned')).toBe(true);
-      } else {
-        expect(attacked.player.health).toBeLessThan(nearPlayer.health);
-      }
-    }
-  });
-
-  it('stun interrupts telegraphed attacks and preserves the player health', () => {
-    const sim = new GameSimulation();
-    nearby(sim);
-    advance(sim, 2);
-    const snapshot = sim.snapshot();
-    expect(snapshot.enemyIntent).not.toBeNull();
-    expect(sim.restore({
-      ...snapshot,
-      effects: {
-        ...snapshot.effects,
-        enemy: [{ id: 'stunned', remaining: 2.5, magnitude: 0, tick: 0 }]
-      }
-    })).toBe(true);
-    advance(sim, 70);
-    const after = sim.snapshot();
-    expect(after.enemyIntent).toBeNull();
-    expect(after.player.health).toBe(snapshot.player.health);
-  });
-
-  it('can save a defeated enemy before its replacement spawns', () => {
+describe('group encounters with three independent opponents', () => {
+  it('spawns all enemy types simultaneously, with stable distinct IDs', () => {
     const sim = new GameSimulation();
     const state = sim.snapshot();
-    expect(sim.restore({
-      ...state,
-      player: { ...state.player, x: 725, y: 520 },
-      enemy: { ...state.enemy, health: 1 },
-      enemyCooldown: 0
-    })).toBe(true);
-    sim.command({ type: 'attack', targetId: state.enemy.id });
-    advance(sim, 3);
-    const defeated = sim.snapshot();
-    expect(defeated.enemy.alive).toBe(false);
-    expect(defeated.kills).toBe(1);
-    expect(sim.restore(defeated)).toBe(true);
-    advance(sim, 190);
-    const next = sim.snapshot();
-    expect(next.enemy.alive).toBe(true);
-    expect(next.enemy.type).toBe('skeleton');
-    expect(next.enemy.id).toBe('skeleton-2');
+    expect(state.version).toBe(5);
+    expect(state.enemies).toHaveLength(3);
+    expect(state.enemies.map(unit => unit.actor.type)).toEqual(['wraith', 'skeleton', 'wolf']);
+    expect(state.enemies.map(unit => unit.actor.id)).toEqual(['wraith-1', 'skeleton-2', 'wolf-3']);
+    expect(createPack(1, 1).map(unit => unit.actor.id)).toEqual(['wraith-4', 'skeleton-5', 'wolf-6']);
+    expect(createEncounter(1, 1).type).toBe('skeleton');
+    expect(Object.values(ENEMY_DEFINITIONS).every(def => def.windup > 0.5)).toBe(true);
   });
 
-  it('serializes the attack windup, resets cooldown after resolution, rejects corrupted saves', () => {
+  it('selects any living enemy by ID, rejects invalid targets and keeps separate enemy state', () => {
     const sim = new GameSimulation();
-    nearby(sim);
-    advance(sim, 2);
-    const saved = sim.snapshot();
-    expect(saved.enemyIntent).not.toBeNull();
-    expect(sim.restore(structuredClone(saved))).toBe(true);
-    expect(sim.snapshot()).toEqual(saved);
-    const malformed = {
-      ...saved,
-      enemyIntent: {
-        ...saved.enemyIntent!,
-        pattern: 'leap' as const
+    sim.command({ type: 'attack', targetId: 'skeleton-2' });
+    const selected = sim.snapshot();
+    expect(selected.selectedTargetId).toBe('skeleton-2');
+    expect(selected.enemy.type).toBe('skeleton');
+    sim.command({ type: 'attack', targetId: 'nonexistent' });
+    expect(sim.snapshot().selectedTargetId).toBe('skeleton-2');
+    expect(sim.snapshot().enemies.map(unit => unit.actor.health)).toEqual(
+      selected.enemies.map(unit => unit.actor.health));
+    const snap = sim.snapshot();
+    const health = 1;
+    const units = snap.enemies.map((unit, i) => i === 1 ? {
+      ...unit, actor: { ...unit.actor, health }
+    } : unit);
+    const player = { ...snap.player, x: 860, y: 635 };
+    expect(sim.restore({ ...snap, enemies: units, player })).toBe(true);
+    sim.command({ type: 'attack', targetId: 'skeleton-2' });
+    advance(sim, 12);
+    const after = sim.snapshot();
+    expect(after.kills).toBe(1);
+    expect(after.enemies[1]!.actor.alive).toBe(false);
+    expect(after.enemies[0]!.actor.alive).toBe(true);
+    expect(after.enemies[2]!.actor.alive).toBe(true);
+    expect(after.groundLoot).toHaveLength(1);
+  });
+
+  it('telegraphs a ranged attack and permits the player to dodge the locked zone', () => {
+    const sim = new GameSimulation();
+    disableOthers(sim, 0, 725, 520);
+    advance(sim, 3);
+    const warned = sim.snapshot();
+    expect(warned.enemies[0]!.intent?.pattern).toBe('bolt');
+    expect(warned.player.health).toBe(warned.player.maxHealth);
+    sim.command({ type: 'move', destination: { x: 350, y: 500 } });
+    advance(sim, 82);
+    expect(sim.snapshot().player.health).toBe(warned.player.health);
+    expect(sim.drainEvents().some(event => event.type === 'enemyAttack' && !event.hit)).toBe(true);
+  });
+
+  it('can resolve independent telegraphs from multiple nearby enemies', () => {
+    const sim = new GameSimulation();
+    const s = sim.snapshot();
+    expect(sim.restore({
+      ...s,
+      player: { ...s.player, x: 850, y: 565 },
+      enemies: s.enemies.map(unit => ({ ...unit, cooldown: 0 }))
+    })).toBe(true);
+    advance(sim, 15);
+    const warned = sim.snapshot();
+    expect(warned.enemies.filter(unit => unit.intent !== null).length).toBeGreaterThanOrEqual(2);
+    advance(sim, 90);
+    expect(sim.drainEvents().filter(event => event.type === 'enemyAttack').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('skeleton attacks in melee, wolf leaps and poisons a stationary target', () => {
+    for (const [index, expected] of [[1, 'sweep'], [2, 'leap']] as const) {
+      const sim = new GameSimulation();
+      const initial = sim.snapshot().enemies[index]!.actor;
+      disableOthers(sim, index, initial.x - 44, initial.y);
+      advance(sim, 3);
+      expect(sim.snapshot().enemies[index]!.intent?.pattern).toBe(expected);
+      advance(sim, 72);
+      const after = sim.snapshot();
+      expect(after.player.health).toBeLessThan(after.player.maxHealth);
+      if (expected === 'leap') {
+        expect(after.effects.player.some(effect => effect.id === 'poisoned')).toBe(true);
+        expect(after.enemies[2]!.actor.x).toBeCloseTo(initial.x - 44, 1);
       }
+    }
+  });
+
+  it('stun only interrupts the selected enemy, not all other units', () => {
+    const sim = new GameSimulation();
+    const s = sim.snapshot();
+    expect(sim.restore({
+      ...s,
+      player: { ...s.player, x: 850, y: 565 },
+      enemies: s.enemies.map(unit => ({ ...unit, cooldown: 0 }))
+    })).toBe(true);
+    advance(sim, 8);
+    const before = sim.snapshot();
+    expect(before.enemies[0]!.intent).not.toBeNull();
+    expect(sim.restore({
+      ...before,
+      enemies: before.enemies.map((unit, i) => i === 0 ? {
+        ...unit,
+        effects: [{ id: 'stunned', remaining: 2.5, magnitude: 0, tick: 0 }]
+      } : unit)
+    })).toBe(true);
+    advance(sim, 3);
+    const after = sim.snapshot();
+    expect(after.enemies[0]!.intent).toBeNull();
+    expect(after.enemies.slice(1).some(unit => unit.actor.alive)).toBe(true);
+  });
+
+  it('respawns a full wave with fresh IDs after all three defeats', () => {
+    const sim = new GameSimulation();
+    for (let i = 0; i < 3; i++) {
+      const s = sim.snapshot();
+      const unit = s.enemies[i]!.actor;
+      expect(sim.restore({
+        ...s,
+        player: { ...s.player, x: unit.x - 35, y: unit.y },
+        selectedTargetId: null,
+        enemies: s.enemies.map((u, j) => i === j ? {
+          ...u, actor: { ...u.actor, health: 1 }
+        } : u)
+      })).toBe(true);
+      sim.command({ type: 'attack', targetId: unit.id });
+      advance(sim, 5);
+      expect(sim.snapshot().enemies[i]!.actor.alive).toBe(false);
+    }
+    const defeated = sim.snapshot();
+    expect(defeated.kills).toBe(3);
+    expect(defeated.respawnTimer).toBeGreaterThan(0);
+    advance(sim, 220);
+    const newWave = sim.snapshot();
+    expect(newWave.wave).toBe(1);
+    expect(newWave.enemies.every(unit => unit.actor.alive)).toBe(true);
+    expect(newWave.enemies.map(unit => unit.actor.id)).toEqual(['wraith-4', 'skeleton-5', 'wolf-6']);
+  });
+
+  it('preserves per-enemy windups and statuses in a v5 save, and rejects malformed groups', () => {
+    const sim = new GameSimulation();
+    const s = sim.snapshot();
+    expect(sim.restore({
+      ...s,
+      player: { ...s.player, x: 850, y: 565 },
+      enemies: s.enemies.map(unit => ({ ...unit, cooldown: 0 }))
+    })).toBe(true);
+    advance(sim, 10);
+    const original = sim.snapshot();
+    expect(original.enemies.some(unit => unit.intent !== null)).toBe(true);
+    expect(sim.restore(structuredClone(original))).toBe(true);
+    expect(sim.snapshot()).toEqual(original);
+    const duplicate = {
+      ...original,
+      enemies: original.enemies.map((unit, i) => i === 2
+        ? { ...unit, actor: { ...unit.actor, id: 'skeleton-2' } } : unit)
     };
-    expect(sim.restore(malformed)).toBe(false);
+    expect(sim.restore(duplicate)).toBe(false);
+    expect(sim.restore({ ...original, enemies: [] })).toBe(false);
+    expect(sim.restore({ ...original, selectedTargetId: 'unknown' })).toBe(false);
     expect(validIntent({ pattern: 'bolt', x: 100, y: 100, radius: 40, remaining: 1, total: 0.5 })).toBe(false);
-    advance(sim, 80);
-    expect(sim.snapshot().enemyCooldown).toBeGreaterThan(0);
   });
 });

@@ -16,6 +16,12 @@ test('switches Czech/English in the menu and game without losing the scene', asy
   await page.locator('#game-language').selectOption('en');
   await expect(page.getByText('Enemies defeated')).toBeVisible();
   await expect(page.locator('.enemy-name')).toHaveText('Wraith');
+  await expect(page.locator('.enemy-roster button')).toHaveCount(3);
+  await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
+  const skeleton = page.locator('.enemy-roster button').filter({ hasText: 'Skeleton Warrior' });
+  await skeleton.click();
+  await expect(skeleton).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.enemy-name')).toHaveText('Skeleton Warrior');
   await expect(page.locator('.game-hud')).toBeVisible();
 
   await page.getByRole('button', { name: 'Save' }).click();

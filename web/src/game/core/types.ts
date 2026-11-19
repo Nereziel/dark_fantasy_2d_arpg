@@ -2,7 +2,7 @@
 import type { ClassId } from '../data/classes';
 import type { Equipment, GroundItem, Item, DerivedStats, EquipmentSlot } from '../data/items';
 import type { ActiveEffects, Cooldowns, SkillSlot } from '../skills/skills';
-import type { EnemySnapshot, EnemyIntent } from '../enemies/enemies';
+import type { EnemySnapshot, EnemyIntent, EnemyUnit } from '../enemies/enemies';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
@@ -13,12 +13,17 @@ export interface ActorSnapshot extends Point {
   alive: boolean;
 }
 export interface GameSnapshot {
-  version: 4;
+  version: 5;
   classId: ClassId;
   player: ActorSnapshot;
+  /** Focused enemy for the existing HUD; authoritative enemy state is in enemies. */
   enemy: EnemySnapshot;
   enemyIntent: EnemyIntent | null;
   enemyCooldown: number;
+  enemies: EnemyUnit[];
+  selectedTargetId: string | null;
+  wave: number;
+  respawnTimer: number;
   kills: number;
   level: number;
   xp: number;

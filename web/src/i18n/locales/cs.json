@@ -28,7 +28,8 @@
     "xp": "Zkušenosti",
     "inventory": "Inventář",
     "class": "Třída",
-    "itemDrops": "Kořist"
+    "itemDrops": "Kořist",
+    "enemies": "Protivníci"
   },
   "status": {
     "ready": "Připraven",
@@ -48,7 +49,8 @@
     "hint": "Klávesa I otevře inventář. Zatím jde o první převedené systémy; questy a dungeony budou následovat.",
     "pickup": "Kořist: kliknutí na zářící předmět",
     "skills": "Schopnosti: Q / pravé tlačítko myši a klávesa 1",
-    "avoid": "Uhni z červené oblasti dříve, než útok dopadne."
+    "avoid": "Uhni z červené oblasti dříve, než útok dopadne.",
+    "navigate": "Překážky obcházej kliknutím na volné místo; cíl lze vybrat ze seznamu."
   },
   "battle": {
     "defeat": "Nepřítel padl",
