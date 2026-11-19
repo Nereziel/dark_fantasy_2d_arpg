@@ -9,7 +9,8 @@ import {
   type ContextTarget, type ResolvedPointerContext
 } from '../input/contextResolver';
 import { resolvePointerAction } from '../input/bindings';
-import { GAME_BINDINGS } from '../input/gameBindings';
+import { HeldPointerMovement } from '../input/heldMovement';
+import { playerAnimation } from '../entities/playerAnimation';
 import { ACTOR_RADIUS, canOccupy, type Obstacle } from '../world/navigation';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
 import {
@@ -41,6 +42,13 @@ export class FrontierScene extends Phaser.Scene {
   private renderedSeed: number | null = null;
   private renderedZone: ZoneId | null = null;
   private activeObstacles: readonly Obstacle[] = [];
+  private readonly heldMovement = new HeldPointerMovement();
+  private hoveredId: string | null = null;
+  private interactableVisuals!: Phaser.GameObjects.Graphics;
+  private projectileVisuals!: Phaser.GameObjects.Graphics;
+  private debugMarkers!: Phaser.GameObjects.Graphics;
+  private readonly debugMovement = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).has('debug');
 
   constructor(bridge: GameBridge) {
     super({ key: 'Frontier' });
@@ -106,6 +114,9 @@ export class FrontierScene extends Phaser.Scene {
     this.groundItems = this.add.graphics().setDepth(44);
     this.statusVisuals = this.add.graphics().setDepth(47);
     this.telegraph = this.add.graphics().setDepth(46);
+    this.interactableVisuals = this.add.graphics().setDepth(43);
+    this.projectileVisuals = this.add.graphics().setDepth(61);
+    this.debugMarkers = this.add.graphics().setDepth(70);
 
     this.cameras.main.setBounds(0, 0, WIDTH, HEIGHT);
     this.cameras.main.setZoom(1);
@@ -114,10 +125,15 @@ export class FrontierScene extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', this.onWorldClick, this);
     this.input.on('pointermove', this.onPointerHover, this);
+    this.input.on('pointerup', this.onPointerRelease, this);
+    this.input.on('gameout', this.onPointerCancel, this);
     const unsubscribeEvents = this.bridge.onEvent(event => this.onGameEvent(event));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.off('pointerdown', this.onWorldClick, this);
       this.input.off('pointermove', this.onPointerHover, this);
+      this.input.off('pointerup', this.onPointerRelease, this);
+      this.input.off('gameout', this.onPointerCancel, this);
+      this.heldMovement.release();
       this.game.canvas.style.cursor = 'default';
       unsubscribeEvents();
       for (const actor of this.enemyGraphics.values()) actor.destroy();
@@ -137,6 +153,10 @@ export class FrontierScene extends Phaser.Scene {
     const portal = state.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT;
     const targets: ContextTarget[] = [
       { kind: 'INTERACTABLE', id: 'crypt-portal', position: portal, hitRadius: 64 },
+      ...state.interactables.map(object => ({
+        kind: 'INTERACTABLE' as const, id: object.id,
+        position: object.position, hitRadius: object.hitRadius
+      })),
       ...state.groundLoot.map(drop => ({
         kind: 'LOOT' as const, id: drop.id, position: { x: drop.x, y: drop.y }, hitRadius: 30
       })),
@@ -161,41 +181,72 @@ export class FrontierScene extends Phaser.Scene {
 
   private onPointerHover(pointer: Phaser.Input.Pointer): void {
     const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-    const cursor = cursorForContext(this.pointerContext(world));
+    const context = this.pointerContext(world);
+    this.hoveredId = context.kind === 'ENEMY' || context.kind === 'LOOT'
+      || context.kind === 'NPC' || context.kind === 'INTERACTABLE'
+      ? context.id : null;
+    this.bridge.setPointerAim(world, context.kind === 'ENEMY' ? context.id : null);
+    const cursor = cursorForContext(context);
     const cursors = {
       move: 'crosshair', hostile: 'crosshair', talk: 'pointer',
       loot: 'grab', interact: 'pointer', blocked: 'not-allowed', ui: 'default'
     } as const;
     this.game.canvas.style.cursor = cursors[cursor];
+
+    // A held ground click follows the cursor, at most ~9 path requests/second.
+    if (!pointer.isDown || this.uiCapturesPointer() || !this.bridge.snapshot().player.alive) {
+      this.heldMovement.release();
+      return;
+    }
+    const destination = this.heldMovement.update(world, this.time.now);
+    if (destination) this.bridge.command({ type: 'move', destination });
+  }
+
+  private onPointerRelease(): void {
+    this.heldMovement.release();
+  }
+
+  private onPointerCancel(): void {
+    this.heldMovement.release();
+    this.hoveredId = null;
   }
 
   private onWorldClick(pointer: Phaser.Input.Pointer): void {
     const action = resolvePointerAction({
       button: pointer.button, uiCaptured: this.uiCapturesPointer()
-    }, GAME_BINDINGS);
+    }, this.bridge.bindings());
     if (!action) return;
+
+    const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    const context = this.pointerContext(world);
+    this.bridge.setPointerAim(world, context.kind === 'ENEMY' ? context.id : null);
+
     if (action === 'SECONDARY') {
-      const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-      const context = this.pointerContext(world);
+      const aim = this.bridge.skillAim('rmb');
       this.bridge.command({
         type: 'cast', slot: 'rmb',
+        ...(aim ? { aim } : {}),
         ...(context.kind === 'ENEMY' ? { targetId: context.id } : {})
       });
       return;
     }
+    if (action === 'EVADE') {
+      this.bridge.command({ type: 'evade' });
+      return;
+    }
     if (action !== 'PRIMARY' && action !== 'FORCE_MOVE') return;
-    const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     if (action === 'FORCE_MOVE') {
-      // Ignore NPC/enemy/loot picking; the simulation resolves nearest walkable ground.
+      this.heldMovement.begin(world, this.time.now);
       this.bridge.command({ type: 'move', destination: { x: world.x, y: world.y } });
       return;
     }
-    const context = this.pointerContext(world);
     const command = contextToCommand(context);
     if (command) {
       this.bridge.command(command);
+      if (context.kind === 'GROUND') this.heldMovement.begin(world, this.time.now);
+      else this.heldMovement.release();
     } else if (context.kind === 'INVALID') {
-      // Clicking solid terrain walks up to it rather than silently doing nothing.
+      this.heldMovement.begin(world, this.time.now);
       this.bridge.command({ type: 'move', destination: { x: world.x, y: world.y } });
     }
   }
@@ -281,12 +332,29 @@ export class FrontierScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.bridge.tick(delta);
+    // Camera-follow changes the world coordinate beneath a stationary held cursor.
+    // Update it at the same throttled cadence even without pointermove events.
+    if (this.heldMovement.active && this.input.activePointer.isDown) {
+      if (this.uiCapturesPointer()) this.heldMovement.release();
+      else {
+        const pointer = this.input.activePointer;
+        const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        const goal = this.heldMovement.update(world, this.time.now);
+        if (goal) this.bridge.command({ type: 'move', destination: goal });
+      }
+    }
     const state = this.bridge.snapshot();
     if (this.renderedSeed !== state.worldSeed || this.renderedZone !== state.zone) {
       this.paintWorld(state.worldSeed, state.zone);
     }
     for (const actor of this.campDecor) actor.setVisible(state.zone === 'wilderness');
     this.hero.setPosition(state.player.x, state.player.y);
+    const animation = playerAnimation(state);
+    const oscillation = Math.sin(this.time.now * 0.015);
+    this.hero.setScale(animation === 'running' ? 1 + oscillation * 0.045
+      : animation === 'attacking' ? 1 + oscillation * 0.025
+      : animation === 'evading' ? 0.9 : 1);
+    this.hero.setAlpha(animation === 'stunned' ? 0.72 : 1);
     this.wardenMarker.setText(state.quest.status === 'ready' ? '?'
       : state.quest.status === 'available' ? '!' : '·');
     this.wardenMarker.setVisible(state.zone === 'wilderness' && state.quest.status !== 'completed');
@@ -315,6 +383,16 @@ export class FrontierScene extends Phaser.Scene {
     this.healthBar.clear();
     this.telegraph.clear();
     this.statusVisuals.clear();
+    if (state.zone === 'wilderness' && this.hoveredId) {
+      const npc = NPC_POSITIONS[this.hoveredId as NpcId];
+      if (npc) this.statusVisuals.lineStyle(2, 0xf3d49e, 0.86)
+        .strokeCircle(npc.x, npc.y, 34);
+    }
+    const portal = state.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT;
+    if (this.hoveredId === 'crypt-portal') {
+      this.statusVisuals.lineStyle(3, 0xb8e6dc, 0.85)
+        .strokeCircle(portal.x, portal.y, 66);
+    }
     for (const unit of state.enemies) {
       const { actor, intent, effects } = unit;
       if (!actor.alive) continue;
@@ -344,6 +422,10 @@ export class FrontierScene extends Phaser.Scene {
         .fillRect(actor.x - 26, actor.y - 45, 52, 8);
       this.healthBar.fillStyle(0xa3494c)
         .fillRect(actor.x - 24, actor.y - 43, 48 * (actor.health / actor.maxHealth), 4);
+      if (this.hoveredId === actor.id) {
+        this.healthBar.lineStyle(2, 0xf5dbb8, 0.8)
+          .strokeEllipse(actor.x, actor.y + 8, 70, 48);
+      }
       if (state.selectedTargetId === actor.id) {
         this.healthBar.lineStyle(2, 0xf0c783, 0.95).strokeEllipse(actor.x, actor.y + 8, 63, 43);
         this.healthBar.lineStyle(1, 0xf6e0ae, 0.75)
@@ -361,10 +443,45 @@ export class FrontierScene extends Phaser.Scene {
         .fillCircle(state.player.x - 35, state.player.y + 27, 2)
         .fillCircle(state.player.x - 29, state.player.y + 27, 2);
     }
+    this.interactableVisuals.clear();
+    for (const object of state.interactables) {
+      const x = object.position.x, y = object.position.y;
+      if (object.kind === 'chest') {
+        this.interactableVisuals.fillStyle(0x59432e).fillRoundedRect(x - 22, y - 13, 44, 27, 4);
+        this.interactableVisuals.lineStyle(3, 0xb69b62).strokeRoundedRect(x - 22, y - 13, 44, 27, 4);
+        this.interactableVisuals.fillStyle(0xe4c879).fillRect(x - 4, y - 4, 8, 12);
+      } else {
+        this.interactableVisuals.fillStyle(0x556b66, 0.75).fillCircle(x, y, 22);
+        this.interactableVisuals.lineStyle(3, 0xa7d4b9).strokeCircle(x, y, 20);
+      }
+      if (this.hoveredId === object.id) {
+        this.interactableVisuals.lineStyle(3, 0xffd38d).strokeCircle(x, y, object.hitRadius);
+      }
+    }
+    this.projectileVisuals.clear();
+    for (const missile of state.projectiles) {
+      const color = missile.type === 'shadow' ? 0xa78bcd : 0xe8a25f;
+      this.projectileVisuals.fillStyle(color, 0.25).fillCircle(missile.x, missile.y, 14);
+      this.projectileVisuals.fillStyle(color, 0.95).fillCircle(missile.x, missile.y, 6);
+    }
+    this.debugMarkers.clear();
+    if (this.debugMovement && state.moveDestination) {
+      const p = state.moveDestination;
+      this.debugMarkers.lineStyle(2, 0x76d9af, 0.85).strokeCircle(p.x, p.y, 12);
+      this.debugMarkers.lineStyle(1, 0x76d9af, 0.65)
+        .lineBetween(state.player.x, state.player.y, p.x, p.y);
+    }
+    if (state.shield > 0) {
+      this.statusVisuals.lineStyle(3, 0x8dc6f6, 0.65)
+        .strokeCircle(state.player.x, state.player.y, 27);
+    }
     this.groundItems.clear();
     for (const drop of state.groundLoot) {
       const hex = RARITIES[drop.item.rarity].color.replace('#', '');
       const color = Number.parseInt(hex, 16);
+      if (this.hoveredId === drop.id) {
+        this.groundItems.lineStyle(3, 0xffdc8d).strokeCircle(drop.x, drop.y, 25);
+      }
       this.groundItems.fillStyle(color, 0.13).fillCircle(drop.x, drop.y, 21);
       this.groundItems.lineStyle(2, color, 0.95).strokeCircle(drop.x, drop.y, 17);
       this.groundItems.fillStyle(color).fillRect(drop.x - 7, drop.y - 7, 14, 14);

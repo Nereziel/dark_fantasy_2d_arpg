@@ -7,11 +7,11 @@ We will now complete foundational prompts in numeric order, even though early ve
 | Prompt | Status | Remaining essentials |
 | --- | --- | --- |
 | 01 — Foundation | Functional baseline; additional architecture docs remain | Current Svelte 5, Phaser 4, Vite, TS, CI and cs/en are deployed; fill required documentation progressively |
-| **02 — Player Entity and Character Core** | **Core module integrated** | Complete modular combat/animation/interaction ownership and remaining acceptance checks |
-| 03 — Diablo-style mouse movement | **Partially integrated** | Nearest reachable click destinations work; held-button movement and repath throttling still missing |
-| 04 — Mouse context resolver | **Partially integrated** | One click resolver and contextual cursor live; shrine, chests, hover highlights and interaction validation need expansion |
-| 05 — Force move / hold position / skill aiming | **Partially integrated** | Middle-click force move, Shift hold, Space evade, targeted RMB; UI rebinding and extra slots are still future work |
-| 06 — Central combat | **Partially integrated** | Typed attacks, player dodge/block, typed skill damage and healing live; magic resistances for incoming hits, shields, complete damage events and balance remain |
+| **02 — Player Entity and Character Core** | **Core complete** | Separate stats, health/resource, movement, effect stack, animation state, skill data, equipment and interactions are in use; visual asset animation can expand later |
+| 03 — Diablo-style mouse movement | **Core complete** | Mouse-hold movement, camera-relative updates, path throttle, reachability, collision, root/stun and debug destination are implemented; advanced navmesh remains optional |
+| 04 — Mouse context resolver | **Core complete** | Ground, enemy, NPC, loot, UI, portal/door, chest and shrine resolve through one picker; in-world target highlight and distance checks active |
+| 05 — Force move / hold position / skill aiming | **Core complete** | Configurable bindings with browser-local UI, Shift stand-still, mouse force move, 5 target modes, aim via cursor. More active skill slots and potions belong to later prompts |
+| 06 — Central combat | **Core complete** | Physical + elemental damage, AoE, authoritative enemy projectile, crit, dodge, armor/resists, block, shield, healing and observable combat events; more attack families and balance follow |
 | 07 — Warrior skills | Prototype | Full Warrior kit, cooldowns and animation timing |
 | 08 — Animation & game feel | Not complete | Visual animation state machine, timed hit frames and hit reactions |
 | 09 — Status effect framework | Prototype | Generic stacking, expiry, resistance and dispel framework |
@@ -26,15 +26,15 @@ We will now complete foundational prompts in numeric order, even though early ve
 - Derivation and definitions of all five primary attributes and the requested derived stats are in `web/src/game/stats/deriveStats.ts`; `items.ts` re-exports the public `deriveStats` function for compatibility.
 - Health/resource rules for character creation, gear-driven max-health changes and fixed-step class resource regeneration live in `web/src/game/entities/player.ts`.
 - `GameSimulation.snapshot().stats` exposes the authoritative current values to the localized `web/src/ui/CharacterSheet.svelte` (C / Escape).
-- Dodge and block are applied to incoming physical hits. Resistances for currently absent nonphysical enemy damage, shields and advanced mechanics are not yet fully integrated.
+- Dodge, block, type-based resistances and transient shields are applied to actual incoming attacks; additional class/status/item stat modifiers will be added in later prompts.
 - Saves still contain only class, level, equipment, inventory, gold and quest progression. No duplicate derived stats, UI state or combat state are written into IndexedDB.
 - Unit regression tests: `Stats.test.ts`, `PlayerModel.test.ts`; browser check of C and in-dialog locale switching: `startup.spec.ts`.
 
 ## Completed agent merge and runtime integration
 
-All five parallel agent PRs were merged separately (#1, #5, #2, #3, #4). Their standalone modules were connected in the integration branch for PR #6. The new integration tests cover blocked destinations, hold position, evade cooldown, targeted skills and typed incoming damage; Playwright verifies keyboard integration. **A merged module is not by itself the complete acceptance criteria for the numbered prompt.** The remaining gaps in the table above are explicit.
+All five parallel agent PRs were merged separately (#1, #5, #2, #3, #4), then connected in PR #6. PR #7 completes the remaining core acceptance behaviors: held movement with throttling, interaction targets, configurable controls, cursor-based skill aiming, root/stun, healing/shields and projectile/resistance resolution. Unit and browser tests validate runtime behavior rather than merely imported modules. Remaining content expansion belongs to later prompts.
 
-**Compatibility:** Q/RMB remains the first implemented skill, 1 the second. Bindings for future potions and skill slots exist but are not activated. Character-only IndexedDB format v8 remains unchanged; evade cooldown, holding position, world seed, enemy state and damage remain ephemeral.
+**Compatibility:** Q/RMB remains the first implemented skill, 1 the second. Future potion and skill slots 2–4 have configurable action bindings but no abilities until their implementation prompts. Browser-local input preferences are not part of character saves. Character-only IndexedDB format v8 remains unchanged; evade cooldown, shields, missiles, chest/shrine uses, input state, world seed, enemies and combat remain ephemeral.
 
 ## Multi-agent contribution policy
 

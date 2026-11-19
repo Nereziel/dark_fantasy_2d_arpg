@@ -3,6 +3,7 @@
  */
 import type { GameCommand, Point } from '../core/types';
 import { isNpcId } from '../world/npcs';
+import { isWorldObjectId } from '../world/interactables';
 
 export type ContextKind =
   | 'GROUND' | 'ENEMY' | 'NPC' | 'LOOT' | 'INTERACTABLE' | 'UI' | 'INVALID';
@@ -123,7 +124,9 @@ export function contextToCommand(context: ResolvedPointerContext): GameCommand |
         ? { type: 'interactNpc', npcId: context.id }
         : null;
     case 'INTERACTABLE':
-      return context.id === 'crypt-portal' ? { type: 'usePortal' } : null;
+      if (context.id === 'crypt-portal') return { type: 'usePortal' };
+      return isWorldObjectId(context.id)
+        ? { type: 'interactObject', id: context.id } : null;
     case 'UI':
     case 'INVALID':
       return null;

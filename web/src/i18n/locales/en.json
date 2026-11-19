@@ -32,7 +32,8 @@
     "enemies": "Enemies",
     "wave": "Wave",
     "camp": "Emberwatch Camp",
-    "autosave": "Character autosave enabled"
+    "autosave": "Character autosave enabled",
+    "shield": "Shield"
   },
   "status": {
     "ready": "Ready",
@@ -46,14 +47,14 @@
     "emptySave": "No compatible saved hero found"
   },
   "controls": {
-    "move": "Move: click the ground",
+    "move": "Move: click or hold left mouse",
     "attack": "Attack: click an enemy",
     "pause": "Pause: Esc",
-    "hint": "Space: evade · Shift: hold position · middle click: force move · Q/RMB and 1: skills · I/C: panels",
+    "hint": "Space: evade · Shift: stand still · Q/RMB and 1: cursor-aimed skills · Esc → Controls to remap",
     "pickup": "Loot: click a glowing item",
     "skills": "Skills: Q / right mouse button and key 1",
     "avoid": "Dodge the red warning circle before the strike lands.",
-    "navigate": "Click to navigate, including blocked ground (nearest reachable spot). Middle click forces movement past targets."
+    "navigate": "Hold left click to follow the cursor; click solid ground to move beside obstacles. Middle click forces movement."
   },
   "battle": {
     "defeat": "Enemy defeated",
@@ -348,5 +349,41 @@
       "defense": "Defense",
       "utility": "Utility"
     }
+  },
+  "bindings": {
+    "title": "Input bindings",
+    "open": "Controls",
+    "help": "Choose an action, then press a key or mouse button. Escape cancels capture.",
+    "press": "Waiting for input",
+    "pressShort": "Press…",
+    "change": "Change",
+    "reset": "Restore defaults",
+    "close": "Back",
+    "reserved": "Unimplemented skills, potion and panels are reserved for later prompts. Bindings are saved on this device, separately from your character.",
+    "CONFLICT": "This key or button is already assigned.",
+    "INVALID": "That key or button is not supported.",
+    "actions": {
+      "PRIMARY": "Primary / interact",
+      "SECONDARY": "Secondary skill",
+      "FORCE_MOVE": "Force move",
+      "HOLD_POSITION": "Hold position",
+      "SLOT_1": "Skill 1",
+      "SLOT_2": "Skill 2",
+      "SLOT_3": "Skill 3",
+      "SLOT_4": "Skill 4",
+      "POTION": "Potion (future)",
+      "EVADE": "Evade",
+      "INVENTORY": "Inventory",
+      "CHARACTER": "Character",
+      "SKILLS": "Skills (future)",
+      "TALENTS": "Talents (future)",
+      "MAP": "Map (future)",
+      "JOURNAL": "Journal (future)",
+      "MENU": "Menu / pause"
+    }
+  },
+  "worldObjects": {
+    "shrine": "The soul shrine grants a protective shield.",
+    "chest": "You opened a field chest."
   }
 }

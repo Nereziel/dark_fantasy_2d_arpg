@@ -267,3 +267,44 @@ test('new input mappings evade on Space and toggle pause on Escape', async ({ pa
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Character and Attributes' })).toHaveCount(0);
 });
+
+test('rebinds inventory from I to O in the controls panel and reloads this preference', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Controls' }).click();
+  const controls = page.getByRole('dialog', { name: 'Input bindings' });
+  await expect(controls).toBeVisible();
+  const inventory = controls.locator('.binding-row').filter({ hasText: 'Inventory' });
+  await inventory.getByRole('button', { name: 'Change' }).click();
+  await page.keyboard.press('o');
+  await expect(inventory.locator('code')).toHaveText('KeyO');
+  await controls.getByRole('button', { name: 'Back' }).click();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('o');
+  await expect(page.getByRole('dialog', { name: 'Inventory & Equipment' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.reload();
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await page.keyboard.press('o');
+  await expect(page.getByRole('dialog', { name: 'Inventory & Equipment' })).toBeVisible();
+});
+
+test('holding mouse movement updates the destination without creating combat commands', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  const canvas = page.locator('.phaser-container canvas');
+  await expect(canvas).toBeVisible();
+  const bounds = await canvas.boundingBox();
+  expect(bounds).not.toBeNull();
+  const game = page.locator('.game-screen');
+  const before = Number(await game.getAttribute('data-player-x'));
+  await page.mouse.move(bounds!.x + bounds!.width * 0.61, bounds!.y + bounds!.height * 0.40);
+  await page.mouse.down();
+  await page.mouse.move(bounds!.x + bounds!.width * 0.77, bounds!.y + bounds!.height * 0.40, { steps: 8 });
+  await expect.poll(async () => Number(await game.getAttribute('data-player-x')), { timeout: 5_000 })
+    .toBeGreaterThan(before + 12);
+  await page.mouse.up();
+});

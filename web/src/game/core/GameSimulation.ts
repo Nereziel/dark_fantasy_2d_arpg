@@ -1,7 +1,11 @@
-import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point, ZoneId } from './types';
-import { spawnPlayer, updateHealthLimit, advanceResource } from '../entities/player';
+import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point, ProjectileSnapshot, ZoneId } from './types';
+import { spawnPlayer, updateHealthLimit, advanceResource, regenerateHealth } from '../entities/player';
+import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
+import { applyOrRefreshEffect } from '../status/effectStack';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
-import { resolveTypedDamage, resolveHealing, type DamageType } from '../combat/typedDamage';
+import { resolveTypedDamage, resolveHealing, type DamageType, type DamageResult } from '../combat/typedDamage';
+import type { SkillAim } from '../input/skillAiming';
+import { getWorldObject, isWorldObjectId, worldObjectsFor, type WorldObjectId } from '../world/interactables';
 import {
   SKILLS, emptyCooldowns, emptyEffects, isSkillSlot, isActiveEffect,
   type ActiveEffect, type ActiveEffects, type Cooldowns, type SkillSlot
@@ -60,19 +64,6 @@ function validActor(actor: ActorSnapshot, id: string, obstacles: readonly Obstac
     && actor.alive === (actor.health > 0);
 }
 
-/** Advances actors with collision and uses local A* only when a direct route is blocked. */
-function toward(actor: Point, target: Point, speed: number, dt: number, stop: number, obstacles: readonly Obstacle[]): void {
-  const remaining = distance(actor, target);
-  if (remaining <= stop || remaining < 0.001) return;
-  const amount = Math.max(0, Math.min(speed * dt, remaining - stop));
-  const before = { ...actor };
-  moveActor(actor, target, amount, ACTOR_RADIUS, obstacles);
-  if (distance(before, actor) < amount * 0.15 && amount > 0.01) {
-    const path = findPath(actor, target, ACTOR_RADIUS, obstacles);
-    if (path.length) moveActor(actor, path[0]!, amount, ACTOR_RADIUS, obstacles);
-  }
-}
-
 /**
  * Renderer-independent multi-enemy simulation. All damage and attack windows
  * are resolved on fixed ticks; the Phaser scene only visualizes snapshots.
@@ -94,11 +85,19 @@ export class GameSimulation {
   private quest: QuestProgress = freshQuest();
   private pendingNpc: NpcId | null = null;
   private pendingSkill: SkillSlot | null = null;
+  private pendingAim: SkillAim | null = null;
   private player = spawnPlayer('WARRIOR', this.equipment, { x: 390, y: 470 });
   private groundLoot: GroundItem[] = [];
   private movePath: Point[] = [];
   private attackTarget: string | null = null;
   private pickupTarget: string | null = null;
+  private pendingObject: WorldObjectId | null = null;
+  private usedObjects = new Set<WorldObjectId>();
+  private shield = 0;
+  private projectiles: ProjectileSnapshot[] = [];
+  private nextProjectileId = 0;
+  private movementSpeed = 0;
+  private healthRegenCarry = 0;
   private paused = false;
   private kills = 0;
   private wave = 0;
@@ -115,8 +114,18 @@ export class GameSimulation {
 
   constructor(seed = 0) { this.reset('WARRIOR', seed); }
 
+  private get immobilized(): boolean {
+    return this.effects.player.some(e => e.id === 'stunned' || e.id === 'rooted');
+  }
+
   private follow(actor: Point, target: Point, speed: number, dt: number, stop = 0): void {
-    toward(actor, target, speed, dt, stop, this.world.obstacles);
+    if (actor === this.player) {
+      if (this.immobilized) { this.movementSpeed = 0; return; }
+      const left = Math.max(0, distance(actor, target) - stop);
+      this.movementSpeed = nextMoveSpeed(this.movementSpeed, speed, left, dt);
+      moveToward(actor, target, this.movementSpeed, dt, stop, this.world.obstacles);
+      if (left <= 0.01) this.movementSpeed = 0;
+    } else moveToward(actor, target, speed, dt, stop, this.world.obstacles);
   }
 
   private get focusedUnit(): EnemyUnit {
@@ -141,7 +150,7 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'holdPosition') {
-      if (!this.player.alive || this.paused) return;
+      if (!this.player.alive || (this.paused && command.value)) return;
       this.holdPosition = command.value;
       if (command.value) {
         this.movePath = [];
@@ -152,7 +161,7 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'evade') {
-      if (!this.player.alive || this.paused || this.evadeCooldown > 0) return;
+      if (!this.player.alive || this.paused || this.evadeCooldown > 0 || this.immobilized) return;
       const nearest = this.aliveEnemies
         .map(unit => unit.actor)
         .sort((a, b) => distance(this.player, a) - distance(this.player, b))[0];
@@ -169,6 +178,7 @@ export class GameSimulation {
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pickupTarget = null;
       this.pendingNpc = null;
       this.pendingPortal = false;
@@ -208,12 +218,28 @@ export class GameSimulation {
       return;
     }
     if (!this.player.alive || this.paused) return;
+    if (command.type === 'interactObject') {
+      const object = getWorldObject(command.id, this.zone);
+      if (!object || this.usedObjects.has(object.id)) return;
+      this.movePath = [];
+      this.attackTarget = null;
+      this.pickupTarget = null;
+      this.pendingNpc = null;
+      this.pendingSkill = null;
+      this.pendingAim = null;
+      this.pendingPortal = false;
+      this.pendingObject = object.id;
+      this.tryInteractObject();
+      return;
+    }
     if (command.type === 'usePortal') {
       this.movePath = [];
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingNpc = null;
+      this.pendingObject = null;
       this.pendingPortal = true;
       if (distance(this.player, this.portalPosition) <= 78) this.changeZone();
       return;
@@ -224,6 +250,8 @@ export class GameSimulation {
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
+      this.pendingObject = null;
       this.pendingPortal = false;
       if (nearNpc(this.player, command.npcId)) {
         this.events.push({ type: 'npcDialogue', npcId: command.npcId });
@@ -241,7 +269,7 @@ export class GameSimulation {
         if (!target) return;
         this.selectedTargetId = target.actor.id;
       }
-      this.requestCast(command.slot);
+      this.requestCast(command.slot, command.aim);
       return;
     }
     if (command.type === 'move') {
@@ -257,7 +285,9 @@ export class GameSimulation {
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingNpc = null;
+      this.pendingObject = null;
       this.pendingPortal = false;
     } else if (command.type === 'attack') {
       const selected = this.units.find(unit => unit.actor.id === command.targetId && unit.actor.alive);
@@ -267,16 +297,43 @@ export class GameSimulation {
       this.movePath = [];
       this.pickupTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingNpc = null;
+      this.pendingObject = null;
       this.pendingPortal = false;
     } else if (command.type === 'pickup' && this.groundLoot.some(loot => loot.id === command.id)) {
       this.pickupTarget = command.id;
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingNpc = null;
+      this.pendingObject = null;
       this.pendingPortal = false;
     }
+  }
+
+  /** Resolve world interactions in the authoritative fixed-step model. */
+  private tryInteractObject(): void {
+    const object = getWorldObject(this.pendingObject, this.zone);
+    if (!object || this.usedObjects.has(object.id)) {
+      this.pendingObject = null;
+      return;
+    }
+    if (distance(this.player, object.position) > object.reach) return;
+    this.pendingObject = null;
+    this.usedObjects.add(object.id);
+    if (object.kind === 'shrine') {
+      this.shield = Math.max(this.shield, Math.round(this.player.maxHealth * 0.3));
+    } else {
+      const item = rollItem(this.kills + 101, this.level, this.rng);
+      this.groundLoot.push({
+        id: 'cache-' + object.id, x: object.position.x, y: object.position.y,
+        item: { ...item, id: 'cache-' + object.id + '-item' }
+      });
+      if (this.groundLoot.length > 30) this.groundLoot.shift();
+    }
+    this.events.push({ type: 'worldInteract', id: object.id, kind: object.kind });
   }
 
   private shopAllowed(npcId: NpcId): boolean {
@@ -347,9 +404,45 @@ export class GameSimulation {
     updateHealthLimit(this.player, max);
   }
 
-  private requestCast(slot: SkillSlot): void {
+  private requestCast(slot: SkillSlot, aim?: SkillAim): void {
     const skill = SKILLS[this.classId][slot];
-    if (this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
+    if (skill.kind === 'dash' && this.holdPosition) return;
+    if (this.effects.player.some(e => e.id === 'stunned')
+      || this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
+
+    // Aimed positions and directions are validated by the authoritative simulation.
+    if (aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA') {
+      if (!Number.isFinite(aim.position.x) || !Number.isFinite(aim.position.y)) return;
+      if ((aim.mode === 'AREA' && skill.kind !== 'nova')
+        || (aim.mode === 'GROUND_POSITION' && skill.id !== 'fireball')) return;
+      if (distance(this.player, aim.position) > skill.range + 0.5) {
+        if (this.holdPosition) return;
+        this.pendingSkill = slot;
+        this.pendingAim = { ...aim, position: { ...aim.position } };
+        this.movePath = [];
+        this.attackTarget = null;
+        this.pickupTarget = null;
+        this.pendingNpc = null;
+        this.pendingObject = null;
+        this.pendingPortal = false;
+        return;
+      }
+      this.performCast(slot, aim);
+      return;
+    }
+    if (aim?.mode === 'DIRECTION') {
+      if (skill.kind !== 'dash' || !Number.isFinite(aim.direction.x)
+        || !Number.isFinite(aim.direction.y)
+        || Math.hypot(aim.direction.x, aim.direction.y) < 0.5) return;
+      this.performCast(slot, aim);
+      return;
+    }
+    if (aim?.mode === 'TARGET_ENTITY') {
+      const target = this.units.find(unit => unit.actor.alive && unit.actor.id === aim.targetId);
+      if (!target) return;
+      this.selectedTargetId = target.actor.id;
+    }
+    this.pendingAim = null;
     if (skill.target === 'self') {
       this.performCast(slot);
       return;
@@ -359,6 +452,7 @@ export class GameSimulation {
     this.attackTarget = null;
     this.pickupTarget = null;
     this.pendingNpc = null;
+    this.pendingObject = null;
     this.pendingPortal = false;
     if (distance(this.player, this.enemy) > skill.range) {
       if (!this.holdPosition) this.pendingSkill = slot;
@@ -368,27 +462,106 @@ export class GameSimulation {
   }
 
   private applyEffect(target: 'enemy' | 'player', effect: ActiveEffect, unit = this.focusedUnit): void {
-    const list = target === 'enemy' ? unit.effects : this.effects.player;
-    const existing = list.find(active => active.id === effect.id);
-    if (existing) {
-      existing.remaining = Math.max(existing.remaining, effect.remaining);
-      existing.magnitude = Math.max(existing.magnitude, effect.magnitude);
-      existing.tick = 0;
-    } else list.push(effect);
+    if (target === 'player') this.effects.player = applyOrRefreshEffect(this.effects.player, effect);
+    else unit.effects = applyOrRefreshEffect(unit.effects, effect);
   }
+
+  private enemyResistance(unit: EnemyUnit, type: DamageType): number {
+    if (unit.actor.type === 'wraith' && type === 'shadow') return 35;
+    if (unit.actor.type === 'wolf' && type === 'poison') return 30;
+    if (unit.actor.type === 'crypt_lord' && type === 'shadow') return 20;
+    return 0;
+  }
+
+  private publishDamage(sourceId: string, targetId: string,
+    damageType: DamageType, result: DamageResult): void {
+    this.events.push({
+      type: 'damageResolved', sourceId, targetId, damageType,
+      damage: result.damage, absorbed: result.absorbed,
+      critical: result.critical, dodged: result.dodged, blocked: result.blocked
+    });
+  }
+
+  private resolveEnemyDamage(base: number, unit: EnemyUnit, type: DamageType,
+    sourceId: string, multiplier = 1, critChance = 0): number {
+    if (!unit.actor.alive) return 0;
+    const result = resolveTypedDamage({
+      type, base, multiplier, critChance,
+      defenderArmor: 10 + this.level * 3, defenderLevel: this.level,
+      resistancePercent: this.enemyResistance(unit, type)
+    }, this.rng);
+    this.publishDamage(sourceId, unit.actor.id, type, result);
+    return this.hitEnemy(result.damage, unit);
+  }
+
   private applyDamage(power: number, unit = this.focusedUnit, type: DamageType = 'physical'): number {
     if (!unit.actor.alive) return 0;
     const stats = deriveStats(this.classId, this.equipment);
     const rolled = stats.damageMin + this.rng.next() * (stats.damageMax - stats.damageMin);
     const primary = ['MAGE', 'NECROMANCER', 'WARLOCK'].includes(this.classId)
       ? stats.intelligence : stats.strength;
+    return this.resolveEnemyDamage(
+      rolled, unit, type, 'hero',
+      (1 + primary * 0.035) * Math.max(0, power), stats.critChance
+    );
+  }
+
+  private dealPlayerDamage(base: number, type: DamageType, sourceId: string): boolean {
+    if (!this.player.alive) return false;
+    const stats = deriveStats(this.classId, this.equipment);
+    const resistance = type === 'fire' ? stats.fireResist
+      : type === 'frost' ? stats.frostResist
+      : type === 'lightning' ? stats.lightningResist
+      : type === 'poison' ? stats.poisonResist
+      : type === 'shadow' ? stats.shadowResist
+      : type === 'holy' ? stats.holyResist : 0;
     const result = resolveTypedDamage({
-      type, base: rolled,
-      multiplier: (1 + primary * 0.035) * Math.max(0, power),
-      critChance: stats.critChance, critMultiplier: 1.7,
-      defenderArmor: 10 + this.level * 3, defenderLevel: this.level
+      type, base, defenderArmor: stats.armor, defenderLevel: this.level,
+      resistancePercent: resistance, dodgeChance: stats.dodgeChance,
+      blockChance: stats.blockChance, shield: this.shield
     }, this.rng);
-    return this.hitEnemy(result.damage, unit);
+    this.shield = result.shieldRemaining;
+    this.publishDamage(sourceId, this.player.id, type, result);
+    if (result.damage > 0) this.hitPlayer(result.damage);
+    return result.damage > 0;
+  }
+
+  private fireBolt(source: EnemyUnit, target: Point, radius: number, base: number): void {
+    const shot: ProjectileSnapshot = {
+      id: 'projectile-' + (++this.nextProjectileId),
+      sourceId: source.actor.id, x: source.actor.x, y: source.actor.y,
+      target: { ...target }, type: 'shadow',
+      speed: 560, radius, remaining: 2.5, base
+    };
+    this.projectiles.push(shot);
+    this.events.push({ type: 'projectileLaunch', id: shot.id, sourceId: shot.sourceId });
+  }
+
+  private tickProjectiles(dt: number): void {
+    const remaining: ProjectileSnapshot[] = [];
+    for (const shot of this.projectiles) {
+      const length = distance(shot, shot.target);
+      const travel = Math.min(length, shot.speed * dt);
+      if (length > 0.001) {
+        shot.x += (shot.target.x - shot.x) / length * travel;
+        shot.y += (shot.target.y - shot.y) / length * travel;
+      }
+      shot.remaining -= dt;
+      const blocked = !canOccupy(shot, 3, this.world.obstacles);
+      const landed = distance(shot, shot.target) < 3;
+      if (!blocked && !landed && shot.remaining > 0) {
+        remaining.push(shot);
+        continue;
+      }
+      const sanctuary = this.zone === 'wilderness'
+        && distance(this.player, this.world.camp) <= CAMP_RADIUS;
+      const hit = !blocked && landed && !sanctuary
+        && distance(this.player, shot.target) <= shot.radius
+        && this.dealPlayerDamage(shot.base, shot.type, shot.sourceId);
+      this.events.push({ type: 'projectileImpact', id: shot.id, hit: Boolean(hit) });
+      this.events.push({ type: 'enemyAttack', enemyId: shot.sourceId, hit: Boolean(hit) });
+    }
+    this.projectiles = remaining;
   }
 
   private skillDamageType(slot: SkillSlot): DamageType {
@@ -410,24 +583,48 @@ export class GameSimulation {
     if (unit.actor.health === 0) this.defeatEnemy(unit);
     return dealt;
   }
-  private performCast(slot: SkillSlot): void {
+  private performCast(slot: SkillSlot, aim?: SkillAim): void {
     const skill = SKILLS[this.classId][slot];
     const unit = this.focusedUnit;
     if (this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
-    if (skill.target === 'enemy'
+    const aimed = aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA' || aim?.mode === 'DIRECTION';
+    if (skill.target === 'enemy' && !aimed
       && (!unit.actor.alive || distance(this.player, unit.actor) > skill.range + 0.5)) return;
     this.resource = Math.max(0, this.resource - skill.cost);
     this.cooldowns[slot] = skill.cooldown;
     this.pendingSkill = null;
-    const point = skill.target === 'enemy' ? unit.actor : this.player;
+    this.pendingAim = null;
+    const point = (aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA')
+      ? aim.position : skill.target === 'enemy' ? unit.actor : this.player;
     this.events.push({ type: 'cast', skillId: skill.id, x: point.x, y: point.y });
 
-    if (skill.kind === 'dash' && unit.actor.alive) {
+    if (skill.kind === 'dash' && aim?.mode === 'DIRECTION') {
+      const length = Math.hypot(aim.direction.x, aim.direction.y);
+      const dx = aim.direction.x / length, dy = aim.direction.y / length;
+      moveActor(this.player, {
+        x: this.player.x + dx * Math.min(skill.range, 170),
+        y: this.player.y + dy * Math.min(skill.range, 170)
+      }, Math.min(skill.range, 170), ACTOR_RADIUS, this.world.obstacles);
+    } else if (skill.kind === 'dash' && unit.actor.alive) {
       this.follow(this.player, unit.actor, skill.range, 1, 56);
     }
-    if (skill.kind === 'strike' || skill.kind === 'dash'
+    if (skill.id === 'fireball' && aim?.mode === 'GROUND_POSITION') {
+      for (const target of [...this.aliveEnemies]) {
+        if (distance(aim.position, target.actor) > (skill.impactRadius ?? 66)) continue;
+        this.applyDamage(skill.power, target, 'fire');
+        if (target.actor.alive && skill.duration) {
+          this.applyEffect('enemy', {
+            id: 'burning', remaining: skill.duration,
+            magnitude: Math.max(3, Math.round(2 + deriveStats(this.classId, this.equipment).intelligence * 0.25)),
+            tick: 0
+          }, target);
+        }
+      }
+    } else if (skill.kind === 'strike' || skill.kind === 'dash'
       || skill.kind === 'dot' || skill.kind === 'drain') {
-      const damage = this.applyDamage(skill.power, unit, this.skillDamageType(slot));
+      const damage = unit.actor.alive && (aim?.mode !== 'DIRECTION'
+        || distance(this.player, unit.actor) <= 75)
+        ? this.applyDamage(skill.power, unit, this.skillDamageType(slot)) : 0;
       if (skill.kind === 'drain' && this.player.alive) {
         this.player.health = resolveHealing(this.player.health, this.player.maxHealth, Math.ceil(damage * 0.65)).health;
       }
@@ -440,7 +637,8 @@ export class GameSimulation {
       }
     } else if (skill.kind === 'nova') {
       for (const target of [...this.aliveEnemies]) {
-        if (distance(this.player, target.actor) > skill.range) continue;
+        const center = aim?.mode === 'AREA' ? aim.position : this.player;
+        if (distance(center, target.actor) > (skill.impactRadius ?? skill.range)) continue;
         this.applyDamage(skill.power, target, this.skillDamageType(slot));
         if (target.actor.alive && skill.effect && skill.duration) {
           this.applyEffect('enemy',
@@ -448,6 +646,9 @@ export class GameSimulation {
         }
       }
     } else if ((skill.kind === 'aura' || skill.kind === 'summon') && skill.effect && skill.duration) {
+      if (skill.id === 'consecration') {
+        this.shield = Math.max(this.shield, Math.round(this.player.maxHealth * 0.25));
+      }
       this.applyEffect('player',
         { id: skill.effect, remaining: skill.duration, magnitude: skill.power, tick: 0 });
     }
@@ -461,6 +662,7 @@ export class GameSimulation {
     if (this.player.health === 0) {
       this.player.alive = false;
       this.pendingSkill = null;
+      this.pendingAim = null;
       this.pendingNpc = null;
       this.movePath = [];
       this.attackTarget = null;
@@ -477,7 +679,8 @@ export class GameSimulation {
         if ((effect.id === 'burning' || effect.id === 'poisoned') && unit.actor.alive) {
           while (effect.tick >= 1 && unit.actor.alive) {
             effect.tick -= 1;
-            this.hitEnemy(effect.magnitude, unit);
+            this.resolveEnemyDamage(effect.magnitude, unit,
+              effect.id === 'poisoned' ? 'poison' : 'fire', 'status-' + effect.id);
           }
         }
       }
@@ -501,7 +704,8 @@ export class GameSimulation {
             .find(unit => distance(this.player, unit.actor) <= 280);
           if (target) this.applyDamage(effect.magnitude, target);
         } else if (effect.id === 'poisoned' || effect.id === 'burning') {
-          this.hitPlayer(effect.magnitude);
+          this.dealPlayerDamage(effect.magnitude,
+            effect.id === 'poisoned' ? 'poison' : 'fire', 'status-' + effect.id);
         }
       }
     }
@@ -538,24 +742,18 @@ export class GameSimulation {
           actor.y = intent.y;
         }
       }
-      let hit = false;
-      if (distance(this.player, intent) <= intent.radius) {
-        const stats = deriveStats(this.classId, this.equipment);
-        const result = resolveTypedDamage({
-          type: 'physical', base: def.baseDamage + this.level * 2,
-          defenderArmor: stats.armor, defenderLevel: this.level,
-          dodgeChance: stats.dodgeChance, blockChance: stats.blockChance
-        }, this.rng);
-        if (result.damage > 0) {
-          hit = true;
-          this.hitPlayer(result.damage);
-        }
-        if (hit && intent.pattern === 'leap' && this.player.alive) {
-          this.applyEffect('player',
-            { id: 'poisoned', remaining: 3, magnitude: 3, tick: 0 });
-        }
+      if (intent.pattern === 'bolt') {
+        this.fireBolt(unit, intent, intent.radius, def.baseDamage + this.level * 2);
+        return;
       }
-      this.events.push({ type: 'enemyAttack', enemyId: actor.id, hit });
+      const hit = distance(this.player, intent) <= intent.radius
+        && this.dealPlayerDamage(def.baseDamage + this.level * 2,
+          intent.pattern === 'leap' ? 'poison' : 'physical', actor.id);
+      if (hit && intent.pattern === 'leap' && this.player.alive) {
+        this.applyEffect('player',
+          { id: 'poisoned', remaining: 3, magnitude: 3, tick: 0 });
+      }
+      this.events.push({ type: 'enemyAttack', enemyId: actor.id, hit: Boolean(hit) });
       return;
     }
 
@@ -607,6 +805,13 @@ export class GameSimulation {
     this.player.y = destination === 'crypt' ? CRYPT_EXIT.y : CAMP.y;
     this.dungeonStage = 0;
     this.dungeonCleared = false;
+    this.shield = 0;
+    this.projectiles = [];
+    this.nextProjectileId = 0;
+    this.movementSpeed = 0;
+    this.healthRegenCarry = 0;
+    this.usedObjects.clear();
+    this.pendingObject = null;
     this.wave = 0;
     this.units = destination === 'crypt'
       ? createCryptPack(0, this.level, this.world.encounterPositions)
@@ -623,6 +828,7 @@ export class GameSimulation {
     this.attackTarget = null;
     this.pickupTarget = null;
     this.pendingSkill = null;
+    this.pendingAim = null;
     this.pendingNpc = null;
     this.pendingPortal = false;
     this.selectedTargetId = null;
@@ -646,6 +852,15 @@ export class GameSimulation {
       this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
     }
     this.tickEffects(dt);
+    if (this.player.alive) {
+      const regen = regenerateHealth(
+        this.player.health, this.player.maxHealth,
+        deriveStats(this.classId, this.equipment).healthRegen, dt, this.healthRegenCarry
+      );
+      this.player.health = regen.health;
+      this.healthRegenCarry = regen.carry;
+    }
+    this.tickProjectiles(dt);
     if (this.aliveEnemies.length === 0 && !this.dungeonCleared) {
       if (this.zone === 'wilderness') {
         this.respawnTimer -= dt;
@@ -689,9 +904,21 @@ export class GameSimulation {
       } else {
         this.follow(this.player, NPC_POSITIONS[this.pendingNpc], speed, dt, NPC_INTERACT_RANGE - 10);
       }
-    } else if (this.pendingSkill && focus.actor.alive) {
+    } else if (this.pendingObject) {
+      const object = getWorldObject(this.pendingObject, this.zone);
+      if (!object) this.pendingObject = null;
+      else if (distance(this.player, object.position) <= object.reach) this.tryInteractObject();
+      else this.follow(this.player, object.position, speed, dt, object.reach - 10);
+    } else if (this.pendingSkill && (focus.actor.alive || this.pendingAim !== null)) {
       const skill = SKILLS[this.classId][this.pendingSkill];
-      if (distance(this.player, focus.actor) > skill.range) {
+      const aim = this.pendingAim;
+      if (aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA') {
+        if (distance(this.player, aim.position) > skill.range) {
+          if (!this.holdPosition) {
+            this.follow(this.player, aim.position, speed, dt, Math.max(0, skill.range - 4));
+          }
+        } else this.performCast(this.pendingSkill, aim);
+      } else if (distance(this.player, focus.actor) > skill.range) {
         if (!this.holdPosition) {
           this.follow(this.player, focus.actor, speed, dt, Math.max(0, skill.range - 4));
         }
@@ -703,7 +930,7 @@ export class GameSimulation {
         if (!this.holdPosition) {
           this.follow(this.player, target.actor, speed, dt, definition.attackRange - 4);
         }
-      } else if (this.attackTimer <= 0) {
+      } else if (this.attackTimer <= 0 && !this.effects.player.some(e => e.id === 'stunned')) {
         const stats = deriveStats(this.classId, this.equipment);
         this.attackTimer = 0.68 / stats.attackSpeed;
         this.applyDamage(1, target);
@@ -752,6 +979,7 @@ export class GameSimulation {
     if (this.selectedTargetId === unit.actor.id) {
       this.selectedTargetId = null;
       this.pendingSkill = null;
+      this.pendingAim = null;
     }
     this.kills++;
     this.gold += 12 + this.level * 3;
@@ -844,7 +1072,8 @@ export class GameSimulation {
     const focus = this.focusedUnit;
     const status = this.paused ? 'paused' : !this.player.alive ? 'dead'
       : this.attackTarget || this.pendingSkill ? 'combat'
-      : this.movePath.length || this.pickupTarget ? 'moving' : 'ready';
+      : this.movePath.length || this.pickupTarget || this.pendingObject
+        || this.pendingNpc || this.pendingPortal ? 'moving' : 'ready';
     return {
       version: 5,
       worldSeed: this.world.seed,
@@ -860,6 +1089,11 @@ export class GameSimulation {
       selectedTargetId: this.selectedTargetId,
       wave: this.wave,
       respawnTimer: this.respawnTimer,
+      shield: this.shield,
+      projectiles: this.projectiles.map(p => ({ ...p, target: { ...p.target } })),
+      usedInteractables: [...this.usedObjects],
+      interactables: worldObjectsFor(this.zone).filter(o => !this.usedObjects.has(o.id)),
+      moveDestination: this.movePath.length ? { ...this.movePath[this.movePath.length - 1]! } : null,
       holdPosition: this.holdPosition,
       evadeCooldown: this.evadeCooldown,
       kills: this.kills,
@@ -910,6 +1144,23 @@ export class GameSimulation {
       || !Number.isInteger(s.rngState) || s.rngState < 0 || s.rngState > 0xffffffff
       || !Number.isFinite(s.resource) || s.resource < 0 || s.resource > CLASSES[s.classId].resourceMax
       || !Number.isFinite(s.respawnTimer) || s.respawnTimer < 0 || s.respawnTimer > 5
+      || !Number.isFinite(s.shield) || s.shield < 0 || s.shield > 100000
+      || !Array.isArray(s.projectiles) || s.projectiles.length > 80
+      || !s.projectiles.every(p => !!p && typeof p.id === 'string'
+        && typeof p.sourceId === 'string' && !!p.target
+        && [p.x, p.y, p.target.x, p.target.y, p.speed, p.radius, p.remaining, p.base].every(Number.isFinite)
+        && p.speed > 0 && p.remaining > 0 && p.remaining <= 5
+        && p.radius > 0 && p.radius <= 250 && p.base >= 0
+        && ['physical', 'fire', 'frost', 'lightning', 'poison', 'holy', 'shadow', 'arcane'].includes(p.type))
+      || !Array.isArray(s.usedInteractables) || s.usedInteractables.length > 8
+      || !s.usedInteractables.every(isWorldObjectId)
+      || new Set(s.usedInteractables).size !== s.usedInteractables.length
+      || !Array.isArray(s.interactables)
+      || s.interactables.some(o => !o || !getWorldObject(o.id, s.zone))
+      || JSON.stringify(s.interactables) !== JSON.stringify(
+        worldObjectsFor(s.zone).filter(o => !s.usedInteractables.includes(o.id)))
+      || (s.moveDestination !== null && (!s.moveDestination
+        || !Number.isFinite(s.moveDestination.x) || !Number.isFinite(s.moveDestination.y)))
       || typeof s.holdPosition !== 'boolean'
       || !Number.isFinite(s.evadeCooldown) || s.evadeCooldown < 0 || s.evadeCooldown > 2.5
       || !s.cooldowns || !(['rmb', 'slot1'] as const).every(slot =>
@@ -959,6 +1210,12 @@ export class GameSimulation {
     this.respawnTimer = s.respawnTimer;
     this.holdPosition = s.holdPosition;
     this.evadeCooldown = s.evadeCooldown;
+    this.shield = s.shield;
+    this.projectiles = s.projectiles.map(p => ({ ...p, target: { ...p.target } }));
+    this.nextProjectileId = this.projectiles.reduce((max, p) =>
+      Math.max(max, Number(p.id.replace('projectile-', '')) || 0), 0);
+    this.usedObjects = new Set(s.usedInteractables);
+    this.pendingObject = null;
     this.kills = s.kills;
     this.level = s.level;
     this.xp = s.xp;
@@ -971,11 +1228,14 @@ export class GameSimulation {
     this.movePath = [];
     this.attackTarget = null;
     this.pendingSkill = null;
+    this.pendingAim = null;
     this.pendingNpc = null;
     this.pendingPortal = false;
     this.pickupTarget = null;
     this.attackTimer = 0;
     this.accumulator = 0;
+    this.movementSpeed = 0;
+    this.healthRegenCarry = 0;
     this.refreshHealthLimit();
     return true;
   }
@@ -985,6 +1245,13 @@ export class GameSimulation {
     this.dungeonStage = 0;
     this.dungeonCleared = false;
     this.pendingPortal = false;
+    this.pendingObject = null;
+    this.usedObjects.clear();
+    this.shield = 0;
+    this.projectiles = [];
+    this.nextProjectileId = 0;
+    this.movementSpeed = 0;
+    this.healthRegenCarry = 0;
     this.world = generateWorld(seed);
     this.classId = classId;
     this.equipment = createEquipment();
@@ -997,6 +1264,7 @@ export class GameSimulation {
     this.units = createPack(0, 1, this.world.encounterPositions);
     this.selectedTargetId = null;
     this.pendingSkill = null;
+    this.pendingAim = null;
     this.player = spawnPlayer(classId, this.equipment, this.world.camp);
     this.groundLoot = [];
     this.movePath = [];
