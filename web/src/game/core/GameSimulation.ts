@@ -2,6 +2,11 @@ import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnap
 import { spawnPlayer, updateHealthLimit, advanceResource, regenerateHealth } from '../entities/player';
 import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
 import { applyOrRefreshEffect } from '../status/effectStack';
+import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../skills/warriorKit';
+import { canActivateWarriorSkill, spendAndStartCooldown, advanceWarriorCooldowns, applyWarriorRageDelta, type WarriorActivationRequest } from '../skills/warriorEconomy';
+import { startCombatTimeline, advanceCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
+import { STATUS_DEFINITIONS, type StatusId } from '../status/statusDefinitions';
+import { applyStatus, advanceStatuses, getStatusModifiers, type StatusInstance, type StatusRule } from '../status/statusRuntime';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
 import { resolveTypedDamage, resolveHealing, type DamageType, type DamageResult } from '../combat/typedDamage';
 import type { SkillAim } from '../input/skillAiming';
@@ -74,6 +79,10 @@ export class GameSimulation {
   private inventory: Array<Item | null> = Array(INVENTORY_SIZE).fill(null);
   private rng = new SeededRng();
   private cooldowns: Cooldowns = emptyCooldowns();
+  private warriorCooldowns: Partial<Record<WarriorAbilityId, number>> = {};
+  private warriorPending: { id: WarriorAbilityId; targetId: string | null } | null = null;
+  private warriorAction: { id: WarriorAbilityId; targetId: string | null; timeline: CombatTimelineState; hitCount: number } | null = null;
+  private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
   private effects: ActiveEffects = emptyEffects();
   private world: WorldLayout = generateWorld(0);
   private zone: ZoneId = 'wilderness';
@@ -175,6 +184,8 @@ export class GameSimulation {
       moveActor(this.player, goal, 115, ACTOR_RADIUS, this.world.obstacles);
       if (distance(before, this.player) < 1) return;
       this.evadeCooldown = 2.5;
+      this.warriorPending = null;
+      this.warriorAction = null;
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
@@ -260,6 +271,13 @@ export class GameSimulation {
       }
       return;
     }
+    if (command.type === 'warriorAbility') {
+      if (this.classId !== 'WARRIOR' || !getWarriorAbility(command.id)) return;
+      const unit = command.targetId === undefined ? this.focusedUnit
+        : this.units.find(u => u.actor.alive && u.actor.id === command.targetId);
+      this.requestWarriorAbility(command.id, unit?.actor.id ?? null);
+      return;
+    }
     if (command.type === 'cast') {
       if (!isSkillSlot(command.slot)) return;
       if (command.targetId !== undefined) {
@@ -279,6 +297,8 @@ export class GameSimulation {
         this.player, command.destination, ACTOR_RADIUS, this.world.obstacles
       );
       if (!target) return;
+      this.warriorPending = null;
+      this.warriorAction = null;
       const route = findPath(this.player, target, ACTOR_RADIUS, this.world.obstacles);
       if (!route.length) return;
       this.movePath = route;
@@ -293,6 +313,8 @@ export class GameSimulation {
       const selected = this.units.find(unit => unit.actor.id === command.targetId && unit.actor.alive);
       if (!selected) return;
       this.selectedTargetId = selected.actor.id;
+      this.warriorPending = null;
+      this.warriorAction = null;
       this.attackTarget = selected.actor.id;
       this.movePath = [];
       this.pickupTarget = null;
@@ -592,6 +614,7 @@ export class GameSimulation {
       && (!unit.actor.alive || distance(this.player, unit.actor) > skill.range + 0.5)) return;
     this.resource = Math.max(0, this.resource - skill.cost);
     this.cooldowns[slot] = skill.cooldown;
+    if (this.classId === 'WARRIOR') this.warriorCooldowns[skill.id as WarriorAbilityId] = skill.cooldown;
     this.pendingSkill = null;
     this.pendingAim = null;
     const point = (aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA')
@@ -661,6 +684,8 @@ export class GameSimulation {
     this.events.push({ type: 'hit', targetId: this.player.id, damage: applied });
     if (this.player.health === 0) {
       this.player.alive = false;
+      this.warriorPending = null;
+      this.warriorAction = null;
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
