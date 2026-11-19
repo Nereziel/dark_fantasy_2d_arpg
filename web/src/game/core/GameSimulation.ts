@@ -264,6 +264,8 @@ export class GameSimulation {
     }
     if (!this.player.alive || this.paused) return;
     if (command.type === 'interactObject') {
+      this.warriorAction = null;
+      this.warriorPending = null;
       const object = getWorldObject(command.id, this.zone);
       if (!object || this.usedObjects.has(object.id)) return;
       this.movePath = [];
@@ -278,6 +280,8 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'usePortal') {
+      this.warriorAction = null;
+      this.warriorPending = null;
       this.movePath = [];
       this.attackTarget = null;
       this.pickupTarget = null;
@@ -290,6 +294,8 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'interactNpc') {
+      this.warriorAction = null;
+      this.warriorPending = null;
       if (this.zone !== 'wilderness' || !isNpcId(command.npcId)) return;
       this.movePath = [];
       this.attackTarget = null;
@@ -645,6 +651,7 @@ export class GameSimulation {
   }
 
   private requestCast(slot: SkillSlot, aim?: SkillAim): void {
+    if (this.warriorAction) return;
     const skill = SKILLS[this.classId][slot];
     if (skill.kind === 'dash' && this.holdPosition) return;
     if (this.effects.player.some(e => e.id === 'stunned')
@@ -827,6 +834,7 @@ export class GameSimulation {
     return dealt;
   }
   private performCast(slot: SkillSlot, aim?: SkillAim): void {
+    if (this.warriorAction) return;
     const skill = SKILLS[this.classId][slot];
     const unit = this.focusedUnit;
     if (this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
