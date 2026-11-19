@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { createPack, packTypesForWave } from '../../src/game/enemies/enemies';
 import { generateWorld } from '../../src/game/world/generator';
+import { applyStatus } from '../../src/game/status/statusRuntime';
 
 const frame = 1000 / 60;
 const advance = (sim: GameSimulation, ticks: number) => {
@@ -113,6 +114,40 @@ describe('Wave B integrated Warrior abilities and status engine', () => {
     expect(afterLegacy.resource).toBe(afterStart.resource);
     expect(afterLegacy.cooldowns.rmb).toBe(0);
     expect(afterLegacy.enemies[1]!.actor.health).toBe(afterStart.enemies[1]!.actor.health);
+  });
+
+  it('cancels an unfinished Warrior hit after stun instead of applying delayed damage', () => {
+    const sim = warriorNearSkeleton();
+    const target = sim.snapshot().enemies[1]!.actor;
+    sim.command({ type: 'warriorAbility', id: 'execute', targetId: target.id });
+    advance(sim, 8);
+    const mid = sim.snapshot();
+    expect(mid.warriorAction?.id).toBe('execute');
+    expect(mid.enemies[1]!.actor.health).toBe(target.health);
+    const stunned = { id: 'stunned' as const, remaining: 2, magnitude: 0, tick: 0 };
+    expect(sim.restore({
+      ...mid, effects: { ...mid.effects, player: [stunned] }
+    })).toBe(true);
+    advance(sim, 40);
+    expect(sim.snapshot().warriorAction).toBeNull();
+    expect(sim.snapshot().enemies[1]!.actor.health).toBe(target.health);
+    expect(sim.drainEvents().some(event => event.type === 'warriorImpact' && event.id === 'execute')).toBe(false);
+  });
+
+  it('prevents silenced Warrior buff casts without spending Rage or starting cooldown', () => {
+    const sim = new GameSimulation();
+    const original = sim.snapshot();
+    const statuses = applyStatus([], {
+      id: 'silenced', duration: 3, magnitude: 1, stacking: 'replace'
+    }, 'enemy');
+    expect(sim.restore({
+      ...original, statusEffects: { player: statuses, enemies: {} }
+    })).toBe(true);
+    const before = sim.snapshot();
+    sim.command({ type: 'warriorAbility', id: 'warCry' });
+    expect(sim.snapshot().warriorAction).toBeNull();
+    expect(sim.snapshot().resource).toBe(before.resource);
+    expect(sim.snapshot().warriorCooldowns?.warCry ?? 0).toBe(0);
   });
 
   it('rejects malformed new statuses without changing the existing simulation', () => {
