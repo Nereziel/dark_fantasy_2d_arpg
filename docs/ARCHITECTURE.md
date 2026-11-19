@@ -8,7 +8,7 @@ The site at `https://nereziel.github.io/dark_fantasy_2d_arpg/` now deploys **`we
 - **Phaser 4.2.1:** world canvas, camera, input picking, actor proxies, procedurally drawn test environment, loot graphics, three simultaneous enemy silhouettes, individual health/status overlays, selected-target indicators and ground attack telegraphs.
 - **Strict TypeScript simulation:** authoritative positions, movement, basic attacks, 12 first active class skills, cooldown/resource validation, status effects, three simultaneous data-driven enemy archetypes with individual AI, dodgeable attack windups, deterministic combat damage, XP/levels, loot, gold, inventory/equipment and events.
 - **`svelte-i18n`:** Czech and English dictionaries, changed without reloading the game.
-- **IndexedDB:** current web game snapshots (v5), including active effects, cooldowns, three enemy units, individually pending telegraphs, selected target and encounter wave. Previous web demo and original HTML-game save versions are **not supported or migrated**.
+- **IndexedDB:** character-only save records (format v6) containing class, level, XP, gold, cumulative kills, inventory and equipment. Enemy state, active effects, cooldowns, world drops, positions and encounter wave are never persisted; old saves are not migrated.
 - **Vitest and Playwright:** headless domain unit tests, translation key tests and browser smoke tests.
 
 ## Data ownership
@@ -37,7 +37,7 @@ The game simulation owns attack decisions, locked danger zones and damage on fix
 
 `web/src/game/world/navigation.ts` owns fixed obstacle rectangles. Its collision-aware movement prevents tunneling; player click-to-move uses deterministic A* waypoints around obstacles. Enemy steering applies collision and separation so opponents do not occupy exactly the same position. The renderer draws barricades and ruins from the same obstacle definitions.
 
-`GameSnapshot` version 5 is the sole supported save contract. Old saves are rejected gracefully and no import code is maintained.
+`GameSnapshot` version 5 is an **ephemeral, renderer-facing simulation snapshot**, not a save format. `CharacterProgress` is the persistent allowlisted projection. `SaveRepository` writes only `SavedGame` format 6; loading reinitializes a fresh encounter and the hero at the safe start point with full health. Incompatible old save formats are rejected without import. The test wilderness is still a fixed map; full procedural world regeneration is a later milestone.
 
 ## Hosting and CI
 
@@ -53,5 +53,5 @@ The Vite base path is `/dark_fantasy_2d_arpg/`. All bundle and imported asset UR
 - All six classes have two playable starter skills each; the complete original skill trees and advanced balance are not implemented yet.
 - Ground and hero remain procedural placeholder graphics. Replace with coherent spritesheets/tilemaps while preserving core state.
 - Direct movement has no pathfinding around obstacles yet.
-- The current save format intentionally rejects legacy/demo saves rather than migrating them.
+- Saved characters start new game sessions rather than restoring active combat. Save is currently manual; auto-save and complete character progression (quests, talents, unlocked skills) remain future work.
 - Networking is not implemented.

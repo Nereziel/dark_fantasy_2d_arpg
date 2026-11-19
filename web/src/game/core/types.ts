@@ -12,6 +12,20 @@ export interface ActorSnapshot extends Point {
   maxHealth: number;
   alive: boolean;
 }
+/**
+ * Only permanent character progression crosses save boundaries.
+ * Entire world snapshots are temporary and never written to IndexedDB.
+ */
+export interface CharacterProgress {
+  classId: ClassId;
+  level: number;
+  xp: number;
+  gold: number;
+  kills: number;
+  inventory: Array<Item | null>;
+  equipment: Equipment;
+}
+
 export interface GameSnapshot {
   version: 5;
   classId: ClassId;

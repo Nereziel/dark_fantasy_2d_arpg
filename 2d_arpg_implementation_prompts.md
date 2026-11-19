@@ -116,7 +116,7 @@ The repo already includes `dark_fantasy_2d_arpg_engine.html`, `visuals.js`, `vis
 2. Build Svelte/Phaser in **`web/`**, preserving the old root HTML for reference. Deploy a tested `web/dist/` to the main Pages URL as a public development release.
 3. Extract typed content, simulation, stat/combat formulas, seeded RNG, command handling and save DTOs into testable TypeScript modules; preserve balance and IDs.
 4. Migrate scenes, pixel sprites, movement/input and graphical effects incrementally into Phaser. Replace UI panels with Svelte, communicating only through the typed bridge.
-5. Save the new game's current typed snapshots to IndexedDB. **Do not import or migrate old HTML-game saves or early demo saves**; reject incompatible versions gracefully and make a new game available.
+5. Persist an explicit **character-progress DTO**, never a full `GameSnapshot` or current world/combat state. After load, generate a fresh game session with the hero at a safe starting point. Do not import/migrate old HTML or demo saves; reject incompatible versions gracefully.
 6. Incrementally complete a parity slice: town → NPC quest → mouse movement → combat → loot → inventory → save → reload. Pages already deploys `web/dist/`; every additional release must pass quality gates. Keep root legacy HTML as an offline reference.
 
 Never replace working systems with empty Phaser/Svelte placeholders just to satisfy file structure.
@@ -2353,13 +2353,13 @@ Use stable IDs.
 
 Language preference is a **UI/browser setting**, not part of the character/world save. Locale-independent entity/item/quest IDs remain stable when switching `cs`/`en`. Legacy save imports are not required.
 
-Use versioned IndexedDB saves with atomic writes, validation and graceful rejection of incompatible versions. **Do not import old HTML or previous demo saves.** Never serialize Phaser/Svelte objects. Test current-format round trips, invalid-version rejection and storage failures.
+Use versioned IndexedDB **character-only** saves with atomic writes, validation and graceful rejection of incompatible versions. Save class, level, XP, gold, inventory/equipment, and (once implemented) quest flags, learned skills and talents. **Never save current enemy positions/health, active fights, dropped ground loot, cooldowns, temporary buffs/debuffs, world instance, or player map coordinates.** On load start a new fresh world instance and place the hero at a safe hub/spawn point with full health; quest and character progression survives. Do not import old HTML or demo saves. Never serialize Phaser/Svelte objects. Test character-only round trips, rejected old versions and new-session world reset.
 
 Acceptance criteria:
 
 - new game can be saved
-- full game can be closed/reloaded
-- progression restores correctly
+- the game can be closed and reopened into a **fresh world/session**
+- the hero's permanent progression restores correctly; combat, ground drops, cooldowns and enemy state do not
 - corrupted/invalid save fails gracefully
 - version field exists
 

@@ -1,4 +1,4 @@
-import type { ActorSnapshot, GameCommand, GameEvent, GameSnapshot, Point } from './types';
+import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point } from './types';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
 import { rollAttackDamage, mitigateDamage } from '../combat/damage';
 import {
@@ -485,6 +485,55 @@ export class GameSimulation {
     this.groundLoot = this.groundLoot.filter(item => item.id !== loot.id);
     this.pickupTarget = null;
     this.events.push({ type: 'pickup', id: loot.id });
+  }
+
+  /** Persistent character-only projection. No combat, position, wave, seed or drops. */
+  character(): CharacterProgress {
+    return {
+      classId: this.classId,
+      level: this.level,
+      xp: this.xp,
+      gold: this.gold,
+      kills: this.kills,
+      inventory: this.inventory.map(cloneItem),
+      equipment: cloneEquipment(this.equipment)
+    };
+  }
+
+  /**
+   * Start a genuinely fresh game session from a persistent character.
+   * Validate in an isolated simulation first so malformed data cannot mutate
+   * the running game. All world/transient state is reset on every load.
+   */
+  restoreCharacter(progress: CharacterProgress): boolean {
+    if (!progress || !isClassId(progress.classId)) return false;
+
+    const scratch = new GameSimulation();
+    scratch.reset(progress.classId);
+    const baseline = scratch.snapshot();
+    const candidate: GameSnapshot = {
+      ...baseline,
+      level: progress.level,
+      xp: progress.xp,
+      gold: progress.gold,
+      kills: progress.kills,
+      inventory: progress.inventory,
+      equipment: progress.equipment
+    };
+    if (!scratch.restore(candidate)) return false;
+
+    this.reset(progress.classId);
+    this.level = progress.level;
+    this.xp = progress.xp;
+    this.gold = progress.gold;
+    this.kills = progress.kills;
+    this.inventory = progress.inventory.map(cloneItem);
+    this.equipment = cloneEquipment(progress.equipment);
+    this.refreshHealthLimit();
+    this.player.health = this.player.maxHealth;
+    this.units = createPack(0, this.level);
+    this.events.splice(0);
+    return true;
   }
 
   snapshot(): GameSnapshot {

@@ -69,7 +69,7 @@
   async function save(): Promise<void> {
     busy = true;
     try {
-      await saveGame(bridge.snapshot());
+      await saveGame(bridge.character());
       messageKey = 'status.saved';
     } catch {
       messageKey = 'status.saveError';
@@ -80,8 +80,8 @@
   async function load(): Promise<void> {
     busy = true;
     try {
-      const snapshot = await loadGame();
-      if (snapshot && bridge.restore(snapshot)) {
+      const character = await loadGame();
+      if (character && bridge.restoreCharacter(character)) {
         messageKey = 'status.loaded';
         inventoryOpen = false;
         selectedClass = bridge.snapshot().classId;

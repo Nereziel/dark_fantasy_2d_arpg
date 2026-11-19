@@ -1,29 +1,51 @@
 import { GameSimulation } from '../game/core/GameSimulation';
-import type { GameSnapshot } from '../game/core/types';
+import type { CharacterProgress } from '../game/core/types';
 
 const DATABASE = 'aether-ruin-web';
 const STORE = 'saves';
 const SLOT = 'first-character';
 
-/** Saves only the current game format; older demo/HTML saves are intentionally unsupported. */
+/**
+ * Persistent character only. A new session always starts with fresh monsters,
+ * fresh ground loot, full health, zero cooldowns, and no temporary effects.
+ *
+ * Earlier world-snapshot formats are deliberately unsupported.
+ */
 export interface SavedGame {
-  format: 5;
+  format: 6;
   characterId: string;
   savedAt: number;
-  snapshot: GameSnapshot;
+  character: CharacterProgress;
 }
 
-export function validateSnapshot(raw: unknown): GameSnapshot | null {
-  if (!raw || typeof raw !== 'object' || (raw as { version?: unknown }).version !== 5) return null;
+export function validateCharacter(raw: unknown): CharacterProgress | null {
+  if (!raw || typeof raw !== 'object') return null;
   const simulation = new GameSimulation();
-  return simulation.restore(raw as GameSnapshot) ? simulation.snapshot() : null;
+  return simulation.restoreCharacter(raw as CharacterProgress)
+    ? simulation.character() : null;
+}
+
+/** Export only explicitly whitelisted character fields, never a GameSnapshot. */
+export function createSaveRecord(raw: unknown, savedAt = Date.now()): SavedGame | null {
+  const character = validateCharacter(raw);
+  if (!character || !Number.isFinite(savedAt) || savedAt < 0) return null;
+  return { format: 6, characterId: 'hero', savedAt, character };
+}
+
+export function readSaveRecord(raw: unknown): CharacterProgress | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Partial<SavedGame>;
+  if (record.format !== 6 || record.characterId !== 'hero') return null;
+  return validateCharacter(record.character);
 }
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE, 1);
     request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE);
+      if (!request.result.objectStoreNames.contains(STORE)) {
+        request.result.createObjectStore(STORE);
+      }
     };
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
@@ -43,26 +65,22 @@ async function perform<T>(
     transaction.oncomplete = () => { db.close(); resolve(value); };
     try {
       action(transaction.objectStore(STORE), result => { value = result; });
-    } catch (error) { db.close(); reject(error); }
+    } catch (error) {
+      db.close();
+      reject(error);
+    }
   });
 }
 
-export function saveGame(snapshot: GameSnapshot): Promise<void> {
-  const payload: SavedGame = {
-    format: 5,
-    characterId: snapshot.player.id,
-    savedAt: Date.now(),
-    snapshot
-  };
-  return perform<void>('readwrite', store => { store.put(payload, SLOT); });
+export function saveGame(character: CharacterProgress): Promise<void> {
+  const record = createSaveRecord(character);
+  if (!record) return Promise.reject(new Error('Invalid character progression'));
+  return perform<void>('readwrite', store => { store.put(record, SLOT); });
 }
 
-export function loadGame(): Promise<GameSnapshot | null> {
-  return perform<GameSnapshot | null>('readonly', (store, setResult) => {
+export function loadGame(): Promise<CharacterProgress | null> {
+  return perform<CharacterProgress | null>('readonly', (store, setResult) => {
     const request = store.get(SLOT);
-    request.onsuccess = () => {
-      const data = request.result as Partial<SavedGame> | undefined;
-      setResult(data?.format === 5 ? validateSnapshot(data.snapshot) : null);
-    };
+    request.onsuccess = () => { setResult(readSaveRecord(request.result)); };
   });
 }

@@ -1,5 +1,5 @@
 import { GameSimulation } from '../core/GameSimulation';
-import type { GameCommand, GameEvent, GameSnapshot, GameStateReader } from '../core/types';
+import type { CharacterProgress, GameCommand, GameEvent, GameSnapshot, GameStateReader } from '../core/types';
 
 /** UI-facing presentation adapter; game state is owned by the simulation. */
 export class GameBridge implements GameStateReader {
@@ -9,6 +9,12 @@ export class GameBridge implements GameStateReader {
   private notificationClock = 0;
 
   snapshot(): GameSnapshot { return this.simulation.snapshot(); }
+  character(): CharacterProgress { return this.simulation.character(); }
+  restoreCharacter(progress: CharacterProgress): boolean {
+    const restored = this.simulation.restoreCharacter(progress);
+    if (restored) this.emit();
+    return restored;
+  }
 
   subscribe(listener: (state: GameSnapshot) => void): () => void {
     this.listeners.add(listener);

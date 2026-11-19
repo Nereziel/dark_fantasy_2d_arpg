@@ -4,7 +4,7 @@
     "start": "Enter the world",
     "continue": "Continue exploring",
     "new": "New hero",
-    "help": "Choose your hero. Click to move, fight enemies and gather loot.",
+    "help": "Choose your hero. Your character and equipment are saved; enemies and the world restart on your next session.",
     "current": "New version · early development build",
     "language": "Language",
     "back": "Main menu",
@@ -38,10 +38,10 @@
     "combat": "Combat",
     "dead": "Dead",
     "paused": "Paused",
-    "saved": "Game saved",
-    "loaded": "Game loaded",
+    "saved": "Hero saved",
+    "loaded": "Hero loaded — a fresh world awaits",
     "saveError": "Saving is unavailable",
-    "emptySave": "No saved game found"
+    "emptySave": "No compatible saved hero found"
   },
   "controls": {
     "move": "Move: click the ground",

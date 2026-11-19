@@ -43,7 +43,7 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 | `web/src/game/bridge` | Typovaný most mezi simulací a Svelte |
 | `web/src/ui` | Svelte komponenty pro výběr třídy, inventář a HUD |
 | `web/src/i18n` | Překlady `cs` a `en` přes svelte-i18n |
-| `web/src/persistence` | IndexedDB uložení výhradně aktuálního formátu; bez migrace starých pozic |
+| `web/src/persistence` | IndexedDB ukládání pouze trvalých dat postavy (formát v6); bez migrace starých pozic |
 | `web/tests` | Vitest a Playwright |
 
 Z původní hry zůstaly v kořeni `dark_fantasy_2d_arpg_engine.html`, `visuals.js`, `visuals.css` a `index.html` jako **referenční implementace**. Na Pages se již nepoužívají; nedochází tedy k nechtěnému mísení starého a nového enginu.
@@ -69,4 +69,4 @@ Vlastní kód a originální herní assety mají mít GPL-3.0; externí assety s
 
 Kompletní posloupnost 63 implementačních kroků: [`2d_arpg_implementation_prompts.md`](./2d_arpg_implementation_prompts.md).
 
-Současná verze je **v rané fázi převodu**. Původní uložené hry a předchozí vývojové formáty se **nepřevádějí**. Nepodporované pozice je nutné nahradit novou hrou.
+Současná verze je **v rané fázi převodu**. Ukládání nyní funguje po vzoru Diabla: do IndexedDB se zapisují jen **trvalá data hrdiny** (povolání, úroveň, XP, zlato, statistika porážek, inventář a výbava). Po opětovném načtení se postava objeví s plným zdravím v počáteční oblasti; nepřátelé, předměty na zemi, stavové efekty a cooldowny začínají znovu. **Současná mapa je zatím pevně daná**; procedurální generování nových map bude doplněno v další etapě. Ukládání je zatím ruční přes tlačítko „Uložit“. Původní uložené hry a předchozí vývojové formáty se **nepřevádějí**.

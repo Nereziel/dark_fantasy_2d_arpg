@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CLASSES, CLASS_IDS } from '../../src/game/data/classes';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { createEquipment, deriveStats, isItem, rollItem, SeededRng } from '../../src/game/data/items';
-import { validateSnapshot } from '../../src/persistence/SaveRepository';
+import { createSaveRecord, readSaveRecord, validateCharacter } from '../../src/persistence/SaveRepository';
 
 describe('legacy class definitions', () => {
   it('preserves all six primary attributes and class-specific resource caps', () => {
@@ -73,16 +73,25 @@ describe('deterministic legacy-style loot and inventory', () => {
     expect(sim.restore({ ...original, rngState: -1 })).toBe(false);
   });
 
-  it('accepts only the current v5 save format and ignores older snapshots', () => {
+  it('stores only character progression and rejects old world-snapshot saves', () => {
     const sim = new GameSimulation();
-    const current = sim.snapshot();
-    expect(validateSnapshot(current)).toEqual(current);
-    expect(validateSnapshot({ ...current, version: 4 })).toBeNull();
-    expect(validateSnapshot({ ...current, version: 3 })).toBeNull();
-    expect(validateSnapshot({ ...current, version: 2 })).toBeNull();
-    expect(validateSnapshot({ ...current, version: 1 })).toBeNull();
-    expect(validateSnapshot({ ...current, enemies: [current.enemies[0]] })).toBeNull();
-    expect(validateSnapshot({ ...current, enemies: current.enemies.map((unit, i) => i === 0 ? { ...unit, actor: { ...unit.actor, type: 'invalid' } } : unit) })).toBeNull();
-    expect(validateSnapshot({ ...current, enemies: current.enemies.map((unit, i) => i === 0 ? { ...unit, effects: [{ id: 'burning', remaining: -5, magnitude: 4, tick: 0 }] } : unit) })).toBeNull();
+    const hero = sim.character();
+    const record = createSaveRecord(hero, 1234)!;
+
+    expect(record).not.toBeNull();
+    expect(record.format).toBe(6);
+    expect(record.savedAt).toBe(1234);
+    expect(Object.keys(record.character).sort()).toEqual([
+      'classId', 'equipment', 'gold', 'inventory', 'kills', 'level', 'xp'
+    ].sort());
+    expect('enemies' in record.character).toBe(false);
+    expect('effects' in record.character).toBe(false);
+    expect('player' in record.character).toBe(false);
+    expect('world' in record.character).toBe(false);
+    expect(readSaveRecord(record)).toEqual(hero);
+    expect(validateCharacter({ ...hero, inventory: [null] })).toBeNull();
+    expect(readSaveRecord({ ...record, format: 5, snapshot: sim.snapshot() })).toBeNull();
+    expect(readSaveRecord({ ...record, character: { ...hero, gold: -15 } })).toBeNull();
+    expect(readSaveRecord({ ...record, characterId: 'wrong' })).toBeNull();
   });
 });

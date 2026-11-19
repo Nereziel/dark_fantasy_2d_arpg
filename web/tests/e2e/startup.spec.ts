@@ -25,7 +25,7 @@ test('switches Czech/English in the menu and game without losing the scene', asy
   await expect(page.locator('.game-hud')).toBeVisible();
 
   await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByRole('status')).toContainText('Game saved');
+  await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await expect(page.locator('#menu-language')).toHaveValue('en');
 });
@@ -46,7 +46,7 @@ test('creates a Rogue, opens localized inventory, saves and reloads its class', 
   await expect(page.getByRole('dialog', { name: 'Inventář a výbava' })).toBeVisible();
   await page.getByRole('button', { name: 'Zavřít' }).click();
   await page.getByRole('button', { name: 'Uložit' }).click();
-  await expect(page.getByRole('status')).toContainText('Hra uložena');
+  await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
   await expect(page.locator('#menu-language')).toHaveValue('cs');
   await page.getByRole('button', { name: 'Načíst' }).click();
@@ -67,9 +67,11 @@ test('casts a Paladin ability and localizes effects without restarting the game'
   await expect(page.getByRole('button', { name: 'Posvěcená půda' })).toBeDisabled();
   await expect(page.locator('.effect-chip.beneficial')).toContainText('Posvěcení');
   await page.getByRole('button', { name: 'Uložit' }).click();
-  await expect(page.getByRole('status')).toContainText('Hra uložena');
+  await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
   await page.getByRole('button', { name: 'Načíst' }).click();
   await expect(page.getByText('Paladin · Úroveň 1')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Posvěcená půda' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Posvěcená půda' })).toBeEnabled();
+  await expect(page.locator('.effect-chip.beneficial')).toHaveCount(0);
+  await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
 });

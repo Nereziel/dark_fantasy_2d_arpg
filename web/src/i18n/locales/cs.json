@@ -4,7 +4,7 @@
     "start": "Vstoupit do světa",
     "continue": "Pokračovat v průzkumu",
     "new": "Nová postava",
-    "help": "Vyber hrdinu. Kliknutím se pohybuj, útoč na nepřátele a sbírej kořist.",
+    "help": "Vyber hrdinu. Ukládá se postava a její vybavení; po opětovném spuštění začíná nová herní relace.",
     "current": "Nová verze · raná vývojová fáze",
     "language": "Jazyk",
     "back": "Zpět do menu",
@@ -38,10 +38,10 @@
     "combat": "Boj",
     "dead": "Smrt",
     "paused": "Pauza",
-    "saved": "Hra uložena",
-    "loaded": "Hra načtena",
+    "saved": "Postava uložena",
+    "loaded": "Postava načtena – začíná nový svět",
     "saveError": "Uložení není dostupné",
-    "emptySave": "Uložená hra nebyla nalezena"
+    "emptySave": "Není uložená žádná kompatibilní postava"
   },
   "controls": {
     "move": "Pohyb: kliknutí na zem",
