@@ -75,3 +75,40 @@ test('casts a Paladin ability and localizes effects without restarting the game'
   await expect(page.locator('.effect-chip.beneficial')).toHaveCount(0);
   await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
 });
+
+test('autosaves only the hero and generates fresh wilderness on reopening', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: /Rogue/ }).click();
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await expect(page.locator('.zone-name')).toHaveText('Emberwatch Camp');
+  const firstSeed = await page.locator('.game-screen').getAttribute('data-world-seed');
+  expect(firstSeed).not.toBeNull();
+  // New character creation triggers a real IndexedDB autosave, no manual button.
+  await expect.poll(async () => page.evaluate(async () => {
+    return await new Promise<number | null>((resolve) => {
+      const open = indexedDB.open('aether-ruin-web', 1);
+      open.onerror = () => resolve(null);
+      open.onsuccess = () => {
+        const db = open.result;
+        const get = db.transaction('saves', 'readonly')
+          .objectStore('saves').get('first-character');
+        get.onerror = () => { db.close(); resolve(null); };
+        get.onsuccess = () => {
+          const record = get.result as { format?: number; character?: { classId?: string } } | undefined;
+          db.close();
+          resolve(record?.format === 6 && record.character?.classId === 'ROGUE' ? 6 : null);
+        };
+      };
+    });
+  })).toBe(6);
+
+  await page.reload();
+  await page.getByRole('button', { name: 'Load' }).click();
+  await expect(page.getByText('Rogue · Level 1')).toBeVisible();
+  await expect(page.locator('.zone-name')).toHaveText('Emberwatch Camp');
+  const secondSeed = await page.locator('.game-screen').getAttribute('data-world-seed');
+  expect(secondSeed).not.toBe(firstSeed);
+  await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
+  await expect(page.locator('.effect-chip')).toHaveCount(0);
+});

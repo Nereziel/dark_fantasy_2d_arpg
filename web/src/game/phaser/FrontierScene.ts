@@ -5,7 +5,7 @@ import { RARITIES } from '../data/items';
 import { SKILLS } from '../skills/skills';
 import type { GameEvent } from '../core/types';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
-import { OBSTACLES } from '../world/navigation';
+import { CAMP_RADIUS, generateWorld } from '../world/generator';
 
 const WIDTH = 2200;
 const HEIGHT = 1400;
@@ -22,6 +22,8 @@ export class FrontierScene extends Phaser.Scene {
   private groundItems!: Phaser.GameObjects.Graphics;
   private statusVisuals!: Phaser.GameObjects.Graphics;
   private telegraph!: Phaser.GameObjects.Graphics;
+  private terrain!: Phaser.GameObjects.Graphics;
+  private renderedSeed: number | null = null;
 
   constructor(bridge: GameBridge) {
     super({ key: 'Frontier' });
@@ -29,7 +31,7 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.paintWorld();
+    this.paintWorld(this.bridge.snapshot().worldSeed);
 
     this.hero = this.add.graphics();
     this.hero.fillStyle(0x131f30).fillCircle(0, 3, 19);
@@ -167,6 +169,7 @@ export class FrontierScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     this.bridge.tick(delta);
     const state = this.bridge.snapshot();
+    if (this.renderedSeed !== state.worldSeed) this.paintWorld(state.worldSeed);
     this.hero.setPosition(state.player.x, state.player.y);
     this.hero.setVisible(state.player.alive);
     const ids = new Set(state.enemies.map(unit => unit.actor.id));
@@ -251,12 +254,16 @@ export class FrontierScene extends Phaser.Scene {
 
   }
 
-  private paintWorld(): void {
-    const ground = this.add.graphics().setDepth(-100);
+  private paintWorld(worldSeed: number): void {
+    const layout = generateWorld(worldSeed);
+    if (!this.terrain) this.terrain = this.add.graphics().setDepth(-100);
+    const ground = this.terrain;
+    ground.clear();
+    this.renderedSeed = worldSeed;
     ground.fillStyle(0x131921).fillRect(0, 0, WIDTH, HEIGHT);
 
     // Deterministic visual variations; cosmetic only, never collision/loot state.
-    let seed = 0x8237ab19;
+    let seed = (worldSeed ^ 0x8237ab19) >>> 0;
     const random = () => {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       return seed / 4294967296;
@@ -272,6 +279,30 @@ export class FrontierScene extends Phaser.Scene {
         }
       }
     }
+
+    // A safe encampment is the hero's spawn and re-entry point.
+    const camp = layout.camp;
+    ground.fillStyle(0x151f22, 0.96).fillCircle(camp.x, camp.y, CAMP_RADIUS);
+    ground.lineStyle(5, 0x8a7956, 0.82)
+      .strokeCircle(camp.x, camp.y, CAMP_RADIUS - 9);
+    ground.lineStyle(2, 0xc9aa73, 0.42)
+      .strokeCircle(camp.x, camp.y, CAMP_RADIUS - 22);
+    // Dark tents, banners and a central brazier. Purely cosmetic.
+    for (const dx of [-105, 110]) {
+      ground.fillStyle(0x111823).fillEllipse(camp.x + dx, camp.y - 82, 69, 18);
+      ground.fillStyle(0x46515a).fillTriangle(
+        camp.x + dx - 33, camp.y - 78,
+        camp.x + dx + 33, camp.y - 78,
+        camp.x + dx, camp.y - 122);
+      ground.lineStyle(3, 0x9b8767, 0.65).lineBetween(
+        camp.x + dx, camp.y - 78, camp.x + dx, camp.y - 122);
+    }
+    ground.fillStyle(0x0b1017).fillCircle(camp.x + 34, camp.y + 65, 24);
+    ground.lineStyle(5, 0x6d5345).strokeCircle(camp.x + 34, camp.y + 65, 21);
+    ground.fillStyle(0xdb793d, 0.92).fillTriangle(
+      camp.x + 21, camp.y + 68, camp.x + 47, camp.y + 68, camp.x + 34, camp.y + 32);
+    ground.fillStyle(0xffd49a, 0.86).fillTriangle(
+      camp.x + 26, camp.y + 64, camp.x + 42, camp.y + 64, camp.x + 34, camp.y + 44);
 
     // A pale trade route leads toward the first encounter.
     ground.fillStyle(0x34352f, 0.7).fillRoundedRect(230, 425, 1080, 160, 60);
@@ -291,7 +322,7 @@ export class FrontierScene extends Phaser.Scene {
     }
 
     // Walkability and visuals share the same authoritative obstacle definitions.
-    for (const wall of OBSTACLES) {
+    for (const wall of layout.obstacles) {
       if (wall.id === 'shrine') continue;
       ground.fillStyle(0x48515a, 0.95)
         .fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 5);

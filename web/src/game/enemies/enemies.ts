@@ -66,11 +66,11 @@ const PACK_POSITIONS: readonly Point[] = [
 ];
 
 /** Three enemies simultaneously; IDs remain unique across successive waves. */
-export function createPack(wave: number, level: number): EnemyUnit[] {
+export function createPack(wave: number, level: number, positions: readonly Point[] = PACK_POSITIONS): EnemyUnit[] {
   const types: readonly EnemyType[] = ['wraith', 'skeleton', 'wolf'];
   return types.map((type, index) => {
     const def = ENEMY_DEFINITIONS[type];
-    const pos = PACK_POSITIONS[index]!;
+    const pos = positions[index]!;
     const hp = def.health + Math.max(0, level - 1) * 12;
     return {
       actor: {

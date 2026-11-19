@@ -15,18 +15,18 @@ const COLS = Math.ceil(WORLD_WIDTH / CELL);
 const ROWS = Math.ceil(WORLD_HEIGHT / CELL);
 const KEY = (x: number, y: number): number => y * COLS + x;
 
-export function canOccupy(point: Point, radius = ACTOR_RADIUS): boolean {
+export function canOccupy(point: Point, radius = ACTOR_RADIUS, obstacles: readonly Obstacle[] = OBSTACLES): boolean {
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false;
   if (point.x < radius || point.y < radius
       || point.x > WORLD_WIDTH - radius || point.y > WORLD_HEIGHT - radius) return false;
-  return !OBSTACLES.some(wall => point.x + radius > wall.x
+  return !obstacles.some(wall => point.x + radius > wall.x
     && point.x - radius < wall.x + wall.width
     && point.y + radius > wall.y
     && point.y - radius < wall.y + wall.height);
 }
 
 /** Collision-aware sliding, stepped so fast moves cannot tunnel through walls. */
-export function moveActor(actor: Point, goal: Point, distance: number, radius = ACTOR_RADIUS): void {
+export function moveActor(actor: Point, goal: Point, distance: number, radius = ACTOR_RADIUS, obstacles: readonly Obstacle[] = OBSTACLES): void {
   if (!(distance > 0) || !Number.isFinite(distance)) return;
   const dx = goal.x - actor.x, dy = goal.y - actor.y;
   const length = Math.hypot(dx, dy);
@@ -36,11 +36,11 @@ export function moveActor(actor: Point, goal: Point, distance: number, radius = 
   const sx = dx / length * total / steps;
   const sy = dy / length * total / steps;
   for (let i = 0; i < steps; i++) {
-    if (canOccupy({ x: actor.x + sx, y: actor.y + sy }, radius)) {
+    if (canOccupy({ x: actor.x + sx, y: actor.y + sy }, radius, obstacles)) {
       actor.x += sx; actor.y += sy;
-    } else if (canOccupy({ x: actor.x + sx, y: actor.y }, radius)) {
+    } else if (canOccupy({ x: actor.x + sx, y: actor.y }, radius, obstacles)) {
       actor.x += sx;
-    } else if (canOccupy({ x: actor.x, y: actor.y + sy }, radius)) {
+    } else if (canOccupy({ x: actor.x, y: actor.y + sy }, radius, obstacles)) {
       actor.y += sy;
     }
   }
@@ -53,20 +53,20 @@ function grid(point: Point): [number, number] {
     Math.max(0, Math.min(ROWS - 1, Math.floor(point.y / CELL)))
   ];
 }
-function lineClear(start: Point, end: Point, radius: number): boolean {
+function lineClear(start: Point, end: Point, radius: number, obstacles: readonly Obstacle[]): boolean {
   const length = Math.hypot(end.x - start.x, end.y - start.y);
   const steps = Math.max(1, Math.ceil(length / 15));
   for (let i = 1; i <= steps; i++) {
     const ratio = i / steps;
-    if (!canOccupy({ x: start.x + (end.x - start.x) * ratio, y: start.y + (end.y - start.y) * ratio }, radius)) return false;
+    if (!canOccupy({ x: start.x + (end.x - start.x) * ratio, y: start.y + (end.y - start.y) * ratio }, radius, obstacles)) return false;
   }
   return true;
 }
 
 /** Bounded, deterministic A* on the static walkability grid. */
-export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS): Point[] {
-  if (!canOccupy(goal, radius)) return [];
-  if (lineClear(from, goal, radius)) return [{ ...goal }];
+export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS, obstacles: readonly Obstacle[] = OBSTACLES): Point[] {
+  if (!canOccupy(goal, radius, obstacles)) return [];
+  if (lineClear(from, goal, radius, obstacles)) return [{ ...goal }];
   const [startX, startY] = grid(from);
   const [endX, endY] = grid(goal);
   const start = KEY(startX, startY), end = KEY(endX, endY);
@@ -95,7 +95,7 @@ export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS): Point
       const reduced: Point[] = [];
       let anchor = from;
       for (let i = 0; i < points.length; i++) {
-        if (i === points.length - 1 || !lineClear(anchor, points[i + 1]!, radius)) {
+        if (i === points.length - 1 || !lineClear(anchor, points[i + 1]!, radius, obstacles)) {
           reduced.push(points[i]!);
           anchor = points[i]!;
         }
@@ -109,9 +109,9 @@ export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS): Point
       const nx = x + vx, ny = y + vy;
       if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
       const candidate = KEY(nx, ny);
-      if (closed[candidate] || !canOccupy(center(nx, ny), radius)) continue;
+      if (closed[candidate] || !canOccupy(center(nx, ny), radius, obstacles)) continue;
       if (vx !== 0 && vy !== 0 &&
-        (!canOccupy(center(x + vx, y), radius) || !canOccupy(center(x, y + vy), radius))) continue;
+        (!canOccupy(center(x + vx, y), radius, obstacles) || !canOccupy(center(x, y + vy), radius, obstacles))) continue;
       const updated = cost[current]! + Math.hypot(vx, vy);
       if (updated >= cost[candidate]!) continue;
       cost[candidate] = updated;

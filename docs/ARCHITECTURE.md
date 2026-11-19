@@ -5,10 +5,10 @@
 The site at `https://nereziel.github.io/dark_fantasy_2d_arpg/` now deploys **`web/dist/`** instead of the old root HTML engine. This is an intentionally early playable migration; full campaign parity remains future work. The original root HTML engine is kept for reference.
 
 - **Svelte 5:** menu, selection of six original classes, HUD, inventory/equipment, runtime locale.
-- **Phaser 4.2.1:** world canvas, camera, input picking, actor proxies, procedurally drawn test environment, loot graphics, three simultaneous enemy silhouettes, individual health/status overlays, selected-target indicators and ground attack telegraphs.
+- **Phaser 4.2.1:** world canvas, camera, input picking, actor proxies, seeded wilderness terrain and safe starter camp, loot graphics, three simultaneous enemy silhouettes, selected-target indicators and telegraphs.
 - **Strict TypeScript simulation:** authoritative positions, movement, basic attacks, 12 first active class skills, cooldown/resource validation, status effects, three simultaneous data-driven enemy archetypes with individual AI, dodgeable attack windups, deterministic combat damage, XP/levels, loot, gold, inventory/equipment and events.
 - **`svelte-i18n`:** Czech and English dictionaries, changed without reloading the game.
-- **IndexedDB:** character-only save records (format v6) containing class, level, XP, gold, cumulative kills, inventory and equipment. Enemy state, active effects, cooldowns, world drops, positions and encounter wave are never persisted; old saves are not migrated.
+- **IndexedDB:** automatic debounced plus manual character-only saves (format v6) with class, level, XP, gold, cumulative kills, inventory and equipment. Enemy state, effects, cooldowns, drops, positions, encounter wave and world seed are never persisted; old saves are not migrated.
 - **Vitest and Playwright:** headless domain unit tests, translation key tests and browser smoke tests.
 
 ## Data ownership
@@ -35,9 +35,9 @@ The starter base attributes for Warrior, Paladin, Mage, Rogue, Necromancer and W
 
 The game simulation owns attack decisions, locked danger zones and damage on fixed ticks. Phaser only draws warnings, enemy outlines and effects. Stuns interrupt the affected enemy's windup without affecting unrelated actors.
 
-`web/src/game/world/navigation.ts` owns fixed obstacle rectangles. Its collision-aware movement prevents tunneling; player click-to-move uses deterministic A* waypoints around obstacles. Enemy steering applies collision and separation so opponents do not occupy exactly the same position. The renderer draws barricades and ruins from the same obstacle definitions.
+`web/src/game/world/navigation.ts` provides collision-aware movement and deterministic A* navigation. `web/src/game/world/generator.ts` builds a small wilderness layout from a **per-session seed**. The safe camp and encounter spawns remain accessible while randomized extra ruins use the same collision and graphical geometry. This is an initial procedural slice, not yet a full biome/tilemap generator.
 
-`GameSnapshot` version 5 is an **ephemeral, renderer-facing simulation snapshot**, not a save format. `CharacterProgress` is the persistent allowlisted projection. `SaveRepository` writes only `SavedGame` format 6; loading reinitializes a fresh encounter and the hero at the safe start point with full health. Incompatible old save formats are rejected without import. The test wilderness is still a fixed map; full procedural world regeneration is a later milestone.
+`GameSnapshot` version 5 is an **ephemeral, renderer-facing snapshot**, not a save format; its `worldSeed` never reaches storage. `CharacterProgress` is the persistent allowlisted projection. `SaveRepository` writes only format 6. The UI bridge generates fresh random world seeds on every new-game/load, while the simulation remains deterministic for a given seed. The hero returns to the safe camp with full health and fresh encounters. `CharacterAutosaver` coalesces changes and serializes writes; the page-hide flush is best-effort. Older saves are rejected.
 
 ## Hosting and CI
 
@@ -49,9 +49,9 @@ The Vite base path is `/dark_fantasy_2d_arpg/`. All bundle and imported asset UR
 
 ## Technical gaps
 
-- The scene remains a fixed test wilderness with one simultaneous three-enemy pack; full world generation, dynamic large groups, quests, towns and bosses are not migrated.
+- The scene remains a small seeded wilderness with one three-enemy pack; complete biome/tile generation, large groups, quests, towns and bosses are not migrated.
 - All six classes have two playable starter skills each; the complete original skill trees and advanced balance are not implemented yet.
 - Ground and hero remain procedural placeholder graphics. Replace with coherent spritesheets/tilemaps while preserving core state.
 - Direct movement has no pathfinding around obstacles yet.
-- Saved characters start new game sessions rather than restoring active combat. Save is currently manual; auto-save and complete character progression (quests, talents, unlocked skills) remain future work.
+- Saved characters start new sessions instead of restoring combat. Basic autosaving is implemented; quest, talent and learned-skill persistence still requires those gameplay systems.
 - Networking is not implemented.

@@ -28,6 +28,8 @@ export interface CharacterProgress {
 
 export interface GameSnapshot {
   version: 5;
+  /** Ephemeral map seed. This is never included in CharacterProgress saves. */
+  worldSeed: number;
   classId: ClassId;
   player: ActorSnapshot;
   /** Focused enemy for the existing HUD; authoritative enemy state is in enemies. */
@@ -61,7 +63,7 @@ export type GameCommand =
   | { type: 'equip'; index: number }
   | { type: 'unequip'; slot: EquipmentSlot }
   | { type: 'pause'; value: boolean }
-  | { type: 'reset'; classId?: ClassId };
+  | { type: 'reset'; classId?: ClassId; seed?: number };
 
 export type GameEvent =
   | { type: 'cast'; skillId: string; x: number; y: number }

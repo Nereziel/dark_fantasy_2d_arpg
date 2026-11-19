@@ -5,6 +5,8 @@
   import { GameBridge } from './game/bridge/GameBridge';
   import type { GameSnapshot } from './game/core/types';
   import { loadGame, saveGame } from './persistence/SaveRepository';
+  import { CharacterAutosaver } from './persistence/CharacterAutosaver';
+  import { CAMP, CAMP_RADIUS } from './game/world/generator';
   import GameViewport from './ui/GameViewport.svelte';
   import CharacterSelect from './ui/CharacterSelect.svelte';
   import InventoryPanel from './ui/InventoryPanel.svelte';
@@ -18,14 +20,39 @@
   let busy = $state(false);
   let selectedClass: ClassId = $state('WARRIOR');
   let inventoryOpen = $state(false);
+  const autosaver = new CharacterAutosaver(saveGame, 1400, () => {
+    messageKey = 'status.saveError';
+  });
 
-  onMount(() => bridge.subscribe((latest) => { view = latest; }));
+  onMount(() => {
+    const unsubscribe = bridge.subscribe((latest) => {
+      view = latest;
+      if (playing) autosaver.schedule(bridge.character());
+    });
+    // Browser lifecycle hooks are best-effort; the regular autosave debounce
+    // is what protects character progression during normal play.
+    const flushOnExit = () => { void autosaver.flush().catch(() => {}); };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushOnExit();
+    };
+    window.addEventListener('pagehide', flushOnExit);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('pagehide', flushOnExit);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      void autosaver.dispose().catch(() => {});
+    };
+  });
 
   function newGame(): void {
     bridge.command({ type: 'reset', classId: selectedClass });
     messageKey = '';
     inventoryOpen = false;
     playing = true;
+    void autosaver.saveNow(bridge.character()).catch(() => {
+      messageKey = 'status.saveError';
+    });
   }
   function resume(): void {
     bridge.command({ type: 'pause', value: false });
@@ -34,6 +61,7 @@
   function menu(): void {
     inventoryOpen = false;
     bridge.command({ type: 'pause', value: true });
+    void autosaver.flush().catch(() => { messageKey = 'status.saveError'; });
     playing = false;
   }
   function togglePause(): void {
@@ -69,7 +97,7 @@
   async function save(): Promise<void> {
     busy = true;
     try {
-      await saveGame(bridge.character());
+      await autosaver.saveNow(bridge.character());
       messageKey = 'status.saved';
     } catch {
       messageKey = 'status.saveError';
@@ -80,11 +108,13 @@
   async function load(): Promise<void> {
     busy = true;
     try {
+      await autosaver.flush();
       const character = await loadGame();
       if (character && bridge.restoreCharacter(character)) {
         messageKey = 'status.loaded';
         inventoryOpen = false;
         selectedClass = bridge.snapshot().classId;
+        autosaver.prime(bridge.character());
         playing = true;
       } else {
         messageKey = 'status.emptySave';
@@ -133,13 +163,14 @@
       </div>
     </main>
   {:else}
-    <main class="game-screen">
+    <main class="game-screen" data-world-seed={view.worldSeed}>
       <GameViewport {bridge} />
       <div class="game-vignette" aria-hidden="true"></div>
 
       <header class="game-header">
         <div class="brand-mark">AETHER <span>&amp;</span> RUIN</div>
-        <div class="zone-name">{ $t('hud.location') }</div>
+        <div class="zone-name">{Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS
+          ? $t('hud.camp') : $t('hud.location')}</div>
         <div class="top-actions">
           <label for="game-language" class="visually-hidden">{ $t('menu.language') }</label>
           <select id="game-language" class="compact-select" value={$locale ?? 'en'} onchange={(event) => setLanguage((event.currentTarget as HTMLSelectElement).value as Language)}>

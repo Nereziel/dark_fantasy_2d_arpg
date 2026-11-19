@@ -29,6 +29,7 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 - Uhnutí před útokem: opusť červeně vyznačenou oblast před zásahem.
 - Mezerník nebo Esc mimo inventář: pauza.
 - Přepnutí **Čeština / English** je v menu i při hraní.
+- **Tábor:** bezpečná oblast bez útoků nepřátel. Nové spuštění vytváří jinou variantu divočiny.
 
 ## Současná architektura
 
@@ -38,12 +39,12 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 | `web/src/game/skills` a `web/src/game/combat` | Schopnosti, cooldowny, stavové efekty a výpočty poškození |
 | `web/src/game/data` | Definice tříd, předmětů, afixů a výbavy |
 | `web/src/game/enemies` | Skupiny nepřátel, nezávislé útoky, varování a parametry AI |
-| `web/src/game/world` | Kolize prostředí, průchodnost a A* navigace |
+| `web/src/game/world` | Seedovaná divočina, bezpečný tábor, kolize a A* navigace |
 | `web/src/game/phaser` | Phaser scéna, vykreslování a ovládání |
 | `web/src/game/bridge` | Typovaný most mezi simulací a Svelte |
 | `web/src/ui` | Svelte komponenty pro výběr třídy, inventář a HUD |
 | `web/src/i18n` | Překlady `cs` a `en` přes svelte-i18n |
-| `web/src/persistence` | IndexedDB ukládání pouze trvalých dat postavy (formát v6); bez migrace starých pozic |
+| `web/src/persistence` | Automatické i ruční ukládání trvalých dat postavy (v6), bez migrace starých pozic |
 | `web/tests` | Vitest a Playwright |
 
 Z původní hry zůstaly v kořeni `dark_fantasy_2d_arpg_engine.html`, `visuals.js`, `visuals.css` a `index.html` jako **referenční implementace**. Na Pages se již nepoužívají; nedochází tedy k nechtěnému mísení starého a nového enginu.
@@ -69,4 +70,4 @@ Vlastní kód a originální herní assety mají mít GPL-3.0; externí assety s
 
 Kompletní posloupnost 63 implementačních kroků: [`2d_arpg_implementation_prompts.md`](./2d_arpg_implementation_prompts.md).
 
-Současná verze je **v rané fázi převodu**. Ukládání nyní funguje po vzoru Diabla: do IndexedDB se zapisují jen **trvalá data hrdiny** (povolání, úroveň, XP, zlato, statistika porážek, inventář a výbava). Po opětovném načtení se postava objeví s plným zdravím v počáteční oblasti; nepřátelé, předměty na zemi, stavové efekty a cooldowny začínají znovu. **Současná mapa je zatím pevně daná**; procedurální generování nových map bude doplněno v další etapě. Ukládání je zatím ruční přes tlačítko „Uložit“. Původní uložené hry a předchozí vývojové formáty se **nepřevádějí**.
+Současná verze je **v rané fázi převodu**. Ukládání nyní funguje po vzoru Diabla: do IndexedDB se zapisují jen **trvalá data hrdiny** (povolání, úroveň, XP, zlato, statistika porážek, inventář a výbava). Po opětovném načtení se postava objeví s plným zdravím v **bezpečném táboře**. Vznikne nová divočina s jiným seedem a nepřátelé, předměty na zemi, stavové efekty i cooldowny začínají znovu. Rozmístění části ruin a překážek se obměňuje; plnohodnotné oblasti, města a dungeony zatím chybějí. **Postava se automaticky ukládá při změně trvalého postupu**, při spuštění nové postavy a při odchodu do menu; ruční tlačítko „Uložit“ zůstává dostupné. Původní uložené hry a předchozí vývojové formáty se **nepřevádějí**.

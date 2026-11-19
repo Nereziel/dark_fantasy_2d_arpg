@@ -4,7 +4,7 @@
     "start": "Enter the world",
     "continue": "Continue exploring",
     "new": "New hero",
-    "help": "Choose your hero. Your character and equipment are saved; enemies and the world restart on your next session.",
+    "help": "Choose your hero. Progress saves automatically. Each new session generates a fresh wilderness layout.",
     "current": "New version · early development build",
     "language": "Language",
     "back": "Main menu",
@@ -30,7 +30,9 @@
     "class": "Class",
     "itemDrops": "Loot",
     "enemies": "Enemies",
-    "wave": "Wave"
+    "wave": "Wave",
+    "camp": "Emberwatch Camp",
+    "autosave": "Character autosave enabled"
   },
   "status": {
     "ready": "Ready",

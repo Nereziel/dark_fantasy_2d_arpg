@@ -1,4 +1,5 @@
 import { GameSimulation } from '../core/GameSimulation';
+import { newSessionSeed } from '../world/generator';
 import type { CharacterProgress, GameCommand, GameEvent, GameSnapshot, GameStateReader } from '../core/types';
 
 /** UI-facing presentation adapter; game state is owned by the simulation. */
@@ -11,7 +12,7 @@ export class GameBridge implements GameStateReader {
   snapshot(): GameSnapshot { return this.simulation.snapshot(); }
   character(): CharacterProgress { return this.simulation.character(); }
   restoreCharacter(progress: CharacterProgress): boolean {
-    const restored = this.simulation.restoreCharacter(progress);
+    const restored = this.simulation.restoreCharacter(progress, newSessionSeed());
     if (restored) this.emit();
     return restored;
   }
@@ -28,7 +29,9 @@ export class GameBridge implements GameStateReader {
   }
 
   command(command: GameCommand): void {
-    this.simulation.command(command);
+    this.simulation.command(command.type === 'reset'
+      ? { ...command, seed: command.seed ?? newSessionSeed() }
+      : command);
     this.emit();
   }
 

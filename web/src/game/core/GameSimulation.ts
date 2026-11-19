@@ -107,7 +107,7 @@ export class GameSimulation {
 
   command(command: GameCommand): void {
     if (command.type === 'reset') {
-      this.reset(isClassId(command.classId) ? command.classId : 'WARRIOR');
+      this.reset(isClassId(command.classId) ? command.classId : 'WARRIOR', command.seed ?? this.world.seed);
       return;
     }
     if (command.type === 'pause') {
@@ -314,6 +314,11 @@ export class GameSimulation {
 
   private updateEnemyAI(unit: EnemyUnit, dt: number): void {
     if (!unit.actor.alive || !this.player.alive) { unit.intent = null; return; }
+    // The starting encampment is a true sanctuary.
+    if (distance(this.player, this.world.camp) <= 165) {
+      unit.intent = null;
+      return;
+    }
     unit.cooldown = Math.max(0, unit.cooldown - dt);
     const actor = unit.actor;
     const def = ENEMY_DEFINITIONS[actor.type];
@@ -644,7 +649,7 @@ export class GameSimulation {
     this.classId = classId;
     this.equipment = createEquipment();
     this.inventory = Array(INVENTORY_SIZE).fill(null);
-    this.rng = new SeededRng();
+    this.rng = new SeededRng(seed === 0 ? 0x49ac127b : ((seed ^ 0x49ac127b) >>> 0));
     this.cooldowns = emptyCooldowns();
     this.effects = emptyEffects();
     this.units = createPack(0, 1);
