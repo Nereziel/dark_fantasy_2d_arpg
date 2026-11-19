@@ -3,16 +3,17 @@
     "subtitle": "The dark frontier awaits",
     "start": "Enter the world",
     "continue": "Continue exploring",
-    "new": "New expedition",
-    "help": "Click the ground to move. Click an enemy to attack.",
-    "current": "First playable slice of the new architecture",
+    "new": "New hero",
+    "help": "Choose your hero. Click to move, fight enemies and gather loot.",
+    "current": "New version · early development build",
     "language": "Language",
     "back": "Main menu",
     "paused": "Paused",
     "resume": "Resume",
     "restart": "Start over",
     "save": "Save",
-    "load": "Load"
+    "load": "Load",
+    "selectClass": "Choose your class"
   },
   "hud": {
     "health": "Health",
@@ -21,8 +22,13 @@
     "level": "Level",
     "enemy": "Enemy",
     "location": "Ravaged Frontier",
-    "resource": "Stamina",
-    "gameOver": "You have fallen"
+    "resource": "Resource",
+    "gameOver": "You have fallen",
+    "gold": "Gold",
+    "xp": "Experience",
+    "inventory": "Inventory",
+    "class": "Class",
+    "itemDrops": "Loot"
   },
   "status": {
     "ready": "Ready",
@@ -39,7 +45,8 @@
     "move": "Move: click the ground",
     "attack": "Attack: click an enemy",
     "pause": "Pause: spacebar",
-    "hint": "This is the initial test scene. The full legacy game is still being migrated."
+    "hint": "Press I to open inventory. These are the first migrated systems; quests and dungeons will follow.",
+    "pickup": "Loot: click a glowing item"
   },
   "battle": {
     "defeat": "Enemy defeated",
@@ -49,5 +56,114 @@
   "footer": {
     "prototype": "Prototype scene • Svelte 5 / Phaser 4 / TypeScript",
     "legacy": "The original game is still available separately on GitHub Pages"
+  },
+  "inventory": {
+    "title": "Inventory & Equipment",
+    "open": "Inventory (I)",
+    "close": "Close",
+    "equipped": "Equipped",
+    "bag": "Backpack",
+    "empty": "Empty slot",
+    "equip": "Equip",
+    "unequip": "Unequip",
+    "slot": "Slot",
+    "level": "Item level",
+    "noItems": "No items yet",
+    "damage": "Damage",
+    "armor": "Armor",
+    "block": "Block",
+    "affixes": "Modifiers",
+    "full": "Inventory is full"
+  },
+  "stat": {
+    "strength": "Strength",
+    "dexterity": "Dexterity",
+    "intelligence": "Intelligence",
+    "vitality": "Vitality",
+    "willpower": "Willpower",
+    "armor": "Armor",
+    "minDmg": "Min damage",
+    "maxDmg": "Max damage",
+    "blockChance": "Block chance",
+    "critChance": "Critical chance",
+    "moveSpeed": "Movement speed"
+  },
+  "resource": {
+    "rage": "Rage",
+    "faith": "Faith",
+    "mana": "Mana",
+    "energy": "Energy",
+    "essence": "Essence",
+    "soul": "Soul Power"
+  },
+  "classes": {
+    "WARRIOR": {
+      "name": "Warrior",
+      "desc": "A resilient fighter building rage in close combat."
+    },
+    "PALADIN": {
+      "name": "Paladin",
+      "desc": "A holy defender wielding faith and divine power."
+    },
+    "MAGE": {
+      "name": "Mage",
+      "desc": "An elemental caster who strikes from a safe distance."
+    },
+    "ROGUE": {
+      "name": "Rogue",
+      "desc": "A nimble assassin relying on agility and critical strikes."
+    },
+    "NECROMANCER": {
+      "name": "Necromancer",
+      "desc": "Commands death and channels the essence of fallen foes."
+    },
+    "WARLOCK": {
+      "name": "Warlock",
+      "desc": "A dark channeler wielding curses and soul power."
+    }
+  },
+  "item": {
+    "rarity": {
+      "COMMON": "Common",
+      "UNCOMMON": "Uncommon",
+      "RARE": "Rare",
+      "EPIC": "Epic",
+      "LEGENDARY": "Legendary"
+    },
+    "base": {
+      "broadsword": "Tempered Broadsword",
+      "shield": "Iron Round Shield",
+      "hauberk": "Steel Hauberk",
+      "helm": "Heavy Great Helm",
+      "gauntlets": "Reinforced Gauntlets",
+      "greaves": "Plated Greaves",
+      "belt": "Studded War Belt",
+      "bloodstone": "Ancient Bloodstone",
+      "signet": "Iron Signet Ring"
+    },
+    "affix": {
+      "stalwart": "Stalwart",
+      "savage": "Savage",
+      "fiery": "Fiery",
+      "brisk": "Brisk",
+      "vampiric": "Vampiric",
+      "falcon": "Falcon",
+      "titan": "Titan",
+      "warding": "Warding",
+      "haste": "Haste",
+      "bear": "Bear"
+    },
+    "slot": {
+      "HELMET": "Helmet",
+      "AMULET": "Amulet",
+      "CHEST": "Chest",
+      "MAIN_HAND": "Main hand",
+      "OFF_HAND": "Off hand",
+      "GLOVES": "Gloves",
+      "BELT": "Belt",
+      "BOOTS": "Boots",
+      "RING_1": "Ring I",
+      "RING_2": "Ring II"
+    }
   }
 }

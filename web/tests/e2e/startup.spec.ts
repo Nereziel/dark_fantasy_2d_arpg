@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('switches Czech/English in the menu and in game without losing the scene', async ({ page }) => {
+test('switches Czech/English in the menu and game without losing the scene', async ({ page }) => {
   await page.goto('./');
   await expect(page.getByRole('heading', { name: 'Aether & Ruin' })).toBeVisible();
 
@@ -20,4 +20,27 @@ test('switches Czech/English in the menu and in game without losing the scene', 
   await expect(page.getByRole('status')).toContainText('Game saved');
   await page.reload();
   await expect(page.locator('#menu-language')).toHaveValue('en');
+});
+
+test('creates a Rogue, opens localized inventory, saves and reloads its class', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  const rogue = page.getByRole('button', { name: /Rogue/ });
+  await expect(rogue).toBeVisible();
+  await rogue.click();
+  await expect(rogue).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await expect(page.getByText('Rogue · Level 1')).toBeVisible();
+  await page.getByRole('button', { name: 'Inventory (I)' }).click();
+  await expect(page.getByRole('dialog', { name: 'Inventory & Equipment' })).toBeVisible();
+  await expect(page.getByText('Helmet')).toBeVisible();
+  await page.locator('#game-language').selectOption('cs');
+  await expect(page.getByRole('dialog', { name: 'Inventář a výbava' })).toBeVisible();
+  await page.getByRole('button', { name: 'Zavřít' }).click();
+  await page.getByRole('button', { name: 'Uložit' }).click();
+  await expect(page.getByRole('status')).toContainText('Hra uložena');
+  await page.reload();
+  await expect(page.locator('#menu-language')).toHaveValue('cs');
+  await page.getByRole('button', { name: 'Načíst' }).click();
+  await expect(page.getByText('Tulák · Úroveň 1')).toBeVisible();
 });

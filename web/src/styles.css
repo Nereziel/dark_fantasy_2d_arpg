@@ -57,3 +57,13 @@ h1 span,.brand-mark span{color:#b88b59}
 .pause-card h2{font-family:Cinzel,Georgia,serif;color:#e6d6b4;margin:0 0 12px}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 @media(max-width:720px){.game-header{padding:10px;gap:6px}.brand-mark{font-size:.7rem}.zone-name{display:none}.top-actions{gap:5px}.compact-select,.small-button{font-size:.68rem;padding:6px}.world-guide{left:10px;top:65px;max-width:200px;font-size:.67rem;padding:8px}.game-hud{bottom:5px;padding:9px;gap:8px;width:98%}.portrait{display:none}.status-panel{display:none}.hud-details{font-size:.6rem}.hud-actions{flex-direction:column;gap:4px}.hud-actions button{font-size:.65rem;padding:5px}.vital-top{font-size:.64rem}}
+
+/* Class selection, richer HUD and inventory controls (Svelte/Phaser production). */
+.main-menu{overflow-y:auto;align-items:start}
+.main-menu .menu-content{padding-top:22px;padding-bottom:30px;margin:auto}
+.resource-label{margin-top:8px;margin-bottom:5px;color:#9dbbd2}
+.resource-track{height:8px;border-color:#325575;background:#0f1b2c}
+.resource-fill{height:100%;background:linear-gradient(90deg,#246387,#5da9d0);transition:width .2s}
+.experience-track{height:3px;margin-top:8px;background:#1a232c}
+.experience-track>div{height:100%;background:#c5a16b;transition:width .2s}
+@media(max-width:560px){.main-menu .menu-content{padding:12px}.main-menu h1{margin:9px 0;font-size:2.6rem}.ornament{margin:12px 0}.subtitle{margin:12px}.menu-actions{gap:5px}.menu-actions button{padding:8px 11px}.language-choice{margin:10px 0}.hint{margin:9px auto}.hud-actions button{font-size:.59rem;padding:5px}.game-hud{gap:5px}}

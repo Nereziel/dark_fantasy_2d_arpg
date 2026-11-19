@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import type { GameBridge } from '../bridge/GameBridge';
+import { CLASSES } from '../data/classes';
+import { RARITIES } from '../data/items';
 
 const WIDTH = 2200;
 const HEIGHT = 1400;
@@ -13,6 +15,7 @@ export class FrontierScene extends Phaser.Scene {
   private hero!: Phaser.GameObjects.Graphics;
   private wraith!: Phaser.GameObjects.Graphics;
   private healthBar!: Phaser.GameObjects.Graphics;
+  private groundItems!: Phaser.GameObjects.Graphics;
 
   constructor(bridge: GameBridge) {
     super({ key: 'Frontier' });
@@ -25,7 +28,7 @@ export class FrontierScene extends Phaser.Scene {
     this.hero = this.add.graphics();
     this.hero.fillStyle(0x131f30).fillCircle(0, 3, 19);
     this.hero.fillStyle(0x8e9caa).fillCircle(0, -5, 13);
-    this.hero.fillStyle(0x1e3445).fillTriangle(-14, 8, 14, 8, 0, -26);
+    this.hero.fillStyle(CLASSES[this.bridge.snapshot().classId].color).fillTriangle(-14, 8, 14, 8, 0, -26);
     this.hero.fillStyle(0xd7c3a0).fillCircle(0, -13, 5);
     this.hero.lineStyle(4, 0xb7a77a).lineBetween(14, 5, 25, -22);
     this.hero.setDepth(50);
@@ -38,6 +41,7 @@ export class FrontierScene extends Phaser.Scene {
     this.wraith.setDepth(48);
 
     this.healthBar = this.add.graphics().setDepth(60);
+    this.groundItems = this.add.graphics().setDepth(44);
 
     this.cameras.main.setBounds(0, 0, WIDTH, HEIGHT);
     this.cameras.main.setZoom(1);
@@ -56,7 +60,8 @@ export class FrontierScene extends Phaser.Scene {
   private onSpace(event: KeyboardEvent): void {
     const active = document.activeElement;
     if (active instanceof HTMLElement &&
-      ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(active.tagName)) return;
+      (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(active.tagName)
+        || document.querySelector('.inventory-overlay'))) return;
     event.preventDefault();
     this.bridge.command({ type: 'pause', value: !this.bridge.snapshot().paused });
   }
@@ -65,7 +70,12 @@ export class FrontierScene extends Phaser.Scene {
     if (pointer.button !== 0 || this.bridge.snapshot().paused) return;
     const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     const state = this.bridge.snapshot();
-    if (state.enemy.alive && Phaser.Math.Distance.Between(
+    const loot = state.groundLoot.find(g =>
+      Phaser.Math.Distance.Between(world.x, world.y, g.x, g.y) < 30
+    );
+    if (loot) {
+      this.bridge.command({ type: 'pickup', id: loot.id });
+    } else if (state.enemy.alive && Phaser.Math.Distance.Between(
       world.x, world.y, state.enemy.x, state.enemy.y
     ) < 46) {
       this.bridge.command({ type: 'attack', targetId: state.enemy.id });
@@ -83,6 +93,15 @@ export class FrontierScene extends Phaser.Scene {
     this.wraith.setVisible(state.enemy.alive);
 
     this.healthBar.clear();
+    this.groundItems.clear();
+    for (const drop of state.groundLoot) {
+      const hex = RARITIES[drop.item.rarity].color.replace('#', '');
+      const color = Number.parseInt(hex, 16);
+      this.groundItems.fillStyle(color, 0.13).fillCircle(drop.x, drop.y, 21);
+      this.groundItems.lineStyle(2, color, 0.95).strokeCircle(drop.x, drop.y, 17);
+      this.groundItems.fillStyle(color).fillRect(drop.x - 7, drop.y - 7, 14, 14);
+      this.groundItems.lineStyle(2, 0xece6d7, 0.5).strokeRect(drop.x - 7, drop.y - 7, 14, 14);
+    }
     if (state.enemy.alive) {
       this.healthBar.fillStyle(0x080a10, 0.9).fillRect(state.enemy.x - 26, state.enemy.y - 43, 52, 8);
       this.healthBar.fillStyle(0xa3494c).fillRect(state.enemy.x - 24, state.enemy.y - 41, 48 * (state.enemy.health / state.enemy.maxHealth), 4);

@@ -1,56 +1,47 @@
-# Aether & Ruin — Architecture (migration stage 01)
+# Aether & Ruin — Architecture
 
-This document describes the **partially implemented** Svelte/Phaser client at `web/`. The original playable root HTML game is still served by GitHub Pages. The staged client is intentionally incomplete.
+## Production stack (first public migration)
 
-## Stack
+The site at `https://nereziel.github.io/dark_fantasy_2d_arpg/` now deploys **`web/dist/`** instead of the old root HTML engine. This is an intentionally early playable migration; full campaign parity remains future work. The original root HTML engine is kept for reference.
 
-- Svelte 5 for UI, settings and HUD, with Svelte runes.
-- Phaser 4.2.1 for drawing the world and pointer input.
-- Strict TypeScript simulation and typed commands/immutable snapshots.
-- Vite for local dev/static export, with base path `/dark_fantasy_2d_arpg/`.
-- `svelte-i18n` with `cs` and `en` catalogs.
-- IndexedDB for staged game saves; legacy saves are not yet imported.
-- Vitest for renderer-independent tests; Playwright for smoke tests.
+- **Svelte 5:** menu, selection of six original classes, HUD, inventory/equipment, runtime locale.
+- **Phaser 4.2.1:** world canvas, camera, input picking, actor proxies, procedurally drawn test environment and loot graphics.
+- **Strict TypeScript simulation:** authoritative positions, movement, basic attacks, XP/levels, deterministic loot, gold, inventory/equipment, resource regen and events.
+- **`svelte-i18n`:** Czech and English dictionaries, changed without reloading the game.
+- **IndexedDB:** versioned web game snapshots (v2). A small migrator reads the previous web demo's v1 save. Old original-HTML game saves are **not** imported yet.
+- **Vitest and Playwright:** headless domain unit tests, translation key tests and browser smoke tests.
 
-## Data flow
+## Data ownership
 
 ```text
-Mouse click -> Phaser FrontierScene -> GameBridge.command(Move/Attack)
-Svelte menu -> GameBridge.command(Pause/Reset)
-                              |
-                              v
-               GameSimulation (fixed 60 Hz)
-                              |
-                              v
-                     GameSnapshot / GameEvent
-                      |                  |
-                 Phaser views         Svelte HUD
+Phaser world clicks ----> typed command bus <---- Svelte panels
+                                  |
+                                  v
+                         GameSimulation
+                     (fixed-step; seedable RNG)
+                                  |
+                      immutable game snapshot
+                       /                \
+                Phaser visuals         Svelte HUD
 ```
 
-The simulation depends on **neither Phaser nor Svelte**. It cannot import the DOM, locale strings or renderer objects. `GameBridge` publishes UI snapshots at most eight times per second; Phaser reads state for every rendered frame. A bounded time accumulator prevents giant simulation jumps when the browser resumes from suspension.
+Neither Phaser GameObjects nor translated labels are serialized into saved state. Persistent IDs are independent of locale. Inventory equip and world pickup are typed commands.
 
-The current simplified combat is **not** a port of all legacy combat: it is a working integration reference with a single foe. All future items/quests/skills will be migrated to pure TypeScript domain systems with stable IDs and regression tests.
+The starter base attributes for Warrior, Paladin, Mage, Rogue, Necromancer and Warlock are taken from the original `CLASS_DEFINITIONS`. Item bases and rarity distribution follow the original `ItemGenerator`; generated affix IDs/values are stored, while UI names and labels are rendered from `cs`/`en` dictionaries.
 
-## Scene/rendering
+## Hosting and CI
 
-`web/src/game/phaser/FrontierScene.ts` currently draws programmatic placeholder terrain/trees and two characters. It demonstrates a Phaser-managed camera, input, sprite proxies and basic combat bars. Actual sprite atlases, tilemaps, pathfinding and chunk streaming are later milestones.
+`.github/workflows/pages.yml` builds and tests the Svelte SPA on game/build input changes, runs Chromium E2E, then uploads **`web/dist` only** to GitHub Pages. GitHub Pages is static hosting and no backend is required.
 
-## Browser persistence
+The workflow intentionally ignores documentation-only/test-only pushes; independent quality tests for changes to tests and pull requests are configured in `quality.yml`.
 
-`web/src/persistence/SaveRepository.ts` uses a versioned IndexedDB record (`format: 1`) and intentionally **does not** migrate or overwrite the original HTML game's localStorage saves. Migration, backup and more robust save DTO validation are later work.
+The Vite base path is `/dark_fantasy_2d_arpg/`. All bundle and imported asset URLs must work at this repository subpath.
 
-## Localization
+## Technical gaps
 
-The `svelte-i18n` catalogs are in `web/src/i18n/locales/`. The language selector updates the UI without restarting Phaser. Locale preference lives separately in localStorage. New content must ship with Czech and English strings. See `2d_arpg_implementation_prompts.md` for full locale/grammar requirements.
-
-## Deployment
-
-`.github/workflows/pages.yml` watches only the **published legacy** game. The staged `web/` app is validated by `.github/workflows/quality.yml` without Pages deployment. Do not switch the Pages artifact to `web/dist/` until legacy gameplay/save parity has been demonstrated in browser E2E tests.
-
-## Known limitations
-
-- Original six classes, loot, talents, quests, NPC conversations and dungeon generation are **not yet migrated**.
-- Player and enemy graphics are temporary procedural shapes, not finished spritesheets.
-- Movement is direct point navigation without pathfinding around obstacles.
-- The initial save adapter works for the new format only.
-- Offline font fallback is available, but optional Google Fonts require network.
+- The scene remains a test wilderness; the original world generation, quests, towns and bosses are not migrated.
+- Basic attack behavior is class-specific by stats/range but original six skill bars are not implemented yet.
+- Ground and hero remain procedural placeholder graphics. Replace with coherent spritesheets/tilemaps while preserving core state.
+- Direct movement has no pathfinding around obstacles yet.
+- Browser saves still need explicit legacy-HTML import with recovery, validation and player opt-in.
+- Networking is not implemented.

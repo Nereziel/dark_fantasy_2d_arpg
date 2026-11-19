@@ -1,21 +1,25 @@
-name: Deploy Aether & Ruin to GitHub Pages
+name: Deploy Aether & Ruin (Svelte + Phaser) to GitHub Pages
 
 on:
   push:
     branches: [main]
-    # Only changes to the CURRENTLY PUBLISHED game trigger deployment.
-    # Docs, README, implementation prompts, tests and the future web/ staging
-    # app do not redeploy the legacy site. Switch this list on migration cutover.
+    # Only published application sources, asset inputs and deploy config.
+    # Documentation/test-only commits do not rebuild GitHub Pages.
     paths:
-      - 'index.html'
-      - 'dark_fantasy_2d_arpg_engine.html'
-      - 'visuals.js'
-      - 'visuals.css'
-      - 'assets/**'
+      - 'web/index.html'
+      - 'web/src/**'
+      - 'web/public/**'
+      - 'web/package.json'
+      - 'web/package-lock.json'
+      - 'web/npm-shrinkwrap.json'
+      - 'web/vite.config.*'
+      - 'web/svelte.config.*'
+      - 'web/tsconfig*.json'
+      - 'web/postcss.config.*'
+      - 'web/tailwind.config.*'
+      - 'web/scripts/**'
       - '.github/workflows/pages.yml'
       - '.github/actions/**'
-
-  # Deliberate manual redeploy, even when no game files changed.
   workflow_dispatch:
 
 permissions:
@@ -29,34 +33,58 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Check out game
+      - name: Checkout game
         uses: actions/checkout@v4
 
-      # Legacy static site validation. At the Svelte/Phaser cutover, replace
-      # with npm ci/check/test/build in web/ and upload web/dist below.
-      - name: Validate source and scripts
-        run: node tests/site.test.mjs
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
-      - name: Configure GitHub Pages
+      - name: Install locked dependencies
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck Svelte/TypeScript
+        working-directory: web
+        run: npm run check
+
+      - name: Run gameplay and localization unit tests
+        working-directory: web
+        run: npm run test
+
+      - name: Build Vite static SPA
+        working-directory: web
+        run: npm run build
+
+      - name: Verify Pages asset base path
+        run: |
+          test -s web/dist/index.html
+          grep -q '/dark_fantasy_2d_arpg/' web/dist/index.html
+
+      - name: Install Chromium
+        working-directory: web
+        run: npx playwright install chromium --with-deps
+
+      - name: Browser smoke test
+        working-directory: web
+        run: npm run test:e2e
+
+      - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      # Publish only runtime files, never README, specs, tests or source docs.
-      - name: Assemble legacy static site
-        run: |
-          mkdir -p site
-          cp index.html dark_fantasy_2d_arpg_engine.html visuals.js visuals.css site/
-          if [ -d assets ]; then cp -R assets site/assets; fi
-
-      - name: Upload static website
+      - name: Upload built game only
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: web/dist
 
-      - name: Deploy
+      - name: Deploy game
         id: deployment
         uses: actions/deploy-pages@v4

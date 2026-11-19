@@ -3,16 +3,17 @@
     "subtitle": "Temná země čeká",
     "start": "Vstoupit do světa",
     "continue": "Pokračovat v průzkumu",
-    "new": "Nový průzkum",
-    "help": "Klikni do světa pro pohyb. Kliknutím na nepřítele ho napadneš.",
-    "current": "První hratelná ukázka nové architektury",
+    "new": "Nová postava",
+    "help": "Vyber hrdinu. Kliknutím se pohybuj, útoč na nepřátele a sbírej kořist.",
+    "current": "Nová verze · raná vývojová fáze",
     "language": "Jazyk",
     "back": "Zpět do menu",
     "paused": "Pozastaveno",
     "resume": "Pokračovat",
     "restart": "Začít znovu",
     "save": "Uložit",
-    "load": "Načíst"
+    "load": "Načíst",
+    "selectClass": "Vyber třídu"
   },
   "hud": {
     "health": "Životy",
@@ -21,8 +22,13 @@
     "level": "Úroveň",
     "enemy": "Nepřítel",
     "location": "Zpustošená hranice",
-    "resource": "Výdrž",
-    "gameOver": "Padl jsi"
+    "resource": "Zdroj",
+    "gameOver": "Padl jsi",
+    "gold": "Zlato",
+    "xp": "Zkušenosti",
+    "inventory": "Inventář",
+    "class": "Třída",
+    "itemDrops": "Kořist"
   },
   "status": {
     "ready": "Připraven",
@@ -39,7 +45,8 @@
     "move": "Pohyb: kliknutí na zem",
     "attack": "Útok: kliknutí na nepřítele",
     "pause": "Pauza: mezerník",
-    "hint": "Tato oblast je počáteční testovací scéna. Plný obsah původní hry se teprve převádí."
+    "hint": "Klávesa I otevře inventář. Zatím jde o první převedené systémy; questy a dungeony budou následovat.",
+    "pickup": "Kořist: kliknutí na zářící předmět"
   },
   "battle": {
     "defeat": "Nepřítel padl",
@@ -49,5 +56,114 @@
   "footer": {
     "prototype": "Zkušební scéna • Svelte 5 / Phaser 4 / TypeScript",
     "legacy": "Původní hra zatím běží samostatně na GitHub Pages"
+  },
+  "inventory": {
+    "title": "Inventář a výbava",
+    "open": "Inventář (I)",
+    "close": "Zavřít",
+    "equipped": "Nasazeno",
+    "bag": "Batoh",
+    "empty": "Prázdný slot",
+    "equip": "Nasadit",
+    "unequip": "Sundat",
+    "slot": "Pozice",
+    "level": "Úroveň předmětu",
+    "noItems": "Zatím žádné předměty",
+    "damage": "Poškození",
+    "armor": "Zbroj",
+    "block": "Blokování",
+    "affixes": "Vlastnosti",
+    "full": "Inventář je plný"
+  },
+  "stat": {
+    "strength": "Síla",
+    "dexterity": "Obratnost",
+    "intelligence": "Inteligence",
+    "vitality": "Vitalita",
+    "willpower": "Vůle",
+    "armor": "Zbroj",
+    "minDmg": "Min. poškození",
+    "maxDmg": "Max. poškození",
+    "blockChance": "Šance na blok",
+    "critChance": "Kritický zásah",
+    "moveSpeed": "Rychlost pohybu"
+  },
+  "resource": {
+    "rage": "Hněv",
+    "faith": "Víra",
+    "mana": "Mana",
+    "energy": "Energie",
+    "essence": "Esence",
+    "soul": "Síla duší"
+  },
+  "classes": {
+    "WARRIOR": {
+      "name": "Válečník",
+      "desc": "Odolný bojovník, který čerpá hněv z blízkého boje."
+    },
+    "PALADIN": {
+      "name": "Paladin",
+      "desc": "Svatý bojovník s ochranou, vírou a božskou mocí."
+    },
+    "MAGE": {
+      "name": "Mág",
+      "desc": "Pán živlů a magie, který zasahuje z bezpečné vzdálenosti."
+    },
+    "ROGUE": {
+      "name": "Tulák",
+      "desc": "Rychlý zabiják využívající obratnost a kritické zásahy."
+    },
+    "NECROMANCER": {
+      "name": "Nekromant",
+      "desc": "Povolává moc smrti a pohlcuje esenci padlých."
+    },
+    "WARLOCK": {
+      "name": "Černokněžník",
+      "desc": "Temný mág pracující s kletbami a silou duší."
+    }
+  },
+  "item": {
+    "rarity": {
+      "COMMON": "Obyčejný",
+      "UNCOMMON": "Neobyčejný",
+      "RARE": "Vzácný",
+      "EPIC": "Epický",
+      "LEGENDARY": "Legendární"
+    },
+    "base": {
+      "broadsword": "Kalený široký meč",
+      "shield": "Železný kulatý štít",
+      "hauberk": "Ocelová kroužková zbroj",
+      "helm": "Těžká přilba",
+      "gauntlets": "Zpevněné rukavice",
+      "greaves": "Plátové holenice",
+      "belt": "Okovaný opasek",
+      "bloodstone": "Prastarý krvavý kámen",
+      "signet": "Železný pečetní prsten"
+    },
+    "affix": {
+      "stalwart": "Nezdolnost",
+      "savage": "Divokost",
+      "fiery": "Oheň",
+      "brisk": "Svižnost",
+      "vampiric": "Upírství",
+      "falcon": "Sokol",
+      "titan": "Titán",
+      "warding": "Ochrana",
+      "haste": "Spěch",
+      "bear": "Medvěd"
+    },
+    "slot": {
+      "HELMET": "Přilba",
+      "AMULET": "Amulet",
+      "CHEST": "Zbroj",
+      "MAIN_HAND": "Hlavní ruka",
+      "OFF_HAND": "Druhá ruka",
+      "GLOVES": "Rukavice",
+      "BELT": "Opasek",
+      "BOOTS": "Boty",
+      "RING_1": "Prsten I",
+      "RING_2": "Prsten II"
+    }
   }
 }

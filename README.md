@@ -1,48 +1,16 @@
 # Aether & Ruin
 
-Dark fantasy 2D akční RPG v prohlížeči. Zachovává původní herní engine a opravuje neviditelné pixel-art sprity. Rozšiřuje svět o procedurální textury, dekorace, osvětlení a podporu HiDPI.
+Dark-fantasy 2D ARPG pro prohlížeč. Hra se postupně převádí z původního monolitického HTML enginu na **Svelte 5 + Phaser 4 + TypeScript + Vite**.
 
 ## Hrát online
 
-https://nereziel.github.io/dark_fantasy_2d_arpg/
+**https://nereziel.github.io/dark_fantasy_2d_arpg/**
 
-## Spuštění lokálně
+Na GitHub Pages se nyní publikuje **nová Svelte/Phaser verze**, která je stále ve vývoji. Obsahuje výběr šesti tříd, základní boj a pohyb kliknutím, kořist, inventář, výbavu, zkušenosti, zlato a uložení nové hry. Původní plný herní obsah (dungeony, questy, talenty a další systémy) se teprve převádí.
 
-V kořenové složce spusť `python3 -m http.server 8000` a otevři `http://localhost:8000/`. Nejsou potřeba npm, backend ani build. Původní Tailwind a fonty se načítají z CDN, proto je pro plný vzhled potřeba internet.
+## Lokální spuštění
 
-## Ovládání
-
-Levé tlačítko myši: pohyb, útok nebo interakce. Pravé tlačítko: sekundární schopnost. Klávesy 1–4: další schopnosti (fungují i na české klávesnici). Inventář, talenty, mapa, pauza a ukládání jsou dostupné v HUD. Uložení využívá localStorage prohlížeče.
-
-## Struktura projektu
-
-- `index.html` – výchozí vstup pro GitHub Pages (přesměrování na engine)
-- `dark_fantasy_2d_arpg_engine.html` – hra, opravy spritů a HiDPI
-- `visuals.js` – předgenerované textury krajiny, scenérie, světla, dekorace a render objektů
-- `visuals.css` – aktualizovaný vzhled menu, HUD a oken
-- `tests/site.test.mjs` – základní statická validace JavaScriptu a propojení souborů
-- `.github/workflows/pages.yml` – automatický deployment pouze při změně publikované hry
-- `.github/workflows/quality.yml` – samostatná validace pro pull requesty a změny testů bez deploymentu
-- `2d_arpg_implementation_prompts.md` – plán postupné migrace na Svelte 5 / Phaser 4 / TypeScript / Vite; nový projekt bude v `web/`
-
-## Nasazení na GitHub Pages
-
-1. V repozitáři otevři **Settings → Pages**.
-2. V části **Build and deployment** vyber jako **Source** možnost **GitHub Actions**.
-3. Workflow se spustí při pushi do `main` **jen když se změní publikovaná hra** (`index.html`, herní HTML, `visuals.js`, `visuals.css`, herní assety či deploy workflow). Změny `README.md`, implementačních promptů, `docs/**`, testů nebo dosud nepublikovaného `web/` projektu **nespustí Pages rebuild**. Ruční nasazení je dostupné přes **Actions → Deploy Aether & Ruin to GitHub Pages → Run workflow**.
-4. Po úspěšném běhu bude hra dostupná na výše uvedené adrese.
-
-## Technologie
-
-**Aktuálně:** HTML5 Canvas, vanilla JavaScript, CSS a Tailwind CDN. GitHub Pages podporuje všechny součásti bez dalšího serveru.
-
-**Plánovaná architektura:** Svelte 5 + Phaser 4 + TypeScript + Vite v samostatném `web/` projektu, včetně **české a anglické lokalizace přes `svelte-i18n`**. Jazyk půjde přepínat během hraní bez restartu a nastavení se uloží samostatně od herní pozice. Do vydání plnohodnotně hratelné verze běží současná HTML hra. Až bude migrace otestována, workflow přejde na publikování `web/dist/` a bude sledovat jen odpovídající zdrojové soubory a build konfiguraci.
-
-## Nový Svelte/Phaser projekt (staging)
-
-První **nezávislá vývojová verze** je implementována ve složce [`web/`](./web/). Obsahuje startovací menu, základní Phaser scénu s pohybem myší a soubojem, Svelte HUD, živé přepínání češtiny a angličtiny, IndexedDB save/load, typovanou herní simulaci a automatizované testy. **Není to ještě převod celé hry**; původní HTML verze zůstává nasazená na GitHub Pages.
-
-Lokální spuštění nové verze (Node.js 22+):
+Vyžaduje Node.js 22+ a npm:
 
 ```bash
 cd web
@@ -50,25 +18,49 @@ npm ci
 npm run dev
 ```
 
-Vite běží na portu 5173, výchozí cesta projektu je `http://localhost:5173/dark_fantasy_2d_arpg/`. Kontroly spustíš pomocí `npm run check`, `npm run test`, `npm run build` a `npm run test:e2e` (Playwright vyžaduje nainstalovaný Chromium přes `npx playwright install chromium`).
+Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 
-CI [`quality.yml`](./.github/workflows/quality.yml) automaticky ověřuje typy, testy, build a Chromium smoke test bez deploymentu. GitHub Pages workflow publikuje dál pouze původní funkční HTML hru.
+## Ovládání
 
-## Jazyky (plánovaná Svelte/Phaser verze)
+- Levé tlačítko myši: pohyb po zemi, útok kliknutím na nepřítele, sebrání kořisti kliknutím na předmět.
+- Klávesa **I**: inventář; Esc: zavření inventáře.
+- Mezerník nebo Esc mimo inventář: pauza.
+- Přepnutí **Čeština / English** je v menu i při hraní.
 
-- **Čeština (`cs`) a angličtina (`en`)** pro menu, HUD, předměty, dovednosti, NPC, dialogy, questy a obsah kampaně.
-- Knihovna **`svelte-i18n`** bude součástí projektu od prvního implementačního promptu; slovníky budou v `web/src/i18n/locales/`.
-- Přepínač jazyka bude v hlavním menu a nastavení, bez opětovného načtení hry. Výchozí jazyk zohlední prohlížeč a uloženou volbu.
-- Původní HTML verze zatím zůstává beze změny; tyto funkce se vztahují k plánované migraci.
+## Současná architektura
 
-## Licence / License
+| Složka | Účel |
+| --- | --- |
+| `web/src/game/core` | Herní simulace, příkazy, XP, boj, kořist |
+| `web/src/game/data` | Definice tříd, předmětů, afixů a výbavy |
+| `web/src/game/phaser` | Phaser scéna, vykreslování a ovládání |
+| `web/src/game/bridge` | Typovaný most mezi simulací a Svelte |
+| `web/src/ui` | Svelte komponenty pro výběr třídy, inventář a HUD |
+| `web/src/i18n` | Překlady `cs` a `en` přes svelte-i18n |
+| `web/src/persistence` | IndexedDB uložení, migrace starší vývojové pozice |
+| `web/tests` | Vitest a Playwright |
 
-**Aether & Ruin is licensed under the GNU General Public License v3.0 only (`GPL-3.0-only`).**
+Z původní hry zůstaly v kořeni `dark_fantasy_2d_arpg_engine.html`, `visuals.js`, `visuals.css` a `index.html` jako **referenční implementace**. Na Pages se již nepoužívají; nedochází tedy k nechtěnému mísení starého a nového enginu.
 
-Licence se vztahuje na **veškerý původní obsah projektu**, ke kterému mohou přispěvatelé udělit práva: zdrojový kód, grafiku, sprity, animace, zvuky, hudbu, herní data, příběh, dialogy, dokumentaci a české i anglické překlady. This includes all original project source code and game assets, unless expressly stated otherwise.
+## Testování
 
-Úplné znění licence / Full license text: [LICENSE](LICENSE).
+```bash
+cd web
+npm run check
+npm run test
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
 
-**Externí knihovny, fonty a převzaté assety si zachovávají vlastní licence.** Jejich licence, autoři a odkazy jsou v [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md). GPL nepřelicencovává cizí díla. Third-party components retain their respective licenses and must be used in compliance with their own terms.
+Workflow [`pages.yml`](./.github/workflows/pages.yml) kontroluje typy, jednotkové testy, build a browser smoke test a poté nasazuje pouze `web/dist/`. Spustí se při změně zdrojových souborů nové hry, build konfigurace či jejích závislostí, **nikoli při úpravách samotného README, dokumentace nebo testů**. Samostatné [`quality.yml`](./.github/workflows/quality.yml) ověřuje PR a změny testů bez deploymentu.
 
-Pokud budeš distribuovat upravenou verzi, dodrž podmínky GPL včetně poskytnutí odpovídajících zdrojových souborů a zachování licenčních upozornění. When distributing modified versions, follow GPLv3's source-availability and notice requirements.
+## Licence
+
+Vlastní kód a originální herní assety mají mít GPL-3.0; externí assety si zachovávají vlastní licence a vyžadují patřičné uvedení zdroje. Před přijetím cizích assetů ověřte licenční kompatibilitu.
+
+## Vývojový plán
+
+Kompletní posloupnost 63 implementačních kroků: [`2d_arpg_implementation_prompts.md`](./2d_arpg_implementation_prompts.md).
+
+Současná verze je **v rané fázi převodu**. Ukládání původní HTML hry zatím není plně migrováno, takže nová hra používá vlastní verzovaný IndexedDB formát.
