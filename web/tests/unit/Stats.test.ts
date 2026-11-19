@@ -11,7 +11,7 @@ describe('prompt 02: modular and derived character statistics', () => {
   it('exposes every primary and required derived stat for all classes', () => {
     const names = STAT_GROUPS.flatMap(group => group.stats);
     expect(new Set(names).size).toBe(names.length);
-    const required: readonly DerivedStatKey[] = [
+    const required: DerivedStatKey[] = [
       'strength', 'dexterity', 'intelligence', 'vitality', 'willpower',
       'maxHealth', 'healthRegen', 'maxResource', 'resourceRegen', 'armor',
       'physicalResist', 'fireResist', 'frostResist', 'lightningResist',
