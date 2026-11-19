@@ -18,7 +18,7 @@
 </script>
 
 <div class="inventory-overlay">
-  <section class="inventory-window" role="dialog" aria-modal="true" aria-label={$t('inventory.title')}>
+  <div class="inventory-window" role="dialog" aria-modal="true" aria-label={$t('inventory.title')}>
     <header class="inventory-header">
       <div><div class="inventory-kicker">AETHER &amp; RUIN</div><h2>{$t('inventory.title')}</h2></div>
       <button class="close-button" onclick={close} aria-label={$t('inventory.close')}>✕</button>
@@ -77,7 +77,7 @@
         </div>
       </div>
     </div>
-  </section>
+  </div>
 </div>
 
 <style>

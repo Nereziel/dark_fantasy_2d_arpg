@@ -21,7 +21,7 @@ interface OldSnapshot {
 /** Upgrade the previous Svelte sandbox save. This does not import the original HTML engine's save. */
 export function migrateSnapshot(raw: unknown): GameSnapshot | null {
   if (!raw || typeof raw !== 'object') return null;
-  const value = raw as Partial<GameSnapshot & OldSnapshot>;
+  const value = raw as { version?: unknown };
   const simulation = new GameSimulation();
   if (value.version === 2) {
     return simulation.restore(value as GameSnapshot) ? simulation.snapshot() : null;
