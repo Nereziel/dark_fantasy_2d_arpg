@@ -1,4 +1,10 @@
-# Paralelní vývoj Aether & Ruin — vlna A
+# Parallel agent development — current Wave B (Agents 06–15)
+
+Ten independently assigned modules for Prompts 07–11: [exact write-sets and rules](WAVE_B.md), [integration plan](INTEGRATION_B.md), and individual task docs [06](06/TASK.md), [07](07/TASK.md), [08](08/TASK.md), [09](09/TASK.md), [10](10/TASK.md), [11](11/TASK.md), [12](12/TASK.md), [13](13/TASK.md), [14](14/TASK.md), [15](15/TASK.md). This is a **plan only**; no work started. The earlier Wave A plan remains below for reference.
+
+---
+
+## Archived Wave A (Agents 01–05)
 
 **Umístění:** `docs/plan/agents/`  
 **Zdroj pořadí:** [63 implementačních promptů](../../../2d_arpg_implementation_prompts.md)  

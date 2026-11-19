@@ -2,7 +2,7 @@
 
 Projekt: **Aether & Ruin** (`Nereziel/dark_fantasy_2d_arpg`).
 
-Pro koordinovanou paralelní práci platí **[docs/plan/agents/README.md](docs/plan/agents/README.md)** a **[docs/plan/agents/INTEGRATION.md](docs/plan/agents/INTEGRATION.md)**. Každý přidělený agent musí nejprve přečíst svůj `docs/plan/agents/NN/TASK.md` a původní prompt v `2d_arpg_implementation_prompts.md`.
+Pro koordinovanou paralelní práci platí **[docs/plan/agents/README.md](docs/plan/agents/README.md)**. Pro aktuální vlnu B (06–15) platí **[WAVE_B.md](docs/plan/agents/WAVE_B.md)** a **[INTEGRATION_B.md](docs/plan/agents/INTEGRATION_B.md)**; původní [INTEGRATION.md](docs/plan/agents/INTEGRATION.md) zůstává archivem vlny A. Každý přidělený agent musí nejprve přečíst svůj `docs/plan/agents/NN/TASK.md` a původní prompt v `2d_arpg_implementation_prompts.md`.
 
 - Pracuj ve **vlastní větvi / worktree**, nikdy přímo do `main`.
 - Zapisuj **pouze** soubory uvedené jako povolené v zadání. Jestli potřebuješ jiný soubor, zastav se a požádej integrátora o změnu rozsahu.
