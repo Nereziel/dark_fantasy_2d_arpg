@@ -579,6 +579,7 @@ export class GameSimulation {
         if (this.respawnTimer <= 0) {
           this.wave++;
           this.units = createPack(this.wave, this.level, this.world.encounterPositions);
+          this.respawnTimer = 0;
           this.selectedTargetId = null;
         }
       } else if (this.dungeonStage === 0) {
@@ -587,6 +588,7 @@ export class GameSimulation {
           this.dungeonStage = 1;
           this.wave = 1;
           this.units = createCryptPack(1, this.level, CRYPT_BOSS_POSITIONS);
+          this.respawnTimer = 0;
           this.selectedTargetId = null;
         }
       } else {
