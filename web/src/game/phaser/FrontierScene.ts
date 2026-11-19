@@ -345,7 +345,10 @@ export class FrontierScene extends Phaser.Scene {
         type: 'impact', position: { x: actor.x, y: actor.y },
         damage: event.damage, absorbed: event.absorbed,
         outcome: event.dodged ? 'dodged' : event.blocked ? 'blocked' : 'hit',
-        delivery: event.sourceId.includes('projectile') ? 'projectile' : 'melee',
+        delivery: state.enemies.some(u => u.actor.id === event.sourceId
+          && ENEMY_DEFINITIONS[u.actor.type].attack === 'bolt')
+          || (event.sourceId === 'hero' && event.damageType !== 'physical')
+          ? 'projectile' : 'melee',
         critical: event.critical, strong: event.critical || event.damage >= 45
       });
       for (const cue of cues) {
@@ -453,6 +456,13 @@ export class FrontierScene extends Phaser.Scene {
           .strokeCircle(intent.x, intent.y, intent.radius);
         this.telegraph.fillStyle(0xffd3a7, 0.55 + progress * 0.4)
           .fillCircle(intent.x, intent.y, 4);
+      }
+      const canonicalEffects = state.statusEffects?.enemies?.[actor.id] ?? [];
+      if (canonicalEffects.some(effect => effect.id === 'fortified')) {
+        this.statusVisuals.lineStyle(3, 0x9ac7ee, 0.9).strokeCircle(actor.x, actor.y, 33);
+      }
+      if (canonicalEffects.some(effect => effect.id === 'poisoned')) {
+        this.statusVisuals.fillStyle(0x73d478, 0.24).fillCircle(actor.x, actor.y, 31);
       }
       if (effects.some(effect => effect.id === 'stunned')) {
         this.statusVisuals.lineStyle(4, 0xf6cc73, 0.95)
