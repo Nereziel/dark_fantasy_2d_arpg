@@ -76,6 +76,36 @@ function validActor(actor: ActorSnapshot, id: string, obstacles: readonly Obstac
  * Renderer-independent multi-enemy simulation. All damage and attack windows
  * are resolved on fixed ticks; the Phaser scene only visualizes snapshots.
  */
+
+function validWaveBState(s: GameSnapshot): boolean {
+  if (s.warriorCooldowns !== undefined && (!s.warriorCooldowns ||
+    Object.entries(s.warriorCooldowns).some(([id, n]) =>
+      !getWarriorAbility(id) || !Number.isFinite(n) || n! < 0 || n! > 360))) return false;
+  if (s.warriorAction) {
+    const action = s.warriorAction;
+    const state = action.timeline;
+    if (!getWarriorAbility(action.id) || !state
+      || !Number.isSafeInteger(action.hitCount) || action.hitCount < 0 || action.hitCount > 100
+      || !Number.isSafeInteger(state.elapsedTicks) || state.elapsedTicks < 0
+      || !Number.isSafeInteger(state.windupTicks) || state.windupTicks < 0
+      || !Number.isSafeInteger(state.recoveryTicks) || state.recoveryTicks < 0
+      || !Number.isSafeInteger(state.sustainTicks) || state.sustainTicks < 0
+      || (state.totalTicks !== null && (!Number.isSafeInteger(state.totalTicks) || state.totalTicks < state.elapsedTicks))
+      || typeof state.movementLocked !== 'boolean'
+      || typeof state.impactEmitted !== 'boolean') return false;
+  }
+  if (s.statusEffects === undefined) return true;
+  const valid = (values: unknown) => Array.isArray(values) && values.length <= 16
+    && values.every(e => e && typeof e.id === 'string' && Object.hasOwn(STATUS_DEFINITIONS, e.id)
+      && advanceStatuses([e as StatusInstance], 0).statuses.length === 1);
+  return !!s.statusEffects && valid(s.statusEffects.player)
+    && !!s.statusEffects.enemies && typeof s.statusEffects.enemies === 'object'
+    && !Array.isArray(s.statusEffects.enemies)
+    && Object.entries(s.statusEffects.enemies).every(([id, values]) =>
+      Array.isArray(s.enemies) && s.enemies.some(unit => unit?.actor?.id === id)
+      && valid(values));
+}
+
 export class GameSimulation {
   private classId: ClassId = 'WARRIOR';
   private equipment: Equipment = createEquipment();
@@ -1491,6 +1521,7 @@ export class GameSimulation {
       || !Number.isFinite(s.evadeCooldown) || s.evadeCooldown < 0 || s.evadeCooldown > 2.5
       || !s.cooldowns || !(['rmb', 'slot1'] as const).every(slot =>
         Number.isFinite(s.cooldowns[slot]) && s.cooldowns[slot] >= 0 && s.cooldowns[slot] <= 360)
+      || !validWaveBState(s)
       || !s.effects || !Array.isArray(s.effects.player)
       || s.effects.player.length > 8 || !s.effects.player.every(isActiveEffect)
       || !Array.isArray(s.enemies) || s.enemies.length !== PACK_SIZE
