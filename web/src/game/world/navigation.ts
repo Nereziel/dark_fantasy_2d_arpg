@@ -121,3 +121,101 @@ export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS, obstac
   }
   return [];
 }
+
+/** Resolve one click to a reachable destination without altering the existing pathfinder. */
+export function resolveReachableDestination(
+  from: Point,
+  requested: Point,
+  radius = ACTOR_RADIUS,
+  obstacles: readonly Obstacle[] = OBSTACLES
+): Point | null {
+  if (!from || !requested || !Number.isFinite(from.x) || !Number.isFinite(from.y)
+      || !Number.isFinite(requested.x) || !Number.isFinite(requested.y)
+      || !Number.isFinite(radius) || radius <= 0 || !Array.isArray(obstacles)
+      || obstacles.some(wall => !wall || !Number.isFinite(wall.x) || !Number.isFinite(wall.y)
+        || !Number.isFinite(wall.width) || !Number.isFinite(wall.height)
+        || wall.width <= 0 || wall.height <= 0)
+      || !canOccupy(from, radius, obstacles)) return null;
+
+  // Keep an already reachable destination exact rather than snapping it to the grid.
+  if (canOccupy(requested, radius, obstacles) && findPath(from, requested, radius, obstacles).length > 0) {
+    return { ...requested };
+  }
+
+  // Compare squared Euclidean distances by their difference, scaled to stay
+  // finite even for coordinates close to Number.MAX_VALUE. Clamping the target
+  // would change which reachable location is mathematically nearest.
+  const metricScale = Math.max(1, Math.abs(requested.x), Math.abs(requested.y));
+  let best: Point = { ...from };
+  let bestTravel = 0;
+  const consider = (candidate: Point): void => {
+    const distanceDelta = (candidate.x - best.x)
+      * (((candidate.x + best.x) / 2 - requested.x) / metricScale)
+      + (candidate.y - best.y)
+      * (((candidate.y + best.y) / 2 - requested.y) / metricScale);
+    const travel = Math.hypot(candidate.x - from.x, candidate.y - from.y);
+    if (distanceDelta < 0
+      || (distanceDelta === 0 && (travel < bestTravel
+        || (travel === bestTravel && (candidate.x < best.x
+          || (candidate.x === best.x && candidate.y < best.y)))))) {
+      best = candidate;
+      bestTravel = travel;
+    }
+  };
+
+  const limit = COLS * ROWS;
+  const state = new Uint8Array(limit); // 0 unknown, 1 passable, 2 blocked
+  const visited = new Uint8Array(limit);
+  const queue = new Int32Array(limit);
+  let head = 0;
+  let tail = 0;
+  const walkable = (x: number, y: number): boolean => {
+    const key = KEY(x, y);
+    if (state[key] === 0) {
+      state[key] = canOccupy(center(x, y), radius, obstacles) ? 1 : 2;
+    }
+    return state[key] === 1;
+  };
+  const enqueue = (x: number, y: number): void => {
+    const key = KEY(x, y);
+    if (visited[key]) return;
+    visited[key] = 1;
+    queue[tail++] = key;
+  };
+
+  // A valid position may lie in a cell whose *center* is blocked.
+  // Seed only neighboring centers with an unobstructed segment from the actor.
+  const [startX, startY] = grid(from);
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const x = startX + dx, y = startY + dy;
+      if (x < 0 || x >= COLS || y < 0 || y >= ROWS || !walkable(x, y)) continue;
+      if (lineClear(from, center(x, y), radius, obstacles)) enqueue(x, y);
+    }
+  }
+
+  const directions: ReadonlyArray<readonly [number, number]> = [
+    [-1, 0], [1, 0], [0, -1], [0, 1],
+    [-1, -1], [1, -1], [-1, 1], [1, 1]
+  ];
+  // Each cell is queued once: at most COLS*ROWS expansions, no repeated A*.
+  while (head < tail && head < limit) {
+    const key = queue[head++]!;
+    const x = key % COLS, y = Math.floor(key / COLS);
+    const here = center(x, y);
+    consider(here);
+    for (const [dx, dy] of directions) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+      const next = KEY(nx, ny);
+      if (visited[next] || !walkable(nx, ny)) continue;
+      if (dx !== 0 && dy !== 0 && (!walkable(x + dx, y) || !walkable(x, y + dy))) continue;
+      if (!lineClear(here, center(nx, ny), radius, obstacles)) continue;
+      enqueue(nx, ny);
+    }
+  }
+
+  return canOccupy(best, radius, obstacles) && findPath(from, best, radius, obstacles).length > 0
+    ? { ...best }
+    : null;
+}
