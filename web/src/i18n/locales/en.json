@@ -308,18 +308,54 @@
       "name": "Crypt Lord",
       "desc": "An ancient ruler of the tomb. Heavily armored with a sweeping attack."
     },
-    "skeletonArcher": "Skeleton Archer",
-    "skeletonMage": "Skeleton Mage",
-    "ghoul": "Ghoul",
-    "zombie": "Zombie",
-    "spider": "Spider",
-    "corruptedBoar": "Corrupted Boar",
-    "banditFighter": "Bandit Fighter",
-    "banditArcher": "Bandit Archer",
-    "banditRogue": "Bandit Rogue",
-    "fanatic": "Fanatic",
-    "cultMage": "Cult Mage",
-    "cultHealer": "Cult Healer"
+    "skeletonArcher": {
+      "name": "Skeleton Archer",
+      "desc": "A wilderness enemy."
+    },
+    "skeletonMage": {
+      "name": "Skeleton Mage",
+      "desc": "A wilderness enemy."
+    },
+    "ghoul": {
+      "name": "Ghoul",
+      "desc": "A wilderness enemy."
+    },
+    "zombie": {
+      "name": "Zombie",
+      "desc": "A wilderness enemy."
+    },
+    "spider": {
+      "name": "Spider",
+      "desc": "A wilderness enemy."
+    },
+    "corruptedBoar": {
+      "name": "Corrupted Boar",
+      "desc": "A wilderness enemy."
+    },
+    "banditFighter": {
+      "name": "Bandit Fighter",
+      "desc": "A wilderness enemy."
+    },
+    "banditArcher": {
+      "name": "Bandit Archer",
+      "desc": "A wilderness enemy."
+    },
+    "banditRogue": {
+      "name": "Bandit Rogue",
+      "desc": "A wilderness enemy."
+    },
+    "fanatic": {
+      "name": "Fanatic",
+      "desc": "A wilderness enemy."
+    },
+    "cultMage": {
+      "name": "Cult Mage",
+      "desc": "A wilderness enemy."
+    },
+    "cultHealer": {
+      "name": "Cult Healer",
+      "desc": "A wilderness enemy."
+    }
   },
   "npc": {
     "talk": "Speak to the warden",
