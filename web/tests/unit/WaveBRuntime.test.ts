@@ -103,4 +103,30 @@ describe('Wave B integrated Warrior abilities and status engine', () => {
     expect(sim.drainEvents().some(event => event.type === 'enemyHeal')).toBe(true);
   });
 
+  it('does not execute the legacy skill during a timed Warrior action', () => {
+    const sim = warriorNearSkeleton();
+    sim.command({ type: 'warriorAbility', id: 'groundSlam' });
+    const afterStart = sim.snapshot();
+    expect(afterStart.warriorAction?.id).toBe('groundSlam');
+    sim.command({ type: 'cast', slot: 'rmb', targetId: afterStart.enemies[1]!.actor.id });
+    const afterLegacy = sim.snapshot();
+    expect(afterLegacy.resource).toBe(afterStart.resource);
+    expect(afterLegacy.cooldowns.rmb).toBe(0);
+    expect(afterLegacy.enemies[1]!.actor.health).toBe(afterStart.enemies[1]!.actor.health);
+  });
+
+  it('rejects malformed new statuses without changing the existing simulation', () => {
+    const sim = new GameSimulation();
+    sim.command({ type: 'warriorAbility', id: 'warCry' });
+    advance(sim, 20);
+    const original = sim.snapshot();
+    const statuses = original.statusEffects!;
+    const altered = structuredClone(original);
+    altered.statusEffects = {
+      ...statuses, player: [{ ...statuses.player[0]!, id: 'untrusted-effect' }]
+    };
+    expect(sim.restore(altered)).toBe(false);
+    expect(sim.snapshot()).toEqual(original);
+  });
+
 });
