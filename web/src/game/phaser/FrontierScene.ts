@@ -318,6 +318,17 @@ export class FrontierScene extends Phaser.Scene {
         targets: ring, alpha: 0, scaleX: 3.3, scaleY: 3.3, duration: 470,
         onComplete: () => ring.destroy()
       });
+    } else if (event.type === 'enemyHeal') {
+      const target = this.bridge.snapshot().enemies.find(u => u.actor.id === event.targetId)?.actor;
+      if (!target) return;
+      const label = this.add.text(target.x, target.y - 42, '+' + event.amount, {
+        fontFamily: 'Georgia, serif', fontSize: '17px',
+        color: '#91e4b4', stroke: '#070b11', strokeThickness: 3
+      }).setOrigin(0.5).setDepth(90);
+      this.tweens.add({
+        targets: label, y: label.y - 28, alpha: 0, duration: 750,
+        onComplete: () => label.destroy()
+      });
     } else if (event.type === 'warriorImpact') {
       const ring = this.add.graphics().setPosition(event.x, event.y).setDepth(86);
       ring.lineStyle(5, 0xf4ce80, 0.95).strokeCircle(0, 0, 35);
