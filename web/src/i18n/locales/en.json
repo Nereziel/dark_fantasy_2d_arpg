@@ -29,7 +29,8 @@
     "inventory": "Inventory",
     "class": "Class",
     "itemDrops": "Loot",
-    "enemies": "Enemies"
+    "enemies": "Enemies",
+    "wave": "Wave"
   },
   "status": {
     "ready": "Ready",
