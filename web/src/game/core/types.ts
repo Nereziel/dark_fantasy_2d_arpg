@@ -135,7 +135,8 @@ export type GameEvent =
   | { type: 'dungeonCleared' }
   | { type: 'questUpdated'; status: QuestProgress['status']; defeated: number }
   | { type: 'enemyWindup'; enemyId: string; pattern: 'bolt' | 'sweep' | 'leap' }
-  | { type: 'enemyAttack'; enemyId: string; hit: boolean };
+  | { type: 'enemyAttack'; enemyId: string; hit: boolean }
+  | { type: 'enemyHeal'; enemyId: string; targetId: string; amount: number };
 export interface GameStateReader {
   snapshot(): GameSnapshot;
   subscribe(listener: (state: GameSnapshot) => void): () => void;
