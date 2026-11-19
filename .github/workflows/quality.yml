@@ -1,0 +1,31 @@
+name: Validate Aether & Ruin
+
+on:
+  # PR quality checks are independent of publishing and always report a result,
+  # including for documentation-only pull requests.
+  pull_request:
+    branches: [main]
+
+  # Test-only pushes should run checks without rebuilding/redeploying Pages.
+  # Published game changes are already checked by pages.yml before deployment.
+  push:
+    branches: [main]
+    paths:
+      - 'tests/**'
+      - '.github/workflows/quality.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate current browser game
+        run: node tests/site.test.mjs
+
+      # At Svelte/Phaser migration: extend this workflow to validate the
+      # staging web/ project with npm ci/check/test/build on relevant changes.
