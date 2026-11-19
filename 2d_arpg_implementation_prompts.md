@@ -270,6 +270,11 @@ Use derived-stat calculation rather than permanently modifying cached numbers fr
 
 Create a minimal placeholder Warrior as the first playable class.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Keep actor state and derived stats in pure TypeScript simulation; Phaser renders a player sprite view by ID, and Svelte presents read-only character-sheet projections. Port existing class formulas and test them.
+
 Acceptance criteria:
 
 - player can spawn
@@ -328,6 +333,11 @@ Mouse
 ```
 
 Do not access raw mouse input throughout gameplay scripts.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use Phaser input and camera world-coordinate conversion (including zoom/DPR) to submit typed MoveCommands. Use authoritative navigation/collision data; throttle repathing and preserve existing mouse movement.
 
 Acceptance criteria:
 
@@ -390,6 +400,11 @@ Add cursor feedback for:
 - invalid location
 
 Add target highlighting.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Phaser handles world context picking by stable entity IDs. Svelte overlays intercept input and never let clicks pass to movement/attack. Send typed interaction commands instead of calling GameObjects.
 
 Acceptance criteria:
 
@@ -463,6 +478,11 @@ J                   = quest journal
 Esc                 = menu
 ```
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Keep mouse/key mappings in a Phaser input adapter separate from simulation commands. Support Czech digit-row skill keys and suppress world shortcuts while UI text fields/modals are active.
+
 Acceptance criteria:
 
 - all bindings are configurable input actions
@@ -519,6 +539,11 @@ Supported damage types:
 Create reusable hit/damage payloads.
 
 Do not allow individual skills to invent independent damage formulas.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Compute combat in pure TypeScript with seeded tests. Phaser/Svelte consume hit events, but never decide damage or hit success.
 
 Acceptance criteria:
 
@@ -579,6 +604,11 @@ Integrate with Diablo-style controls:
 - keyboard skill → use cursor target
 - hold position → never auto-approach
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use typed skill definitions and simulation-owned costs/cooldowns; Phaser plays cast effects and Svelte displays cooldown/resource projections.
+
 Acceptance criteria:
 
 - Warrior has a playable combat loop
@@ -628,6 +658,11 @@ Add:
 
 Keep visual effects readable.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use Phaser atlases/spritesheets, animation keys, trails, particles and hit flashes. Keep authoritative damage timing in simulation events, not a render frame; ensure legible pixel scale and pooling.
+
 Acceptance criteria:
 
 - attacks visually align with hit timing
@@ -672,6 +707,11 @@ Each effect should support:
 - visual hook
 
 Effects must be data-driven.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Keep status effect timers, stacking and modifiers in simulation. Phaser displays effects and Svelte renders buff/debuff timers via projections.
 
 Acceptance criteria:
 
@@ -722,6 +762,11 @@ Create configurable:
 
 Do not make every enemy use identical AI.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Run deterministic AI and navigation in TypeScript systems. Phaser GameObjects are visual proxies, not enemy truth.
+
 Acceptance criteria:
 
 - at least three enemy archetypes behave differently
@@ -763,6 +808,11 @@ Each family should have tactical differences.
 
 Do not create fifteen identical enemies with different sprites.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Monster-family definitions reference Phaser sprite/animation asset keys but retain pure typed gameplay stats and behaviors.
+
 Acceptance criteria:
 
 - monster definitions share reusable components
@@ -797,6 +847,11 @@ Leveling grants:
 Avoid placing the XP formula directly in Player.
 
 Create progression definitions/resources.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Keep XP and level rules in pure TypeScript; notify Svelte HUD and Phaser level-up effects through events.
 
 Acceptance criteria:
 
@@ -861,6 +916,11 @@ Create data definitions for:
 - legendary powers
 - sell value
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use typed item templates, stable instance IDs and validated save schemas. Never use icon names as authoritative item identities.
+
 Acceptance criteria:
 
 - items are defined outside inventory UI
@@ -911,6 +971,11 @@ Rarity should influence:
 
 Use controlled RNG.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use seeded TypeScript RNG and test loot/affix generators headlessly with Vitest.
+
 Acceptance criteria:
 
 - generated items are reproducible with a known seed when requested
@@ -951,6 +1016,11 @@ UI equip request
 → UI receives updated state
 ```
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Build inventory/equipment as Svelte components. Drag/drop and buttons send equip/move commands; simulation validates operations and publishes item-state snapshots.
+
 Acceptance criteria:
 
 - items can be equipped
@@ -987,6 +1057,11 @@ World loot should support:
 
 Boss loot tables should support curated guaranteed drops plus random drops.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Phaser renders loot sprites, rarity beams and pickups from simulation events; loot interaction still uses typed distance/ownership rules.
+
 Acceptance criteria:
 
 - normal enemies drop basic loot
@@ -1018,6 +1093,11 @@ Create reusable modifiers such as:
 Elites may combine compatible modifiers.
 
 Add visual identification and better loot.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Elite modifiers are TypeScript gameplay effects; Phaser displays their auras/telegraphs, while Svelte shows modifier details in target HUD.
 
 Acceptance criteria:
 
@@ -1055,6 +1135,11 @@ click NPC
 → stop
 → open interaction/dialogue
 ```
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Implement town as Phaser-rendered region backed by persistent TypeScript world data. NPC dialogue, merchant and stash windows are Svelte overlays.
 
 Acceptance criteria:
 
@@ -1098,6 +1183,11 @@ Implement merchants with:
 Avoid exponential inflation.
 
 Create centralized pricing/economy formulas.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Merchant UI is Svelte; prices, gold deductions, inventory rules and transactions are validated in TypeScript simulation.
 
 Acceptance criteria:
 
@@ -1147,6 +1237,11 @@ Quest categories:
 
 Do not embed quest logic directly inside NPC scripts.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Define quests/dialogue in typed data; Svelte renders choices/journal and dispatches commands, while simulation owns progress and rewards.
+
 Acceptance criteria:
 
 - NPC can offer quest
@@ -1177,6 +1272,11 @@ Suggested flow:
 12. unlocks next progression step
 
 Include meaningful narrative context instead of only numeric kill objectives.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Keep existing quest IDs, progress and rewards stable during migration. Svelte quest tracker consumes derived snapshots and tests cover completion.
 
 Acceptance criteria:
 
@@ -1226,6 +1326,11 @@ Create generation validation:
 
 Regenerate invalid sections.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Generate deterministic terrain/navigation/POI data in TypeScript. Phaser renders tilemaps and layered sprites; drawing directly on Canvas must not be the authoritative world representation.
+
 Acceptance criteria:
 
 - different seeds produce different wilderness layouts
@@ -1259,6 +1364,11 @@ Persist examples:
 
 Avoid loading the entire world simultaneously.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Simulation owns chunk IDs/seeds/persistence, Phaser streams tilemap layers and releases resources. Budget loading and verify chunk return state and Pages asset paths.
+
 Acceptance criteria:
 
 - player can cross chunk boundaries without obvious breaks
@@ -1284,6 +1394,11 @@ Implement:
 Map discovery must persist.
 
 Do not reveal unexplored procedural locations automatically.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Exploration/fog state belongs to simulation/persistence. Phaser maps coordinates; Svelte displays map/minimap overlay without duplicating discovery logic.
 
 Acceptance criteria:
 
@@ -1323,6 +1438,11 @@ Use dungeon seeds.
 
 Add automated/debug connectivity validation.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Dungeon generator outputs a seeded room/door graph and tile IDs as pure data; Phaser renders it, and Vitest checks accessibility headlessly.
+
 Acceptance criteria:
 
 - multiple seeds produce different valid layouts
@@ -1352,6 +1472,11 @@ Do not change the general dungeon generator just to hardcode this theme.
 
 Theme-specific data should plug into reusable generation logic.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Build the crypt with Phaser tilemaps, layered props, sprite atlases and atmospheric FX; preserve visible collision and readable boss warnings.
+
 Acceptance criteria:
 
 - crypt feels visually and mechanically distinct
@@ -1380,6 +1505,11 @@ Implement Act I examples:
 - Graveyard Warden
 - Brood Mother
 - Corrupted Knight
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Boss states and hit checks live in TypeScript; Phaser animates phases/telegraphs and Svelte displays projected boss information.
 
 Acceptance criteria:
 
@@ -1413,6 +1543,11 @@ Design at least three mechanically distinct phases.
 
 Boss difficulty should come from mechanics rather than extreme HP.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use a testable pure boss phase machine; Phaser presents attack tells and Svelte renders boss HP/phase from typed events.
+
 Acceptance criteria:
 
 - encounter can be completed without debug tools
@@ -1444,6 +1579,11 @@ Respawn at:
 Optionally apply configurable durability loss.
 
 Do not remove major permanent progression on standard difficulty.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Death/respawn overlay belongs to Svelte; respawn is a simulation command and Phaser handles transitions.
 
 Acceptance criteria:
 
@@ -1493,6 +1633,11 @@ Create Warrior branches:
 - crowd control
 - tactical buffs
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use Svelte talent-tree UI. Spending/respec is a typed command validated by simulation, never a Svelte store mutation.
+
 Acceptance criteria:
 
 - player can spend talent points
@@ -1529,6 +1674,11 @@ Do not implement modifications with giant skill-specific if/else chains.
 
 Use composable modifiers or well-defined extension hooks.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Skills and modifiers are typed gameplay calculations; Phaser selects effects by IDs and Svelte tooltips project final values.
+
 Acceptance criteria:
 
 - at least one Warrior skill can be materially transformed
@@ -1561,6 +1711,11 @@ Example materials:
 
 Create crafting recipes as data.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use Svelte crafting/salvage dialogs backed by pure TypeScript transaction/crafting rules and deterministic tests.
+
 Acceptance criteria:
 
 - items can be salvaged
@@ -1588,6 +1743,11 @@ Jewelry:
 - resource regeneration
 
 Support gem tiers and upgrading lower-tier gems into higher tiers.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Store gems/runes/sockets in validated item data. Svelte sends socket commands and simulation recalculates stats.
 
 Acceptance criteria:
 
@@ -1621,6 +1781,11 @@ Integrate potion hotkey:
 
 `Q`
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Consumables and cooldown restrictions belong to simulation; Svelte shows bar/counts and Phaser plays effects.
+
 Acceptance criteria:
 
 - potion works during combat
@@ -1645,6 +1810,11 @@ Architect it so account-wide/shared storage could be added later for multiplayer
 
 Do not implement network storage yet.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Svelte stash UI uses stable item IDs, transfer commands and versioned IndexedDB saves.
+
 Acceptance criteria:
 
 - stash persists
@@ -1665,6 +1835,11 @@ Rules:
 - travel should preserve world/save state
 
 Add the starting-town waypoint and at least one wilderness waypoint.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Svelte shows waypoint selection. Simulation verifies travel/discovery, Phaser moves the camera or transitions scenes.
 
 Acceptance criteria:
 
@@ -1697,6 +1872,11 @@ Rewards:
 - gold
 - materials
 - loot
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+World event outcomes are simulation-owned; Phaser renders events and Svelte projects objectives and rewards.
 
 Acceptance criteria:
 
@@ -1737,6 +1917,11 @@ Some shrines may trigger combat encounters.
 
 All interactions must work through the central click interaction system.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Phaser renders shrines/interactables and TypeScript processes activation, buffs, loot and persistence.
+
 Acceptance criteria:
 
 - interactables share reusable interface
@@ -1773,6 +1958,11 @@ Possible builds:
 Create Paladin-specific talent branches and class-relevant item affixes.
 
 Do not duplicate Warrior systems.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Port Paladin gameplay as typed class data; Phaser renders Paladin atlases/VFX and Svelte projects the resource bar.
 
 Acceptance criteria:
 
@@ -1823,6 +2013,11 @@ Possible builds:
 - lightning
 - arcane
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Keep Mage spell mechanics in simulation; Phaser renders projectiles and elemental VFX, Svelte displays cooldowns.
+
 Acceptance criteria:
 
 - mouse cursor determines spell direction/ground position
@@ -1866,6 +2061,11 @@ Possible builds:
 - bone caster
 - blood
 - poison
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Necromancer summons are simulation entities with stable IDs and ownership. Phaser renders them; Svelte projects summon counts.
 
 Acceptance criteria:
 
@@ -1914,6 +2114,11 @@ Focus on:
 - target selection
 - traps
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Rogue dodge/stealth results must be simulation-authoritative; Phaser handles animations and Svelte displays effects.
+
 Acceptance criteria:
 
 - melee and ranged Rogue builds are possible
@@ -1949,6 +2154,11 @@ Possible builds:
 
 Reuse summon framework created for Necromancer.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Warlock curses/resources live in shared status/skill systems; Phaser shows VFX and Svelte projects counters.
+
 Acceptance criteria:
 
 - Warlock has distinct resource/gameplay
@@ -1980,6 +2190,11 @@ Store:
 - world seed association
 
 Do not make a separate save implementation per class.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Create accessible CharacterSelect.svelte from typed class definitions. Use Phaser or atlas preview for art only; character creation emits a typed command.
 
 Acceptance criteria:
 
@@ -2021,6 +2236,11 @@ Plan for future migration.
 Never serialize fragile scene/node references as primary identity.
 
 Use stable IDs.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use versioned IndexedDB saves with atomic writes, validation, recovery and migrations. Import original localStorage saves without deleting them prematurely; never serialize Phaser/Svelte objects. Test legacy and new save round trips.
 
 Acceptance criteria:
 
@@ -2071,6 +2291,11 @@ Combat UI:
 
 UI must observe gameplay state, not own it.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Write Svelte 5 HUD/menus as small components observing read-only selectors. Commands go through GameBridge. Avoid per-frame global UI updates and block click-through to Phaser.
+
 Acceptance criteria:
 
 - UI supports mouse interaction correctly
@@ -2100,6 +2325,11 @@ Support:
 Ensure all Diablo-style mouse actions can be rebound.
 
 Do not assume left-handed/right-handed input layout permanently.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Svelte owns settings and saved preferences; Phaser applies resolution scale, audio and effects. Browser VSync is not guaranteed configurable; fullscreen requires user gesture. Preserve Czech keyboard bindings.
 
 Acceptance criteria:
 
@@ -2134,6 +2364,11 @@ Add event hooks for:
 - environment
 
 Do not hardcode audio playback throughout unrelated systems.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use Phaser audio or a Web Audio adapter. Svelte changes preferences, and browser audio is unlocked after a user gesture.
 
 Acceptance criteria:
 
@@ -2178,6 +2413,11 @@ Create new biome-generation data, monster tables, dungeon themes, quests, and lo
 
 Reuse existing systems.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Act II is typed region/biome content rendered through shared Phaser tilemap and scene infrastructure.
+
 Acceptance criteria:
 
 - Act II is a progression from Act I
@@ -2218,6 +2458,11 @@ Boss:
 
 Introduce fire hazards and new dungeon themes.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Act III reuses the same TypeScript rules and Phaser region/scene adapters, not a separate game engine.
+
 Acceptance criteria:
 
 - new biome uses existing world-generation framework
@@ -2256,6 +2501,11 @@ Mini bosses:
 Boss:
 
 **The Lich Sovereign**
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Act IV visual effects use Phaser while environmental combat/hazard outcomes stay testable in TypeScript.
 
 Acceptance criteria:
 
@@ -2297,6 +2547,11 @@ Create:
 - multi-phase final boss
 - campaign completion state
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Act V reuses shared Svelte UI, Phaser scenes and game systems; check all new assets in static Pages build.
+
 Acceptance criteria:
 
 - campaign can be completed from start to finish
@@ -2328,6 +2583,11 @@ The player should still feel stronger when returning to old areas.
 
 Use region level ranges rather than permanently matching every enemy exactly to player level.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Difficulty multipliers are TypeScript simulation rules; Svelte selects mode and Phaser adjusts presentation only.
+
 Acceptance criteria:
 
 - difficulty changes combat meaningfully
@@ -2352,6 +2612,11 @@ Reputation may unlock:
 Keep faction logic data-driven.
 
 Do not tightly couple it to the main campaign.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Faction/reputation logic stays in gameplay data with Svelte projections for relevant UI.
 
 Acceptance criteria:
 
@@ -2378,6 +2643,11 @@ Examples:
 
 Create legendary-effect framework reusable across classes.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Implement legendary item triggers in the shared TypeScript combat/item systems, not custom scene/UI hooks.
+
 Acceptance criteria:
 
 - legendary effects are modular
@@ -2403,6 +2673,11 @@ Prepare systems for:
 - post-campaign progression
 
 Implement one prototype repeatable challenge dungeon with configurable modifiers.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Endgame generation remains deterministic and render-independent; Phaser presents regions and Svelte shows progress/results.
 
 Acceptance criteria:
 
@@ -2441,6 +2716,11 @@ Do not prematurely optimize trivial code.
 
 Measure before/after where possible.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Profile Phaser tilemap layers, texture memory, pools, culling and particles; profile Svelte subscription frequency. Test Vite production build at desktop/mobile viewports and tune DPR/FPS.
+
 Acceptance criteria:
 
 - performance bottlenecks are documented
@@ -2469,6 +2749,11 @@ Validate:
 
 Produce useful error output with seed information.
 
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Run seed validation in Node/Vitest without Phaser or Svelte; record failing seed and input parameters.
+
 Acceptance criteria:
 
 - generation tests can run across many seeds
@@ -2496,6 +2781,11 @@ Add automated tests/debug validation for:
 - talents
 
 Test edge cases.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use Vitest for combat/item edge cases and typed bridge contracts; keep Playwright for browser integration.
 
 Acceptance criteria:
 
@@ -2530,6 +2820,11 @@ Commands/actions:
 - print current RNG seeds
 
 Debug tools must be disabled or inaccessible in release mode.
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Use development-only Svelte debug panel and Phaser overlays gated by Vite environment flags; no production cheat controls.
 
 Acceptance criteria:
 
@@ -2572,6 +2867,11 @@ Document findings in:
 ```text
 docs/MULTIPLAYER_READINESS.md
 ```
+
+
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Review command/snapshot isolation, serializable state and lack of Phaser/Svelte dependencies in simulation; document future server authority without implementing networking.
 
 Acceptance criteria:
 
@@ -2619,6 +2919,11 @@ Fix all blocking issues discovered.
 
 Do not add unrelated new features during this verification pass.
 
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Run Playwright against the built Vite bundle on `/dark_fantasy_2d_arpg/`: verify click-through prevention, movement, combat, loot, inventory, save/reload, assets, console errors and resize. Compare with legacy game until parity.
+
+
 ---
 
 # PROMPT 63 — Full Game Systems Audit
@@ -2665,9 +2970,16 @@ Update documentation to match the final code.
 
 At the end, produce a concise architecture summary and list the highest-value future improvements.
 
+### Implementation notes — Svelte / Phaser / TypeScript
+
+Audit Svelte component ownership, Phaser scene cleanup, simulation independence, typed bridge, IndexedDB migrations, Vite base URLs, GitHub Pages workflow and Vitest/Playwright coverage.
+
+
 ---
 
 # Final Target
+
+The finished application must be a **Svelte 5 + Phaser 4 + TypeScript + Vite static SPA**, with independent deterministic simulation, a typed UI/game bridge, versioned IndexedDB saves, static assets under the GitHub Pages repository path and passing Vitest/Playwright tests.
 
 The completed project should provide:
 
