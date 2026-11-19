@@ -6,7 +6,7 @@ Dark-fantasy 2D ARPG pro prohlížeč. Hra se postupně převádí z původního
 
 **https://nereziel.github.io/dark_fantasy_2d_arpg/**
 
-Na GitHub Pages se nyní publikuje **nová Svelte/Phaser verze**, která je stále ve vývoji. Obsahuje výběr šesti tříd, základní boj a pohyb kliknutím, kořist, inventář, výbavu, zkušenosti, zlato a uložení nové hry. Původní plný herní obsah (dungeony, questy, talenty a další systémy) se teprve převádí.
+Na GitHub Pages se nyní publikuje **nová Svelte/Phaser verze**, která je stále ve vývoji. Obsahuje výběr šesti tříd, základní boj a pohyb kliknutím, dvě aktivní schopnosti pro každou ze šesti tříd (Q / pravé tlačítko a 1), efekty, kořist, inventář, výbavu, zkušenosti, zlato a uložení nové hry. Původní plný herní obsah (dungeony, questy, talenty a další systémy) se teprve převádí.
 
 ## Lokální spuštění
 
@@ -24,6 +24,7 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 
 - Levé tlačítko myši: pohyb po zemi, útok kliknutím na nepřítele, sebrání kořisti kliknutím na předmět.
 - Klávesa **I**: inventář; Esc: zavření inventáře.
+- **Q** nebo **pravé tlačítko myši**: první schopnost; **1**: druhá schopnost.
 - Mezerník nebo Esc mimo inventář: pauza.
 - Přepnutí **Čeština / English** je v menu i při hraní.
 
@@ -32,6 +33,7 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 | Složka | Účel |
 | --- | --- |
 | `web/src/game/core` | Herní simulace, příkazy, XP, boj, kořist |
+| `web/src/game/skills` a `web/src/game/combat` | Schopnosti, cooldowny, stavové efekty a výpočty poškození |
 | `web/src/game/data` | Definice tříd, předmětů, afixů a výbavy |
 | `web/src/game/phaser` | Phaser scéna, vykreslování a ovládání |
 | `web/src/game/bridge` | Typovaný most mezi simulací a Svelte |
@@ -63,4 +65,4 @@ Vlastní kód a originální herní assety mají mít GPL-3.0; externí assety s
 
 Kompletní posloupnost 63 implementačních kroků: [`2d_arpg_implementation_prompts.md`](./2d_arpg_implementation_prompts.md).
 
-Současná verze je **v rané fázi převodu**. Ukládání původní HTML hry zatím není plně migrováno, takže nová hra používá vlastní verzovaný IndexedDB formát.
+Současná verze je **v rané fázi převodu**. Původní uložené hry a předchozí vývojové formáty se **nepřevádějí**. Nepodporované pozice je nutné nahradit novou hrou.

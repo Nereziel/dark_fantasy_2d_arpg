@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CLASSES, CLASS_IDS } from '../../src/game/data/classes';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { createEquipment, deriveStats, isItem, rollItem, SeededRng } from '../../src/game/data/items';
-import { migrateSnapshot } from '../../src/persistence/SaveRepository';
+import { validateSnapshot } from '../../src/persistence/SaveRepository';
 
 describe('legacy class definitions', () => {
   it('preserves all six primary attributes and class-specific resource caps', () => {
@@ -73,14 +73,12 @@ describe('deterministic legacy-style loot and inventory', () => {
     expect(sim.restore({ ...original, rngState: -1 })).toBe(false);
   });
 
-  it('migrates the earlier staged save without rewriting it in-place', () => {
-    const migrated = migrateSnapshot({
-      version: 1, player: { id: 'hero', x: 390, y: 470, health: 80, maxHealth: 100, alive: true },
-      enemy: { id: 'wraith-1', x: 780, y: 520, health: 72, maxHealth: 72, alive: true },
-      kills: 2, level: 1, paused: false, status: 'ready'
-    });
-    expect(migrated?.version).toBe(2);
-    expect(migrated?.player.health).toBe(Math.round(migrated!.player.maxHealth * 0.8));
-    expect(migrateSnapshot({ version: 2, inventory: [] })).toBeNull();
+  it('accepts only the current v3 save format and ignores older snapshots', () => {
+    const sim = new GameSimulation();
+    const current = sim.snapshot();
+    expect(validateSnapshot(current)).toEqual(current);
+    expect(validateSnapshot({ ...current, version: 2 })).toBeNull();
+    expect(validateSnapshot({ ...current, version: 1 })).toBeNull();
+    expect(validateSnapshot({ ...current, effects: { player: [], enemy: [{ id: 'burning', remaining: -5, magnitude: 4, tick: 0 }] } })).toBeNull();
   });
 });

@@ -6,9 +6,9 @@ The site at `https://nereziel.github.io/dark_fantasy_2d_arpg/` now deploys **`we
 
 - **Svelte 5:** menu, selection of six original classes, HUD, inventory/equipment, runtime locale.
 - **Phaser 4.2.1:** world canvas, camera, input picking, actor proxies, procedurally drawn test environment and loot graphics.
-- **Strict TypeScript simulation:** authoritative positions, movement, basic attacks, XP/levels, deterministic loot, gold, inventory/equipment, resource regen and events.
+- **Strict TypeScript simulation:** authoritative positions, movement, basic attacks, 12 first active class skills, cooldown/resource validation, status effects, deterministic combat damage, XP/levels, loot, gold, inventory/equipment and events.
 - **`svelte-i18n`:** Czech and English dictionaries, changed without reloading the game.
-- **IndexedDB:** versioned web game snapshots (v2). A small migrator reads the previous web demo's v1 save. Old original-HTML game saves are **not** imported yet.
+- **IndexedDB:** current web game snapshots (v3), including active effects and cooldowns. Previous web demo and original HTML-game save versions are **not supported or migrated**.
 - **Vitest and Playwright:** headless domain unit tests, translation key tests and browser smoke tests.
 
 ## Data ownership
@@ -40,8 +40,8 @@ The Vite base path is `/dark_fantasy_2d_arpg/`. All bundle and imported asset UR
 ## Technical gaps
 
 - The scene remains a test wilderness; the original world generation, quests, towns and bosses are not migrated.
-- Basic attack behavior is class-specific by stats/range but original six skill bars are not implemented yet.
+- All six classes have two playable starter skills each; the complete original skill trees and advanced balance are not implemented yet.
 - Ground and hero remain procedural placeholder graphics. Replace with coherent spritesheets/tilemaps while preserving core state.
 - Direct movement has no pathfinding around obstacles yet.
-- Browser saves still need explicit legacy-HTML import with recovery, validation and player opt-in.
+- The current save format intentionally rejects legacy/demo saves rather than migrating them.
 - Networking is not implemented.

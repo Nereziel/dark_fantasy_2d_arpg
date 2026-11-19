@@ -44,3 +44,24 @@ test('creates a Rogue, opens localized inventory, saves and reloads its class', 
   await page.getByRole('button', { name: 'Načíst' }).click();
   await expect(page.getByText('Tulák · Úroveň 1')).toBeVisible();
 });
+
+test('casts a Paladin ability and localizes effects without restarting the game', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: /Paladin/ }).click();
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  const skill = page.getByRole('button', { name: 'Consecration' });
+  await expect(skill).toBeEnabled();
+  await skill.click();
+  await expect(skill).toBeDisabled();
+  await expect(page.locator('.effect-chip.beneficial')).toContainText('Consecration');
+  await page.locator('#game-language').selectOption('cs');
+  await expect(page.getByRole('button', { name: 'Posvěcená půda' })).toBeDisabled();
+  await expect(page.locator('.effect-chip.beneficial')).toContainText('Posvěcení');
+  await page.getByRole('button', { name: 'Uložit' }).click();
+  await expect(page.getByRole('status')).toContainText('Hra uložena');
+  await page.reload();
+  await page.getByRole('button', { name: 'Načíst' }).click();
+  await expect(page.getByText('Paladin · Úroveň 1')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Posvěcená půda' })).toBeDisabled();
+});

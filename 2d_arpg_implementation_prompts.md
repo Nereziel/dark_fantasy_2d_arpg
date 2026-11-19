@@ -2,7 +2,7 @@
 
 Use these **63 prompts in order**. Each step must preserve a playable, testable browser game and support deployment to GitHub Pages.
 
-This plan modernizes the **existing Aether & Ruin HTML5 Canvas prototype**. Reuse its functioning classes, quests, combat, inventory, world and saves instead of discarding them. The target is a top-down dark-fantasy ARPG with Diablo-like mouse movement, six classes, five acts, procedural locations and future multiplayer-readiness.
+This plan modernizes the **existing Aether & Ruin HTML5 Canvas prototype**. Reuse its functioning classes, quests, combat, inventory and world systems where practical. **Old save files do not need to be supported or imported.** The target is a top-down dark-fantasy ARPG with Diablo-like mouse movement, six classes, five acts, procedural locations and future multiplayer-readiness.
 
 ## Project licensing and third-party material
 
@@ -23,7 +23,7 @@ This is the project's selected architecture. **Do not switch to Godot, React, Ne
 | Gameplay | **TypeScript** (strict) | Authoritative state, combat, entities, movement, AI, quests, item rules, deterministic generation |
 | Tooling | **Vite**, `@sveltejs/vite-plugin-svelte` | Development server, hot reload, client-side SPA and static production bundle |
 | UI state bridge | Typed commands/events and Svelte-facing read-only projections | Communication without tight coupling |
-| Persistence | **IndexedDB** (saves), `localStorage` (preferences only) | Versioned saves and legacy migration |
+| Persistence | **IndexedDB** (saves), `localStorage` (preferences only) | Versioned saves for the current game format (no legacy importer) |
 | Tests | **Vitest**, **Playwright**, `svelte-check` | Logic tests, browser tests, static checks |
 | Deployment | **GitHub Actions → GitHub Pages** | Publish `dist/`, no runtime backend |
 | Localization | **`svelte-i18n`**, `cs` and `en` | Runtime language switching, ICU messages, localized game UI and content |
@@ -116,7 +116,7 @@ The repo already includes `dark_fantasy_2d_arpg_engine.html`, `visuals.js`, `vis
 2. Build Svelte/Phaser in **`web/`**, preserving the old root HTML for reference. Deploy a tested `web/dist/` to the main Pages URL as a public development release.
 3. Extract typed content, simulation, stat/combat formulas, seeded RNG, command handling and save DTOs into testable TypeScript modules; preserve balance and IDs.
 4. Migrate scenes, pixel sprites, movement/input and graphical effects incrementally into Phaser. Replace UI panels with Svelte, communicating only through the typed bridge.
-5. Import existing legacy `localStorage` saves to versioned IndexedDB, with backup/fallback and tests.
+5. Save the new game's current typed snapshots to IndexedDB. **Do not import or migrate old HTML-game saves or early demo saves**; reject incompatible versions gracefully and make a new game available.
 6. Incrementally complete a parity slice: town → NPC quest → mouse movement → combat → loot → inventory → save → reload. Pages already deploys `web/dist/`; every additional release must pass quality gates. Keep root legacy HTML as an offline reference.
 
 Never replace working systems with empty Phaser/Svelte placeholders just to satisfy file structure.
@@ -131,7 +131,7 @@ All 63 prompts remain sequential. The public new-engine build can be feature-inc
 | Core combat slice | 06–17 | Mouse movement, attacks, damage, status effects, loot and inventory work together; deterministic unit tests |
 | Act I world slice | 18–29 | Reachable town/quest → wilderness → dungeon → boss → loot → return, in browser, with bilingual NPC dialogue, objectives, item names and map labels |
 | Progression and classes | 30–44 | No duplicated item/skill rules; each class uses shared systems; representative builds tested |
-| Persistence and UI | 45–48 | Legacy saves imported safely; fresh and migrated saves survive reload; keyboard/UI interactions stable; mid-game `cs`↔`en` switching and persistence verified |
+| Persistence and UI | 45–48 | Only the current save format loads; valid new saves survive reload and incompatible saves fail gracefully; keyboard/UI interactions and mid-game `cs`↔`en` switching verified |
 | Campaign and endgame | 49–56 | Region/act transitions and generated objectives are navigable, saveable, testable |
 | Release readiness | 57–63 | Profiler evidence, deterministic seed suite, combat tests, full vertical-slice E2E, no console errors and successful Pages preview |
 
@@ -139,7 +139,7 @@ Every implemented feature needs: a clearly owned TypeScript state, a Phaser pres
 
 **Simulation determinism**: pick a documented simulation tick rate, use accumulator/catch-up caps after tab suspension, never depend on render delta or `Math.random()` for authoritative rolls, and make replay/seed failures reproducible.
 
-**Save safety**: version save DTOs and content definitions; implement idempotent migrations, distinguish persistent IDs from Phaser sprite IDs, handle quota/private-mode/storage errors, and preserve a recoverable copy of legacy data until import is verified.
+**Save safety**: version current save DTOs and content definitions; distinguish persistent IDs from Phaser sprite IDs, validate data, handle quota/private-mode/storage errors, and **reject old or incompatible save versions** without attempting migrations. A new game must always remain possible.
 
 **Graphics production**: establish consistent camera/world units, tile sizes, sprite pivots, depth/occlusion layers, pixel-art filter/zoom, animation naming, texture atlases and art credits before scaling content. Include a visual regression/screenshot check for representative environments where practical.
 
@@ -171,7 +171,7 @@ Every implemented feature needs: a clearly owned TypeScript state, a Phaser pres
 16. Avoid per-frame Svelte store updates for sprites and particles.
 17. Run `npm run check`, applicable Vitest tests and `npm run build` on frontend changes.
 18. Use Playwright smoke tests for critical UI, gameplay and deployment milestones, serving the production Vite bundle at the actual repository subpath.
-19. Preserve existing class/quest functionality and old saves until verified migrated.
+19. Preserve relevant existing class/quest functionality; **legacy save compatibility is explicitly out of scope**.
 19a. For every player-facing message added or edited in a prompt, provide Czech and English translations in the same change and test the runtime locale switch; never store translated strings as gameplay IDs or save fields.
 20. At the end of each task report: created/modified files, architecture changes, gameplay changes, tests, Pages/deploy status, limitations and recommended next step.
 21. Do not redeploy Pages when only README, prompts, docs or tests change. Rebuild after published `web/` game, asset, locale or build-input changes, with independent PR quality checks.
@@ -293,7 +293,7 @@ Responsibility contract:
 - Create one visible sample tile/sprite, one typed UI command and a read-only HUD value updated by a gameplay event.
 - Add a visible Czech/English selector to the Svelte main menu; both language dictionaries must include all initial menu, HUD and error strings. Change locale live without resetting the Phaser scene or simulation, and persist preference independently from character saves.
 - Destroy Phaser and unsubscribe bridge listeners when the Svelte viewport unmounts/hot reloads. No duplicated canvas, global singleton or direct Svelte→Phaser logic.
-- Produce a legacy-module migration table. Keep the current deployed HTML game available until feature parity is tested.
+- Produce a legacy-module feature mapping; old HTML remains a repository reference only. Do not implement old-save import.
 
 Acceptance criteria:
 
@@ -303,7 +303,7 @@ Acceptance criteria:
 - typed UI command reaches the pure TypeScript simulation and visibly updates the HUD
 - pure gameplay modules have no Phaser/Svelte imports
 - Vitest unit and Playwright boot/scene smoke tests pass
-- architecture, UI bridge, deployment and legacy migration are documented
+- architecture, UI bridge, deployment and supported current save format are documented
 - original HTML implementation remains runnable locally for comparison; it is not part of the Pages artifact
 - documentation/test-only commits do not trigger Pages rebuilds; published Svelte/Phaser source changes are tested and deployed
 - `svelte-i18n` renders Czech/English startup UI; changing language updates HUD/menu without a game restart, and locale persists across browser refresh
@@ -2342,7 +2342,7 @@ Save:
 
 Use schema/save versioning.
 
-Plan for future migration.
+Do not add legacy importers or migrations for old game builds; document current-format invalidation behavior instead.
 
 Never serialize fragile scene/node references as primary identity.
 
@@ -2351,9 +2351,9 @@ Use stable IDs.
 
 ### Implementation notes — Svelte / Phaser / TypeScript
 
-Language preference is a **UI/browser setting**, not part of the character/world save. Existing locale-independent entity/item/quest IDs must remain stable across switching and migrations; old saves load under both `cs` and `en`.
+Language preference is a **UI/browser setting**, not part of the character/world save. Locale-independent entity/item/quest IDs remain stable when switching `cs`/`en`. Legacy save imports are not required.
 
-Use versioned IndexedDB saves with atomic writes, validation, recovery and migrations. Import original localStorage saves without deleting them prematurely; never serialize Phaser/Svelte objects. Test legacy and new save round trips.
+Use versioned IndexedDB saves with atomic writes, validation and graceful rejection of incompatible versions. **Do not import old HTML or previous demo saves.** Never serialize Phaser/Svelte objects. Test current-format round trips, invalid-version rejection and storage failures.
 
 Acceptance criteria:
 

@@ -46,7 +46,8 @@
     "attack": "Attack: click an enemy",
     "pause": "Pause: spacebar",
     "hint": "Press I to open inventory. These are the first migrated systems; quests and dungeons will follow.",
-    "pickup": "Loot: click a glowing item"
+    "pickup": "Loot: click a glowing item",
+    "skills": "Skills: Q / right mouse button and key 1"
   },
   "battle": {
     "defeat": "Enemy defeated",
@@ -164,6 +165,68 @@
       "BOOTS": "Boots",
       "RING_1": "Ring I",
       "RING_2": "Ring II"
+    }
+  },
+  "combat": {
+    "skills": "Abilities",
+    "effects": "Active effects"
+  },
+  "effects": {
+    "stunned": "Stunned",
+    "chilled": "Chilled",
+    "burning": "Burning",
+    "poisoned": "Poisoned",
+    "consecration": "Consecration",
+    "skeleton": "Skeleton ally"
+  },
+  "skills": {
+    "cleave": {
+      "name": "Cleave",
+      "desc": "A powerful melee attack dealing increased physical damage."
+    },
+    "charge": {
+      "name": "Charge",
+      "desc": "Rush toward an enemy, strike, and briefly stun it."
+    },
+    "judgment": {
+      "name": "Judgment",
+      "desc": "A focused strike of holy light at a distant target."
+    },
+    "consecration": {
+      "name": "Consecration",
+      "desc": "Consecrate the ground, healing the hero and damaging nearby enemies."
+    },
+    "fireball": {
+      "name": "Fireball",
+      "desc": "A fiery strike that burns an enemy for several seconds."
+    },
+    "frostNova": {
+      "name": "Frost Nova",
+      "desc": "Damage and slow nearby enemies with a surge of cold."
+    },
+    "shadowDash": {
+      "name": "Shadow Dash",
+      "desc": "Dash to an enemy and land a powerful strike."
+    },
+    "poisonBlade": {
+      "name": "Poison Blade",
+      "desc": "Strike an enemy and apply damage over time with poison."
+    },
+    "boneSpear": {
+      "name": "Bone Spear",
+      "desc": "Launch a piercing spear of bone toward the target."
+    },
+    "raiseSkeleton": {
+      "name": "Raise Skeleton",
+      "desc": "Summon a temporary ally that attacks nearby enemies."
+    },
+    "lifeDrain": {
+      "name": "Life Drain",
+      "desc": "Damage a target and heal the hero for part of the damage dealt."
+    },
+    "soulBurn": {
+      "name": "Soul Burn",
+      "desc": "Curse an enemy with lingering soulfire damage."
     }
   }
 }

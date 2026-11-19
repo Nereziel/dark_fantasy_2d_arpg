@@ -46,7 +46,8 @@
     "attack": "Útok: kliknutí na nepřítele",
     "pause": "Pauza: mezerník",
     "hint": "Klávesa I otevře inventář. Zatím jde o první převedené systémy; questy a dungeony budou následovat.",
-    "pickup": "Kořist: kliknutí na zářící předmět"
+    "pickup": "Kořist: kliknutí na zářící předmět",
+    "skills": "Schopnosti: Q / pravé tlačítko myši a klávesa 1"
   },
   "battle": {
     "defeat": "Nepřítel padl",
@@ -164,6 +165,68 @@
       "BOOTS": "Boty",
       "RING_1": "Prsten I",
       "RING_2": "Prsten II"
+    }
+  },
+  "combat": {
+    "skills": "Schopnosti",
+    "effects": "Aktivní efekty"
+  },
+  "effects": {
+    "stunned": "Omráčení",
+    "chilled": "Zpomalení",
+    "burning": "Hoření",
+    "poisoned": "Otrava",
+    "consecration": "Posvěcení",
+    "skeleton": "Kostěný společník"
+  },
+  "skills": {
+    "cleave": {
+      "name": "Rozmáchlý úder",
+      "desc": "Silný úder zblízka, který způsobí zvýšené fyzické poškození."
+    },
+    "charge": {
+      "name": "Výpad",
+      "desc": "Rychlý výpad k nepříteli, zásah a krátké omráčení."
+    },
+    "judgment": {
+      "name": "Soud",
+      "desc": "Soustředěný úder světla na vzdáleného nepřítele."
+    },
+    "consecration": {
+      "name": "Posvěcená půda",
+      "desc": "Posvětí okolí hrdiny, léčí jej a zraňuje nepřátele v dosahu."
+    },
+    "fireball": {
+      "name": "Ohnivá koule",
+      "desc": "Ohnivý zásah, který zapálí nepřítele na několik sekund."
+    },
+    "frostNova": {
+      "name": "Ledová nova",
+      "desc": "Zasáhne a zpomalí nepřátele v blízkosti hrdiny."
+    },
+    "shadowDash": {
+      "name": "Stínový výpad",
+      "desc": "Přesune se k nepříteli a zasadí silný úder."
+    },
+    "poisonBlade": {
+      "name": "Jedová čepel",
+      "desc": "Zraní nepřítele a způsobí postupné poškození jedem."
+    },
+    "boneSpear": {
+      "name": "Kostěné kopí",
+      "desc": "Vystřelí na cíl průrazné kostěné kopí."
+    },
+    "raiseSkeleton": {
+      "name": "Povolat kostlivce",
+      "desc": "Dočasně povolá pomocníka útočícího na blízké nepřátele."
+    },
+    "lifeDrain": {
+      "name": "Vysátí života",
+      "desc": "Zraní cíl a vyléčí hrdinu za část způsobeného poškození."
+    },
+    "soulBurn": {
+      "name": "Žár duší",
+      "desc": "Prokleje nepřítele plamenem, který jej dále spaluje."
     }
   }
 }

@@ -1,5 +1,10 @@
 import type { ActorSnapshot, GameCommand, GameEvent, GameSnapshot, Point } from './types';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
+import { rollAttackDamage } from '../combat/damage';
+import {
+  SKILLS, emptyCooldowns, emptyEffects, isSkillSlot, isActiveEffect,
+  type ActiveEffect, type ActiveEffects, type Cooldowns, type SkillSlot
+} from '../skills/skills';
 import {
   SeededRng, createEquipment, deriveStats, isEquipmentSlot, isItem, rollItem,
   type Equipment, type EquipmentSlot, type GroundItem, type Item
@@ -48,6 +53,9 @@ export class GameSimulation {
   private equipment: Equipment = createEquipment();
   private inventory: Array<Item | null> = Array(INVENTORY_SIZE).fill(null);
   private rng = new SeededRng();
+  private cooldowns: Cooldowns = emptyCooldowns();
+  private effects: ActiveEffects = emptyEffects();
+  private pendingSkill: SkillSlot | null = null;
   private player = makeActor('hero', 390, 470, deriveStats('WARRIOR', this.equipment).maxHealth);
   private enemy = makeActor('wraith-1', 780, 520, 72);
   private groundLoot: GroundItem[] = [];
@@ -78,6 +86,10 @@ export class GameSimulation {
     if (command.type === 'equip') { this.equip(command.index); return; }
     if (command.type === 'unequip') { this.unequip(command.slot); return; }
     if (!this.player.alive || this.paused) return;
+    if (command.type === 'cast') {
+      if (isSkillSlot(command.slot)) this.requestCast(command.slot);
+      return;
+    }
 
     if (command.type === 'move') {
       const { x, y } = command.destination;
@@ -88,14 +100,17 @@ export class GameSimulation {
       };
       this.attackTarget = null;
       this.pickupTarget = null;
+      this.pendingSkill = null;
     } else if (command.type === 'attack' && command.targetId === this.enemy.id && this.enemy.alive) {
       this.attackTarget = command.targetId;
       this.moveTarget = null;
       this.pickupTarget = null;
+      this.pendingSkill = null;
     } else if (command.type === 'pickup' && this.groundLoot.some(g => g.id === command.id)) {
       this.pickupTarget = command.id;
       this.moveTarget = null;
       this.attackTarget = null;
+      this.pendingSkill = null;
     }
   }
 
@@ -128,6 +143,126 @@ export class GameSimulation {
     if (this.player.alive) this.player.health = Math.max(1, Math.min(max, this.player.health + delta));
   }
 
+  private requestCast(slot: SkillSlot): void {
+    const skill = SKILLS[this.classId][slot];
+    if (this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
+    if (skill.target === 'self') {
+      this.performCast(slot);
+      return;
+    }
+    if (!this.enemy.alive) return;
+    this.moveTarget = null;
+    this.attackTarget = null;
+    this.pickupTarget = null;
+    if (distance(this.player, this.enemy) > skill.range) {
+      // A queued cast does not spend resources until the hero reaches range.
+      this.pendingSkill = slot;
+      return;
+    }
+    this.performCast(slot);
+  }
+
+  private applyEffect(target: 'enemy' | 'player', effect: ActiveEffect): void {
+    const list = this.effects[target];
+    const existing = list.find(active => active.id === effect.id);
+    if (existing) {
+      existing.remaining = Math.max(existing.remaining, effect.remaining);
+      existing.magnitude = Math.max(existing.magnitude, effect.magnitude);
+      existing.tick = 0;
+    } else list.push(effect);
+  }
+
+  private applyDamage(power: number): number {
+    if (!this.enemy.alive) return 0;
+    const stats = deriveStats(this.classId, this.equipment);
+    const { damage } = rollAttackDamage(
+      this.classId, stats, this.rng, power, 10 + this.level * 3, this.level
+    );
+    return this.hitEnemy(damage);
+  }
+
+  private hitEnemy(damage: number): number {
+    if (!this.enemy.alive || damage <= 0) return 0;
+    const dealt = Math.min(this.enemy.health, Math.max(0, Math.round(damage)));
+    if (dealt === 0) return 0;
+    this.enemy.health -= dealt;
+    this.events.push({ type: 'hit', targetId: this.enemy.id, damage: dealt });
+    if (this.enemy.health === 0) this.defeatEnemy();
+    return dealt;
+  }
+
+  private performCast(slot: SkillSlot): void {
+    const skill = SKILLS[this.classId][slot];
+    if (this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
+    if (skill.target === 'enemy' &&
+      (!this.enemy.alive || distance(this.player, this.enemy) > skill.range + 0.5)) return;
+    this.resource = Math.max(0, this.resource - skill.cost);
+    this.cooldowns[slot] = skill.cooldown;
+    this.pendingSkill = null;
+    const point = skill.target === 'enemy' ? this.enemy : this.player;
+    this.events.push({ type: 'cast', skillId: skill.id, x: point.x, y: point.y });
+
+    if (skill.kind === 'dash' && this.enemy.alive) {
+      // Dash to the target; clamp to the navigable world and stop at melee range.
+      toward(this.player, this.enemy, skill.range, 1, 56);
+    }
+    if (skill.kind === 'strike' || skill.kind === 'dash' ||
+      skill.kind === 'dot' || skill.kind === 'drain') {
+      const damage = this.applyDamage(skill.power);
+      if (skill.kind === 'drain' && this.player.alive) {
+        this.player.health = Math.min(this.player.maxHealth, this.player.health + Math.ceil(damage * 0.65));
+      }
+      if (skill.effect && skill.duration && this.enemy.alive) {
+        if (skill.effect === 'stunned' || skill.effect === 'poisoned' || skill.effect === 'burning') {
+          const magnitude = skill.effect === 'stunned' ? 0
+            : Math.max(3, Math.round(2 + deriveStats(this.classId, this.equipment).intelligence * 0.25));
+          this.applyEffect('enemy', { id: skill.effect, remaining: skill.duration, magnitude, tick: 0 });
+        }
+      }
+    } else if (skill.kind === 'nova') {
+      if (this.enemy.alive && distance(this.player, this.enemy) <= skill.range) {
+        this.applyDamage(skill.power);
+        if (this.enemy.alive && skill.effect && skill.duration) {
+          this.applyEffect('enemy', { id: skill.effect, remaining: skill.duration, magnitude: 0, tick: 0 });
+        }
+      }
+    } else if ((skill.kind === 'aura' || skill.kind === 'summon') && skill.effect && skill.duration) {
+      this.applyEffect('player', { id: skill.effect, remaining: skill.duration, magnitude: skill.power, tick: 0 });
+    }
+  }
+
+  /** Simulation-owned timed statuses. No Phaser animation controls damage timing. */
+  private tickEffects(dt: number): void {
+    for (const effect of this.effects.enemy) {
+      effect.remaining -= dt;
+      effect.tick += dt;
+      if ((effect.id === 'burning' || effect.id === 'poisoned') && this.enemy.alive) {
+        while (effect.tick >= 1 && this.enemy.alive) {
+          effect.tick -= 1;
+          this.hitEnemy(effect.magnitude);
+        }
+      }
+    }
+    this.effects.enemy = this.enemy.alive
+      ? this.effects.enemy.filter(effect => effect.remaining > 0) : [];
+
+    for (const effect of this.effects.player) {
+      effect.remaining -= dt;
+      effect.tick += dt;
+      while (effect.tick >= 1 && effect.remaining > -0.0001) {
+        effect.tick -= 1;
+        if (effect.id === 'consecration') {
+          this.player.health = Math.min(this.player.maxHealth,
+            this.player.health + Math.max(1, Math.round(this.player.maxHealth * 0.025)));
+          if (this.enemy.alive && distance(this.player, this.enemy) <= 135) this.applyDamage(effect.magnitude);
+        } else if (effect.id === 'skeleton') {
+          if (this.enemy.alive && distance(this.player, this.enemy) <= 280) this.applyDamage(effect.magnitude);
+        }
+      }
+    }
+    this.effects.player = this.effects.player.filter(effect => effect.remaining > 0);
+  }
+
   advance(deltaMilliseconds: number): void {
     if (this.paused || !this.player.alive || !Number.isFinite(deltaMilliseconds)) return;
     this.accumulator += Math.min(MAX_FRAME_SECONDS, Math.max(0, deltaMilliseconds / 1000));
@@ -142,28 +277,33 @@ export class GameSimulation {
     this.resource = Math.min(definition.resourceMax, Math.max(0, this.resource + definition.regenRate * dt));
     this.attackTimer = Math.max(0, this.attackTimer - dt);
     this.enemyTimer = Math.max(0, this.enemyTimer - dt);
+    for (const slot of ['rmb', 'slot1'] as const) {
+      this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
+    }
+    this.tickEffects(dt);
     if (!this.enemy.alive) {
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) {
         this.enemy = makeActor('wraith-1', 780 + (this.kills % 3) * 80, 520, 72 + this.level * 8);
+        this.effects.enemy = [];
       }
     }
 
     const playerSpeed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment).moveSpeed / 100);
-    if (this.attackTarget === this.enemy.id && this.enemy.alive) {
+    if (this.pendingSkill && this.enemy.alive) {
+      const skill = SKILLS[this.classId][this.pendingSkill];
+      if (distance(this.player, this.enemy) > skill.range) {
+        toward(this.player, this.enemy, playerSpeed, dt, Math.max(0, skill.range - 4));
+      } else {
+        this.performCast(this.pendingSkill);
+      }
+    } else if (this.attackTarget === this.enemy.id && this.enemy.alive) {
       if (distance(this.player, this.enemy) > definition.attackRange) {
         toward(this.player, this.enemy, playerSpeed, dt, definition.attackRange - 4);
       } else if (this.attackTimer <= 0) {
         const stats = deriveStats(this.classId, this.equipment);
         this.attackTimer = 0.68 / stats.attackSpeed;
-        const base = stats.damageMin + this.rng.next() * (stats.damageMax - stats.damageMin);
-        const crit = this.rng.next() < stats.critChance / 100;
-        const offensive = ['MAGE', 'NECROMANCER', 'WARLOCK'].includes(this.classId)
-          ? stats.intelligence : stats.strength;
-        const damage = Math.max(1, Math.round(base * (1 + offensive * 0.035) * (crit ? 1.7 : 1)));
-        this.enemy.health = Math.max(0, this.enemy.health - damage);
-        this.events.push({ type: 'hit', targetId: this.enemy.id, damage });
-        if (this.enemy.health <= 0) this.defeatEnemy();
+        this.applyDamage(1);
         if (this.classId === 'WARRIOR') this.resource = Math.min(definition.resourceMax, this.resource + 8);
         if (this.classId === 'NECROMANCER') this.resource = Math.min(definition.resourceMax, this.resource + 10);
         if (this.classId === 'WARLOCK') this.resource = Math.min(definition.resourceMax, this.resource + 8);
@@ -179,9 +319,12 @@ export class GameSimulation {
     }
 
     if (this.enemy.alive) {
-      if (distance(this.player, this.enemy) < 275)
-        toward(this.enemy, this.player, ENEMY_SPEED, dt, ENEMY_RANGE - 3);
-      if (distance(this.player, this.enemy) <= ENEMY_RANGE && this.enemyTimer <= 0) {
+      const stunned = this.effects.enemy.some(e => e.id === 'stunned');
+      const chilled = this.effects.enemy.some(e => e.id === 'chilled');
+      if (!stunned && distance(this.player, this.enemy) < 275) {
+        toward(this.enemy, this.player, ENEMY_SPEED * (chilled ? 0.35 : 1), dt, ENEMY_RANGE - 3);
+      }
+      if (!stunned && distance(this.player, this.enemy) <= ENEMY_RANGE && this.enemyTimer <= 0) {
         this.enemyTimer = ENEMY_COOLDOWN;
         const stats = deriveStats(this.classId, this.equipment);
         const raw = 9 + this.level * 2;
@@ -204,6 +347,8 @@ export class GameSimulation {
     this.kills++;
     this.respawnTimer = 2.8;
     this.attackTarget = null;
+    this.pendingSkill = null;
+    this.effects.enemy = [];
     this.gold += 12 + this.level * 3;
     this.xp += 40 + this.level * 12;
     while (this.xp >= this.level * 80) {
@@ -236,11 +381,16 @@ export class GameSimulation {
       : this.attackTarget && this.enemy.alive ? 'combat'
       : this.moveTarget || this.pickupTarget ? 'moving' : 'ready';
     return {
-      version: 2,
+      version: 3,
       classId: this.classId,
       player: { ...this.player }, enemy: { ...this.enemy },
       kills: this.kills, level: this.level, xp: this.xp, gold: this.gold,
       resource: this.resource, rngState: this.rng.state,
+      cooldowns: { ...this.cooldowns },
+      effects: {
+        player: this.effects.player.map(e => ({ ...e })),
+        enemy: this.effects.enemy.map(e => ({ ...e }))
+      },
       stats: deriveStats(this.classId, this.equipment),
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
@@ -253,7 +403,7 @@ export class GameSimulation {
 
   restore(snapshot: GameSnapshot): boolean {
     const s = snapshot;
-    if (!s || s.version !== 2 || !isClassId(s.classId)
+    if (!s || s.version !== 3 || !isClassId(s.classId)
       || !validActor(s.player, 'hero') || !validActor(s.enemy, 'wraith-1')
       || !Number.isSafeInteger(s.kills) || s.kills < 0
       || !Number.isSafeInteger(s.level) || s.level < 1 || s.level > 1000
@@ -261,6 +411,12 @@ export class GameSimulation {
       || !Number.isSafeInteger(s.gold) || s.gold < 0
       || !Number.isInteger(s.rngState) || s.rngState < 0 || s.rngState > 0xffffffff
       || !Number.isFinite(s.resource) || s.resource < 0 || s.resource > CLASSES[s.classId].resourceMax
+      || !s.cooldowns || !(['rmb', 'slot1'] as const).every(slot =>
+        typeof s.cooldowns[slot] === 'number' && Number.isFinite(s.cooldowns[slot])
+        && s.cooldowns[slot] >= 0 && s.cooldowns[slot] <= 360)
+      || !s.effects || !(['player', 'enemy'] as const).every(key =>
+        Array.isArray(s.effects[key]) && s.effects[key].length <= 8
+        && s.effects[key].every(isActiveEffect))
       || !Array.isArray(s.inventory) || s.inventory.length !== INVENTORY_SIZE
       || !s.inventory.every(item => item === null || isItem(item))
       || !s.equipment || Object.keys(createEquipment()).some(
@@ -284,6 +440,12 @@ export class GameSimulation {
     this.gold = s.gold;
     this.resource = s.resource;
     this.rng = new SeededRng(s.rngState);
+    this.cooldowns = { ...s.cooldowns };
+    this.effects = {
+      player: s.effects.player.map(e => ({ ...e })),
+      enemy: s.effects.enemy.map(e => ({ ...e }))
+    };
+    this.pendingSkill = null;
     this.paused = false;
     this.moveTarget = null;
     this.attackTarget = null;
@@ -302,6 +464,9 @@ export class GameSimulation {
     this.equipment = createEquipment();
     this.inventory = Array(INVENTORY_SIZE).fill(null);
     this.rng = new SeededRng();
+    this.cooldowns = emptyCooldowns();
+    this.effects = emptyEffects();
+    this.pendingSkill = null;
     this.player = makeActor('hero', 390, 470, deriveStats(classId, this.equipment).maxHealth);
     this.enemy = makeActor('wraith-1', 780, 520, 72);
     this.groundLoot = [];

@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import type { GameBridge } from '../bridge/GameBridge';
 import { CLASSES } from '../data/classes';
 import { RARITIES } from '../data/items';
+import { SKILLS } from '../skills/skills';
+import type { GameEvent } from '../core/types';
 
 const WIDTH = 2200;
 const HEIGHT = 1400;
@@ -16,6 +18,7 @@ export class FrontierScene extends Phaser.Scene {
   private wraith!: Phaser.GameObjects.Graphics;
   private healthBar!: Phaser.GameObjects.Graphics;
   private groundItems!: Phaser.GameObjects.Graphics;
+  private statusVisuals!: Phaser.GameObjects.Graphics;
 
   constructor(bridge: GameBridge) {
     super({ key: 'Frontier' });
@@ -42,18 +45,22 @@ export class FrontierScene extends Phaser.Scene {
 
     this.healthBar = this.add.graphics().setDepth(60);
     this.groundItems = this.add.graphics().setDepth(44);
+    this.statusVisuals = this.add.graphics().setDepth(47);
 
     this.cameras.main.setBounds(0, 0, WIDTH, HEIGHT);
     this.cameras.main.setZoom(1);
     this.cameras.main.startFollow(this.hero, true, 0.1, 0.1);
 
+    this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', this.onWorldClick, this);
+    const unsubscribeEvents = this.bridge.onEvent(event => this.onGameEvent(event));
     this.input.keyboard?.on('keydown-SPACE', this.onSpace, this);
     this.input.keyboard?.on('keydown-ESC', this.onSpace, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.off('pointerdown', this.onWorldClick, this);
       this.input.keyboard?.off('keydown-SPACE', this.onSpace, this);
       this.input.keyboard?.off('keydown-ESC', this.onSpace, this);
+      unsubscribeEvents();
     });
   }
 
@@ -67,7 +74,12 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private onWorldClick(pointer: Phaser.Input.Pointer): void {
-    if (pointer.button !== 0 || this.bridge.snapshot().paused) return;
+    if (this.bridge.snapshot().paused) return;
+    if (pointer.button === 2) {
+      this.bridge.command({ type: 'cast', slot: 'rmb' });
+      return;
+    }
+    if (pointer.button !== 0) return;
     const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     const state = this.bridge.snapshot();
     const loot = state.groundLoot.find(g =>
@@ -84,6 +96,33 @@ export class FrontierScene extends Phaser.Scene {
     }
   }
 
+  /** Visual feedback only: combat rules never rely on an animation frame. */
+  private onGameEvent(event: GameEvent): void {
+    if (event.type === 'cast') {
+      const definition = Object.values(SKILLS)
+        .flatMap(kit => Object.values(kit))
+        .find(skill => skill.id === event.skillId);
+      const ring = this.add.graphics().setPosition(event.x, event.y).setDepth(85);
+      ring.lineStyle(4, definition?.color ?? 0xffddaa, 0.95).strokeCircle(0, 0, 18);
+      this.tweens.add({
+        targets: ring, alpha: 0, scaleX: 3.3, scaleY: 3.3, duration: 470,
+        onComplete: () => ring.destroy()
+      });
+    } else if (event.type === 'hit') {
+      const state = this.bridge.snapshot();
+      const actor = event.targetId === 'hero' ? state.player : state.enemy;
+      const label = this.add.text(actor.x, actor.y - 39, '-' + event.damage, {
+        fontFamily: 'Georgia, serif', fontSize: '17px',
+        color: event.targetId === 'hero' ? '#ff8d8d' : '#f6d29a',
+        stroke: '#070b11', strokeThickness: 3
+      }).setOrigin(0.5).setDepth(90);
+      this.tweens.add({
+        targets: label, y: label.y - 32, alpha: 0, duration: 750,
+        onComplete: () => label.destroy()
+      });
+    }
+  }
+
   update(_time: number, delta: number): void {
     this.bridge.tick(delta);
     const state = this.bridge.snapshot();
@@ -93,6 +132,31 @@ export class FrontierScene extends Phaser.Scene {
     this.wraith.setVisible(state.enemy.alive);
 
     this.healthBar.clear();
+    this.statusVisuals.clear();
+    if (state.enemy.alive) {
+      const effects = state.effects.enemy;
+      if (effects.some(e => e.id === 'stunned')) {
+        this.statusVisuals.lineStyle(4, 0xf6cc73, 0.95).strokeCircle(state.enemy.x, state.enemy.y, 30);
+      } else if (effects.some(e => e.id === 'chilled')) {
+        this.statusVisuals.lineStyle(4, 0x89d8ff, 0.8).strokeCircle(state.enemy.x, state.enemy.y, 28);
+      }
+      if (effects.some(e => e.id === 'burning')) {
+        this.statusVisuals.fillStyle(0xff7041, 0.22).fillCircle(state.enemy.x, state.enemy.y, 31);
+      }
+      if (effects.some(e => e.id === 'poisoned')) {
+        this.statusVisuals.fillStyle(0x73d478, 0.24).fillCircle(state.enemy.x, state.enemy.y, 31);
+      }
+    }
+    if (state.effects.player.some(e => e.id === 'consecration')) {
+      this.statusVisuals.lineStyle(3, 0xffe0a1, 0.48)
+        .strokeCircle(state.player.x, state.player.y, 105);
+    }
+    if (state.effects.player.some(e => e.id === 'skeleton')) {
+      this.statusVisuals.fillStyle(0x79d0bc, 0.65).fillCircle(state.player.x - 32, state.player.y + 30, 10);
+      this.statusVisuals.fillStyle(0x0b2830, 1)
+        .fillCircle(state.player.x - 35, state.player.y + 27, 2)
+        .fillCircle(state.player.x - 29, state.player.y + 27, 2);
+    }
     this.groundItems.clear();
     for (const drop of state.groundLoot) {
       const hex = RARITIES[drop.item.rarity].color.replace('#', '');

@@ -18,6 +18,6 @@ Production base path: `/dark_fantasy_2d_arpg/` (also served by the Vite developm
 
 ## Current functionality
 
-Six classes with original base stats and resources, mouse movement/targeting, basic combat, XP/gold/level progression, deterministic item drops, click-to-pickup, inventory and equip/unequip, runtime bilingual UI, IndexedDB game saves and staged-v1 save migration.
+Six classes with original base stats/resources, mouse movement/targeting, basic attacks, **two active skills per class** (Q/right mouse and 1), cooldowns, damage-over-time and buffs, combat feedback, XP/gold/level progression, deterministic loot, inventory/equipment and runtime Czech/English switching. Only **current-format v3** IndexedDB saves are supported; no legacy/demo save import.
 
 The original HTML game remains in the repository for reference, but is not in the Pages build. This does **not** mean that the original full game content has been migrated.

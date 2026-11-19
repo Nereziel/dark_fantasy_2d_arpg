@@ -8,6 +8,7 @@
   import GameViewport from './ui/GameViewport.svelte';
   import CharacterSelect from './ui/CharacterSelect.svelte';
   import InventoryPanel from './ui/InventoryPanel.svelte';
+  import SkillBar from './ui/SkillBar.svelte';
   import { CLASSES, type ClassId } from './game/data/classes';
 
   const bridge = new GameBridge();
@@ -50,8 +51,8 @@
   }
   function handleKeydown(event: KeyboardEvent): void {
     const target = event.target;
-    if (target instanceof HTMLElement && target.closest('input, textarea, select')) return;
-    if (!playing) return;
+    if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (!playing || event.repeat) return;
     if (event.code === 'KeyI') {
       event.preventDefault();
       if (inventoryOpen) closeInventory();
@@ -59,6 +60,10 @@
     } else if (event.code === 'Escape' && inventoryOpen) {
       event.preventDefault();
       closeInventory();
+    } else if (!inventoryOpen && !view.paused && view.player.alive &&
+      (event.code === 'KeyQ' || event.code === 'Digit1' || event.code === 'Numpad1')) {
+      event.preventDefault();
+      bridge.command({ type: 'cast', slot: event.code === 'KeyQ' ? 'rmb' : 'slot1' });
     }
   }
   async function save(): Promise<void> {
@@ -151,9 +156,11 @@
         <div>{$t('controls.move')}</div>
         <div>{$t('controls.attack')}</div>
         <div>{$t('controls.pickup')}</div>
+        <div>{$t('controls.skills')}</div>
         <div class="world-guide-sub">{$t('controls.hint')}</div>
       </div>
 
+      <SkillBar {bridge} {view} />
       <div class="game-hud">
         <div class="portrait"><span>✦</span></div>
         <div class="vital-panel">
