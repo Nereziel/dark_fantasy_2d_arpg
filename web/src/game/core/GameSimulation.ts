@@ -6,7 +6,7 @@ import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../
 import { canActivateWarriorSkill, spendAndStartCooldown, advanceWarriorCooldowns, applyWarriorRageDelta, type WarriorActivationRequest } from '../skills/warriorEconomy';
 import { startCombatTimeline, advanceCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
 import { STATUS_DEFINITIONS, type StatusId } from '../status/statusDefinitions';
-import { applyStatus, advanceStatuses, getStatusModifiers, type StatusInstance, type StatusRule } from '../status/statusRuntime';
+import { applyStatus, advanceStatuses, dispelStatuses, getStatusModifiers, type StatusInstance, type StatusRule } from '../status/statusRuntime';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
 import { resolveTypedDamage, resolveHealing, type DamageType, type DamageResult } from '../combat/typedDamage';
 import type { SkillAim } from '../input/skillAiming';
@@ -997,6 +997,8 @@ export class GameSimulation {
       const ally = this.units.find(u => u.actor.id === decision.targetId && u.actor.alive);
       if (ally && unit.cooldown <= 0 && distance(actor, ally.actor) <= 220) {
         ally.actor.health = resolveHealing(ally.actor.health, ally.actor.maxHealth, 36).health;
+        this.statusEffects.enemies[ally.actor.id] = dispelStatuses(
+          this.statusEffects.enemies[ally.actor.id] ?? [], { categories: ['curse'] });
         unit.cooldown = 6.5;
         this.events.push({ type: 'enemyHeal', enemyId: actor.id, targetId: ally.actor.id, amount: 36 });
       }
