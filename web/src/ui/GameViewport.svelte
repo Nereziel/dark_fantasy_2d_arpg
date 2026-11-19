@@ -7,7 +7,7 @@
 
   onMount(() => {
     let alive = true;
-    let game: { destroy: (removeCanvas?: boolean) => void } | null = null;
+    let game: { destroy: (removeCanvas: boolean) => void } | null = null;
 
     void import('../game/phaser/createGame').then(({ createGame }) => {
       if (alive) game = createGame(canvasHost, bridge);

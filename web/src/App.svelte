@@ -9,11 +9,11 @@
 
   const bridge = new GameBridge();
   let playing = $state(false);
-  let state: GameSnapshot = $state(bridge.snapshot());
+  let view: GameSnapshot = $state(bridge.snapshot());
   let messageKey = $state('');
   let busy = $state(false);
 
-  onMount(() => bridge.subscribe((latest) => { state = latest; }));
+  onMount(() => bridge.subscribe((latest) => { view = latest; }));
 
   function newGame(): void {
     bridge.command({ type: 'reset' });
@@ -29,7 +29,7 @@
     playing = false;
   }
   function togglePause(): void {
-    bridge.command({ type: 'pause', value: !state.paused });
+    bridge.command({ type: 'pause', value: !view.paused });
   }
   async function save(): Promise<void> {
     busy = true;
@@ -107,7 +107,7 @@
               <option value={option.code}>{option.label}</option>
             {/each}
           </select>
-          <button class="small-button" onclick={togglePause}>{state.paused ? $t('menu.resume') : $t('menu.paused')}</button>
+          <button class="small-button" onclick={togglePause}>{view.paused ? $t('menu.resume') : $t('menu.paused')}</button>
           <button class="small-button" onclick={menu}>{$t('menu.back')}</button>
         </div>
       </header>
@@ -121,13 +121,13 @@
       <div class="game-hud">
         <div class="portrait"><span>✦</span></div>
         <div class="vital-panel">
-          <div class="vital-top"><span>{$t('hud.health')}</span><strong>{state.player.health} / {state.player.maxHealth}</strong></div>
-          <div class="health-track"><div class="health-fill" style:width={`${100 * state.player.health / state.player.maxHealth}%`}></div></div>
-          <div class="hud-details"><span>{$t('hud.level')} {state.level}</span><span>{$t('hud.kills')}: {state.kills}</span></div>
+          <div class="vital-top"><span>{$t('hud.health')}</span><strong>{view.player.health} / {view.player.maxHealth}</strong></div>
+          <div class="health-track"><div class="health-fill" style:width={`${100 * view.player.health / view.player.maxHealth}%`}></div></div>
+          <div class="hud-details"><span>{$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills}</span></div>
         </div>
         <div class="status-panel">
           <div class="status-label">{$t('hud.status')}</div>
-          <div class="status-value">{$t(`status.${state.status}`)}</div>
+          <div class="status-value">{$t(`status.${view.status}`)}</div>
         </div>
         <div class="hud-actions">
           <button disabled={busy} onclick={save}>{$t('menu.save')}</button>
@@ -138,7 +138,7 @@
       {#if messageKey}
         <div class="toast" role="status">{$t(messageKey)}</div>
       {/if}
-      {#if state.paused}
+      {#if view.paused}
         <div class="modal-shield">
           <section class="pause-card" aria-label={$t('menu.paused')}>
             <h2>{$t('menu.paused')}</h2>
@@ -146,7 +146,7 @@
             <button class="secondary" onclick={menu}>{$t('menu.back')}</button>
           </section>
         </div>
-      {:else if !state.player.alive}
+      {:else if !view.player.alive}
         <div class="modal-shield">
           <section class="pause-card">
             <h2>{$t('hud.gameOver')}</h2>
