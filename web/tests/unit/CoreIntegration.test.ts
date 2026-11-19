@@ -51,7 +51,7 @@ describe('integrated core prompt modules', () => {
     expect('evadeCooldown' in sim.character()).toBe(false);
     frames(sim, 200);
     sim.command({ type: 'evade' });
-    expect(sim.snapshot().player.x).toBeGreaterThan(evaded.player.x);
+    expect(Math.hypot(sim.snapshot().player.x - evaded.player.x, sim.snapshot().player.y - evaded.player.y)).toBeGreaterThan(50);
   });
 
   it('uses typed defender mitigation, dodge/block results and deterministic RNG for enemy attacks', () => {
@@ -100,5 +100,20 @@ describe('integrated core prompt modules', () => {
     expect(sim.snapshot().evadeCooldown).toBe(0);
     expect(sim.snapshot().worldSeed).toBe(42);
     expect('holdPosition' in sim.character()).toBe(false);
+  });
+});
+
+describe('targeted skill input contract', () => {
+  it('targets the clicked enemy for RMB while preserving ordinary toolbar casts', () => {
+    const sim = new GameSimulation(0);
+    sim.command({ type: 'reset', classId: 'MAGE' });
+    sim.command({ type: 'cast', slot: 'rmb', targetId: 'skeleton-2' });
+    expect(sim.snapshot().selectedTargetId).toBe('skeleton-2');
+    for (let n = 0; n < 280 && sim.snapshot().cooldowns.rmb === 0; n++) sim.advance(16.667);
+    expect(sim.snapshot().cooldowns.rmb).toBeGreaterThan(0);
+    const active = sim.snapshot();
+    expect(active.enemies[1]!.actor.health).toBeLessThan(active.enemies[1]!.actor.maxHealth);
+    sim.command({ type: 'cast', slot: 'rmb', targetId: 'no-such-enemy' });
+    expect(sim.snapshot().selectedTargetId).toBe('skeleton-2');
   });
 });

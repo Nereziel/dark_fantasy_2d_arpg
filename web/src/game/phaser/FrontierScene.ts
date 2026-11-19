@@ -3,7 +3,14 @@ import type { GameBridge } from '../bridge/GameBridge';
 import { CLASSES } from '../data/classes';
 import { RARITIES } from '../data/items';
 import { SKILLS } from '../skills/skills';
-import type { GameEvent, ZoneId } from '../core/types';
+import type { GameEvent, ZoneId, Point } from '../core/types';
+import {
+  resolvePointerContext, contextToCommand, cursorForContext,
+  type ContextTarget, type ResolvedPointerContext
+} from '../input/contextResolver';
+import { resolvePointerAction } from '../input/bindings';
+import { GAME_BINDINGS } from '../input/gameBindings';
+import { ACTOR_RADIUS, canOccupy, type Obstacle } from '../world/navigation';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
 import {
   CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
@@ -33,6 +40,7 @@ export class FrontierScene extends Phaser.Scene {
   private terrain!: Phaser.GameObjects.Graphics;
   private renderedSeed: number | null = null;
   private renderedZone: ZoneId | null = null;
+  private activeObstacles: readonly Obstacle[] = [];
 
   constructor(bridge: GameBridge) {
     super({ key: 'Frontier' });
@@ -105,69 +113,90 @@ export class FrontierScene extends Phaser.Scene {
 
     this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', this.onWorldClick, this);
+    this.input.on('pointermove', this.onPointerHover, this);
     const unsubscribeEvents = this.bridge.onEvent(event => this.onGameEvent(event));
-    this.input.keyboard?.on('keydown-SPACE', this.onSpace, this);
-    this.input.keyboard?.on('keydown-ESC', this.onSpace, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.input.off('pointerdown', this.onWorldClick, this);
-      this.input.keyboard?.off('keydown-SPACE', this.onSpace, this);
-      this.input.keyboard?.off('keydown-ESC', this.onSpace, this);
+      this.input.off('pointermove', this.onPointerHover, this);
+      this.game.canvas.style.cursor = 'default';
       unsubscribeEvents();
       for (const actor of this.enemyGraphics.values()) actor.destroy();
       this.enemyGraphics.clear();
     });
   }
 
-  private onSpace(event: KeyboardEvent): void {
-    const active = document.activeElement;
-    if (active instanceof HTMLElement &&
-      (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(active.tagName)
-        || document.querySelector('.inventory-overlay, .npc-dialog-shield, .trade-overlay'))) return;
-    event.preventDefault();
-    this.bridge.command({ type: 'pause', value: !this.bridge.snapshot().paused });
+  private uiCapturesPointer(): boolean {
+    return this.bridge.snapshot().paused || !!document.querySelector(
+      '.inventory-overlay, .character-sheet-backdrop, .npc-dialog-shield, .trade-overlay, .modal-shield'
+    );
+  }
+
+  /** Context choice is owned by Agent 03's pure resolver, not Phaser hit-order. */
+  private pointerContext(point: Point): ResolvedPointerContext {
+    const state = this.bridge.snapshot();
+    const portal = state.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT;
+    const targets: ContextTarget[] = [
+      { kind: 'INTERACTABLE', id: 'crypt-portal', position: portal, hitRadius: 64 },
+      ...state.groundLoot.map(drop => ({
+        kind: 'LOOT' as const, id: drop.id, position: { x: drop.x, y: drop.y }, hitRadius: 30
+      })),
+      ...state.enemies.map(unit => ({
+        kind: 'ENEMY' as const, id: unit.actor.id,
+        position: { x: unit.actor.x, y: unit.actor.y },
+        hitRadius: unit.actor.type === 'crypt_lord' ? 58 : 43, alive: unit.actor.alive
+      }))
+    ];
+    if (state.zone === 'wilderness') {
+      for (const id of Object.keys(NPC_POSITIONS) as NpcId[]) {
+        targets.push({ kind: 'NPC', id, position: NPC_POSITIONS[id], hitRadius: 40 });
+      }
+    }
+    return resolvePointerContext({
+      pointer: point,
+      uiCaptured: this.uiCapturesPointer(),
+      walkable: canOccupy(point, ACTOR_RADIUS, this.activeObstacles),
+      targets
+    });
+  }
+
+  private onPointerHover(pointer: Phaser.Input.Pointer): void {
+    const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    const cursor = cursorForContext(this.pointerContext(world));
+    const cursors = {
+      move: 'crosshair', hostile: 'crosshair', talk: 'pointer',
+      loot: 'grab', interact: 'pointer', blocked: 'not-allowed', ui: 'default'
+    } as const;
+    this.game.canvas.style.cursor = cursors[cursor];
   }
 
   private onWorldClick(pointer: Phaser.Input.Pointer): void {
-    if (this.bridge.snapshot().paused) return;
-    if (pointer.button === 2) {
-      this.bridge.command({ type: 'cast', slot: 'rmb' });
+    const action = resolvePointerAction({
+      button: pointer.button, uiCaptured: this.uiCapturesPointer()
+    }, GAME_BINDINGS);
+    if (!action) return;
+    if (action === 'SECONDARY') {
+      const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      const context = this.pointerContext(world);
+      this.bridge.command({
+        type: 'cast', slot: 'rmb',
+        ...(context.kind === 'ENEMY' ? { targetId: context.id } : {})
+      });
       return;
     }
-    if (pointer.button !== 0) return;
+    if (action !== 'PRIMARY' && action !== 'FORCE_MOVE') return;
     const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-    const state = this.bridge.snapshot();
-    const portal = state.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT;
-    if (Phaser.Math.Distance.Between(world.x, world.y, portal.x, portal.y) < 64) {
-      this.bridge.command({ type: 'usePortal' });
+    if (action === 'FORCE_MOVE') {
+      // Ignore NPC/enemy/loot picking; the simulation resolves nearest walkable ground.
+      this.bridge.command({ type: 'move', destination: { x: world.x, y: world.y } });
       return;
     }
-    const npc = state.zone === 'wilderness'
-      ? (Object.keys(NPC_POSITIONS) as NpcId[]).find(id =>
-      Phaser.Math.Distance.Between(
-        world.x, world.y, NPC_POSITIONS[id].x, NPC_POSITIONS[id].y
-      ) < 40
-    ) : undefined;
-    if (npc) {
-      this.bridge.command({ type: 'interactNpc', npcId: npc });
-      return;
-    }
-    const loot = state.groundLoot.find(g =>
-      Phaser.Math.Distance.Between(world.x, world.y, g.x, g.y) < 30
-    );
-    if (loot) {
-      this.bridge.command({ type: 'pickup', id: loot.id });
-    } else {
-      const target = state.enemies
-        .filter(unit => unit.actor.alive)
-        .map(unit => unit.actor)
-        .find(enemy => Phaser.Math.Distance.Between(
-          world.x, world.y, enemy.x, enemy.y
-        ) < 43);
-      if (target) {
-        this.bridge.command({ type: 'attack', targetId: target.id });
-      } else {
-        this.bridge.command({ type: 'move', destination: { x: world.x, y: world.y } });
-      }
+    const context = this.pointerContext(world);
+    const command = contextToCommand(context);
+    if (command) {
+      this.bridge.command(command);
+    } else if (context.kind === 'INVALID') {
+      // Clicking solid terrain walks up to it rather than silently doing nothing.
+      this.bridge.command({ type: 'move', destination: { x: world.x, y: world.y } });
     }
   }
 
@@ -408,6 +437,7 @@ export class FrontierScene extends Phaser.Scene {
     ground.clear();
     this.renderedSeed = worldSeed;
     this.renderedZone = zone;
+    this.activeObstacles = layout.obstacles;
     if (zone === 'crypt') {
       this.paintCrypt(ground, worldSeed, layout.obstacles);
       return;

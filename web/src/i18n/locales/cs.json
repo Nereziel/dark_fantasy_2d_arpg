@@ -48,12 +48,12 @@
   "controls": {
     "move": "Pohyb: kliknutí na zem",
     "attack": "Útok: kliknutí na nepřítele",
-    "pause": "Pauza: mezerník",
-    "hint": "Klávesa I otevře inventář, klávesa C přehled postavy. Schopnosti: Q a 1. Esc zavírá panely.",
+    "pause": "Pauza: Esc",
+    "hint": "Mezerník: úskok · Shift: držet pozici · prostřední klik: vynucený pohyb · Q/RMB a 1: schopnosti · I/C: panely",
     "pickup": "Kořist: kliknutí na zářící předmět",
     "skills": "Schopnosti: Q / pravé tlačítko myši a klávesa 1",
     "avoid": "Uhni z červené oblasti dříve, než útok dopadne.",
-    "navigate": "Překážky obcházej kliknutím na volné místo; cíl lze vybrat ze seznamu."
+    "navigate": "Kliknutím se přesuneš i k nejbližšímu dostupnému místu vedle překážky. Prostřední tlačítko vynutí pohyb."
   },
   "battle": {
     "defeat": "Nepřítel padl",

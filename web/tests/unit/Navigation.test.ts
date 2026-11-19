@@ -41,13 +41,16 @@ describe('world collisions and deterministic navigation', () => {
     expect(Math.hypot(actor.x - goal.x, actor.y - goal.y)).toBeLessThan(8);
   });
 
-  it('does not accept a destination inside solid geometry', () => {
+  it('stops at reachable ground beside an obstacle instead of ignoring the click', () => {
     const sim = new GameSimulation();
     const prior = sim.snapshot();
-    sim.command({ type: 'move', destination: { x: 1030, y: 370 } });
-    for (let i = 0; i < 30; i++) sim.advance(16.667);
-    expect(sim.snapshot().player.x).toBeCloseTo(prior.player.x);
-    expect(sim.snapshot().player.y).toBeCloseTo(prior.player.y);
-    expect(findPath(prior.player, { x: 1030, y: 370 })).toEqual([]);
+    const blocked = { x: 1030, y: 370 };
+    expect(findPath(prior.player, blocked)).toEqual([]);
+    sim.command({ type: 'move', destination: blocked });
+    expect(sim.snapshot().status).toBe('moving');
+    for (let i = 0; i < 45; i++) sim.advance(16.667);
+    expect(Math.hypot(sim.snapshot().player.x - prior.player.x,
+      sim.snapshot().player.y - prior.player.y)).toBeGreaterThan(30);
+    expect(canOccupy(sim.snapshot().player)).toBe(true);
   });
 });

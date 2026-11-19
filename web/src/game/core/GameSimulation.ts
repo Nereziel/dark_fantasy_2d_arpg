@@ -1,7 +1,7 @@
 import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point, ZoneId } from './types';
 import { spawnPlayer, updateHealthLimit, advanceResource } from '../entities/player';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
-import { rollAttackDamage, mitigateDamage } from '../combat/damage';
+import { resolveTypedDamage, resolveHealing, type DamageType } from '../combat/typedDamage';
 import {
   SKILLS, emptyCooldowns, emptyEffects, isSkillSlot, isActiveEffect,
   type ActiveEffect, type ActiveEffects, type Cooldowns, type SkillSlot
@@ -10,7 +10,7 @@ import {
   ENEMY_DEFINITIONS, PACK_SIZE, createPack, createCryptPack, validEnemyType, validIntent,
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
-import { ACTOR_RADIUS, canOccupy, findPath, moveActor, type Obstacle } from '../world/navigation';
+import { ACTOR_RADIUS, canOccupy, findPath, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
   generateWorld, generateCrypt, type WorldLayout
@@ -107,6 +107,8 @@ export class GameSimulation {
   private gold = 75;
   private resource = CLASSES.WARRIOR.resourceInitial;
   private attackTimer = 0;
+  private holdPosition = false;
+  private evadeCooldown = 0;
   private respawnTimer = 0;
   private accumulator = 0;
   private readonly events: GameEvent[] = [];
@@ -136,6 +138,40 @@ export class GameSimulation {
     }
     if (command.type === 'pause') {
       this.paused = command.value;
+      return;
+    }
+    if (command.type === 'holdPosition') {
+      if (!this.player.alive || this.paused) return;
+      this.holdPosition = command.value;
+      if (command.value) {
+        this.movePath = [];
+        this.pickupTarget = null;
+        this.pendingNpc = null;
+        this.pendingPortal = false;
+      }
+      return;
+    }
+    if (command.type === 'evade') {
+      if (!this.player.alive || this.paused || this.evadeCooldown > 0) return;
+      const nearest = this.aliveEnemies
+        .map(unit => unit.actor)
+        .sort((a, b) => distance(this.player, a) - distance(this.player, b))[0];
+      const delta = nearest && distance(this.player, nearest) < 310
+        ? { x: this.player.x - nearest.x, y: this.player.y - nearest.y }
+        : { x: 1, y: 0 };
+      const len = Math.hypot(delta.x, delta.y);
+      const unit = len > 0.001 ? { x: delta.x / len, y: delta.y / len } : { x: 1, y: 0 };
+      const goal = { x: this.player.x + unit.x * 115, y: this.player.y + unit.y * 115 };
+      const before = { ...this.player };
+      moveActor(this.player, goal, 115, ACTOR_RADIUS, this.world.obstacles);
+      if (distance(before, this.player) < 1) return;
+      this.evadeCooldown = 2.5;
+      this.movePath = [];
+      this.attackTarget = null;
+      this.pendingSkill = null;
+      this.pickupTarget = null;
+      this.pendingNpc = null;
+      this.pendingPortal = false;
       return;
     }
     if (command.type === 'equip') { this.equip(command.index); return; }
@@ -197,12 +233,24 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'cast') {
-      if (isSkillSlot(command.slot)) this.requestCast(command.slot);
+      if (!isSkillSlot(command.slot)) return;
+      if (command.targetId !== undefined) {
+        const target = this.units.find(unit =>
+          unit.actor.alive && unit.actor.id === command.targetId
+        );
+        if (!target) return;
+        this.selectedTargetId = target.actor.id;
+      }
+      this.requestCast(command.slot);
       return;
     }
     if (command.type === 'move') {
       if (!Number.isFinite(command.destination.x) || !Number.isFinite(command.destination.y)) return;
-      const target = command.destination;
+      if (this.holdPosition) return;
+      const target = resolveReachableDestination(
+        this.player, command.destination, ACTOR_RADIUS, this.world.obstacles
+      );
+      if (!target) return;
       const route = findPath(this.player, target, ACTOR_RADIUS, this.world.obstacles);
       if (!route.length) return;
       this.movePath = route;
@@ -313,7 +361,7 @@ export class GameSimulation {
     this.pendingNpc = null;
     this.pendingPortal = false;
     if (distance(this.player, this.enemy) > skill.range) {
-      this.pendingSkill = slot;
+      if (!this.holdPosition) this.pendingSkill = slot;
       return;
     }
     this.performCast(slot);
@@ -328,14 +376,31 @@ export class GameSimulation {
       existing.tick = 0;
     } else list.push(effect);
   }
-  private applyDamage(power: number, unit = this.focusedUnit): number {
+  private applyDamage(power: number, unit = this.focusedUnit, type: DamageType = 'physical'): number {
     if (!unit.actor.alive) return 0;
     const stats = deriveStats(this.classId, this.equipment);
-    const { damage } = rollAttackDamage(
-      this.classId, stats, this.rng, power, 10 + this.level * 3, this.level
-    );
-    return this.hitEnemy(damage, unit);
+    const rolled = stats.damageMin + this.rng.next() * (stats.damageMax - stats.damageMin);
+    const primary = ['MAGE', 'NECROMANCER', 'WARLOCK'].includes(this.classId)
+      ? stats.intelligence : stats.strength;
+    const result = resolveTypedDamage({
+      type, base: rolled,
+      multiplier: (1 + primary * 0.035) * Math.max(0, power),
+      critChance: stats.critChance, critMultiplier: 1.7,
+      defenderArmor: 10 + this.level * 3, defenderLevel: this.level
+    }, this.rng);
+    return this.hitEnemy(result.damage, unit);
   }
+
+  private skillDamageType(slot: SkillSlot): DamageType {
+    const id = SKILLS[this.classId][slot].id;
+    if (id === 'fireball' || id === 'soulBurn') return 'fire';
+    if (id === 'frostNova') return 'frost';
+    if (id === 'poisonBlade') return 'poison';
+    if (id === 'lifeDrain') return 'shadow';
+    if (id === 'judgment' || id === 'consecration') return 'holy';
+    return 'physical';
+  }
+
   private hitEnemy(damage: number, unit: EnemyUnit): number {
     if (!unit.actor.alive || damage <= 0) return 0;
     const dealt = Math.min(unit.actor.health, Math.max(0, Math.round(damage)));
@@ -362,9 +427,9 @@ export class GameSimulation {
     }
     if (skill.kind === 'strike' || skill.kind === 'dash'
       || skill.kind === 'dot' || skill.kind === 'drain') {
-      const damage = this.applyDamage(skill.power, unit);
+      const damage = this.applyDamage(skill.power, unit, this.skillDamageType(slot));
       if (skill.kind === 'drain' && this.player.alive) {
-        this.player.health = Math.min(this.player.maxHealth, this.player.health + Math.ceil(damage * 0.65));
+        this.player.health = resolveHealing(this.player.health, this.player.maxHealth, Math.ceil(damage * 0.65)).health;
       }
       if (skill.effect && skill.duration && unit.actor.alive
         && ['stunned', 'poisoned', 'burning'].includes(skill.effect)) {
@@ -376,7 +441,7 @@ export class GameSimulation {
     } else if (skill.kind === 'nova') {
       for (const target of [...this.aliveEnemies]) {
         if (distance(this.player, target.actor) > skill.range) continue;
-        this.applyDamage(skill.power, target);
+        this.applyDamage(skill.power, target, this.skillDamageType(slot));
         if (target.actor.alive && skill.effect && skill.duration) {
           this.applyEffect('enemy',
             { id: skill.effect, remaining: skill.duration, magnitude: 0, tick: 0 }, target);
@@ -424,10 +489,12 @@ export class GameSimulation {
       while (effect.tick >= 1 && effect.remaining > -0.0001 && this.player.alive) {
         effect.tick -= 1;
         if (effect.id === 'consecration') {
-          this.player.health = Math.min(this.player.maxHealth,
-            this.player.health + Math.max(1, Math.round(this.player.maxHealth * 0.025)));
+          this.player.health = resolveHealing(
+            this.player.health, this.player.maxHealth,
+            Math.max(1, Math.round(this.player.maxHealth * 0.025))
+          ).health;
           for (const unit of [...this.aliveEnemies]) {
-            if (distance(this.player, unit.actor) <= 135) this.applyDamage(effect.magnitude, unit);
+            if (distance(this.player, unit.actor) <= 135) this.applyDamage(effect.magnitude, unit, 'holy');
           }
         } else if (effect.id === 'skeleton') {
           const target = this.aliveEnemies
@@ -471,11 +538,19 @@ export class GameSimulation {
           actor.y = intent.y;
         }
       }
-      const hit = distance(this.player, intent) <= intent.radius;
-      if (hit) {
+      let hit = false;
+      if (distance(this.player, intent) <= intent.radius) {
         const stats = deriveStats(this.classId, this.equipment);
-        this.hitPlayer(mitigateDamage(def.baseDamage + this.level * 2, stats.armor, this.level));
-        if (intent.pattern === 'leap' && this.player.alive) {
+        const result = resolveTypedDamage({
+          type: 'physical', base: def.baseDamage + this.level * 2,
+          defenderArmor: stats.armor, defenderLevel: this.level,
+          dodgeChance: stats.dodgeChance, blockChance: stats.blockChance
+        }, this.rng);
+        if (result.damage > 0) {
+          hit = true;
+          this.hitPlayer(result.damage);
+        }
+        if (hit && intent.pattern === 'leap' && this.player.alive) {
           this.applyEffect('player',
             { id: 'poisoned', remaining: 3, magnitude: 3, tick: 0 });
         }
@@ -542,6 +617,8 @@ export class GameSimulation {
     this.cooldowns = emptyCooldowns();
     this.attackTimer = 0;
     this.accumulator = 0;
+    this.holdPosition = false;
+    this.evadeCooldown = 0;
     this.movePath = [];
     this.attackTarget = null;
     this.pickupTarget = null;
@@ -564,6 +641,7 @@ export class GameSimulation {
     const definition = CLASSES[this.classId];
     this.resource = advanceResource(this.resource, definition.regenRate, definition.resourceMax, dt);
     this.attackTimer = Math.max(0, this.attackTimer - dt);
+    this.evadeCooldown = Math.max(0, this.evadeCooldown - dt);
     for (const slot of ['rmb', 'slot1'] as const) {
       this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
     }
@@ -614,13 +692,17 @@ export class GameSimulation {
     } else if (this.pendingSkill && focus.actor.alive) {
       const skill = SKILLS[this.classId][this.pendingSkill];
       if (distance(this.player, focus.actor) > skill.range) {
-        this.follow(this.player, focus.actor, speed, dt, Math.max(0, skill.range - 4));
+        if (!this.holdPosition) {
+          this.follow(this.player, focus.actor, speed, dt, Math.max(0, skill.range - 4));
+        }
       } else this.performCast(this.pendingSkill);
     } else if (this.attackTarget) {
       const target = this.units.find(unit => unit.actor.id === this.attackTarget && unit.actor.alive);
       if (!target) this.attackTarget = null;
       else if (distance(this.player, target.actor) > definition.attackRange) {
-        this.follow(this.player, target.actor, speed, dt, definition.attackRange - 4);
+        if (!this.holdPosition) {
+          this.follow(this.player, target.actor, speed, dt, definition.attackRange - 4);
+        }
       } else if (this.attackTimer <= 0) {
         const stats = deriveStats(this.classId, this.equipment);
         this.attackTimer = 0.68 / stats.attackSpeed;
@@ -655,8 +737,10 @@ export class GameSimulation {
       this.xp -= this.level * 80;
       this.level++;
       this.events.push({ type: 'levelUp', level: this.level });
-      this.player.health = Math.min(this.player.maxHealth,
-        this.player.health + Math.round(this.player.maxHealth * 0.25));
+      this.player.health = resolveHealing(
+        this.player.health, this.player.maxHealth,
+        Math.round(this.player.maxHealth * 0.25)
+      ).health;
     }
   }
 
@@ -776,6 +860,8 @@ export class GameSimulation {
       selectedTargetId: this.selectedTargetId,
       wave: this.wave,
       respawnTimer: this.respawnTimer,
+      holdPosition: this.holdPosition,
+      evadeCooldown: this.evadeCooldown,
       kills: this.kills,
       level: this.level,
       xp: this.xp,
@@ -824,6 +910,8 @@ export class GameSimulation {
       || !Number.isInteger(s.rngState) || s.rngState < 0 || s.rngState > 0xffffffff
       || !Number.isFinite(s.resource) || s.resource < 0 || s.resource > CLASSES[s.classId].resourceMax
       || !Number.isFinite(s.respawnTimer) || s.respawnTimer < 0 || s.respawnTimer > 5
+      || typeof s.holdPosition !== 'boolean'
+      || !Number.isFinite(s.evadeCooldown) || s.evadeCooldown < 0 || s.evadeCooldown > 2.5
       || !s.cooldowns || !(['rmb', 'slot1'] as const).every(slot =>
         Number.isFinite(s.cooldowns[slot]) && s.cooldowns[slot] >= 0 && s.cooldowns[slot] <= 360)
       || !s.effects || !Array.isArray(s.effects.player)
@@ -869,6 +957,8 @@ export class GameSimulation {
     this.selectedTargetId = s.selectedTargetId;
     this.wave = s.wave;
     this.respawnTimer = s.respawnTimer;
+    this.holdPosition = s.holdPosition;
+    this.evadeCooldown = s.evadeCooldown;
     this.kills = s.kills;
     this.level = s.level;
     this.xp = s.xp;
@@ -920,6 +1010,8 @@ export class GameSimulation {
     this.resource = CLASSES[classId].resourceInitial;
     this.paused = false;
     this.attackTimer = 0;
+    this.evadeCooldown = 0;
+    this.holdPosition = false;
     this.respawnTimer = 0;
     this.accumulator = 0;
     this.events.splice(0);
