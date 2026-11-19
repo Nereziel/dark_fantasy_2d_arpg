@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Aether & Ruin — 2D Dark Fantasy ARPG Engine</title>
+  <title>Aether & Ruin | Dark Fantasy ARPG</title>
+  <meta name="theme-color" content="#0c1014">
+  <meta name="description" content="Aether & Ruin — dark fantasy pixel-art action RPG. Explore Oakhaven, the wilds, crypts and marshes.">
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="./visuals.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=MedievalSharp&family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
@@ -2303,7 +2306,7 @@
             rect(10 + reach, 9 + by, 3, 1, pal.w);
           }
 
-          return g.map(r => r.join(''));
+          return g.map(r => r.map(color => Object.keys(pal).find(key => pal[key] === color) || '.').join(''));
         };
 
         this.cache.set(key, {
@@ -2359,7 +2362,7 @@
             rect(5, 10, 2, 4, pal.l);
             rect(8, 10, 2, 4, pal.l);
           }
-          return g.map(r => r.join(''));
+          return g.map(r => r.map(color => Object.keys(pal).find(key => pal[key] === color) || '.').join(''));
         };
 
         this.cache.set(key, {
@@ -2447,7 +2450,7 @@
             rect(18, 14 + bobY, 2, 3, pal.g);
           }
 
-          return g.map(r => r.join(''));
+          return g.map(r => r.map(color => Object.keys(pal).find(key => pal[key] === color) || '.').join(''));
         };
 
         this.cache.set('BOSS_HOLLOW_KING', {
@@ -2512,7 +2515,7 @@
           rect(5, 17, 2, 5, pal.c);
           rect(17, 17, 2, 5, pal.c);
 
-          return g.map(r => r.join(''));
+          return g.map(r => r.map(color => Object.keys(pal).find(key => pal[key] === color) || '.').join(''));
         };
 
         this.cache.set('BOSS_MOTHER_DECAY', {
@@ -2764,13 +2767,13 @@
 
       clear() {
         this.ctx.fillStyle = '#05060a';
-        this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+        this.ctx.fillRect(0, 0, this.ctx.canvas.clientWidth, this.ctx.canvas.clientHeight);
       }
 
       drawWorld(grid, camera) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(ctx.canvas.width / 2 - camera.x, ctx.canvas.height / 2 - camera.y);
+        ctx.translate(ctx.canvas.clientWidth / 2 - camera.x, ctx.canvas.clientHeight / 2 - camera.y);
 
         // Act I Safe Town Sanctuary (Oakhaven)
         ctx.fillStyle = '#131915';
@@ -2806,10 +2809,10 @@
         // Subtle stone/earth tile grid
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
         ctx.lineWidth = 1;
-        const startX = Math.max(40, Math.floor((camera.x - ctx.canvas.width / 2) / 64) * 64);
-        const endX = Math.min(3560, camera.x + ctx.canvas.width / 2 + 64);
-        const startY = Math.max(40, Math.floor((camera.y - ctx.canvas.height / 2) / 64) * 64);
-        const endY = Math.min(2360, camera.y + ctx.canvas.height / 2 + 64);
+        const startX = Math.max(40, Math.floor((camera.x - ctx.canvas.clientWidth / 2) / 64) * 64);
+        const endX = Math.min(3560, camera.x + ctx.canvas.clientWidth / 2 + 64);
+        const startY = Math.max(40, Math.floor((camera.y - ctx.canvas.clientHeight / 2) / 64) * 64);
+        const endY = Math.min(2360, camera.y + ctx.canvas.clientHeight / 2 + 64);
 
         for (let gx = startX; gx <= endX; gx += 64) {
           ctx.beginPath();
@@ -2845,7 +2848,7 @@
       drawProps(props, camera, hoveredTarget) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(ctx.canvas.width / 2 - camera.x, ctx.canvas.height / 2 - camera.y);
+        ctx.translate(ctx.canvas.clientWidth / 2 - camera.x, ctx.canvas.clientHeight / 2 - camera.y);
         for (const p of props) {
           if (p.isDestroyed) continue;
           const isHovered = hoveredTarget === p;
@@ -2870,7 +2873,7 @@
       drawShrines(shrines, camera, hoveredTarget) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(ctx.canvas.width / 2 - camera.x, ctx.canvas.height / 2 - camera.y);
+        ctx.translate(ctx.canvas.clientWidth / 2 - camera.x, ctx.canvas.clientHeight / 2 - camera.y);
         for (const s of shrines) {
           const isHovered = hoveredTarget === s;
           const pulse = Math.sin(s.pulseTimer) * 4;
@@ -2904,7 +2907,7 @@
       drawChests(chests, camera, hoveredTarget) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(ctx.canvas.width / 2 - camera.x, ctx.canvas.height / 2 - camera.y);
+        ctx.translate(ctx.canvas.clientWidth / 2 - camera.x, ctx.canvas.clientHeight / 2 - camera.y);
         for (const c of chests) {
           const isHovered = hoveredTarget === c;
           if (isHovered && !c.isOpened) {
@@ -2929,7 +2932,7 @@
       drawTownObjects(townObjects, npcs, camera, hoveredTarget) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(ctx.canvas.width / 2 - camera.x, ctx.canvas.height / 2 - camera.y);
+        ctx.translate(ctx.canvas.clientWidth / 2 - camera.x, ctx.canvas.clientHeight / 2 - camera.y);
 
         for (const obj of townObjects) {
           const isHovered = hoveredTarget === obj;
@@ -2993,7 +2996,7 @@
       drawGroundLoot(groundLoot, camera, hoveredTarget) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(ctx.canvas.width / 2 - camera.x, ctx.canvas.height / 2 - camera.y);
+        ctx.translate(ctx.canvas.clientWidth / 2 - camera.x, ctx.canvas.clientHeight / 2 - camera.y);
         for (const gl of groundLoot) {
           const bob = Math.sin(gl.bobTimer) * 3;
           const color = gl.item.rarity?.color || '#94a3b8';
@@ -3030,7 +3033,7 @@
       drawEnemies(enemies, camera, hoveredTarget) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(ctx.canvas.width / 2 - camera.x, ctx.canvas.height / 2 - camera.y);
+        ctx.translate(ctx.canvas.clientWidth / 2 - camera.x, ctx.canvas.clientHeight / 2 - camera.y);
         for (const e of enemies) {
           if (e.isDead) continue;
           const isHovered = hoveredTarget === e;
@@ -3102,7 +3105,7 @@
       drawProjectiles(projectiles, camera) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(ctx.canvas.width / 2 - camera.x, ctx.canvas.height / 2 - camera.y);
+        ctx.translate(ctx.canvas.clientWidth / 2 - camera.x, ctx.canvas.clientHeight / 2 - camera.y);
         for (const p of projectiles) {
           ctx.fillStyle = p.color;
           ctx.shadowColor = p.color;
@@ -3117,7 +3120,7 @@
       drawGroundZones(groundZones, camera) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(ctx.canvas.width / 2 - camera.x, ctx.canvas.height / 2 - camera.y);
+        ctx.translate(ctx.canvas.clientWidth / 2 - camera.x, ctx.canvas.clientHeight / 2 - camera.y);
         for (const z of groundZones) {
           ctx.fillStyle = z.color;
           ctx.beginPath();
@@ -3133,7 +3136,7 @@
       drawAllies(allies, camera) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(ctx.canvas.width / 2 - camera.x, ctx.canvas.height / 2 - camera.y);
+        ctx.translate(ctx.canvas.clientWidth / 2 - camera.x, ctx.canvas.clientHeight / 2 - camera.y);
         for (const a of allies) {
           this.sprites.drawSprite(ctx, 'ALLY_SKELETON', a.x, a.y, {
             scale: 2.3,
@@ -3148,8 +3151,8 @@
       drawPlayer(player, camera) {
         const ctx = this.ctx;
         ctx.save();
-        const px = ctx.canvas.width / 2 - camera.x + player.x;
-        const py = ctx.canvas.height / 2 - camera.y + player.y;
+        const px = ctx.canvas.clientWidth / 2 - camera.x + player.x;
+        const py = ctx.canvas.clientHeight / 2 - camera.y + player.y;
 
         const classColors = {
           WARRIOR: 'rgba(248, 113, 113, 0.35)',
@@ -3188,7 +3191,7 @@
       drawEffects(camera) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.translate(ctx.canvas.width / 2 - camera.x, ctx.canvas.height / 2 - camera.y);
+        ctx.translate(ctx.canvas.clientWidth / 2 - camera.x, ctx.canvas.clientHeight / 2 - camera.y);
 
         for (const tg of this.telegraphs) {
           const pct = 1 - (tg.timer / tg.maxTimer);
@@ -3232,9 +3235,9 @@
       drawFogOfWar(camera) {
         const ctx = this.ctx;
         ctx.save();
-        const sx = camera.x - ctx.canvas.width / 2;
-        const sy = camera.y - ctx.canvas.height / 2;
-        ctx.drawImage(this.fogCanvas, sx, sy, ctx.canvas.width, ctx.canvas.height, 0, 0, ctx.canvas.width, ctx.canvas.height);
+        const sx = camera.x - ctx.canvas.clientWidth / 2;
+        const sy = camera.y - ctx.canvas.clientHeight / 2;
+        ctx.drawImage(this.fogCanvas, sx, sy, ctx.canvas.clientWidth, ctx.canvas.clientHeight, 0, 0, ctx.canvas.clientWidth, ctx.canvas.clientHeight);
         ctx.restore();
       }
 
@@ -3603,8 +3606,9 @@
 
       initResize() {
         const onResize = () => {
-          this.canvas.width = window.innerWidth;
-          this.canvas.height = window.innerHeight;
+          this.pixelRatio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+          this.canvas.width = Math.round(window.innerWidth * this.pixelRatio);
+          this.canvas.height = Math.round(window.innerHeight * this.pixelRatio);
         };
         window.addEventListener('resize', onResize);
         onResize();
@@ -4896,8 +4900,8 @@
           const rect = this.canvas.getBoundingClientRect();
           this.mouseScreen.x = e.clientX - rect.left;
           this.mouseScreen.y = e.clientY - rect.top;
-          this.mouseWorld.x = this.mouseScreen.x - this.canvas.width / 2 + this.camera.x;
-          this.mouseWorld.y = this.mouseScreen.y - this.canvas.height / 2 + this.camera.y;
+          this.mouseWorld.x = this.mouseScreen.x - this.canvas.clientWidth / 2 + this.camera.x;
+          this.mouseWorld.y = this.mouseScreen.y - this.canvas.clientHeight / 2 + this.camera.y;
           if (this.flow.currentState === APP_STATES.GAMEPLAY) {
             this.hoveredTarget = this.resolveHoverTarget();
             if (this.isMouseDown && !this.isShiftHeld && this.hoveredTarget.type === 'GROUND') {
@@ -5105,6 +5109,7 @@
       }
 
       render() {
+        this.ctx.setTransform(this.pixelRatio || 1, 0, 0, this.pixelRatio || 1, 0, 0);
         this.renderer.clear();
         if (this.flow.currentState === APP_STATES.GAMEPLAY || this.flow.currentState === APP_STATES.PAUSE || this.flow.currentState === APP_STATES.DEATH) {
           this.ctx.save();
@@ -5127,6 +5132,7 @@
           if (this.player) this.renderer.drawPlayer(this.player, this.camera);
           this.renderer.drawEffects(this.camera);
           this.renderer.drawFogOfWar(this.camera);
+          this.renderer.drawAtmosphere(this.camera, this.player);
 
           this.ctx.restore();
         }
@@ -5157,5 +5163,6 @@
       window.gameApp.start();
     });
   </script>
+  <script src="./visuals.js"></script>
 </body>
 </html>
