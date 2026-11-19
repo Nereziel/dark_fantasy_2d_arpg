@@ -76,3 +76,30 @@ jobs:
             git commit -m "chore(web): lock staging dependencies [skip ci]"
             git push
           fi
+  browser-smoke:
+    needs: staging-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked staging dependencies
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+      - name: Install Playwright Chromium
+        working-directory: web
+        run: npx playwright install chromium --with-deps
+      - name: Build browser app
+        working-directory: web
+        run: npm run build
+      - name: Playwright locale/gameplay boot smoke test
+        working-directory: web
+        run: npm run test:e2e
+      - name: Upload failing browser evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-playwright-failure
+          path: web/test-results/
+          if-no-files-found: ignore

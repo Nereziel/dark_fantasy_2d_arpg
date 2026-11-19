@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('switches Czech/English in the menu and in game without losing the scene', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.getByRole('heading', { name: 'Aether & Ruin' })).toBeVisible();
 
   await page.locator('#menu-language').selectOption('cs');
@@ -9,6 +9,7 @@ test('switches Czech/English in the menu and in game without losing the scene', 
 
   await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
   await expect(page.locator('.game-hud')).toBeVisible();
+  await expect(page.locator('.phaser-container canvas')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Poražení nepřátelé')).toBeVisible();
 
   await page.locator('#game-language').selectOption('en');
