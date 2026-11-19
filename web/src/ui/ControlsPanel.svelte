@@ -11,7 +11,7 @@
   let error = $state('');
   const actions: readonly InputAction[] = [
     'PRIMARY', 'SECONDARY', 'FORCE_MOVE', 'HOLD_POSITION',
-    'SLOT_1', 'SLOT_2', 'SLOT_3', 'SLOT_4',
+    'SLOT_1', 'SLOT_2', 'SLOT_3', 'SLOT_4', 'SLOT_5', 'SLOT_6',
     'POTION', 'EVADE', 'INVENTORY', 'CHARACTER',
     'SKILLS', 'TALENTS', 'MAP', 'JOURNAL', 'MENU'
   ];
