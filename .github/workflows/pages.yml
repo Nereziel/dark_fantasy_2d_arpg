@@ -3,48 +3,19 @@ name: Deploy Aether & Ruin to GitHub Pages
 on:
   push:
     branches: [main]
-    # Build/deploy only when the published game or its build configuration changes.
-    # README.md, implementation prompts, docs/ and test-only commits do not deploy.
+    # Only changes to the CURRENTLY PUBLISHED game trigger deployment.
+    # Docs, README, implementation prompts, tests and the future web/ staging
+    # app do not redeploy the legacy site. Switch this list on migration cutover.
     paths:
-      # Current published HTML5 Canvas game (legacy, until Svelte/Phaser cutover)
       - 'index.html'
       - 'dark_fantasy_2d_arpg_engine.html'
       - 'visuals.js'
       - 'visuals.css'
       - 'assets/**'
-
-      # Future root-level Vite app (if migrated to repository root)
-      - 'src/**'
-      - 'public/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'npm-shrinkwrap.json'
-      - 'vite.config.*'
-      - 'svelte.config.*'
-      - 'tsconfig*.json'
-      - 'postcss.config.*'
-      - 'tailwind.config.*'
-      - 'scripts/**'
-
-      # Side-by-side Svelte/Phaser app during migration
-      - 'web/index.html'
-      - 'web/src/**'
-      - 'web/public/**'
-      - 'web/package.json'
-      - 'web/package-lock.json'
-      - 'web/npm-shrinkwrap.json'
-      - 'web/vite.config.*'
-      - 'web/svelte.config.*'
-      - 'web/tsconfig*.json'
-      - 'web/postcss.config.*'
-      - 'web/tailwind.config.*'
-      - 'web/scripts/**'
-
-      # Changing deployment configuration must also trigger deployment.
       - '.github/workflows/pages.yml'
       - '.github/actions/**'
 
-  # Intentional manual redeploy is always possible (ignores push path filters).
+  # Deliberate manual redeploy, even when no game files changed.
   workflow_dispatch:
 
 permissions:
@@ -53,7 +24,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: true
 
 jobs:
@@ -66,8 +37,8 @@ jobs:
       - name: Check out game
         uses: actions/checkout@v4
 
-      # Legacy static site validation. During the Svelte/Phaser cutover,
-      # replace this with npm ci/check/test/build and publish web/dist.
+      # Legacy static site validation. At the Svelte/Phaser cutover, replace
+      # with npm ci/check/test/build in web/ and upload web/dist below.
       - name: Validate source and scripts
         run: node tests/site.test.mjs
 
