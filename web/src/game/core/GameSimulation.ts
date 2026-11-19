@@ -9,7 +9,8 @@ import {
   ENEMY_DEFINITIONS, PACK_SIZE, createPack, validEnemyType, validIntent,
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
-import { ACTOR_RADIUS, canOccupy, findPath, moveActor, WORLD_WIDTH, WORLD_HEIGHT } from '../world/navigation';
+import { ACTOR_RADIUS, canOccupy, findPath, moveActor, type Obstacle } from '../world/navigation';
+import { generateWorld, type WorldLayout } from '../world/generator';
 import {
   SeededRng, createEquipment, deriveStats, isEquipmentSlot, isItem, rollItem,
   type Equipment, type EquipmentSlot, type GroundItem, type Item
@@ -41,24 +42,24 @@ function cloneUnit(unit: EnemyUnit): EnemyUnit {
     effects: unit.effects.map(effect => ({ ...effect }))
   };
 }
-function validActor(actor: ActorSnapshot, id: string): boolean {
+function validActor(actor: ActorSnapshot, id: string, obstacles: readonly Obstacle[]): boolean {
   return !!actor && actor.id === id
     && [actor.x, actor.y, actor.health, actor.maxHealth].every(Number.isFinite)
     && actor.maxHealth > 0 && actor.health >= 0 && actor.health <= actor.maxHealth
-    && canOccupy(actor, ACTOR_RADIUS)
+    && canOccupy(actor, ACTOR_RADIUS, obstacles)
     && actor.alive === (actor.health > 0);
 }
 
 /** Advances actors with collision and uses local A* only when a direct route is blocked. */
-function toward(actor: Point, target: Point, speed: number, dt: number, stop = 0): void {
+function toward(actor: Point, target: Point, speed: number, dt: number, stop: number, obstacles: readonly Obstacle[]): void {
   const remaining = distance(actor, target);
   if (remaining <= stop || remaining < 0.001) return;
   const amount = Math.max(0, Math.min(speed * dt, remaining - stop));
   const before = { ...actor };
-  moveActor(actor, target, amount);
+  moveActor(actor, target, amount, ACTOR_RADIUS, obstacles);
   if (distance(before, actor) < amount * 0.15 && amount > 0.01) {
-    const path = findPath(actor, target);
-    if (path.length) moveActor(actor, path[0]!, amount);
+    const path = findPath(actor, target, ACTOR_RADIUS, obstacles);
+    if (path.length) moveActor(actor, path[0]!, amount, ACTOR_RADIUS, obstacles);
   }
 }
 
@@ -73,6 +74,7 @@ export class GameSimulation {
   private rng = new SeededRng();
   private cooldowns: Cooldowns = emptyCooldowns();
   private effects: ActiveEffects = emptyEffects();
+  private world: WorldLayout = generateWorld(0);
   private units: EnemyUnit[] = createPack(0, 1);
   private selectedTargetId: string | null = null;
   private pendingSkill: SkillSlot | null = null;
@@ -92,6 +94,12 @@ export class GameSimulation {
   private respawnTimer = 0;
   private accumulator = 0;
   private readonly events: GameEvent[] = [];
+
+  constructor(seed = 0) { this.reset('WARRIOR', seed); }
+
+  private follow(actor: Point, target: Point, speed: number, dt: number, stop = 0): void {
+    toward(actor, target, speed, dt, stop, this.world.obstacles);
+  }
 
   private get focusedUnit(): EnemyUnit {
     return this.units.find(unit => unit.actor.id === this.selectedTargetId && unit.actor.alive)
@@ -124,7 +132,7 @@ export class GameSimulation {
     if (command.type === 'move') {
       if (!Number.isFinite(command.destination.x) || !Number.isFinite(command.destination.y)) return;
       const target = command.destination;
-      const route = findPath(this.player, target);
+      const route = findPath(this.player, target, ACTOR_RADIUS, this.world.obstacles);
       if (!route.length) return;
       this.movePath = route;
       this.attackTarget = null;
@@ -230,7 +238,7 @@ export class GameSimulation {
     this.events.push({ type: 'cast', skillId: skill.id, x: point.x, y: point.y });
 
     if (skill.kind === 'dash' && unit.actor.alive) {
-      toward(this.player, unit.actor, skill.range, 1, 56);
+      this.follow(this.player, unit.actor, skill.range, 1, 56);
     }
     if (skill.kind === 'strike' || skill.kind === 'dash'
       || skill.kind === 'dot' || skill.kind === 'drain') {
@@ -314,7 +322,7 @@ export class GameSimulation {
 
   private updateEnemyAI(unit: EnemyUnit, dt: number): void {
     if (!unit.actor.alive || !this.player.alive) { unit.intent = null; return; }
-    // The starting encampment is a true sanctuary.
+    // The starter camp is a sanctuary even if the player retreats mid-combat.
     if (distance(this.player, this.world.camp) <= 165) {
       unit.intent = null;
       return;
@@ -337,7 +345,7 @@ export class GameSimulation {
       unit.cooldown = def.cooldown;
       if (intent.pattern === 'leap') {
         // The landing spot is fixed at cast time. Terrain cannot be bypassed.
-        if (canOccupy(intent)) {
+        if (canOccupy(intent, ACTOR_RADIUS, this.world.obstacles)) {
           actor.x = intent.x;
           actor.y = intent.y;
         }
@@ -360,13 +368,13 @@ export class GameSimulation {
     const slowed = unit.effects.some(effect => effect.id === 'chilled');
     const speed = def.speed * (slowed ? 0.35 : 1);
     if (dist > def.preferredRange + 10) {
-      toward(actor, this.player, speed, dt, def.preferredRange);
+      this.follow(actor, this.player, speed, dt, def.preferredRange);
     } else if (def.attack === 'bolt' && dist > 0 && dist < def.preferredRange - 23) {
       const retreat = {
         x: actor.x + (actor.x - this.player.x) / dist * speed * dt,
         y: actor.y + (actor.y - this.player.y) / dist * speed * dt
       };
-      moveActor(actor, retreat, speed * dt);
+      moveActor(actor, retreat, speed * dt, ACTOR_RADIUS, this.world.obstacles);
     }
     // Formation spacing prevents all mobs from collapsing into one sprite.
     for (const other of this.units) {
@@ -377,7 +385,7 @@ export class GameSimulation {
           x: actor.x + (actor.x - other.actor.x) / delta * 8,
           y: actor.y + (actor.y - other.actor.y) / delta * 8
         };
-        moveActor(actor, retreat, Math.min(8, speed * dt * 0.65));
+        moveActor(actor, retreat, Math.min(8, speed * dt * 0.65), ACTOR_RADIUS, this.world.obstacles);
       }
     }
     if (unit.cooldown > 0 || distance(actor, this.player) > def.attackRange) return;
@@ -410,7 +418,7 @@ export class GameSimulation {
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) {
         this.wave++;
-        this.units = createPack(this.wave, this.level);
+        this.units = createPack(this.wave, this.level, this.world.encounterPositions);
         this.selectedTargetId = null;
       }
     }
@@ -420,13 +428,13 @@ export class GameSimulation {
     if (this.pendingSkill && focus.actor.alive) {
       const skill = SKILLS[this.classId][this.pendingSkill];
       if (distance(this.player, focus.actor) > skill.range) {
-        toward(this.player, focus.actor, speed, dt, Math.max(0, skill.range - 4));
+        this.follow(this.player, focus.actor, speed, dt, Math.max(0, skill.range - 4));
       } else this.performCast(this.pendingSkill);
     } else if (this.attackTarget) {
       const target = this.units.find(unit => unit.actor.id === this.attackTarget && unit.actor.alive);
       if (!target) this.attackTarget = null;
       else if (distance(this.player, target.actor) > definition.attackRange) {
-        toward(this.player, target.actor, speed, dt, definition.attackRange - 4);
+        this.follow(this.player, target.actor, speed, dt, definition.attackRange - 4);
       } else if (this.attackTimer <= 0) {
         const stats = deriveStats(this.classId, this.equipment);
         this.attackTimer = 0.68 / stats.attackSpeed;
@@ -440,10 +448,10 @@ export class GameSimulation {
       const loot = this.groundLoot.find(item => item.id === this.pickupTarget);
       if (!loot) this.pickupTarget = null;
       else if (distance(this.player, loot) <= 36) this.collectLoot(loot);
-      else toward(this.player, loot, speed, dt, 32);
+      else this.follow(this.player, loot, speed, dt, 32);
     } else if (this.movePath.length) {
       const point = this.movePath[0]!;
-      toward(this.player, point, speed, dt);
+      this.follow(this.player, point, speed, dt);
       if (distance(this.player, point) <= 6) this.movePath.shift();
     }
 
@@ -510,7 +518,7 @@ export class GameSimulation {
    * Validate in an isolated simulation first so malformed data cannot mutate
    * the running game. All world/transient state is reset on every load.
    */
-  restoreCharacter(progress: CharacterProgress): boolean {
+  restoreCharacter(progress: CharacterProgress, seed = this.world.seed): boolean {
     if (!progress || !isClassId(progress.classId)) return false;
 
     const scratch = new GameSimulation();
@@ -527,7 +535,7 @@ export class GameSimulation {
     };
     if (!scratch.restore(candidate)) return false;
 
-    this.reset(progress.classId);
+    this.reset(progress.classId, seed);
     this.level = progress.level;
     this.xp = progress.xp;
     this.gold = progress.gold;
@@ -536,7 +544,7 @@ export class GameSimulation {
     this.equipment = cloneEquipment(progress.equipment);
     this.refreshHealthLimit();
     this.player.health = this.player.maxHealth;
-    this.units = createPack(0, this.level);
+    this.units = createPack(0, this.level, this.world.encounterPositions);
     this.events.splice(0);
     return true;
   }
@@ -548,6 +556,7 @@ export class GameSimulation {
       : this.movePath.length || this.pickupTarget ? 'moving' : 'ready';
     return {
       version: 5,
+      worldSeed: this.world.seed,
       classId: this.classId,
       player: { ...this.player },
       enemy: { ...focus.actor },
@@ -581,8 +590,11 @@ export class GameSimulation {
   }
 
   restore(s: GameSnapshot): boolean {
-    if (!s || s.version !== 5 || !isClassId(s.classId)
-      || !validActor(s.player, 'hero')
+    const layout = s && Number.isSafeInteger(s.worldSeed)
+      && s.worldSeed >= 0 && s.worldSeed <= 0xffffffff
+      ? generateWorld(s.worldSeed) : null;
+    if (!s || !layout || s.version !== 5 || !isClassId(s.classId)
+      || !validActor(s.player, 'hero', layout.obstacles)
       || !Number.isSafeInteger(s.kills) || s.kills < 0
       || !Number.isSafeInteger(s.wave) || s.wave < 0 || s.wave > 1000000
       || !Number.isSafeInteger(s.level) || s.level < 1 || s.level > 1000
@@ -598,7 +610,7 @@ export class GameSimulation {
       || !Array.isArray(s.enemies) || s.enemies.length !== PACK_SIZE
       || !s.enemies.every((unit, index) =>
         !!unit && !!unit.actor && validEnemyType(unit.actor.type)
-        && validActor(unit.actor, unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1))
+        && validActor(unit.actor, unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && validIntent(unit.intent)
         && (unit.intent === null || unit.intent.pattern === ENEMY_DEFINITIONS[unit.actor.type].attack)
         && Number.isFinite(unit.cooldown) && unit.cooldown >= 0 && unit.cooldown <= 20
@@ -614,9 +626,10 @@ export class GameSimulation {
           || (s.equipment[key as EquipmentSlot] !== null && !isItem(s.equipment[key as EquipmentSlot])))
       || !Array.isArray(s.groundLoot) || s.groundLoot.length > 30
       || !s.groundLoot.every(loot => !!loot && typeof loot.id === 'string'
-        && canOccupy(loot, 0) && isItem(loot.item))
+        && canOccupy(loot, 0, layout.obstacles) && isItem(loot.item))
     ) return false;
 
+    this.world = layout;
     this.classId = s.classId;
     this.equipment = cloneEquipment(s.equipment);
     this.inventory = s.inventory.map(cloneItem);
@@ -645,17 +658,18 @@ export class GameSimulation {
     return true;
   }
 
-  reset(classId: ClassId = 'WARRIOR'): void {
+  reset(classId: ClassId = 'WARRIOR', seed = this.world.seed): void {
+    this.world = generateWorld(seed);
     this.classId = classId;
     this.equipment = createEquipment();
     this.inventory = Array(INVENTORY_SIZE).fill(null);
     this.rng = new SeededRng(seed === 0 ? 0x49ac127b : ((seed ^ 0x49ac127b) >>> 0));
     this.cooldowns = emptyCooldowns();
     this.effects = emptyEffects();
-    this.units = createPack(0, 1);
+    this.units = createPack(0, 1, this.world.encounterPositions);
     this.selectedTargetId = null;
     this.pendingSkill = null;
-    this.player = makeActor('hero', 390, 470, deriveStats(classId, this.equipment).maxHealth);
+    this.player = makeActor('hero', this.world.camp.x, this.world.camp.y, deriveStats(classId, this.equipment).maxHealth);
     this.groundLoot = [];
     this.movePath = [];
     this.attackTarget = null;
