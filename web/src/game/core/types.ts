@@ -8,6 +8,9 @@ import type { NpcId } from '../world/npcs';
 import type { ShopOfferId } from '../trade/commerce';
 import type { DamageType } from '../combat/typedDamage';
 import type { SkillAim } from '../input/skillAiming';
+import type { WarriorAbilityId } from '../skills/warriorKit';
+import type { CombatTimelineState } from '../animation/combatTimeline';
+import type { StatusInstance } from '../status/statusRuntime';
 import type { WorldObject, WorldObjectId } from '../world/interactables';
 
 export interface Point { x: number; y: number }
@@ -79,6 +82,10 @@ export interface GameSnapshot {
   resource: number;
   rngState: number;
   cooldowns: Cooldowns;
+  /** Runtime Warrior actions and status effects are never part of CharacterProgress. */
+  warriorCooldowns?: Partial<Record<WarriorAbilityId, number>>;
+  warriorAction?: { id: WarriorAbilityId; targetId: string | null; timeline: CombatTimelineState; hitCount: number } | null;
+  statusEffects?: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> };
   effects: ActiveEffects;
   stats: DerivedStats;
   inventory: Array<Item | null>;
@@ -94,6 +101,7 @@ export type GameCommand =
   | { type: 'evade' }
   | { type: 'attack'; targetId: string }
   | { type: 'cast'; slot: SkillSlot; targetId?: string; aim?: SkillAim }
+  | { type: 'warriorAbility'; id: WarriorAbilityId; targetId?: string }
   | { type: 'interactNpc'; npcId: NpcId }
   | { type: 'usePortal' }
   | { type: 'interactObject'; id: WorldObjectId }
@@ -121,6 +129,7 @@ export type GameEvent =
   | { type: 'pickup'; id: string }
   | { type: 'levelUp'; level: number }
   | { type: 'playerDeath' }
+  | { type: 'warriorImpact'; id: WarriorAbilityId; x: number; y: number }
   | { type: 'npcDialogue'; npcId: NpcId }
   | { type: 'zoneChanged'; zone: ZoneId }
   | { type: 'dungeonCleared' }
