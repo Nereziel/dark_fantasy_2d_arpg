@@ -426,6 +426,189 @@ export class GameSimulation {
     updateHealthLimit(this.player, max);
   }
 
+
+  /** Decide if a Warrior ability should cast now or approach its target first. */
+  private warriorActivation(id: WarriorAbilityId, targetId: string | null): WarriorActivationRequest {
+    const ability = WARRIOR_ABILITIES[id];
+    const actor = targetId ? this.units.find(u => u.actor.alive && u.actor.id === targetId)?.actor : null;
+    return {
+      skill: {
+        id, cost: ability.rageCost, cooldown: ability.cooldown,
+        range: ability.range, target: ability.target,
+        autoApproach: ability.autoApproach, silenceRestricted: false,
+        movementSkill: ability.tags.includes('MOVEMENT')
+      },
+      state: {
+        rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+        cooldowns: { ...this.warriorCooldowns,
+          cleave: Math.max(this.warriorCooldowns.cleave ?? 0, this.cooldowns.rmb),
+          charge: Math.max(this.warriorCooldowns.charge ?? 0, this.cooldowns.slot1) }
+      },
+      actor: this.player, target: actor ?? null,
+      stunned: this.effects.player.some(e => e.id === 'stunned'),
+      silenced: this.statusEffects.player.some(e => e.id === 'silenced'),
+      holdPosition: this.holdPosition, canMove: !this.immobilized
+    };
+  }
+
+  private requestWarriorAbility(id: WarriorAbilityId, targetId: string | null): void {
+    if (!this.player.alive || this.paused || this.classId !== 'WARRIOR' || this.warriorAction) return;
+    const ability = WARRIOR_ABILITIES[id];
+    const request = this.warriorActivation(id, targetId);
+    const decision = canActivateWarriorSkill(request);
+    if (decision.status === 'approach') {
+      this.warriorPending = { id, targetId };
+      this.movePath = [];
+      this.attackTarget = null;
+      this.pendingSkill = null;
+      this.pendingAim = null;
+      this.pickupTarget = null;
+      return;
+    }
+    if (decision.status !== 'ready') {
+      this.warriorPending = null;
+      return;
+    }
+    const spent = spendAndStartCooldown(request);
+    if (spent.decision.status !== 'ready') return;
+    this.resource = spent.state.rage;
+    this.warriorCooldowns = { ...spent.state.cooldowns } as Partial<Record<WarriorAbilityId, number>>;
+    if (id === 'cleave') this.cooldowns.rmb = ability.cooldown;
+    if (id === 'charge') this.cooldowns.slot1 = ability.cooldown;
+    this.warriorPending = null;
+    this.movePath = [];
+    this.attackTarget = null;
+    this.pendingSkill = null;
+    this.pendingAim = null;
+    const timeline = startCombatTimeline({
+      actionId: id,
+      animation: ability.channel ? 'channel' : ability.tags.includes('BUFF') ? 'cast' : 'attack',
+      windupTicks: Math.max(1, Math.round(ability.hit / FIXED_STEP)),
+      sustainTicks: ability.channel ? Math.round(ability.channel.duration / FIXED_STEP) : 0,
+      recoveryTicks: Math.max(1, Math.round(ability.recovery / FIXED_STEP)),
+      movementLocked: true
+    }).state;
+    this.warriorAction = { id, targetId, timeline, hitCount: 0 };
+    const target = targetId ? this.units.find(u => u.actor.id === targetId)?.actor : null;
+    this.events.push({ type: 'cast', skillId: id, x: target?.x ?? this.player.x, y: target?.y ?? this.player.y });
+  }
+
+  private applyCanonicalStatus(
+    recipient: 'player' | 'enemy', id: StatusId, sourceId: string,
+    magnitude?: number, duration?: number, unit?: EnemyUnit
+  ): void {
+    const definition = STATUS_DEFINITIONS[id];
+    const rule: StatusRule = {
+      id, duration: duration ?? definition.duration,
+      magnitude: magnitude ?? definition.magnitude,
+      stacking: definition.stackMode === 'stack' ? 'add' : 'refresh',
+      maxStacks: definition.maxStacks,
+      tickInterval: definition.tickInterval ?? undefined,
+      dispelCategory: definition.dispelCategory,
+      immunityTags: definition.immunityGroup ? [definition.immunityGroup] : [],
+      visualHook: definition.visualHook,
+      modifiers: definition.modifierKind === 'speedBoost' ? { moveSpeed: 1 }
+        : definition.modifierKind === 'damageReduction' ? { damageReduction: 1 }
+        : definition.modifierKind === 'damageTaken' ? { damageTaken: 1 } : {}
+    };
+    if (recipient === 'player') {
+      this.statusEffects.player = applyStatus(this.statusEffects.player, rule, sourceId);
+    } else if (unit?.actor.alive) {
+      this.statusEffects.enemies[unit.actor.id] = applyStatus(
+        this.statusEffects.enemies[unit.actor.id] ?? [], rule, sourceId);
+    }
+  }
+
+  private tickCanonicalStatuses(dt: number): void {
+    const player = advanceStatuses(this.statusEffects.player, dt);
+    this.statusEffects.player = player.statuses;
+    for (const tick of player.ticks) {
+      if (!this.player.alive) break;
+      if (tick.statusId === 'regeneration') {
+        this.player.health = resolveHealing(this.player.health, this.player.maxHealth, tick.magnitude).health;
+      } else if (tick.statusId === 'burning' || tick.statusId === 'poisoned' || tick.statusId === 'bleeding') {
+        this.dealPlayerDamage(tick.magnitude,
+          tick.statusId === 'burning' ? 'fire' : tick.statusId === 'poisoned' ? 'poison' : 'physical', tick.sourceId);
+      }
+    }
+    for (const unit of this.units) {
+      const result = advanceStatuses(this.statusEffects.enemies[unit.actor.id] ?? [], dt);
+      if (!unit.actor.alive || result.statuses.length === 0) delete this.statusEffects.enemies[unit.actor.id];
+      else this.statusEffects.enemies[unit.actor.id] = result.statuses;
+      for (const tick of result.ticks) {
+        if (!unit.actor.alive) break;
+        if (tick.statusId === 'regeneration') {
+          unit.actor.health = resolveHealing(unit.actor.health, unit.actor.maxHealth, tick.magnitude).health;
+        } else if (tick.statusId === 'burning' || tick.statusId === 'poisoned' || tick.statusId === 'bleeding') {
+          this.resolveEnemyDamage(tick.magnitude, unit,
+            tick.statusId === 'burning' ? 'fire' : tick.statusId === 'poisoned' ? 'poison' : 'physical', tick.sourceId);
+        }
+      }
+    }
+  }
+
+  private warriorImpact(id: WarriorAbilityId, targetId: string | null): void {
+    const ability = WARRIOR_ABILITIES[id];
+    const target = targetId ? this.units.find(u => u.actor.alive && u.actor.id === targetId) : null;
+    if (id === 'warCry') {
+      this.applyCanonicalStatus('player', 'haste', 'hero', 0.2, 8);
+      this.applyCanonicalStatus('player', 'fortified', 'hero', 0.2, 8);
+      this.resource = applyWarriorRageDelta({
+        rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+        cooldowns: this.warriorCooldowns
+      }, ability.rageGain).rage;
+    } else {
+      if (id === 'charge' && target) {
+        moveActor(this.player, target.actor, Math.max(0, distance(this.player, target.actor) - 52),
+          ACTOR_RADIUS, this.world.obstacles);
+      }
+      const victims = ability.radius !== undefined
+        ? [...this.aliveEnemies].filter(u => distance(this.player, u.actor) <= ability.radius! + 0.5)
+        : target && distance(this.player, target.actor) <= ability.range + 0.5 ? [target] : [];
+      for (const unit of victims) {
+        const power = ability.condition
+          && unit.actor.health / unit.actor.maxHealth <= ability.condition.threshold
+          ? ability.condition.bonusPower : ability.power;
+        const dealt = this.applyDamage(power, unit, 'physical');
+        if (dealt > 0 && ability.rageGain > 0) {
+          this.resource = applyWarriorRageDelta({
+            rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+            cooldowns: this.warriorCooldowns
+          }, ability.rageGain).rage;
+        }
+        const stun = ability.effects.find(e => e.id === 'stunned');
+        if (stun && unit.actor.alive) {
+          this.applyEffect('enemy',
+            { id: 'stunned', remaining: stun.duration, magnitude: 0, tick: 0 }, unit);
+        }
+      }
+    }
+    this.events.push({ type: 'warriorImpact', id, x: this.player.x, y: this.player.y });
+  }
+
+  private tickWarriorTimeline(): void {
+    const action = this.warriorAction;
+    if (!action) return;
+    const result = advanceCombatTimeline(action.timeline, 1);
+    action.timeline = result.state;
+    for (const event of result.events) {
+      if (event.type === 'impact' && this.player.alive) {
+        this.warriorImpact(action.id, action.targetId);
+        action.hitCount++;
+      }
+    }
+    const ability = WARRIOR_ABILITIES[action.id];
+    if (ability.channel && action.timeline.phase === 'sustain' && this.player.alive) {
+      const elapsed = action.timeline.elapsedTicks - action.timeline.windupTicks;
+      const interval = Math.max(1, Math.round(ability.channel.tickInterval / FIXED_STEP));
+      if (elapsed > 0 && elapsed % interval === 0) {
+        this.warriorImpact(action.id, action.targetId);
+        action.hitCount++;
+      }
+    }
+    if (action.timeline.phase === 'complete' || action.timeline.phase === 'cancelled') this.warriorAction = null;
+  }
+
   private requestCast(slot: SkillSlot, aim?: SkillAim): void {
     const skill = SKILLS[this.classId][slot];
     if (skill.kind === 'dash' && this.holdPosition) return;
