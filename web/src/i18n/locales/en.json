@@ -257,6 +257,14 @@
     "warden": {
       "name": "Warden Vesna",
       "title": "Commander of Emberwatch Camp"
+    },
+    "merchant": {
+      "name": "Merchant Bram",
+      "description": "Whatever survives the road, I will buy. Whatever you're missing, I can sell."
+    },
+    "blacksmith": {
+      "name": "Blacksmith Odan",
+      "description": "Steel is only as good as the hand that tempers it."
     }
   },
   "quest": {
@@ -275,5 +283,22 @@
       "readyHint": "Return to Warden Vesna.",
       "reward": "Reward"
     }
+  },
+  "trade": {
+    "campServices": "Camp services",
+    "browse": "Browse wares",
+    "visitSmith": "Visit blacksmith",
+    "stock": "Goods for sale",
+    "yourItems": "Sell from backpack",
+    "buy": "Buy",
+    "sell": "Sell",
+    "bagFull": "Your backpack is full. Sell an item to free a slot.",
+    "noItems": "You have no items in your backpack.",
+    "temperTitle": "Temper equipment",
+    "tempering": "Upgrades",
+    "temper": "Temper",
+    "temperHint": "The blacksmith permanently improves equipped weapons and armor for gold (up to three times). Equip an item from your inventory first.",
+    "maximum": "Fully tempered (3/3)",
+    "noForgeable": "Equip a weapon or armor in your inventory, then return to the blacksmith."
   }
 }

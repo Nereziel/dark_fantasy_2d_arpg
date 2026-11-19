@@ -98,6 +98,7 @@ describe('Diablo-style character persistence', () => {
     expect(createSaveRecord({ ...hero, inventory: [] })).toBeNull();
     expect(readSaveRecord({ format: 5, snapshot: current })).toBeNull();
     expect(readSaveRecord({ format: 6, character: hero })).toBeNull();
+    expect(readSaveRecord({ format: 7, character: hero })).toBeNull();
     expect(validateCharacter({ ...hero, quest: { id: 'ashes_at_gate', status: 'ready', defeated: 1 } })).toBeNull();
   });
 

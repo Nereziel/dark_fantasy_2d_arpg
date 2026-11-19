@@ -85,3 +85,11 @@ h1 span,.brand-mark span{color:#b88b59}
 .enemy-roster button:disabled{opacity:.35}
 .roster-health{color:#dc8e85;flex-shrink:0;font-variant-numeric:tabular-nums}
 @media(max-width:720px){.enemy-roster{right:7px;top:167px;width:min(178px,45vw);padding:6px}.enemy-roster button{padding:5px;font-size:.6rem}.enemy-roster-title{font-size:.63rem}.danger-alert{top:62px}}
+
+/* Camp merchant and blacksmith controls. NPC panels pause combat while open. */
+.camp-services{position:absolute;z-index:3;top:508px;left:23px;width:255px;max-width:42vw;
+  display:flex;flex-wrap:wrap;gap:7px;padding:10px;background:#0d141edc;border:1px solid #776549}
+.camp-services-label{width:100%;font-size:.64rem;letter-spacing:.16em;text-transform:uppercase;color:#c5aa7f}
+.camp-services button{flex:1;min-width:95px;font-size:.67rem;padding:8px 5px;border-color:#806c4b;background:#282d32}
+@media(max-width:720px){.camp-services{top:475px;left:10px;width:185px;max-width:47vw;padding:6px;gap:4px}
+  .camp-services button{font-size:.59rem;min-width:75px;padding:6px 4px}.camp-services-label{font-size:.57rem}}

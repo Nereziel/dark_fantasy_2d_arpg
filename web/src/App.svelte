@@ -13,6 +13,10 @@
   import SkillBar from './ui/SkillBar.svelte';
   import QuestJournal from './ui/QuestJournal.svelte';
   import NpcDialogue from './ui/NpcDialogue.svelte';
+  import TradePanel from './ui/TradePanel.svelte';
+  import {
+    MERCHANT_ID, BLACKSMITH_ID, type NpcId, type TradeNpcId
+  } from './game/world/npcs';
   import { WARDEN_ID } from './game/quests/firstQuest';
   import { CLASSES, type ClassId } from './game/data/classes';
 
@@ -24,6 +28,7 @@
   let selectedClass: ClassId = $state('WARRIOR');
   let inventoryOpen = $state(false);
   let dialogueOpen = $state(false);
+  let tradeNpc: TradeNpcId | null = $state(null);
   const autosaver = new CharacterAutosaver(saveGame, 1400, () => {
     messageKey = 'status.saveError';
   });
@@ -32,7 +37,13 @@
     const unsubscribeEvents = bridge.onEvent((event) => {
       if (event.type === 'npcDialogue' && playing) {
         inventoryOpen = false;
-        dialogueOpen = true;
+        if (event.npcId === WARDEN_ID) {
+          dialogueOpen = true;
+          tradeNpc = null;
+        } else {
+          tradeNpc = event.npcId;
+          dialogueOpen = false;
+        }
         bridge.command({ type: 'pause', value: true });
       }
     });
@@ -62,6 +73,7 @@
     messageKey = '';
     inventoryOpen = false;
     dialogueOpen = false;
+    tradeNpc = null;
     playing = true;
     void autosaver.saveNow(bridge.character()).catch(() => {
       messageKey = 'status.saveError';
@@ -72,6 +84,7 @@
     playing = true;
   }
   function menu(): void {
+    tradeNpc = null;
     dialogueOpen = false;
     inventoryOpen = false;
     bridge.command({ type: 'pause', value: true });
@@ -79,11 +92,11 @@
     playing = false;
   }
   function togglePause(): void {
-    if (!inventoryOpen && !dialogueOpen) bridge.command({ type: 'pause', value: !view.paused });
+    if (!inventoryOpen && !dialogueOpen && tradeNpc === null) bridge.command({ type: 'pause', value: !view.paused });
   }
 
   function openInventory(): void {
-    if (dialogueOpen || inventoryOpen || view.paused || !view.player.alive) return;
+    if (dialogueOpen || tradeNpc !== null || inventoryOpen || view.paused || !view.player.alive) return;
     inventoryOpen = true;
     bridge.command({ type: 'pause', value: true });
   }
@@ -91,10 +104,11 @@
     inventoryOpen = false;
     bridge.command({ type: 'pause', value: false });
   }
-  function talkToWarden(): void {
-    if (inventoryOpen || dialogueOpen || view.paused) return;
-    bridge.command({ type: 'interactNpc', npcId: WARDEN_ID });
+  function interact(npcId: NpcId): void {
+    if (inventoryOpen || dialogueOpen || tradeNpc !== null || view.paused) return;
+    bridge.command({ type: 'interactNpc', npcId });
   }
+  function talkToWarden(): void { interact(WARDEN_ID); }
   function acceptQuest(): void {
     bridge.command({ type: 'questAccept' });
   }
@@ -103,16 +117,17 @@
   }
   function closeDialogue(): void {
     dialogueOpen = false;
+    tradeNpc = null;
     bridge.command({ type: 'pause', value: false });
   }
   function handleKeydown(event: KeyboardEvent): void {
     const target = event.target;
     if (target instanceof HTMLElement && target.closest('input, textarea, select, [contenteditable="true"]')) return;
     if (!playing || event.repeat) return;
-    if (event.code === 'Escape' && dialogueOpen) {
+    if (event.code === 'Escape' && (dialogueOpen || tradeNpc !== null)) {
       event.preventDefault();
       closeDialogue();
-    } else if (dialogueOpen) {
+    } else if (dialogueOpen || tradeNpc !== null) {
       return;
     } else if (event.code === 'KeyI') {
       event.preventDefault();
@@ -147,6 +162,7 @@
         messageKey = 'status.loaded';
         inventoryOpen = false;
         dialogueOpen = false;
+        tradeNpc = null;
         selectedClass = bridge.snapshot().classId;
         autosaver.prime(bridge.character());
         playing = true;
@@ -228,6 +244,15 @@
       </div>
 
       <QuestJournal {view} talk={talkToWarden} />
+      {#if Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS + 40}
+        <div class="camp-services" aria-label={$t('trade.campServices')}>
+          <div class="camp-services-label">{$t('trade.campServices')}</div>
+          <button disabled={!view.player.alive || view.paused}
+            onclick={() => interact(MERCHANT_ID)}>{$t('trade.browse')}</button>
+          <button disabled={!view.player.alive || view.paused}
+            onclick={() => interact(BLACKSMITH_ID)}>{$t('trade.visitSmith')}</button>
+        </div>
+      {/if}
       <aside class="enemy-roster" aria-label={$t('hud.enemies')}>
         <div class="enemy-roster-title">{$t('hud.enemies')} · {view.enemies.filter(unit => unit.actor.alive).length}/{view.enemies.length} · {$t('hud.wave')} {view.wave + 1}</div>
         {#each view.enemies as unit (unit.actor.id)}
@@ -279,7 +304,9 @@
       {#if messageKey}
         <div class="toast" role="status">{$t(messageKey)}</div>
       {/if}
-      {#if dialogueOpen}
+      {#if tradeNpc}
+        <TradePanel {view} {bridge} npc={tradeNpc} close={closeDialogue} />
+      {:else if dialogueOpen}
         <NpcDialogue quest={view.quest} accept={acceptQuest} turnIn={turnInQuest} close={closeDialogue} />
       {:else if inventoryOpen}
         <InventoryPanel {view} {bridge} close={closeInventory} />

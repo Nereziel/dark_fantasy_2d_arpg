@@ -11,7 +11,11 @@ import {
 } from '../enemies/enemies';
 import { ACTOR_RADIUS, canOccupy, findPath, moveActor, type Obstacle } from '../world/navigation';
 import { CAMP_RADIUS, generateWorld, type WorldLayout } from '../world/generator';
-import { nearWarden, WARDEN_INTERACT_RANGE, WARDEN_POSITION } from '../world/npcs';
+import {
+  nearNpc, nearWarden, isNpcId, NPC_POSITIONS, NPC_INTERACT_RANGE,
+  MERCHANT_ID, BLACKSMITH_ID, type NpcId
+} from '../world/npcs';
+import { getOffer, createShopItem, sellPrice, temperCost, temperItem } from '../trade/commerce';
 import {
   freshQuest, validQuest, QUEST_REQUIRED_KILLS, QUEST_REWARD_GOLD, QUEST_REWARD_XP,
   WARDEN_ID, type QuestProgress
@@ -83,7 +87,7 @@ export class GameSimulation {
   private units: EnemyUnit[] = createPack(0, 1);
   private selectedTargetId: string | null = null;
   private quest: QuestProgress = freshQuest();
-  private pendingNpc = false;
+  private pendingNpc: NpcId | null = null;
   private pendingSkill: SkillSlot | null = null;
   private player = makeActor('hero', 390, 470, deriveStats('WARRIOR', this.equipment).maxHealth);
   private groundLoot: GroundItem[] = [];
@@ -131,6 +135,20 @@ export class GameSimulation {
     }
     if (command.type === 'equip') { this.equip(command.index); return; }
     if (command.type === 'unequip') { this.unequip(command.slot); return; }
+    // Shop actions must be checked inside the authoritative simulation.
+    // A shop panel pauses combat, but doesn't disable transactions.
+    if (command.type === 'buyItem') {
+      this.buyItem(command.offerId);
+      return;
+    }
+    if (command.type === 'sellItem') {
+      this.sellItem(command.index);
+      return;
+    }
+    if (command.type === 'temperItem') {
+      this.temperEquipment(command.slot);
+      return;
+    }
     // Dialogue pauses the world, not the quest interaction.
     if (command.type === 'questAccept') {
       if (this.player.alive && nearWarden(this.player) && this.quest.status === 'available') {
@@ -150,15 +168,15 @@ export class GameSimulation {
     }
     if (!this.player.alive || this.paused) return;
     if (command.type === 'interactNpc') {
-      if (command.npcId !== WARDEN_ID) return;
+      if (!isNpcId(command.npcId)) return;
       this.movePath = [];
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingSkill = null;
-      if (nearWarden(this.player)) {
-        this.events.push({ type: 'npcDialogue', npcId: WARDEN_ID });
+      if (nearNpc(this.player, command.npcId)) {
+        this.events.push({ type: 'npcDialogue', npcId: command.npcId });
       } else {
-        this.pendingNpc = true;
+        this.pendingNpc = command.npcId;
       }
       return;
     }
@@ -175,7 +193,7 @@ export class GameSimulation {
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingSkill = null;
-      this.pendingNpc = false;
+      this.pendingNpc = null;
     } else if (command.type === 'attack') {
       const selected = this.units.find(unit => unit.actor.id === command.targetId && unit.actor.alive);
       if (!selected) return;
@@ -184,14 +202,57 @@ export class GameSimulation {
       this.movePath = [];
       this.pickupTarget = null;
       this.pendingSkill = null;
-      this.pendingNpc = false;
+      this.pendingNpc = null;
     } else if (command.type === 'pickup' && this.groundLoot.some(loot => loot.id === command.id)) {
       this.pickupTarget = command.id;
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
-      this.pendingNpc = false;
+      this.pendingNpc = null;
     }
+  }
+
+  private shopAllowed(npcId: NpcId): boolean {
+    return this.player.alive && nearNpc(this.player, npcId);
+  }
+
+  private buyItem(offerId: string): void {
+    if (!this.shopAllowed(MERCHANT_ID)) return;
+    const offer = getOffer(offerId);
+    const index = this.inventory.findIndex(item => item === null);
+    if (!offer || index < 0 || this.gold < offer.price) return;
+    // IDs must not collide with purchased items from previous sessions.
+    const existing = new Set(
+      [...this.inventory, ...Object.values(this.equipment)]
+        .filter((item): item is Item => item !== null)
+        .map(item => item.id)
+    );
+    let suffix = 1;
+    while (existing.has(`trade-${offer.id}-${suffix}`)) suffix++;
+    this.inventory[index] = createShopItem(offer, `trade-${offer.id}-${suffix}`);
+    this.gold -= offer.price;
+  }
+
+  private sellItem(index: number): void {
+    if (!this.shopAllowed(MERCHANT_ID)
+      || !Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return;
+    const item = this.inventory[index];
+    if (!item) return;
+    this.gold += sellPrice(item);
+    this.inventory[index] = null;
+  }
+
+  private temperEquipment(slot: EquipmentSlot): void {
+    if (!this.shopAllowed(BLACKSMITH_ID) || !isEquipmentSlot(slot)) return;
+    const item = this.equipment[slot];
+    if (!item) return;
+    const forged = temperItem(item);
+    if (!forged) return;
+    const price = temperCost(item);
+    if (this.gold < price) return;
+    this.equipment[slot] = forged;
+    this.gold -= price;
+    this.refreshHealthLimit();
   }
 
   private equip(index: number): void {
@@ -232,7 +293,7 @@ export class GameSimulation {
     this.movePath = [];
     this.attackTarget = null;
     this.pickupTarget = null;
-    this.pendingNpc = false;
+    this.pendingNpc = null;
     if (distance(this.player, this.enemy) > skill.range) {
       this.pendingSkill = slot;
       return;
@@ -317,7 +378,7 @@ export class GameSimulation {
     if (this.player.health === 0) {
       this.player.alive = false;
       this.pendingSkill = null;
-      this.pendingNpc = false;
+      this.pendingNpc = null;
       this.movePath = [];
       this.attackTarget = null;
       this.pickupTarget = null;
@@ -468,11 +529,12 @@ export class GameSimulation {
     const speed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment).moveSpeed / 100);
     const focus = this.focusedUnit;
     if (this.pendingNpc) {
-      if (nearWarden(this.player)) {
-        this.pendingNpc = false;
-        this.events.push({ type: 'npcDialogue', npcId: WARDEN_ID });
+      if (nearNpc(this.player, this.pendingNpc)) {
+        const id = this.pendingNpc;
+        this.pendingNpc = null;
+        this.events.push({ type: 'npcDialogue', npcId: id });
       } else {
-        this.follow(this.player, WARDEN_POSITION, speed, dt, WARDEN_INTERACT_RANGE - 10);
+        this.follow(this.player, NPC_POSITIONS[this.pendingNpc], speed, dt, NPC_INTERACT_RANGE - 10);
       }
     } else if (this.pendingSkill && focus.actor.alive) {
       const skill = SKILLS[this.classId][this.pendingSkill];
@@ -718,7 +780,7 @@ export class GameSimulation {
     this.movePath = [];
     this.attackTarget = null;
     this.pendingSkill = null;
-    this.pendingNpc = false;
+    this.pendingNpc = null;
     this.pickupTarget = null;
     this.attackTimer = 0;
     this.accumulator = 0;
@@ -735,7 +797,7 @@ export class GameSimulation {
     this.cooldowns = emptyCooldowns();
     this.effects = emptyEffects();
     this.quest = freshQuest();
-    this.pendingNpc = false;
+    this.pendingNpc = null;
     this.units = createPack(0, 1, this.world.encounterPositions);
     this.selectedTargetId = null;
     this.pendingSkill = null;

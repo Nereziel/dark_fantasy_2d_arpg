@@ -257,6 +257,14 @@
     "warden": {
       "name": "Strážkyně Vesna",
       "title": "Velitelka tábora Stráž uhelného žáru"
+    },
+    "merchant": {
+      "name": "Obchodník Bram",
+      "description": "Co cestu přežije, to mohu koupit. Co ti chybí, to mohu prodat."
+    },
+    "blacksmith": {
+      "name": "Kovář Odan",
+      "description": "Kov je dobrý jen tak, jak je pevná ruka, která jej zpracuje."
     }
   },
   "quest": {
@@ -275,5 +283,22 @@
       "readyHint": "Vrať se ke strážkyni Vesně.",
       "reward": "Odměna"
     }
+  },
+  "trade": {
+    "campServices": "Služby tábora",
+    "browse": "Prohlédnout zboží",
+    "visitSmith": "Navštívit kováře",
+    "stock": "Nabídka zboží",
+    "yourItems": "Prodat z batohu",
+    "buy": "Koupit",
+    "sell": "Prodat",
+    "bagFull": "Batoh je plný. Něco prodej nebo odlož.",
+    "noItems": "V batohu nejsou žádné předměty.",
+    "temperTitle": "Zpevnění výbavy",
+    "tempering": "Vylepšení",
+    "temper": "Vylepšit",
+    "temperHint": "Kovář za zlato trvale posílí nasazenou zbraň nebo zbroj (maximálně třikrát). Nejprve si předmět nasaď v inventáři.",
+    "maximum": "Maximální vylepšení (3/3)",
+    "noForgeable": "Nasaď zbraň nebo zbroj v inventáři a vrať se ke kováři."
   }
 }

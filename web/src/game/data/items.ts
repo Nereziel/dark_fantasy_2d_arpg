@@ -20,6 +20,8 @@ export interface Item {
   maxDmg: number;
   block: number;
   affixes: ItemAffix[];
+  /** Permanent blacksmith tempering level (0–3). */
+  upgrades: number;
 }
 export interface GroundItem { id: string; x: number; y: number; item: Item }
 export type Equipment = Record<EquipmentSlot, Item | null>;
@@ -112,7 +114,8 @@ export function rollItem(killIndex: number, level: number, rng: SeededRng): Item
     minDmg: Math.round((template.minDmg ?? 0) * rules.mult),
     maxDmg: Math.round((template.maxDmg ?? 0) * rules.mult),
     block: template.block ?? 0,
-    affixes
+    affixes,
+    upgrades: 0
   };
 }
 export interface DerivedStats extends PrimaryStats {
@@ -171,6 +174,7 @@ export function isItem(value: unknown): value is Item {
     && typeof v.rarity === 'string' && v.rarity in RARITIES
     && Number.isSafeInteger(v.level) && (v.level ?? 0) >= 1
     && typeof v.icon === 'string'
+    && Number.isSafeInteger(v.upgrades) && (v.upgrades ?? -1) >= 0 && (v.upgrades ?? 4) <= 3
     && [v.armor, v.minDmg, v.maxDmg, v.block].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0)
     && Array.isArray(v.affixes) && v.affixes.length <= 5
     && v.affixes.every((a: ItemAffix) => typeof a?.id === 'string'

@@ -4,6 +4,8 @@ import type { Equipment, GroundItem, Item, DerivedStats, EquipmentSlot } from '.
 import type { ActiveEffects, Cooldowns, SkillSlot } from '../skills/skills';
 import type { EnemySnapshot, EnemyIntent, EnemyUnit } from '../enemies/enemies';
 import type { QuestProgress } from '../quests/firstQuest';
+import type { NpcId } from '../world/npcs';
+import type { ShopOfferId } from '../trade/commerce';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
@@ -62,7 +64,10 @@ export type GameCommand =
   | { type: 'move'; destination: Point }
   | { type: 'attack'; targetId: string }
   | { type: 'cast'; slot: SkillSlot }
-  | { type: 'interactNpc'; npcId: 'warden_vesna' }
+  | { type: 'interactNpc'; npcId: NpcId }
+  | { type: 'buyItem'; offerId: ShopOfferId }
+  | { type: 'sellItem'; index: number }
+  | { type: 'temperItem'; slot: EquipmentSlot }
   | { type: 'questAccept' }
   | { type: 'questTurnIn' }
   | { type: 'pickup'; id: string }
@@ -79,7 +84,7 @@ export type GameEvent =
   | { type: 'pickup'; id: string }
   | { type: 'levelUp'; level: number }
   | { type: 'playerDeath' }
-  | { type: 'npcDialogue'; npcId: 'warden_vesna' }
+  | { type: 'npcDialogue'; npcId: NpcId }
   | { type: 'questUpdated'; status: QuestProgress['status']; defeated: number }
   | { type: 'enemyWindup'; enemyId: string; pattern: 'bolt' | 'sweep' | 'leap' }
   | { type: 'enemyAttack'; enemyId: string; hit: boolean };

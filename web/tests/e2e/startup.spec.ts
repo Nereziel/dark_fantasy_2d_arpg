@@ -141,3 +141,52 @@ test('talks to Warden Vesna, accepts the quest and loads its persistent progress
   await expect(page.getByRole('dialog', { name: 'Strážkyně Vesna' })).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Strážkyně Vesna' })).toContainText('Popel u bran');
 });
+
+test('buys equipment, tempers it at the smith and reloads persistent upgrades', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await page.getByRole('button', { name: 'Browse wares' }).click();
+
+  const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
+  await expect(merchant).toBeVisible();
+  await expect(merchant.locator('.trade-gold')).toContainText('75');
+  await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
+  await expect(merchant.locator('.trade-gold')).toContainText('43');
+  await expect(merchant.getByRole('button', { name: 'Sell Studded War Belt' })).toBeVisible();
+  await merchant.getByRole('button', { name: 'Leave' }).click();
+
+  await page.getByRole('button', { name: 'Inventory (I)' }).click();
+  const inventory = page.getByRole('dialog', { name: 'Inventory & Equipment' });
+  await expect(inventory).toContainText('Studded War Belt');
+  await inventory.getByRole('button', { name: 'Equip' }).click();
+  await inventory.getByRole('button', { name: 'Close' }).click();
+
+  await page.getByRole('button', { name: 'Visit blacksmith' }).click();
+  const smith = page.getByRole('dialog', { name: 'Blacksmith Odan' });
+  await expect(smith).toBeVisible();
+  await smith.getByRole('button', { name: 'Temper Studded War Belt' }).click();
+  await expect(smith.locator('.trade-gold')).toContainText('15');
+  await expect(smith).toContainText('Upgrades 1/3');
+  await expect(smith.getByRole('button', { name: 'Temper Studded War Belt' })).toBeDisabled();
+  await smith.getByRole('button', { name: 'Leave' }).click();
+
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('status')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Load' }).click();
+  await page.getByRole('button', { name: 'Visit blacksmith' }).click();
+  const loadedSmith = page.getByRole('dialog', { name: 'Blacksmith Odan' });
+  await expect(loadedSmith).toContainText('Upgrades 1/3');
+  await expect(loadedSmith.locator('.trade-gold')).toContainText('15');
+  await loadedSmith.getByRole('button', { name: 'Leave' }).click();
+
+  await page.getByRole('button', { name: 'Inventory (I)' }).click();
+  await page.getByRole('dialog', { name: 'Inventory & Equipment' }).getByRole('button', { name: 'Unequip' }).click();
+  await page.getByRole('dialog', { name: 'Inventory & Equipment' }).getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Browse wares' }).click();
+  const merchantAgain = page.getByRole('dialog', { name: 'Merchant Bram' });
+  await merchantAgain.getByRole('button', { name: 'Sell Studded War Belt' }).click();
+  await expect(merchantAgain.locator('.trade-gold')).toContainText('35');
+  await expect(merchantAgain.getByRole('button', { name: 'Sell Studded War Belt' })).toHaveCount(0);
+});

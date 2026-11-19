@@ -6,8 +6,9 @@ import { SKILLS } from '../skills/skills';
 import type { GameEvent } from '../core/types';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
 import { CAMP_RADIUS, generateWorld } from '../world/generator';
-import { WARDEN_POSITION } from '../world/npcs';
-import { WARDEN_ID } from '../quests/firstQuest';
+import {
+  WARDEN_POSITION, NPC_POSITIONS, MERCHANT_ID, BLACKSMITH_ID, type NpcId
+} from '../world/npcs';
 
 const WIDTH = 2200;
 const HEIGHT = 1400;
@@ -50,6 +51,31 @@ export class FrontierScene extends Phaser.Scene {
       stroke: '#131923', strokeThickness: 4
     }).setOrigin(0.5).setDepth(82);
 
+    // Merchant and blacksmith use distinct silhouettes and world click targets.
+    for (const id of [MERCHANT_ID, BLACKSMITH_ID] as const) {
+      const pos = NPC_POSITIONS[id];
+      const smith = id === BLACKSMITH_ID;
+      const actor = this.add.graphics().setPosition(pos.x, pos.y).setDepth(49);
+      actor.fillStyle(0x080c11, 0.65).fillEllipse(0, 21, 42, 11);
+      actor.fillStyle(smith ? 0x39404b : 0x486052)
+        .fillTriangle(-15, 18, 15, 18, 0, -19);
+      actor.fillStyle(smith ? 0x817f83 : 0x9c846e).fillRoundedRect(-11, -21, 22, 20, 3);
+      actor.fillStyle(0xd6b995).fillCircle(0, -26, 10);
+      actor.fillStyle(smith ? 0x535962 : 0x5b3c2c)
+        .fillTriangle(-13, -28, 13, -28, 0, -42);
+      if (smith) {
+        actor.lineStyle(5, 0xaaa9ad).lineBetween(19, 14, 25, -20);
+        actor.fillStyle(0x737a85).fillRoundedRect(17, -31, 22, 14, 2);
+      } else {
+        actor.fillStyle(0xc2a36d).fillCircle(-16, -1, 8);
+        actor.lineStyle(3, 0x735846).strokeCircle(-16, -1, 8);
+      }
+      this.add.text(pos.x, pos.y - 64, smith ? '⚒' : '¤', {
+        fontFamily: 'Georgia, serif', fontSize: '23px',
+        color: '#e8c58c', stroke: '#0c121b', strokeThickness: 4
+      }).setOrigin(0.5).setDepth(82);
+    }
+
     this.hero = this.add.graphics();
     this.hero.fillStyle(0x131f30).fillCircle(0, 3, 19);
     this.hero.fillStyle(0x8e9caa).fillCircle(0, -5, 13);
@@ -86,7 +112,7 @@ export class FrontierScene extends Phaser.Scene {
     const active = document.activeElement;
     if (active instanceof HTMLElement &&
       (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(active.tagName)
-        || document.querySelector('.inventory-overlay'))) return;
+        || document.querySelector('.inventory-overlay, .npc-dialog-shield, .trade-overlay'))) return;
     event.preventDefault();
     this.bridge.command({ type: 'pause', value: !this.bridge.snapshot().paused });
   }
@@ -100,10 +126,13 @@ export class FrontierScene extends Phaser.Scene {
     if (pointer.button !== 0) return;
     const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     const state = this.bridge.snapshot();
-    if (Phaser.Math.Distance.Between(
-      world.x, world.y, WARDEN_POSITION.x, WARDEN_POSITION.y
-    ) < 40) {
-      this.bridge.command({ type: 'interactNpc', npcId: WARDEN_ID });
+    const npc = (Object.keys(NPC_POSITIONS) as NpcId[]).find(id =>
+      Phaser.Math.Distance.Between(
+        world.x, world.y, NPC_POSITIONS[id].x, NPC_POSITIONS[id].y
+      ) < 40
+    );
+    if (npc) {
+      this.bridge.command({ type: 'interactNpc', npcId: npc });
       return;
     }
     const loot = state.groundLoot.find(g =>
