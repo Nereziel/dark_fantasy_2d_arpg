@@ -1110,6 +1110,10 @@ export class GameSimulation {
     this.groundLoot = [];
     this.effects = emptyEffects();
     this.cooldowns = emptyCooldowns();
+    this.warriorCooldowns = {};
+    this.warriorPending = null;
+    this.warriorAction = null;
+    this.statusEffects = { player: [], enemies: {} };
     this.attackTimer = 0;
     this.accumulator = 0;
     this.holdPosition = false;
