@@ -8,7 +8,8 @@
   let { bridge, view }: { bridge: GameBridge; view: GameSnapshot } = $props();
 
   function cast(slot: 'rmb' | 'slot1'): void {
-    bridge.command({ type: 'cast', slot });
+    const aim = bridge.skillAim(slot);
+    bridge.command({ type: 'cast', slot, ...(aim ? { aim } : {}) });
   }
 </script>
 

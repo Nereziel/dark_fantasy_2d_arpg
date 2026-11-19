@@ -6,6 +6,9 @@ import type { EnemySnapshot, EnemyIntent, EnemyUnit } from '../enemies/enemies';
 import type { QuestProgress } from '../quests/firstQuest';
 import type { NpcId } from '../world/npcs';
 import type { ShopOfferId } from '../trade/commerce';
+import type { DamageType } from '../combat/typedDamage';
+import type { SkillAim } from '../input/skillAiming';
+import type { WorldObject, WorldObjectId } from '../world/interactables';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
@@ -31,6 +34,18 @@ export interface CharacterProgress {
   quest: QuestProgress;
 }
 
+/** Session-only authoritative missile; never included in CharacterProgress. */
+export interface ProjectileSnapshot extends Point {
+  id: string;
+  sourceId: string;
+  target: Point;
+  type: DamageType;
+  speed: number;
+  radius: number;
+  remaining: number;
+  base: number;
+}
+
 export interface GameSnapshot {
   version: 5;
   /** Ephemeral map seed. This is never included in CharacterProgress saves. */
@@ -52,6 +67,11 @@ export interface GameSnapshot {
   /** Session-only movement and dodge input state. */
   holdPosition: boolean;
   evadeCooldown: number;
+  shield: number;
+  projectiles: ProjectileSnapshot[];
+  interactables: WorldObject[];
+  usedInteractables: WorldObjectId[];
+  moveDestination: Point | null;
   kills: number;
   level: number;
   xp: number;
@@ -73,9 +93,10 @@ export type GameCommand =
   | { type: 'holdPosition'; value: boolean }
   | { type: 'evade' }
   | { type: 'attack'; targetId: string }
-  | { type: 'cast'; slot: SkillSlot; targetId?: string }
+  | { type: 'cast'; slot: SkillSlot; targetId?: string; aim?: SkillAim }
   | { type: 'interactNpc'; npcId: NpcId }
   | { type: 'usePortal' }
+  | { type: 'interactObject'; id: WorldObjectId }
   | { type: 'buyItem'; offerId: ShopOfferId }
   | { type: 'sellItem'; index: number }
   | { type: 'temperItem'; slot: EquipmentSlot }
@@ -90,6 +111,11 @@ export type GameCommand =
 export type GameEvent =
   | { type: 'cast'; skillId: string; x: number; y: number }
   | { type: 'hit'; targetId: string; damage: number }
+  | { type: 'damageResolved'; sourceId: string; targetId: string; damageType: DamageType;
+      damage: number; absorbed: number; critical: boolean; dodged: boolean; blocked: boolean }
+  | { type: 'projectileLaunch'; id: string; sourceId: string }
+  | { type: 'projectileImpact'; id: string; hit: boolean }
+  | { type: 'worldInteract'; id: WorldObjectId; kind: 'shrine' | 'chest' }
   | { type: 'defeat'; targetId: string; kills: number }
   | { type: 'loot'; id: string }
   | { type: 'pickup'; id: string }

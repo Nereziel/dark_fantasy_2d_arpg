@@ -1,6 +1,10 @@
 import { GameSimulation } from '../core/GameSimulation';
 import { newSessionSeed } from '../world/generator';
-import type { CharacterProgress, GameCommand, GameEvent, GameSnapshot, GameStateReader } from '../core/types';
+import { resolveSkillAim, type SkillAim } from '../input/skillAiming';
+import { GAME_BINDINGS } from '../input/gameBindings';
+import type { InputBinding } from '../input/bindings';
+import { SKILLS, type SkillSlot } from '../skills/skills';
+import type { CharacterProgress, GameCommand, GameEvent, GameSnapshot, GameStateReader, Point } from '../core/types';
 
 /** UI-facing presentation adapter; game state is owned by the simulation. */
 export class GameBridge implements GameStateReader {
@@ -8,10 +12,37 @@ export class GameBridge implements GameStateReader {
   private readonly listeners = new Set<(state: GameSnapshot) => void>();
   private readonly events = new Set<(event: GameEvent) => void>();
   private notificationClock = 0;
+  private pointerWorld: Point | null = null;
+  private pointerEnemy: string | null = null;
+  private bindingMap: readonly InputBinding[] = GAME_BINDINGS;
+
+  bindings(): readonly InputBinding[] { return this.bindingMap; }
+  setBindings(bindings: readonly InputBinding[]): void {
+    this.bindingMap = bindings.map(binding => ({ ...binding }));
+  }
+  setPointerAim(point: Point, targetId: string | null): void {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    this.pointerWorld = { ...point };
+    this.pointerEnemy = targetId;
+  }
+  pointerPosition(): Point | null {
+    return this.pointerWorld ? { ...this.pointerWorld } : null;
+  }
+  skillAim(slot: SkillSlot): SkillAim | null {
+    const state = this.snapshot();
+    const skill = SKILLS[state.classId][slot];
+    const mode = skill.aimMode ?? (skill.target === 'self' ? 'SELF' : 'TARGET_ENTITY');
+    const target = this.pointerEnemy && state.enemies.some(unit =>
+      unit.actor.id === this.pointerEnemy && unit.actor.alive)
+      ? this.pointerEnemy : state.selectedTargetId ?? state.enemy.id;
+    return resolveSkillAim(mode, state.player, this.pointerWorld, target);
+  }
 
   snapshot(): GameSnapshot { return this.simulation.snapshot(); }
   character(): CharacterProgress { return this.simulation.character(); }
   restoreCharacter(progress: CharacterProgress): boolean {
+    this.pointerWorld = null;
+    this.pointerEnemy = null;
     const restored = this.simulation.restoreCharacter(progress, newSessionSeed());
     if (restored) this.emit();
     return restored;
@@ -29,6 +60,7 @@ export class GameBridge implements GameStateReader {
   }
 
   command(command: GameCommand): void {
+    if (command.type === 'reset') { this.pointerWorld = null; this.pointerEnemy = null; }
     this.simulation.command(command.type === 'reset'
       ? { ...command, seed: command.seed ?? newSessionSeed() }
       : command);

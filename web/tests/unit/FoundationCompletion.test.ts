@@ -87,6 +87,11 @@ describe('Prompt 05: typed skill aims', () => {
   it('fires an aimed ground nova centered near the mouse rather than always on the hero', () => {
     const sim = new GameSimulation();
     sim.command({ type: 'reset', classId: 'MAGE' });
+    const baseline = sim.snapshot();
+    expect(sim.restore({
+      ...baseline,
+      player: { ...baseline.player, x: 700, y: 520 }
+    })).toBe(true);
     sim.command({
       type: 'cast', slot: 'slot1',
       aim: { mode: 'AREA', position: { x: 780, y: 520 } }

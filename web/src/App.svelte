@@ -5,7 +5,6 @@
   import { GameBridge } from './game/bridge/GameBridge';
   import type { GameSnapshot } from './game/core/types';
   import { resolveKeyboardAction } from './game/input/bindings';
-  import { GAME_BINDINGS } from './game/input/gameBindings';
   import { loadGame, saveGame } from './persistence/SaveRepository';
   import { CharacterAutosaver } from './persistence/CharacterAutosaver';
   import { CAMP, CAMP_RADIUS } from './game/world/generator';
@@ -149,7 +148,7 @@
       && !!target.closest('input, textarea, select, [contenteditable="true"]');
     const action = resolveKeyboardAction({
       code: event.code, repeat: event.repeat, isTyping, uiCaptured: false
-    }, GAME_BINDINGS);
+    }, bridge.bindings());
     if (!action) return;
 
     if (action === 'MENU') {
@@ -184,14 +183,18 @@
     } else if (action === 'EVADE') {
       event.preventDefault();
       bridge.command({ type: 'evade' });
-    } else if (action === 'SECONDARY') {
+    } else if (action === 'SECONDARY' || action === 'SLOT_1') {
       event.preventDefault();
-      bridge.command({ type: 'cast', slot: 'rmb' });
-    } else if (action === 'SLOT_1') {
+      const slot = action === 'SECONDARY' ? 'rmb' : 'slot1';
+      const aim = bridge.skillAim(slot);
+      bridge.command({ type: 'cast', slot, ...(aim ? { aim } : {}) });
+    } else if (action === 'FORCE_MOVE' || action === 'PRIMARY') {
+      const position = bridge.pointerPosition();
+      if (!position) return;
       event.preventDefault();
-      bridge.command({ type: 'cast', slot: 'slot1' });
+      bridge.command({ type: 'move', destination: position });
     }
-    // Other mapped actions have no corresponding skills/UI yet and stay inert.
+    // Remaining mapped slots become active when their skills and UI exist.
   }
   function handleKeyup(event: KeyboardEvent): void {
     if (!heldShiftKeys.delete(event.code)) return;
