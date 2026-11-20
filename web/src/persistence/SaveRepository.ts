@@ -1,5 +1,6 @@
 import { GameSimulation } from '../game/core/GameSimulation';
 import type { CharacterProgress } from '../game/core/types';
+import { MAX_LEVEL } from '../game/progression/progressionRules';
 
 const DATABASE = 'aether-ruin-web';
 const STORE = 'saves';
@@ -9,10 +10,10 @@ const SLOT = 'first-character';
  * Persistent character only. A new session always starts with fresh monsters,
  * fresh ground loot, full health, zero cooldowns, and no temporary effects.
  *
- * Earlier world-snapshot formats are deliberately unsupported.
+ * Legacy character-only format 8 is migrated explicitly; world snapshots remain unsupported.
  */
 export interface SavedGame {
-  format: 8;
+  format: 9;
   characterId: string;
   savedAt: number;
   character: CharacterProgress;
@@ -29,14 +30,35 @@ export function validateCharacter(raw: unknown): CharacterProgress | null {
 export function createSaveRecord(raw: unknown, savedAt = Date.now()): SavedGame | null {
   const character = validateCharacter(raw);
   if (!character || !Number.isFinite(savedAt) || savedAt < 0) return null;
-  return { format: 8, characterId: 'hero', savedAt, character };
+  return { format: 9, characterId: 'hero', savedAt, character };
+}
+
+/**
+ * v8 stored only character data with linear XP thresholds and without point
+ * balances. Reconstruct all unspent points from the legacy level; equipped
+ * and bagged item instances are copied unchanged by restoreCharacter.
+ */
+export function migrateV8Character(raw: unknown): CharacterProgress | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const old = raw as Partial<CharacterProgress>;
+  if (!Number.isSafeInteger(old.level) || (old.level ?? 0) < 1
+      || (old.level ?? 0) > 1000 || !Number.isSafeInteger(old.xp)
+      || (old.xp ?? -1) < 0 || (old.xp ?? 0) >= old.level! * 80) return null;
+  const level = Math.min(old.level!, MAX_LEVEL);
+  return validateCharacter({
+    ...old, level, xp: level === MAX_LEVEL ? 0 : old.xp!,
+    skillPoints: level - 1,
+    talentPoints: Math.floor(level / 5)
+  });
 }
 
 export function readSaveRecord(raw: unknown): CharacterProgress | null {
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as Partial<SavedGame>;
-  if (record.format !== 8 || record.characterId !== 'hero') return null;
-  return validateCharacter(record.character);
+  if (record.characterId !== 'hero') return null;
+  if (record.format === 9) return validateCharacter(record.character);
+  if ((record.format as number) === 8) return migrateV8Character(record.character);
+  return null;
 }
 
 function openDatabase(): Promise<IDBDatabase> {
