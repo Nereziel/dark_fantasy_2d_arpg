@@ -27,8 +27,11 @@ function killUnit(sim: GameSimulation, index: number): void {
     }))
   })).toBe(true);
   sim.command({ type: 'attack', targetId: target.id });
-  // New Warrior hit frame (~11 ticks) replaces immediate melee damage.
-  step(sim, 26);
+  // Preserve fixed-tick impact timing while allowing the basic-attack cooldown
+  // from the previous encounter to finish before this hit begins.
+  for (let frame = 0; frame < 120 && sim.snapshot().enemies[index]!.actor.alive; frame++) {
+    sim.advance(16.667);
+  }
   expect(sim.snapshot().enemies[index]!.actor.alive).toBe(false);
 }
 
