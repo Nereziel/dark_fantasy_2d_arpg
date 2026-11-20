@@ -328,3 +328,36 @@ test('Warrior War Cry uses the simulation timeline and localizes active buffs', 
   await expect(page.getByRole('button', { name: 'Válečný pokřik' })).toBeDisabled();
   await expect(page.locator('.effect-chip.beneficial').filter({ hasText: 'Spěch' })).toBeVisible();
 });
+
+test('stores a purchased item in the permanent camp stash and retrieves it after reloading', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+
+  await page.getByRole('button', { name: 'Browse wares' }).click();
+  const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
+  await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
+  await expect(merchant.locator('.trade-gold')).toContainText('43');
+  await merchant.getByRole('button', { name: 'Leave' }).click();
+
+  await page.getByRole('button', { name: 'Open stash' }).click();
+  const stash = page.getByRole('dialog', { name: 'Camp Stash' });
+  await expect(stash).toBeVisible();
+  await expect(stash).toContainText('Backpack (1/24)');
+  await stash.getByRole('button', { name: 'Store' }).click();
+  await expect(stash).toContainText('Stash (1/24)');
+  await expect(stash).toContainText('Backpack (0/24)');
+  await stash.getByRole('button', { name: 'Leave' }).click();
+
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('status')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Load' }).click();
+  await page.getByRole('button', { name: 'Open stash' }).click();
+  const recovered = page.getByRole('dialog', { name: 'Camp Stash' });
+  await expect(recovered).toContainText('Stash (1/24)');
+  await expect(recovered).toContainText('Studded War Belt');
+  await recovered.getByRole('button', { name: 'Retrieve' }).click();
+  await expect(recovered).toContainText('Stash (0/24)');
+  await expect(recovered).toContainText('Backpack (1/24)');
+});
