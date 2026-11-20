@@ -798,5 +798,79 @@
     "soulShrine": "Soul Shrine",
     "action": "Respawn",
     "checkpointActivated": "Soul Shrine activated as a respawn checkpoint."
+  },
+  "talents": {
+    "open": "Talents",
+    "title": "Warrior Talent Tree",
+    "available": "Unspent talent points",
+    "invested": "Invested",
+    "unlockLevel": "Unlocks at level",
+    "prerequisite": "Requires",
+    "investPoint": "Invest point",
+    "investIn": "Invest in {talent}",
+    "respec": "Respec talents",
+    "respecInfo": "Reset all invested talents for",
+    "warriorOnly": "Warrior talent branches are available only to Warriors.",
+    "branches": {
+      "berserker": "Berserker",
+      "guardian": "Guardian",
+      "warlord": "Warlord"
+    },
+    "nodes": {
+      "berserker": {
+        "battleFury": {
+          "name": "Battle Fury",
+          "description": "Generate +2 Rage per rank on successful attacks and War Cry; +3 maximum Rage per rank."
+        },
+        "bloodlust": {
+          "name": "Bloodlust",
+          "description": "Increase attack speed by 6% per rank. Speeds up basic attack and melee windups."
+        },
+        "executioner": {
+          "name": "Executioner",
+          "description": "Gain +2.5% critical strike chance per rank."
+        },
+        "lastStand": {
+          "name": "Last Stand",
+          "description": "Deal +14% damage per rank while at or below 40% health."
+        }
+      },
+      "guardian": {
+        "ironSkin": {
+          "name": "Iron Skin",
+          "description": "Gain +16 armor per rank, increasing physical damage resistance."
+        },
+        "shieldMastery": {
+          "name": "Shield Mastery",
+          "description": "Gain +4% block chance per rank, up to the standard cap."
+        },
+        "stalwart": {
+          "name": "Stalwart",
+          "description": "Gain +24 maximum health per rank."
+        },
+        "bulwark": {
+          "name": "Bulwark",
+          "description": "War Cry also grants a shield worth 8% of maximum health per rank."
+        }
+      },
+      "warlord": {
+        "commandingCry": {
+          "name": "Commanding Cry",
+          "description": "War Cry haste and fortification last 1.5 seconds longer per rank."
+        },
+        "shockwave": {
+          "name": "Shockwave",
+          "description": "Extend stuns from Warrior combat skills by 0.25 seconds per rank."
+        },
+        "warDrums": {
+          "name": "War Drums",
+          "description": "War Cry grants +5 additional Rage and +0.2 resource regeneration per rank."
+        },
+        "commander": {
+          "name": "Commander",
+          "description": "Increase War Cry haste and fortification magnitude by +6 percentage points per rank."
+        }
+      }
+    }
   }
 }
