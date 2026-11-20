@@ -40,6 +40,10 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 
 Převod pokračuje **v pořadí 63 promptů** ze souboru `2d_arpg_implementation_prompts.md`. Funkční základy **promptů 02–06** jsou propojené: oddělené výpočty hráče, plynulý pohyb s omezením přepočtů, jednotný kontext interakcí, přemapování ovládání a typovaná soubojová pipeline. Podporuje elementální odolnosti u zásahů, úhyb, blokování, štíty, projektily, oblastní poškození a léčení. Integrační PR #20 a #21 propojují Prompty 07–11: sedm schopností válečníka, časování útoků i kouzel všech šesti tříd, původní pixelové atlasy pro jejich animace a všechny příšery, patnáct efektů, AI a odlišné schopnosti monster. Funkční implementace má automatické regresní testy; velkoprodukční ručně kreslené animace zůstávají výtvarným rozšířením. Prompty **12–17** nyní propojuje integrační [PR #28](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/28) po sloučení samostatných agentních modulů #22, #27, #23, #26, #24 a #25. Integrace pokrývá levelování, katalog vybavení, affixy, inventář, loot a elitní nepřátele; stav finální validace a nasazení je popsán v `docs/IMPLEMENTATION_STATUS.md`. Přesný přehled dokončení základů je v `docs/IMPLEMENTATION_STATUS.md`.
 
+## Další etapa — Wave D (připraveno, zatím nespouštěno)
+
+Pro menší integrační zátěž jsou připraveni **jen 3 paralelní agenti (22–24)**: Prompt 18 — trvalé město, Prompt 19 — ekonomika a obchodníci, Prompt 20 — dialogy a questový systém. Každý má právě **2 izolované soubory** a výstupem je draft PR; následné propojení do hry a merge provádí pouze integrátor. [Wave D plán](docs/plan/agents/WAVE_D.md), [integrační runbook](docs/plan/agents/INTEGRATION_D.md), [zadání agentů](docs/plan/agents/README.md). Prompty 21–22 záměrně čekají na další vlnu.
+
 ## Wave C — XP, vybavení, loot a elity
 
 - Hrdina dostává XP za monstra, quest, kryptu a interakce se světem. Nová křivka podporuje více level-upů z jedné odměny; s levelem se přepočítávají základní atributy, životy, maximální zdroje a poškození. HUD ukazuje aktuální XP a přehled postavy nevyužité skill/talent body.

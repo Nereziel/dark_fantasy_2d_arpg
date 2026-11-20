@@ -17,7 +17,8 @@ We will now complete foundational prompts in numeric order, even though early ve
 | **09 — Status effect framework** | **Core complete (PR #21; acceptance CI green)** | All 15 statuses share one reducer with source/stack/expiry/immunity/dispel, visual hooks, CS/EN timers, and ability/on-hit producers for full initial catalog. Legacy HUD projections do not tick separately. |
 | **10–11 — Enemy AI and families** | **Core complete (PR #21; acceptance CI green)** | Nine pure AI policies, active tactical roles including ranged, charger, caster, healer/support, collision-aware navigation/leashing. All 14 family definitions spawn with data-driven abilities, independent cooldowns, pixel art/animations and localized names. Dedicated summoner-family encounter and more complex boss phases remain future content. |
 | **12–17 — Progression, items and elites** | **Core complete in integration PR #28; acceptance CI green** | Runtime, character saves, UI, seeded loot and elite combat connected. Full CI: 440 unit tests, 12 Playwright tests, build, typecheck and legacy site PASS. Publish from `main` and verify Pages deployment after merge. |
-| 18–29 — Act I content | Early vertical-slice prototype | Keep town, quest, commerce and crypt as integration fixtures until core gates pass |
+| **18–20 — Town, economy, dialogue & quests** | **Wave D planned, NOT implemented** | Three agent tasks 22–24 have isolated 2-file ownership; runtime and browser acceptance are coordinator-only and not yet started |
+| 21–29 — Act I story and world | Early vertical-slice prototype | Story chain, wilderness and later Act I prompts begin only after Wave D runtime passes; preserve existing town, quest, commerce and crypt fixtures |
 | 30–63 | Not audited | Follow sequential prompts only after earlier acceptance criteria are met |
 
 ## Prompt 07–11 remaining acceptance closeout (integration PR #21)
@@ -50,6 +51,11 @@ Their isolated green CI was necessary but did not itself constitute working runt
 **Release gate:** Dedicated CI must pass npm ci, svelte-check, Vitest, build, Chromium Playwright and root `tests/site.test.mjs` for the **last integration commit**. Merge PR #28 only after this gate, then verify a successful Pages deployment of the merged SHA.
 
 **Validation evidence:** [GitHub Actions run #44705749684](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44705749684) on integration commit `1c3c176` completed successfully: svelte-check **0 errors / 0 warnings**, **440/440 Vitest**, production build, **12/12 Playwright Chromium**, and root legacy site test. Follow-up documentation-only changes must retain the same green gate before merge. Optional content after Wave C includes socket gem insertion, talent spending trees, additional world events and additional dungeon areas; these are separate future prompts, not claims of current gameplay.
+
+
+## Wave D planned status — Prompts 18–20
+
+**Documentation only, no gameplay changes or agent execution.** The next wave deliberately uses **three** independent agents rather than five: [Wave D](plan/agents/WAVE_D.md) / [integrator runbook](plan/agents/INTEGRATION_D.md). The dedicated tasks are [22 — town](plan/agents/22/TASK.md), [23 — economy](plan/agents/23/TASK.md) and [24 — dialogue/quests](plan/agents/24/TASK.md). Exactly one new source file and one new test per agent; no overlap and no changes to shared runtime, Svelte, Phaser, i18n or save by agents. Integrator will review/merge in 22→23→24 order and integrate each prompt in a small, separately green PR. Prompts 21–22 are deferred to a subsequent wave; **none of Prompts 18–20 can be marked complete until playable runtime acceptance and Pages deployment pass**.
 
 ## Prompt 02 implementation boundaries
 
