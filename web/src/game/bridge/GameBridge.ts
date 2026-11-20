@@ -40,6 +40,9 @@ export class GameBridge implements GameStateReader {
 
   snapshot(): GameSnapshot { return this.simulation.snapshot(); }
   character(): CharacterProgress { return this.simulation.character(); }
+  previewEquipment(index: number): ReturnType<GameSimulation['previewEquipment']> {
+    return this.simulation.previewEquipment(index);
+  }
   restoreCharacter(progress: CharacterProgress): boolean {
     this.pointerWorld = null;
     this.pointerEnemy = null;
