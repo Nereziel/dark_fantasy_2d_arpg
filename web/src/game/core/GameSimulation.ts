@@ -2209,7 +2209,8 @@ export class GameSimulation {
       stash: this.stash.map(cloneItem),
       ...(Object.keys(this.itemFlags).length ? { itemFlags: Object.fromEntries(
         Object.entries(this.itemFlags).map(([id, flags]) => [id, { ...flags }])) } : {}),
-      quest: { ...this.quest }
+      quest: { ...this.quest },
+      questLedger: structuredClone(this.actILedger)
     };
   }
 
@@ -2236,7 +2237,8 @@ export class GameSimulation {
       equipment: progress.equipment,
       stash: progress.stash === undefined ? Array(STASH_SIZE).fill(null) : progress.stash,
       itemFlags: progress.itemFlags,
-      quest: progress.quest
+      quest: progress.quest,
+      questLedger: progress.questLedger ?? createActIQuestLedger(progress.quest)!
     };
     if (!scratch.restore(candidate)) return false;
 
@@ -2252,9 +2254,11 @@ export class GameSimulation {
     this.equipment = cloneEquipment(progress.equipment);
     this.itemFlags = { ...scratch.itemFlags };
     this.quest = { ...progress.quest };
+    this.actILedger = createActIQuestLedger(progress.questLedger ?? progress.quest)!;
     this.refreshHealthLimit();
     this.player.health = this.player.maxHealth;
     this.units = createPack(0, this.level, this.world.encounterPositions);
+    this.spawnMorrow();
     this.events.splice(0);
     return true;
   }
@@ -2322,6 +2326,8 @@ export class GameSimulation {
         Object.entries(this.itemFlags).map(([id, flags]) => [id, { ...flags }])) } : {}),
       groundLoot: this.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! })),
       quest: { ...this.quest },
+      questLedger: structuredClone(this.actILedger),
+      actIIUnlocked: this.questStatus('vesnas_report') === 'completed',
       paused: this.paused,
       status
     };
@@ -2356,6 +2362,13 @@ export class GameSimulation {
         || s.talentPoints < 0 || s.talentPoints > Math.floor(s.level / 5)))
       || !Number.isSafeInteger(s.gold) || s.gold < 0
       || !validQuest(s.quest)
+      || !createActIQuestLedger(s.questLedger ?? s.quest)
+      || (() => {
+        const ledger = createActIQuestLedger(s.questLedger ?? s.quest);
+        const original = ledger && firstQuestFromLedger({ quests: [ledger.quests[0]!] });
+        return !original || original.id !== s.quest.id
+          || original.status !== s.quest.status || original.defeated !== s.quest.defeated;
+      })()
       || !Number.isInteger(s.rngState) || s.rngState < 0 || s.rngState > 0xffffffff
       || !Number.isFinite(s.resource) || s.resource < 0 || s.resource > CLASSES[s.classId].resourceMax + (s.level - 1) * 2
       || !Number.isFinite(s.respawnTimer) || s.respawnTimer < 0 || s.respawnTimer > 5
@@ -2397,10 +2410,13 @@ export class GameSimulation {
             : unit.actor.type === (s.dungeonStage === 0
               ? (['skeleton', 'wolf', 'wraith'] as const)[index]
               : (['crypt_lord', 'skeleton', 'wraith'] as const)[index]))
-          : index >= PACK_SIZE ? unit.summoned === true && unit.actor.type === 'skeleton'
+          : index >= PACK_SIZE ? (unit.actor.id === 'morrow_gravebound'
+              ? unit.actor.type === 'wraith' && unit.summoned !== true
+              : unit.summoned === true && unit.actor.type === 'skeleton')
             : unit.actor.type === packTypesForWave(s.wave)[index])
         && validActor(unit.actor, index >= PACK_SIZE
-          ? 'summon-' + s.wave + '-' + index
+          ? (unit.actor.id === 'morrow_gravebound' && s.zone === 'wilderness'
+              ? 'morrow_gravebound' : 'summon-' + s.wave + '-' + index)
           : unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && (unit.elite === undefined || (
           validateEliteSet(unit.elite.modifiers) && unit.elite.modifiers.length > 0
@@ -2442,6 +2458,8 @@ export class GameSimulation {
     ) return false;
 
     this.world = layout;
+    this.storyFeatures = s.zone === 'wilderness' ? buildWilderness(s.worldSeed).features : [];
+    this.actILedger = createActIQuestLedger(s.questLedger ?? s.quest)!;
     this.eliteQueue = [];
     this.zone = s.zone;
     this.dungeonStage = s.dungeonStage;
@@ -2521,7 +2539,9 @@ export class GameSimulation {
     this.nextProjectileId = 0;
     this.movementSpeed = 0;
     this.healthRegenCarry = 0;
-    this.world = buildWilderness(seed).layout;
+    const wilderness = buildWilderness(seed);
+    this.world = wilderness.layout;
+    this.storyFeatures = wilderness.features;
     this.classId = classId;
     this.equipment = createEquipment();
     this.inventory = Array(INVENTORY_SIZE).fill(null);
@@ -2537,6 +2557,7 @@ export class GameSimulation {
     this.statusEffects = { player: [], enemies: {} };
     this.effects = emptyEffects();
     this.quest = freshQuest();
+    this.actILedger = createActIQuestLedger(this.quest)!;
     this.pendingNpc = null;
     this.pendingTown = null;
     this.units = createPack(0, 1, this.world.encounterPositions);
