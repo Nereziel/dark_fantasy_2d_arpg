@@ -148,7 +148,7 @@ describe('Agent 24: quest registry, branching dialogue and character-only progre
     expect(failQuest(catalog, ledger, FIRST_QUEST_ID, 'enemy_defeated')).toBeNull();
 
     let state = acceptQuest(catalog, ledger, FIRST_QUEST_ID)!.ledger;
-    state = advanceObjective(catalog, state, FIRST_QUEST_ID, 'enemy_defeated', '1', 5)!.ledger;
+    state = advanceObjective(catalog, state, FIRST_QUEST_ID, 'enemy_defeated', 'enemy-1', 5)!.ledger;
     state = turnInQuest(catalog, state, FIRST_QUEST_ID)!.ledger;
     const side = acceptQuest(catalog, state, 'herbalist_help')!;
     expect(side.changed).toBe(true);
