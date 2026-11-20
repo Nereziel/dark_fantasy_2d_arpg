@@ -33,9 +33,14 @@ export const STARTER_QUEST_CATALOG: QuestCatalog = {
           nextNodeId: 'vesna.details'
         },
         {
+          id: 'history', textKey: 'dialogue.vesna.history',
+          conditions: [{ type: 'questStatus', questId: FIRST_QUEST_ID, status: 'completed' }],
+          nextNodeId: 'vesna.details', whenLocked: 'disabled'
+        },
+        {
           id: 'accept', textKey: 'quest.ashes.accept',
           action: { type: 'acceptQuest', questId: FIRST_QUEST_ID },
-          whenLocked: 'disabled'
+          whenLocked: 'hidden'
         },
         {
           id: 'turnIn', textKey: 'quest.ashes.turnIn',
@@ -51,7 +56,7 @@ export const STARTER_QUEST_CATALOG: QuestCatalog = {
         {
           id: 'accept', textKey: 'quest.ashes.accept',
           action: { type: 'acceptQuest', questId: FIRST_QUEST_ID },
-          whenLocked: 'disabled'
+          whenLocked: 'hidden'
         }
       ]
     }
