@@ -2,8 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { CAMP, CAMP_RADIUS, generateWorld } from '../../src/game/world/generator';
 import { ACTOR_RADIUS, canOccupy, findPath, WORLD_HEIGHT } from '../../src/game/world/navigation';
+import { WARDEN_ID } from '../../src/game/quests/firstQuest';
 import {
-  BLACKSMITH_ID, MERCHANT_ID, NPC_INTERACT_RANGE, NPC_POSITIONS, WARDEN_ID
+  BLACKSMITH_ID, MERCHANT_ID, NPC_INTERACT_RANGE, NPC_POSITIONS
 } from '../../src/game/world/npcs';
 import {
   canInteractTownEntry, getTownManifest, isTownSafePoint, townEntry,
