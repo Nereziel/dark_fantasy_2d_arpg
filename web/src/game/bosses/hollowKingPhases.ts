@@ -246,9 +246,24 @@ function phaseKey(phase: HollowKingPhase): string {
 function activeAbility(value: unknown): value is HollowKingAbility {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(ABILITY_SPECS, value);
 }
-function warningValid(w: unknown, a: HollowKingArena): w is HollowKingWarning {
-  if (!record(w) || typeof w.id !== 'string' || w.id.length > 120
+function validActionId(
+  id: unknown, encounter: string, category: 'warning' | 'hazard' | 'add', index: number
+): boolean {
+  if (typeof id !== 'string') return false;
+  const prefix = encounter + '/' + category + '/';
+  if (!id.startsWith(prefix)) return false;
+  const suffix = id.slice(prefix.length);
+  return /^[1-9][0-9]*$/.test(suffix)
+    && suffix.length <= 8 && Number(suffix) <= index;
+}
+function warningValid(
+  w: unknown, a: HollowKingArena, encounter: string, index: number
+): w is HollowKingWarning {
+  if (!record(w) || !validActionId(w.id, encounter, 'warning', index)
+    || w.id !== encounter + '/warning/' + index
     || !activeAbility(w.ability) || !PHASES.includes(w.phase as HollowKingPhase)
+    || (PHASES.includes(w.phase as HollowKingPhase)
+      && !ABILITIES[w.phase as HollowKingPhase].includes(w.ability as HollowKingAbility))
     || !record(w.geometry) || !point(w.geometry.position)
     || !finite(w.geometry.radius) || w.geometry.radius <= 0 || w.geometry.radius > 120
     || !finite(w.geometry.angleRadians) || Math.abs(w.geometry.angleRadians) > Math.PI
@@ -260,11 +275,19 @@ function warningValid(w: unknown, a: HollowKingArena): w is HollowKingWarning {
     || !finite(w.opacity) || w.opacity < 0.4 || w.opacity > 1
     || typeof w.localizationKey !== 'string'
     || w.localizationKey !== `boss.hollowKing.ability.${w.ability}`) return false;
-  return safePlacement(w.geometry.position as HollowKingPoint, w.geometry.radius as number, a);
+  const spec = ABILITY_SPECS[w.ability as HollowKingAbility];
+  return w.geometry.shape === spec.shape
+    && w.geometry.radius === spec.radius
+    && w.geometry.arcDegrees === spec.arcDegrees
+    && w.windupSeconds === spec.windup
+    && safePlacement(w.geometry.position as HollowKingPoint, w.geometry.radius as number, a);
 }
-function hazardValid(h: unknown, a: HollowKingArena, encounter: string): h is HollowKingHazard {
-  return record(h) && typeof h.id === 'string'
-    && h.id.startsWith(`${encounter}/hazard/`) && h.id.length <= 140
+function hazardValid(
+  h: unknown, a: HollowKingArena, encounter: string, index: number, phase: HollowKingPhase
+): h is HollowKingHazard {
+  return record(h) && validActionId(h.id, encounter, 'hazard', index)
+    && (h.type !== 'rune_storm' || phase === 3)
+    && (h.type !== 'grave_circle' || phase >= 2)
     && (h.type === 'grave_circle' || h.type === 'rune_storm')
     && point(h.position) && finite(h.radius) && h.radius > 0 && h.radius <= 52
     && finite(h.durationSeconds) && h.durationSeconds > 0 && h.durationSeconds <= 3
@@ -272,9 +295,10 @@ function hazardValid(h: unknown, a: HollowKingArena, encounter: string): h is Ho
     && h.remainingSeconds <= h.durationSeconds
     && safePlacement(h.position, h.radius, a);
 }
-function addValid(add: unknown, a: HollowKingArena, encounter: string): add is HollowKingAddRequest {
-  return record(add) && typeof add.id === 'string'
-    && add.id.startsWith(`${encounter}/add/`) && add.id.length <= 140
+function addValid(
+  add: unknown, a: HollowKingArena, encounter: string, index: number, phase: HollowKingPhase
+): add is HollowKingAddRequest {
+  return record(add) && phase >= 2 && validActionId(add.id, encounter, 'add', index)
     && add.enemyType === 'skeleton' && point(add.position)
     && safePlacement(add.position, ACTOR_RADIUS, a);
 }
@@ -335,16 +359,21 @@ export function validateHollowKingState(value: unknown): value is HollowKingStat
     || (state.mode === 'dead' && (state.timerSeconds !== 0 || state.warning !== null || state.activeAbility !== null))
     || (state.mode === 'idle' && (state.warning !== null || state.activeAbility !== null))
     || (state.mode === 'telegraph' && (state.warning === null
-      || !warningValid(state.warning, state.arena)
+      || !warningValid(state.warning, state.arena, state.encounterId, state.rotationIndex)
       || state.warning.ability !== state.activeAbility
       || state.warning.phase !== state.phase
       || state.warning.remainingSeconds !== state.timerSeconds))
     || ((state.mode === 'execute' || state.mode === 'recovery')
-      && (state.warning !== null || !activeAbility(state.activeAbility) || state.timerSeconds > 1))
+      && (state.warning !== null || !activeAbility(state.activeAbility)
+        || (activeAbility(state.activeAbility)
+          && !ABILITIES[state.phase].includes(state.activeAbility))
+        || state.timerSeconds > 1))
     || (state.mode !== 'telegraph' && state.mode !== 'idle' && state.mode !== 'dead'
       && state.activeAbility === null)
-    || state.hazards.some(h => !hazardValid(h, state.arena, state.encounterId))
-    || state.addRequests.some(add => !addValid(add, state.arena, state.encounterId))
+    || state.hazards.some(h => !hazardValid(h, state.arena, state.encounterId,
+      state.rotationIndex, state.phase))
+    || state.addRequests.some(add => !addValid(add, state.arena, state.encounterId,
+      state.rotationIndex, state.phase))
     || new Set(state.hazards.map(h => h.id)).size !== state.hazards.length
     || new Set(state.addRequests.map(a => a.id)).size !== state.addRequests.length) return false;
   return true;
