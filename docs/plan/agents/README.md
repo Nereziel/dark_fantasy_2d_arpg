@@ -1,6 +1,6 @@
-# Koordinace agentů — Wave E připravena (agenti 25–27)
+# Koordinace agentů — Wave E core integrována (agenti 25–27)
 
-**Aktuální plán:** [WAVE_E.md](WAVE_E.md), [INTEGRATION_E.md](INTEGRATION_E.md), [25/TASK.md](25/TASK.md), [26/TASK.md](26/TASK.md), [27/TASK.md](27/TASK.md). **Max. 3 paralelní agenti**, dva výhradní soubory na agenta, společné BASE_SHA stanoví integrátor až při dispatchi z aktuálního HEAD main. Prompt 21 = Act I quest chain (25); Prompt 22 = procedurální terén (26) a POI/události (27). Plán ještě neznamená spuštěné agenty ani hotový runtime. Agenti pouze draft PR; integrátor propojí, ověří CS/EN, v10 migrace a E2E. **Waypoint fast travel = budoucí Prompt 36.** Použít [WORKFLOW_CACHE.md](WORKFLOW_CACHE.md).
+**Aktuální záznam / historický plán:** [WAVE_E.md](WAVE_E.md), [INTEGRATION_E.md](INTEGRATION_E.md), [25/TASK.md](25/TASK.md), [26/TASK.md](26/TASK.md), [27/TASK.md](27/TASK.md). **Max. 3 paralelní agenti**, dva výhradní soubory na agenta, společné BASE_SHA stanoví integrátor až při dispatchi z aktuálního HEAD main. Prompt 21 = Act I quest chain (25); Prompt 22 = procedurální terén (26) a POI/události (27). Agentní PR #42/#41/#43 a runtime PR #44/#45 byly integrovány do `main`. CS/EN a charakterové migrace v8/v9/v10→v11 jsou připojeny; 547/547 jednotkových a 13/13 Chromium prošlo. Plná no-debug příběhová E2E cesta a live optional POI rewards zbývají jako acceptance closeout. Agenty **25–27 znovu nespouštěj**. **Waypoint fast travel = budoucí Prompt 36.** Použít [WORKFLOW_CACHE.md](WORKFLOW_CACHE.md).
 
 ---
 
