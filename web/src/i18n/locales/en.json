@@ -973,5 +973,27 @@
       "short": "DMG",
       "description": "Deal 20% more damage for 10 seconds."
     }
+  },
+  "stash": {
+    "tabs": "Stash tabs",
+    "tab": "Tab",
+    "search": "Find item",
+    "rarity": "Rarity",
+    "category": "Category",
+    "sort": "Order",
+    "all": "All",
+    "moveTo": "Move to tab",
+    "organize": "Organize this tab",
+    "noMatches": "No items match the current filters.",
+    "categoryNames": {
+      "weapon": "Weapons",
+      "armor": "Armor",
+      "accessory": "Accessories"
+    },
+    "sortModes": {
+      "rarity": "Rarity",
+      "level": "Level",
+      "name": "Item name"
+    }
   }
 }
