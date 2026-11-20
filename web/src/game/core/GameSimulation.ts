@@ -475,6 +475,7 @@ export class GameSimulation {
       });
       // Chests preserve item ownership; never evict another ground item due to overflow.
     }
+    this.awardExperience(rewardForActivity('exploration', this.level, this.level));
     this.events.push({ type: 'worldInteract', id: object.id, kind: object.kind });
   }
 
@@ -618,7 +619,7 @@ export class GameSimulation {
         movementSkill: ability.tags.includes('MOVEMENT')
       },
       state: {
-        rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+        rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
         cooldowns: { ...this.warriorCooldowns,
           cleave: Math.max(this.warriorCooldowns.cleave ?? 0, this.cooldowns.rmb),
           charge: Math.max(this.warriorCooldowns.charge ?? 0, this.cooldowns.slot1) }
@@ -757,7 +758,7 @@ export class GameSimulation {
       this.applyCanonicalStatus('player', 'haste', 'hero', 0.2, 8);
       this.applyCanonicalStatus('player', 'fortified', 'hero', 0.2, 8);
       this.resource = applyWarriorRageDelta({
-        rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+        rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
         cooldowns: this.warriorCooldowns
       }, ability.rageGain).rage;
     } else {
@@ -795,7 +796,7 @@ export class GameSimulation {
         const dealt = this.applyDamage(power, unit, 'physical');
         if (dealt > 0 && ability.rageGain > 0) {
           this.resource = applyWarriorRageDelta({
-            rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+            rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
             cooldowns: this.warriorCooldowns
           }, ability.rageGain).rage;
         }
@@ -1595,14 +1596,16 @@ export class GameSimulation {
   }
   private step(dt: number): void {
     const definition = CLASSES[this.classId];
-    this.resource = advanceResource(this.resource, definition.regenRate, definition.resourceMax, dt);
+    const currentStats = deriveStats(this.classId, this.equipment, this.level);
+    this.resource = advanceResource(this.resource, currentStats.resourceRegen,
+      currentStats.maxResource, dt);
     this.attackTimer = Math.max(0, this.attackTimer - dt);
     this.evadeCooldown = Math.max(0, this.evadeCooldown - dt);
     for (const slot of ['rmb', 'slot1'] as const) {
       this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
     }
     this.warriorCooldowns = { ...advanceWarriorCooldowns({
-      rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+      rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
       cooldowns: this.warriorCooldowns
     }, dt).cooldowns } as Partial<Record<WarriorAbilityId, number>>;
     this.warriorCooldowns.cleave = this.cooldowns.rmb;
