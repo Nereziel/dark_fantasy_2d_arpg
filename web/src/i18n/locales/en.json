@@ -945,5 +945,33 @@
       "healthRegen": "health regeneration",
       "critChance": "critical chance"
     }
+  },
+  "potions": {
+    "bar": "Potions",
+    "use": "Drink",
+    "select": "Select",
+    "refill": "Refill 1",
+    "refillTitle": "Potion refills",
+    "visitVendor": "Visit apothecary",
+    "healing": {
+      "name": "Healing Potion",
+      "short": "HP",
+      "description": "Restore up to 55 health."
+    },
+    "resource": {
+      "name": "Resource Potion",
+      "short": "RP",
+      "description": "Restore up to 40 class resource."
+    },
+    "resistance": {
+      "name": "Resistance Potion",
+      "short": "RES",
+      "description": "Gain 30 elemental resistance for 12 seconds."
+    },
+    "fury": {
+      "name": "Fury Potion",
+      "short": "DMG",
+      "description": "Deal 20% more damage for 10 seconds."
+    }
   }
 }
