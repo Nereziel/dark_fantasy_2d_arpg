@@ -535,6 +535,8 @@ export class GameSimulation {
     for (const id of defeated) this.miniBossStates.delete(id);
     this.mapDiscovery = structuredClone(progress.mapDiscovery);
     this.worldFacts = structuredClone(progress.worldFacts);
+    this.activeWorldEventId = null;
+    this.units = this.units.filter(unit => !unit.actor.id.startsWith('world-event.'));
     this.activatedCheckpointIds.clear();
     for (const id of checkpoints) this.activatedCheckpointIds.add(id);
     if (this.activatedCheckpointIds.has('shrine.soul-shrine')) {
@@ -943,6 +945,7 @@ export class GameSimulation {
       this.zone, this.player, [...this.activatedCheckpointIds], wilderness.layout
     );
     this.zone = 'wilderness';
+    this.activeWorldEventId = null;
     this.world = wilderness.layout;
     this.storyFeatures = wilderness.features;
     this.cryptTheme = null;
@@ -2678,6 +2681,7 @@ export class GameSimulation {
     const destination: ZoneId = this.zone === 'wilderness' ? 'crypt' : 'wilderness';
     const seed = this.world.seed;
     this.zone = destination;
+    this.activeWorldEventId = null;
     const wilderness = destination === 'wilderness' ? buildWilderness(seed) : null;
     const crypt = destination === 'crypt' ? buildCryptWorld(seed) : null;
     this.world = wilderness?.layout ?? crypt!.layout;
@@ -2934,6 +2938,7 @@ export class GameSimulation {
 
     this.discoverStoryLocations();
     this.observeExploration();
+    this.activateNearbyWorldEvent();
     this.tickCryptTraps(dt);
     if (this.player.alive) {
       for (const unit of this.units) {
@@ -3087,7 +3092,12 @@ export class GameSimulation {
   }
 
   private defeatEnemy(unit: EnemyUnit): void {
+    if(!unit.actor.alive)return;
+    const eventEnemy=this.activeWorldEventId!==null
+      && this.worldEventPlans.some(plan=>plan.id===this.activeWorldEventId
+        && plan.enemySpawns.some(spawn=>spawn.id===unit.actor.id));
     unit.actor.alive = false;
+    unit.actor.health = 0;
     if (unit.actor.id === 'crypt_lord-4' && this.hollowKing
       && !this.hollowKing.deathEmitted) {
       const state = this.hollowKing;
@@ -3141,9 +3151,12 @@ export class GameSimulation {
       this.pendingAim = null;
     }
     this.kills++;
-    this.gold += 12 + this.level * 3;
-    this.awardExperience(Math.round(rewardForActivity('enemy', this.level, this.level)
-      * (unit.elite ? 1.75 : 1)));
+    // Partial event kills yield no per-enemy gold, XP or loot.
+    if(!eventEnemy) {
+      this.gold += 12 + this.level * 3;
+      this.awardExperience(Math.round(rewardForActivity('enemy', this.level, this.level)
+        * (unit.elite ? 1.75 : 1)));
+    }
     if (this.zone === 'wilderness') {
       this.commitQuestTransition(
         advanceObjective(ACT_I_QUEST_CATALOG, this.actILedger,
@@ -3162,8 +3175,9 @@ export class GameSimulation {
       this.gold += 100;
       this.awardExperience(rewardForActivity('boss', this.level, this.level));
     }
-    this.dropEnemyLoot(unit);
+    if(!eventEnemy)this.dropEnemyLoot(unit);
     this.events.push({ type: 'defeat', targetId: unit.actor.id, kills: this.kills });
+    if(eventEnemy)this.finishWorldEventIfReady(unit.actor.id);
     if (this.aliveEnemies.length === 0) this.respawnTimer = this.zone === 'crypt' && this.dungeonStage === 1 ? 0 : 3.2;
   }
   /** The one runtime path for normal, elite and boss drops; rolls share catalog+affixes. */
@@ -3386,6 +3400,7 @@ export class GameSimulation {
         .map(([id, state]) => [id, structuredClone(state)])),
       miniBossDefeatedIds: [...this.defeatedMiniBossIds],
       activatedCheckpointIds: [...this.activatedCheckpointIds],
+      worldEvents: this.eventViews(),
       respawnAt: this.respawnAt ? structuredClone(this.respawnAt) : null,
       respawnProtectionSeconds: this.respawnProtectionSeconds,
       hollowKing: this.hollowKing ? structuredClone(this.hollowKing) : null,
@@ -3716,6 +3731,8 @@ export class GameSimulation {
     this.miniBossStates.clear();
     this.defeatedMiniBossIds.clear();
     this.activatedCheckpointIds.clear();
+    this.worldEventPlans = [];
+    this.activeWorldEventId = null;
     this.respawnAt = null;
     this.respawnProtectionSeconds = 0;
     this.hollowKing = null;
