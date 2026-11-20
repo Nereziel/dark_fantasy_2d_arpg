@@ -1,7 +1,7 @@
 # INTEGRATION_F — Hlavní integrátor, Wave F (Prompty 23–25)
 
 **Status: připravený integrační runbook; není implementací ani spuštěním agentů.**
-Repo: `Nereziel/dark_fantasy_2d_arpg`. Zadání/samostatné write-sety: [WAVE_F.md](WAVE_F.md), [28/TASK.md](28/TASK.md), [29/TASK.md](29/TASK.md), [30/TASK.md). Původní specifikace: `2d_arpg_implementation_prompts.md` Prompty 23, 24, 25.
+Repo: `Nereziel/dark_fantasy_2d_arpg`. Zadání/samostatné write-sety: [WAVE_F.md](WAVE_F.md), [28/TASK.md](28/TASK.md), [29/TASK.md](29/TASK.md), [30/TASK.md](30/TASK.md). Původní specifikace: `2d_arpg_implementation_prompts.md` Prompty 23, 24, 25.
 
 ## 0 — Dispatch gate / společný BASE_SHA
 
