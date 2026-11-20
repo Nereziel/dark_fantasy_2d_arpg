@@ -500,6 +500,7 @@ export class FrontierScene extends Phaser.Scene {
       if (!ids.has(id)) {
         sprite.destroy();
         this.enemyGraphics.delete(id);
+        this.enemyHitUntil.delete(id);
       }
     }
     for (const { actor } of state.enemies) {
