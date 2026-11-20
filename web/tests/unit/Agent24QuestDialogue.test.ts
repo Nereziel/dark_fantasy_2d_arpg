@@ -79,7 +79,7 @@ const withLedger = () => {
   return { catalog, ledger: ledger! };
 };
 
-const status = (ledger: QuestLedger, questId = FIRST_QUEST_ID) =>
+const status = (ledger: QuestLedger, questId: string = FIRST_QUEST_ID) =>
   ledger.quests.find(q => q.questId === questId)!;
 
 const frozen = <T>(value: T): T => {
@@ -280,7 +280,7 @@ describe('Agent 24: quest registry, branching dialogue and character-only progre
     c.quests[0].objectives[0].targetCount = 1000;
     const start = acceptQuest(c, createQuestLedger(c)!, FIRST_QUEST_ID)!.ledger;
     const forged = JSON.parse(JSON.stringify(start)) as QuestLedger;
-    const record = forged.quests[0] as { processedEventIds: string[]; counters: Record<string, number> };
+    const record = forged.quests[0] as unknown as { processedEventIds: string[]; counters: Record<string, number> };
     record.processedEventIds = Array.from({ length: 256 }, (_, i) => 'old_'+i);
     record.counters.defeated = 256;
     expect(validateQuestLedger(c, forged)).toBe(true);
