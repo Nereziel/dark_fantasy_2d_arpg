@@ -96,9 +96,12 @@ describe('Prompt 05: typed skill aims', () => {
       type: 'cast', slot: 'slot1',
       aim: { mode: 'AREA', position: { x: 780, y: 520 } }
     });
-    const state = sim.snapshot();
-    expect(state.cooldowns.slot1).toBeGreaterThan(0);
-    expect(state.enemies[0]!.actor.health).toBeLessThan(state.enemies[0]!.actor.maxHealth);
+    const windup = sim.snapshot();
+    expect(windup.cooldowns.slot1).toBeGreaterThan(0);
+    expect(windup.enemies[0]!.actor.health).toBe(windup.enemies[0]!.actor.maxHealth);
+    advance(sim, 24);
+    const impact = sim.snapshot();
+    expect(impact.enemies[0]!.actor.health).toBeLessThan(impact.enemies[0]!.actor.maxHealth);
   });
 });
 
@@ -162,6 +165,7 @@ describe('Prompt 06: typed damage, shields and real projectiles', () => {
     const sim = new GameSimulation();
     sim.command({ type: 'reset', classId: 'PALADIN' });
     sim.command({ type: 'cast', slot: 'slot1' });
+    advance(sim, 23); // Consecration shield resolves at its deterministic hit frame.
     const before = sim.snapshot();
     const player = { ...before.player, x: 860, y: 635 };
     expect(sim.restore({
@@ -186,6 +190,8 @@ describe('Prompt 06: typed damage, shields and real projectiles', () => {
     const sim = new GameSimulation();
     sim.command({ type: 'reset', classId: 'PALADIN' });
     sim.command({ type: 'cast', slot: 'slot1' });
+    expect(sim.snapshot().shield).toBe(0);
+    advance(sim, 23);
     expect(sim.snapshot().shield).toBeGreaterThan(0);
     const saved = sim.character();
     expect('shield' in saved).toBe(false);
