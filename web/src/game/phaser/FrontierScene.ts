@@ -25,8 +25,9 @@ import { ACTOR_RADIUS, canOccupy, type Obstacle } from '../world/navigation';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
 import {
   CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
-  generateWorld, generateCrypt
+  generateCrypt
 } from '../world/generator';
+import { buildWilderness } from '../world/wildernessRuntime';
 import {
   WARDEN_POSITION, NPC_POSITIONS, MERCHANT_ID, BLACKSMITH_ID
 } from '../world/npcs';
@@ -895,7 +896,8 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private paintWorld(worldSeed: number, zone: ZoneId): void {
-    const layout = zone === 'crypt' ? generateCrypt(worldSeed) : generateWorld(worldSeed);
+    const wilderness = zone === 'wilderness' ? buildWilderness(worldSeed) : null;
+    const layout = zone === 'crypt' ? generateCrypt(worldSeed) : wilderness!.layout;
     if (!this.terrain) this.terrain = this.add.graphics().setDepth(-100);
     const ground = this.terrain;
     ground.clear();
@@ -908,23 +910,31 @@ export class FrontierScene extends Phaser.Scene {
     }
     ground.fillStyle(0x131921).fillRect(0, 0, WIDTH, HEIGHT);
 
-    // Deterministic visual variations; cosmetic only, never collision/loot state.
+    // Terrain/tile layers originate from the same validated world as collision.
+    const terrainColors = {
+      town_clearing: 0x25302e, dark_grass: 0x1b2928,
+      dead_leaves: 0x293029, corrupted_soil: 0x342729,
+      broken_stone: 0x343536, dirt_road: 0x3b382f
+    } as const;
+    for (const tile of wilderness!.terrain.tiles) {
+      const shade = terrainColors[tile.terrainId];
+      ground.fillStyle(shade, 0.72 + tile.variant * 0.06)
+        .fillRect(tile.x, tile.y, tile.width, tile.height);
+    }
+    for (const road of wilderness!.terrain.roads) {
+      ground.lineStyle(road.width, 0x665a42, 0.52);
+      for (let i = 1; i < road.points.length; i++) {
+        const previous = road.points[i - 1]!;
+        const next = road.points[i]!;
+        ground.lineBetween(previous.x, previous.y, next.x, next.y);
+      }
+    }
+    // Decorative forest variation only; never changes the world pathfinder.
     let seed = (worldSeed ^ 0x8237ab19) >>> 0;
     const random = () => {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       return seed / 4294967296;
     };
-
-    for (let y = 0; y < HEIGHT; y += 48) {
-      for (let x = 0; x < WIDTH; x += 48) {
-        const shades = [0x1a2429, 0x1e292c, 0x202b2f, 0x182228];
-        ground.fillStyle(shades[Math.floor(random() * shades.length)], 0.6)
-          .fillRect(x, y, 47, 47);
-        if (random() < 0.2) {
-          ground.fillStyle(0x475345, 0.35).fillRect(x + 9, y + 25, 4, 7);
-        }
-      }
-    }
 
     // A safe encampment is the hero's spawn and re-entry point.
     const camp = layout.camp;
@@ -949,10 +959,6 @@ export class FrontierScene extends Phaser.Scene {
       camp.x + 21, camp.y + 68, camp.x + 47, camp.y + 68, camp.x + 34, camp.y + 32);
     ground.fillStyle(0xffd49a, 0.86).fillTriangle(
       camp.x + 26, camp.y + 64, camp.x + 42, camp.y + 64, camp.x + 34, camp.y + 44);
-
-    // A pale trade route leads toward the first encounter.
-    ground.fillStyle(0x34352f, 0.7).fillRoundedRect(230, 425, 1080, 160, 60);
-    ground.lineStyle(2, 0x505147, 0.45).strokeRoundedRect(235, 429, 1070, 150, 60);
 
     for (let i = 0; i < 120; i++) {
       const x = 60 + random() * (WIDTH - 120);
@@ -983,6 +989,22 @@ export class FrontierScene extends Phaser.Scene {
     ground.fillStyle(0x49535a).fillRoundedRect(1001, 345, 58, 60, 6);
     ground.fillStyle(0x737e83).fillTriangle(990, 350, 1070, 350, 1030, 315);
     ground.lineStyle(3, 0x92c2ac, 0.5).strokeCircle(1030, 385, 14);
+
+    // Seeded story landmarks, treasures and encounters are visible in-world.
+    // Decorative geometry only: actor collision uses the same terrain layout.
+    for (const feature of wilderness!.features) {
+      if (feature.kind === 'cryptEntrance') continue;
+      const color = feature.kind === 'graveyard' ? 0xa6a2a8
+        : feature.kind === 'evidence' ? 0xd3b273
+        : feature.kind === 'miniBoss' ? 0xc77580
+        : feature.kind === 'forest' ? 0x718f6b
+        : feature.kind === 'corruption' ? 0xa36aa0 : 0x79958b;
+      const radius = Math.min(30, feature.radius * 0.5);
+      ground.fillStyle(color, feature.mandatory ? 0.25 : 0.12)
+        .fillCircle(feature.position.x, feature.position.y, radius);
+      ground.lineStyle(feature.mandatory ? 3 : 1, color, 0.78)
+        .strokeCircle(feature.position.x, feature.position.y, radius);
+    }
 
     // The old crypt gateway is a physical interaction point.
     this.paintPortal(ground, CRYPT_GATE.x, CRYPT_GATE.y, 0x96afbc);
