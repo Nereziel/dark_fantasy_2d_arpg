@@ -13,6 +13,12 @@
     "restoreHealth": "Vyléčit zranění",
     "restoreResource": "Obnovit energii",
     "futureService": "Tato služba zatím čeká na další rozšíření hry.",
+    "stashBag": "Batoh",
+    "stashStored": "Úschovna",
+    "stashDeposit": "Uložit",
+    "stashWithdraw": "Vyjmout",
+    "stashEmpty": "Úschovna je prázdná",
+    "stashProtected": "Zamčené a oblíbené předměty nelze uložit. Úschovna uchovává předměty i po opětovném spuštění hry.",
     "entry": {
       "warden_vesna": {
         "name": "Strážkyně Vesna",
@@ -36,7 +42,7 @@
       },
       "stash_camp": {
         "name": "Táborová úschovna",
-        "description": "Připravovaná osobní truhla pro dlouhodobé ukládání předmětů."
+        "description": "Osobní truhla se 24 místy. Uložené předměty zůstávají s postavou i v novém světě."
       },
       "waypoint_camp": {
         "name": "Táborový rozcestník",
