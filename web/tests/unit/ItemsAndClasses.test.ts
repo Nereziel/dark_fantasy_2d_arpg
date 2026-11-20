@@ -79,7 +79,7 @@ describe('deterministic legacy-style loot and inventory', () => {
     const record = createSaveRecord(hero, 1234)!;
 
     expect(record).not.toBeNull();
-    expect(record.format).toBe(9);
+    expect(record.format).toBe(10);
     expect(record.savedAt).toBe(1234);
     expect(Object.keys(record.character).sort()).toEqual([
       'classId', 'equipment', 'gold', 'inventory', 'kills', 'level', 'quest', 'skillPoints', 'talentPoints', 'xp'
