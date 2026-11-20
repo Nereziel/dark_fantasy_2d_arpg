@@ -37,8 +37,9 @@ import { getEnemyArchetype } from '../enemies/archetypeCatalog';
 import { ACTOR_RADIUS, canOccupy, findPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
-  generateWorld, generateCrypt, type WorldLayout
+  generateCrypt, type WorldLayout
 } from '../world/generator';
+import { buildWilderness } from '../world/wildernessRuntime';
 import {
   nearNpc, nearWarden, isNpcId, NPC_POSITIONS, NPC_INTERACT_RANGE,
   MERCHANT_ID, BLACKSMITH_ID, type NpcId
@@ -187,7 +188,7 @@ export class GameSimulation {
     kind: 'pulse' | 'teleport'; position: Point; radius: number;
     multiplier: number; damageType: 'fire' | 'poison' }> = [];
   private effects: ActiveEffects = emptyEffects();
-  private world: WorldLayout = generateWorld(0);
+  private world: WorldLayout = buildWilderness(0).layout;
   private zone: ZoneId = 'wilderness';
   private dungeonStage: 0 | 1 = 0;
   private dungeonCleared = false;
@@ -1669,7 +1670,7 @@ export class GameSimulation {
     const destination: ZoneId = this.zone === 'wilderness' ? 'crypt' : 'wilderness';
     const seed = this.world.seed;
     this.zone = destination;
-    this.world = destination === 'crypt' ? generateCrypt(seed) : generateWorld(seed);
+    this.world = destination === 'crypt' ? generateCrypt(seed) : buildWilderness(seed).layout;
     this.player.x = destination === 'crypt' ? CRYPT_EXIT.x : CAMP.x;
     this.player.y = destination === 'crypt' ? CRYPT_EXIT.y : CAMP.y;
     this.dungeonStage = 0;
@@ -2255,7 +2256,7 @@ export class GameSimulation {
     const layout = s && Number.isSafeInteger(s.worldSeed)
       && s.worldSeed >= 0 && s.worldSeed <= 0xffffffff
       && (s.zone === 'wilderness' || s.zone === 'crypt')
-      ? (s.zone === 'crypt' ? generateCrypt(s.worldSeed) : generateWorld(s.worldSeed))
+      ? (s.zone === 'crypt' ? generateCrypt(s.worldSeed) : buildWilderness(s.worldSeed).layout)
       : null;
     if (!s || !layout || s.version !== 5 || !isClassId(s.classId)
       || (s.dungeonStage !== 0 && s.dungeonStage !== 1)
@@ -2442,7 +2443,7 @@ export class GameSimulation {
     this.nextProjectileId = 0;
     this.movementSpeed = 0;
     this.healthRegenCarry = 0;
-    this.world = generateWorld(seed);
+    this.world = buildWilderness(seed).layout;
     this.classId = classId;
     this.equipment = createEquipment();
     this.inventory = Array(INVENTORY_SIZE).fill(null);
