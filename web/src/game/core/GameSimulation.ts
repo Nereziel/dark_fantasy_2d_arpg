@@ -684,7 +684,7 @@ export class GameSimulation {
     if (this.warriorAction) return;
     const skill = SKILLS[this.classId][slot];
     if (skill.kind === 'dash' && this.holdPosition) return;
-    if (this.effects.player.some(e => e.id === 'stunned')
+    if (this.immobilized || this.statusEffects.player.some(e => e.id === 'silenced')
       || this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
 
     // Aimed positions and directions are validated by the authoritative simulation.
@@ -770,8 +770,12 @@ export class GameSimulation {
   private resolveEnemyDamage(base: number, unit: EnemyUnit, type: DamageType,
     sourceId: string, multiplier = 1, critChance = 0): number {
     if (!unit.actor.alive) return 0;
+    const defenderStatus = getStatusModifiers(this.statusEffects.enemies[unit.actor.id] ?? []);
+    const attackerStatus = getStatusModifiers(this.statusEffects.player);
     const result = resolveTypedDamage({
-      type, base, multiplier, critChance,
+      type, base, multiplier: multiplier
+        * Math.max(0.1, 1 + (attackerStatus.damageDealt ?? 0))
+        * Math.max(0.1, 1 + (defenderStatus.damageTaken ?? 0)), critChance,
       defenderArmor: 10 + this.level * 3, defenderLevel: this.level,
       resistancePercent: Math.min(95, this.enemyResistance(unit, type) +
         100 * Math.min(0.8, getStatusModifiers(this.statusEffects.enemies[unit.actor.id] ?? []).damageReduction ?? 0))
@@ -801,8 +805,13 @@ export class GameSimulation {
       : type === 'poison' ? stats.poisonResist
       : type === 'shadow' ? stats.shadowResist
       : type === 'holy' ? stats.holyResist : 0;
+    const attackerStatus = getStatusModifiers(this.statusEffects.enemies[sourceId] ?? []);
+    const defenderStatus = getStatusModifiers(this.statusEffects.player);
     const result = resolveTypedDamage({
-      type, base, defenderArmor: stats.armor, defenderLevel: this.level,
+      type,
+      base: base * Math.max(0.1, 1 + (attackerStatus.damageDealt ?? 0))
+        * Math.max(0.1, 1 + (defenderStatus.damageTaken ?? 0)),
+      defenderArmor: stats.armor, defenderLevel: this.level,
       resistancePercent: Math.min(95, resistance +
         100 * Math.min(0.8, getStatusModifiers(this.statusEffects.player).damageReduction ?? 0)),
       dodgeChance: stats.dodgeChance,
@@ -1077,7 +1086,9 @@ export class GameSimulation {
     unit.cooldown = Math.max(0, unit.cooldown - dt);
     const actor = unit.actor;
     const def = ENEMY_DEFINITIONS[actor.type];
-    if (unit.effects.some(effect => effect.id === 'stunned')) {
+    if (unit.effects.some(effect => effect.id === 'stunned')
+      || this.statusEffects.enemies[actor.id]?.some(effect =>
+        effect.id === 'stunned' || effect.id === 'frozen')) {
       if (unit.intent) {
         unit.intent = null;
         unit.cooldown = Math.max(unit.cooldown, 0.55);
