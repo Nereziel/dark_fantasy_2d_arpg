@@ -490,7 +490,19 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private onGameEvent(event: GameEvent): void {
-    if (event.type === 'miniBossCue') {
+    if (event.type === 'hollowKingCue') {
+      const ring = this.obtainImpact(event.x, event.y, 88);
+      const tint = event.kind === 'phaseChanged' ? 0xb59ae9
+        : event.kind === 'hitWindow' ? 0xf06c6f
+        : event.kind === 'telegraph' ? 0xeeb478 : 0x8eaeaf;
+      ring.lineStyle(event.kind === 'telegraph' ? 5 : 3, tint, 0.90)
+        .strokeCircle(0, 0, Math.min(128, Math.max(18, event.radius)));
+      ring.fillStyle(tint, 0.11).fillCircle(0, 0,
+        Math.min(128, Math.max(18, event.radius)));
+      this.tweens.add({ targets: ring, alpha: 0, scaleX: 1.16, scaleY: 1.16,
+        duration: event.kind === 'telegraph' ? 700 : 360,
+        onComplete: () => this.releaseImpact(ring) });
+    } else if (event.type === 'miniBossCue') {
       const graphic = this.obtainImpact(event.x, event.y, 88);
       const color = event.kind === 'telegraph' ? 0xf1b568
         : event.kind === 'impact' ? 0xe16a67
@@ -765,6 +777,36 @@ export class FrontierScene extends Phaser.Scene {
     this.healthBar.clear();
     this.telegraph.clear();
     this.statusVisuals.clear();
+    if (state.zone === 'crypt' && state.hollowKing) {
+      const king = state.hollowKing;
+      const warning = king.warning;
+      if (warning) {
+        const g = warning.geometry;
+        const progress = 1 - warning.remainingSeconds / Math.max(0.01, warning.windupSeconds);
+        const alpha = Math.min(0.5, 0.10 + progress * 0.28);
+        this.telegraph.fillStyle(0xe96569, alpha);
+        this.telegraph.lineStyle(4 + progress * 4, 0xffd294, 0.72 + progress * 0.28);
+        if (g.shape === 'circle') {
+          this.telegraph.fillCircle(g.position.x, g.position.y, g.radius);
+          this.telegraph.strokeCircle(g.position.x, g.position.y, g.radius);
+        } else {
+          const arc = g.arcDegrees * Math.PI / 360;
+          const from = g.angleRadians - arc, to = g.angleRadians + arc;
+          this.telegraph.slice(g.position.x, g.position.y, g.radius, from, to, false);
+          this.telegraph.fillPath();
+          this.telegraph.slice(g.position.x, g.position.y, g.radius, from, to, false);
+          this.telegraph.strokePath();
+        }
+      }
+      for (const hazard of king.hazards) {
+        const pulse = 0.22 + 0.08 * Math.sin(this.time.now * 0.013);
+        const c = hazard.type === 'rune_storm' ? 0xb085ea : 0x8cc8a3;
+        this.telegraph.fillStyle(c, pulse)
+          .fillCircle(hazard.position.x, hazard.position.y, hazard.radius);
+        this.telegraph.lineStyle(4, c, 0.85)
+          .strokeCircle(hazard.position.x, hazard.position.y, hazard.radius);
+      }
+    }
     // The current story objective, not every optional POI, receives a pulsing
     // readable quest marker. All positions originate from the validated world.
     const currentStory = state.questLedger?.quests.find(quest =>
