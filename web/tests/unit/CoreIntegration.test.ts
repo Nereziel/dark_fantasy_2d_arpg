@@ -112,6 +112,9 @@ describe('targeted skill input contract', () => {
     expect(sim.snapshot().selectedTargetId).toBe('skeleton-2');
     for (let n = 0; n < 280 && sim.snapshot().cooldowns.rmb === 0; n++) sim.advance(16.667);
     expect(sim.snapshot().cooldowns.rmb).toBeGreaterThan(0);
+    const committed = sim.snapshot();
+    expect(committed.enemies[1]!.actor.health).toBe(committed.enemies[1]!.actor.maxHealth);
+    for (let n = 0; n < 28; n++) sim.advance(16.667);
     const active = sim.snapshot();
     expect(active.enemies[1]!.actor.health).toBeLessThan(active.enemies[1]!.actor.maxHealth);
     sim.command({ type: 'cast', slot: 'rmb', targetId: 'no-such-enemy' });
