@@ -24,6 +24,7 @@
   } from './game/world/npcs';
   import { WARDEN_ID } from './game/quests/firstQuest';
   import { CLASSES, type ClassId } from './game/data/classes';
+  import { xpRequiredForLevel } from './game/progression/progressionRules';
 
   const bridge = new GameBridge();
   let playing = $state(false);
@@ -402,10 +403,10 @@
           {#if view.shield > 0}
             <div class="vital-top resource-label"><span>{$t('hud.shield')}</span><strong>{view.shield}</strong></div>
           {/if}
-          <div class="vital-top resource-label"><span>{$t('resource.' + CLASSES[view.classId].resourceId)}</span><strong>{Math.round(view.resource)} / {CLASSES[view.classId].resourceMax}</strong></div>
-          <div class="health-track resource-track"><div class="resource-fill" style:width={`${100 * view.resource / CLASSES[view.classId].resourceMax}%`}></div></div>
+          <div class="vital-top resource-label"><span>{$t('resource.' + CLASSES[view.classId].resourceId)}</span><strong>{Math.round(view.resource)} / {view.stats.maxResource}</strong></div>
+          <div class="health-track resource-track"><div class="resource-fill" style:width={`${100 * view.resource / view.stats.maxResource}%`}></div></div>
           <div class="hud-details"><span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
-          <div class="experience-track"><div style:width={`${100 * view.xp / (view.level * 80)}%`}></div></div>
+          <div class="experience-track"><div style:width={`${xpRequiredForLevel(view.level) > 0 ? 100 * view.xp / xpRequiredForLevel(view.level) : 100}%`}></div></div>
         </div>
         <div class="status-panel">
           <div class="status-label">{$t('hud.enemy')}</div>
