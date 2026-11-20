@@ -62,10 +62,10 @@ test('casts a Paladin ability and localizes effects without restarting the game'
   await expect(skill).toBeEnabled();
   await skill.click();
   await expect(skill).toBeDisabled();
-  await expect(page.locator('.effect-chip.beneficial')).toContainText('Consecration');
+  await expect(page.locator('.effect-chip.beneficial').filter({ hasText: 'Consecration' })).toHaveCount(1);
   await page.locator('#game-language').selectOption('cs');
   await expect(page.getByRole('button', { name: 'Posvěcená půda' })).toBeDisabled();
-  await expect(page.locator('.effect-chip.beneficial')).toContainText('Posvěcení');
+  await expect(page.locator('.effect-chip.beneficial').filter({ hasText: 'Posvěcení' })).toHaveCount(1);
   await page.getByRole('button', { name: 'Uložit' }).click();
   await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
