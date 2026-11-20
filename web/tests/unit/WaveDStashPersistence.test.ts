@@ -60,14 +60,14 @@ describe('Wave D persistent, safe 24-slot camp stash', () => {
     expect(sim.snapshot()).toEqual(before);
   });
 
-  it('keeps all item metadata and IDs through save v10, new world and load', () => {
+  it('keeps all item metadata and IDs through save v11, new world and load', () => {
     const sim = new GameSimulation();
     sim.command({ type: 'buyItem', offerId: 'belt' });
     atStash(sim);
     sim.command({ type: 'stashDeposit', index: 0 });
     const stored = sim.snapshot().stash![0]!;
     const saved = createSaveRecord(sim.character());
-    expect(saved?.format).toBe(10);
+    expect(saved?.format).toBe(11);
     expect(saved?.character.stash?.[0]).toEqual(stored);
     expect(JSON.stringify(saved)).not.toMatch(/worldSeed|projectiles|enemyCooldown|player":/);
     const loaded = readSaveRecord(saved);
