@@ -370,6 +370,8 @@ export class GameSimulation {
       || defeated.some(id => !MINI_BOSS_IDS.includes(id))) return false;
     this.defeatedMiniBossIds.clear();
     for (const id of defeated) this.defeatedMiniBossIds.add(id);
+    this.units = this.units.filter(unit => !this.defeatedMiniBossIds.has(unit.actor.id as MiniBossId));
+    for (const id of defeated) this.miniBossStates.delete(id);
     this.mapDiscovery = structuredClone(progress.mapDiscovery);
     this.worldFacts = structuredClone(progress.worldFacts);
     this.cryptUsedPropIds.clear();
@@ -640,7 +642,8 @@ export class GameSimulation {
 
   /** A unique, combat-ready named foe uses existing wraith tactics and art. */
   private spawnMorrow(): void {
-    if (this.zone !== 'wilderness' || this.questStatus('morrow_gravebound') !== 'active'
+    if (this.defeatedMiniBossIds.has('morrow_gravebound')
+      || this.zone !== 'wilderness' || this.questStatus('morrow_gravebound') !== 'active'
       || this.units.some(unit => unit.actor.id === 'morrow_gravebound')
       || this.units.length >= PACK_SIZE + 2) return;
     const marker = this.storyFeatures.find(feature => feature.id === 'act1.grave_warden');
@@ -2729,7 +2732,20 @@ export class GameSimulation {
     const restoredWilderness = layout ? buildWilderness(s.worldSeed) : null;
     const restoredIndex = restoredWilderness ? createChunkIndex(restoredWilderness) : null;
     const restoredMapWorld = restoredWilderness ? this.mapInput(restoredWilderness) : null;
-    const cryptManifest = layout ? buildCryptWorld(s.worldSeed).theme : null;
+    const cryptManifest = layout && (s.zone === 'crypt'
+      || !!s.cryptUsedPropIds?.length || !!s.cryptTriggeredTrapIds?.length)
+      ? buildCryptWorld(s.worldSeed).theme : null;
+    const validMiniStates = (states: unknown): boolean => {
+      if (states === undefined) return true;
+      if (!states || typeof states !== 'object' || Array.isArray(states)) return false;
+      const entries = Object.entries(states);
+      if (entries.length > MINI_BOSS_IDS.length) return false;
+      return entries.every(([id, state]) => MINI_BOSS_IDS.includes(id as MiniBossId)
+        && validateMiniBossState(state) && state.bossId === id
+        && state.occurrenceId === id
+        && s.enemies.some(unit => unit.actor.id === id
+          && unit.actor.type === getMiniBossDefinition(id)?.enemyType));
+    };
     const validDungeonIds = (ids: unknown, known: readonly string[]): boolean =>
       ids === undefined || (Array.isArray(ids) && ids.length <= 128
         && ids.every(id => typeof id === 'string' && known.includes(id))
@@ -2739,6 +2755,11 @@ export class GameSimulation {
         || !validateMapDiscovery(s.mapDiscovery, restoredMapWorld)))
       || (s.worldFacts !== undefined && (!restoredIndex
         || !validateWorldFactLedger(restoredIndex, s.worldFacts)))
+      || !validMiniStates(s.miniBossStates)
+      || (s.miniBossDefeatedIds !== undefined && (!Array.isArray(s.miniBossDefeatedIds)
+        || s.miniBossDefeatedIds.length > MINI_BOSS_IDS.length
+        || new Set(s.miniBossDefeatedIds).size !== s.miniBossDefeatedIds.length
+        || s.miniBossDefeatedIds.some(id => !MINI_BOSS_IDS.includes(id))))
       || !validDungeonIds(s.cryptUsedPropIds,
         cryptManifest?.interactables.map(prop => prop.id) ?? [])
       || !validDungeonIds(s.cryptTriggeredTrapIds,
@@ -2814,13 +2835,15 @@ export class GameSimulation {
             : unit.actor.type === (s.dungeonStage === 0
               ? (['skeleton', 'wolf', 'wraith'] as const)[index]
               : (['crypt_lord', 'skeleton', 'wraith'] as const)[index]))
-          : index >= PACK_SIZE ? (unit.actor.id === 'morrow_gravebound'
-              ? unit.actor.type === 'wraith' && unit.summoned !== true
-              : unit.summoned === true && unit.actor.type === 'skeleton')
+          : index >= PACK_SIZE ? (MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId)
+              ? unit.actor.type === getMiniBossDefinition(unit.actor.id)?.enemyType
+                && unit.summoned !== true
+              : unit.summoned === true
+                && (unit.actor.type === 'skeleton' || unit.actor.type === 'spider'))
             : unit.actor.type === packTypesForWave(s.wave)[index])
         && validActor(unit.actor, index >= PACK_SIZE
-          ? (unit.actor.id === 'morrow_gravebound' && s.zone === 'wilderness'
-              ? 'morrow_gravebound' : 'summon-' + s.wave + '-' + index)
+          ? (MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId) && s.zone === 'wilderness'
+              ? unit.actor.id : 'summon-' + s.wave + '-' + index)
           : unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && (unit.elite === undefined || (
           validateEliteSet(unit.elite.modifiers) && unit.elite.modifiers.length > 0
@@ -2888,6 +2911,12 @@ export class GameSimulation {
     this.groundLoot = s.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! }));
     this.player = { ...s.player };
     this.units = s.enemies.map(cloneUnit);
+    this.miniBossStates.clear();
+    for (const [id, state] of Object.entries(s.miniBossStates ?? {})) {
+      this.miniBossStates.set(id, structuredClone(state));
+    }
+    this.defeatedMiniBossIds.clear();
+    for (const id of s.miniBossDefeatedIds ?? []) this.defeatedMiniBossIds.add(id);
     this.selectedTargetId = s.selectedTargetId;
     this.wave = s.wave;
     this.respawnTimer = s.respawnTimer;
