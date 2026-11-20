@@ -594,10 +594,20 @@ export class FrontierScene extends Phaser.Scene {
         onComplete: () => label.destroy()
       });
     } else if (event.type === 'warriorImpact') {
+      const transformed = (event.modifierIds?.length ?? 0) > 0;
+      const radius = transformed ? Math.max(35, Math.min(300, event.radius ?? 35)) : 35;
       const ring = this.obtainImpact(event.x, event.y, 86);
-      ring.lineStyle(5, 0xf4ce80, 0.95).strokeCircle(0, 0, 35);
+      ring.lineStyle(transformed ? 6 : 5, transformed ? 0xcf769b : 0xf4ce80, 0.95)
+        .strokeCircle(0, 0, radius);
+      if (transformed) {
+        ring.lineStyle(3, 0xffd38f, 0.82)
+          .strokeCircle(0, 0, Math.max(20, radius - 13));
+        ring.fillStyle(0xcf769b, 0.11).fillCircle(0, 0, radius);
+      }
       this.tweens.add({
-        targets: ring, alpha: 0, scaleX: 2.3, scaleY: 2.3, duration: 280,
+        targets: ring, alpha: 0, scaleX: transformed ? 1.14 : 2.3,
+        scaleY: transformed ? 1.14 : 2.3,
+        duration: transformed ? 360 : 280,
         onComplete: () => this.releaseImpact(ring)
       });
     } else if (event.type === 'damageResolved') {
