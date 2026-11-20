@@ -74,7 +74,10 @@ export class GameBridge implements GameStateReader {
   }
 
   command(command: GameCommand): void {
-    if (command.type === 'reset') { this.pointerWorld = null; this.pointerEnemy = null; }
+    if (command.type === 'reset' || command.type === 'respawn') {
+      this.pointerWorld = null;
+      this.pointerEnemy = null;
+    }
     this.simulation.command(command.type === 'reset'
       ? { ...command, seed: command.seed ?? newSessionSeed() }
       : command);
