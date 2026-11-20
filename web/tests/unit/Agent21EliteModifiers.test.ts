@@ -158,8 +158,10 @@ describe('Agent 21 — isolated elite modifiers (Prompt 17)', () => {
     ]);
     const poison = eliteOnHitPlan(['poisonAttacks'], hit);
     expect(poison).toMatchObject([{ kind: 'status', statusId: 'poisoned' }]);
-    expect(eliteOnHitPlan(['poisonAttacks'], { ...hit, critical: true })?.[0]?.magnitude)
-      .toBeGreaterThan(poison?.[0]?.magnitude ?? 0);
+    const normalStatus = poison?.find(action => action.kind === 'status');
+    const criticalStatus = eliteOnHitPlan(['poisonAttacks'], { ...hit, critical: true })
+      ?.find(action => action.kind === 'status');
+    expect(criticalStatus?.magnitude).toBeGreaterThan(normalStatus?.magnitude ?? 0);
     for (const bad of [
       { ...hit, hit: false }, { ...hit, damage: 0 }, { ...hit, damage: NaN },
       { ...hit, damage: Infinity }, { ...hit, targetId: '' }, { ...hit, critical: 1 }
