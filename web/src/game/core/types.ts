@@ -20,6 +20,7 @@ import type { MapDiscoveryState } from '../world/mapDiscovery';
 import type { CryptInteractable } from '../world/cryptTheme';
 import type { MiniBossState, MiniBossId } from '../enemies/miniBossRules';
 import type { HollowKingState } from '../bosses/hollowKingPhases';
+import type { RespawnCheckpointId, RespawnDestination } from './deathRespawn';
 import type { WorldFactLedger } from '../world/chunkStreaming';
 
 export interface Point { x: number; y: number }
@@ -36,6 +37,8 @@ export interface WorldSessionProgress {
   cryptTriggeredTrapIds?: string[];
   /** Seed-scoped one-shot miniboss victories, not enemy state snapshots. */
   miniBossDefeatedIds?: MiniBossId[];
+  /** Seed-scoped activated field shrines; town is always the safe fallback. */
+  activatedCheckpointIds?: RespawnCheckpointId[];
 }
 export type ZoneId = 'wilderness' | 'crypt';
 export interface ActorSnapshot extends Point {
@@ -155,6 +158,12 @@ export interface GameSnapshot {
   /** Transient validated Hollow King phase state, never written to character/world saves. */
   hollowKing?: HollowKingState | null;
   hollowKingAddActorIds?: Record<string, string>;
+  /** Death overlay destination, derived by the simulation, not a travel command. */
+  respawnAt?: RespawnDestination | null;
+  /** Activated checkpoint facts never enter character-only saves. */
+  activatedCheckpointIds?: RespawnCheckpointId[];
+  /** Session-only invulnerability to avoid an immediate repeated death. */
+  respawnProtectionSeconds?: number;
   paused: boolean;
   status: GameStatus;
 }
@@ -186,6 +195,7 @@ export type GameCommand =
   | { type: 'setItemFlag'; itemId: string; flag: 'locked' | 'favorite'; value: boolean }
   | { type: 'dropInventory'; index: number }
   | { type: 'pause'; value: boolean }
+  | { type: 'respawn' }
   | { type: 'reset'; classId?: ClassId; seed?: number };
 
 export type GameEvent =
@@ -208,6 +218,9 @@ export type GameEvent =
   | { type: 'pickup'; id: string }
   | { type: 'levelUp'; level: number }
   | { type: 'playerDeath' }
+  | { type: 'checkpointActivated'; id: RespawnCheckpointId }
+  | { type: 'playerRespawn'; checkpointId: RespawnDestination['id'];
+      fromZone: ZoneId; x: number; y: number }
   | { type: 'warriorImpact'; id: WarriorAbilityId; x: number; y: number }
   | { type: 'npcDialogue'; npcId: NpcId }
   | { type: 'townInteraction'; entryId: string; role: TownServiceRole }
