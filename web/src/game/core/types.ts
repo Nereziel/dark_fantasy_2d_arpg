@@ -31,6 +31,9 @@ export interface CharacterProgress {
   classId: ClassId;
   level: number;
   xp: number;
+  /** Unspent points, reconstructible on migration from v8 characters. */
+  skillPoints?: number;
+  talentPoints?: number;
   gold: number;
   kills: number;
   inventory: Array<Item | null>;
@@ -83,6 +86,8 @@ export interface GameSnapshot {
   kills: number;
   level: number;
   xp: number;
+  skillPoints?: number;
+  talentPoints?: number;
   gold: number;
   resource: number;
   rngState: number;
