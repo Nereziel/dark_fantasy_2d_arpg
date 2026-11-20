@@ -326,6 +326,8 @@ export function validateHollowKingState(value: unknown): value is HollowKingStat
     || !Array.isArray(value.addRequests) || value.addRequests.length > MAX_ADDS) return false;
   const state = value as unknown as HollowKingState;
   if (state.phase < phaseAt(state.health, state.maxHealth)
+    || (state.revision === 0 && (state.phase !== 1 || state.mode !== 'idle'
+      || state.introEmitted || state.rotationIndex !== 0))
     || ((state.mode === 'dead') !== (state.health === 0))
     || (state.deathEmitted !== (state.mode === 'dead'))
     || (state.introEmitted && state.revision === 0)
