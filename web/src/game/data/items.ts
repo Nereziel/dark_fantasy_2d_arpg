@@ -1,6 +1,6 @@
 /** Item templates, rarities and affixes ported from the original ItemGenerator. */
 export { deriveStats } from '../stats/deriveStats';
-import { ITEM_BASES, WEAPON_TYPES, type WeaponType } from '../items/itemCatalog';
+import { ITEM_BASES, ITEM_RARITIES, WEAPON_TYPES, type WeaponType } from '../items/itemCatalog';
 import { rollAffixes, type AffixStat } from '../items/affixGeneration';
 export type { DerivedStats } from '../stats/deriveStats';
 
@@ -168,25 +168,33 @@ export function isEquipmentSlot(value: unknown): value is EquipmentSlot {
 export function isItem(value: unknown): value is Item {
   if (!value || typeof value !== 'object') return false;
   const v = value as Partial<Item>;
-  return typeof v.id === 'string' && v.id.length > 0
+  const base = typeof v.templateId === 'string' && Object.hasOwn(ITEM_BASES, v.templateId)
+    ? ITEM_BASES[v.templateId as keyof typeof ITEM_BASES] : null;
+  return !!base && typeof v.id === 'string' && v.id.length > 0
     && ITEM_TEMPLATES.some(t => t.id === v.templateId && t.slot === v.slot)
-    && typeof v.rarity === 'string' && v.rarity in RARITIES
+    && typeof v.rarity === 'string' && Object.hasOwn(RARITIES, v.rarity)
     && Number.isSafeInteger(v.level) && (v.level ?? 0) >= 1
     && typeof v.icon === 'string'
     && Number.isSafeInteger(v.upgrades) && (v.upgrades ?? -1) >= 0 && (v.upgrades ?? 4) <= 3
     && [v.armor, v.minDmg, v.maxDmg, v.block].every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0)
     && Array.isArray(v.affixes) && v.affixes.length <= 6
+    && v.affixes.length <= ITEM_RARITIES[v.rarity as RarityId].maxAffixes
+    && v.affixes.every((_, index) => Object.hasOwn(v.affixes!, index))
     && v.affixes.every((a: ItemAffix) => typeof a?.id === 'string'
       && typeof a.stat === 'string' && Number.isFinite(a.value) && a.value >= 0
       && (a.tier === undefined || (Number.isSafeInteger(a.tier) && a.tier >= 1 && a.tier <= 6))
       && (a.kind === undefined || a.kind === 'prefix' || a.kind === 'suffix'))
-    && (v.requiredLevel === undefined || (Number.isSafeInteger(v.requiredLevel) && v.requiredLevel >= 1 && v.requiredLevel <= 100))
-    && (v.weaponType === undefined || Object.hasOwn(WEAPON_TYPES, v.weaponType))
-    && (v.twoHanded === undefined || typeof v.twoHanded === 'boolean')
+    && (v.requiredLevel === undefined || (Number.isSafeInteger(v.requiredLevel)
+      && v.requiredLevel >= base.requiredLevel && v.requiredLevel <= 100))
+    && (v.weaponType === undefined || v.weaponType === base.weaponType)
+    && (v.twoHanded === undefined || v.twoHanded === (base.weaponType
+      ? WEAPON_TYPES[base.weaponType].twoHanded : false))
     && (v.sockets === undefined || (Array.isArray(v.sockets)
       && v.sockets.length <= (ITEM_BASES[v.templateId as keyof typeof ITEM_BASES]?.maxSockets ?? 0)
-      && v.sockets.every(gem => gem === null || (typeof gem === 'string' && gem.length > 0 && gem.length <= 128))))
+      && v.sockets.every((gem, index) => Object.hasOwn(v.sockets!, index)
+        && (gem === null || (typeof gem === 'string' && gem.length > 0 && gem.length <= 128)))))
     && (v.legendaryPower === undefined || v.legendaryPower === null
-      || (typeof v.legendaryPower.id === 'string' && v.legendaryPower.id.length <= 128
-        && Number.isFinite(v.legendaryPower.magnitude) && v.legendaryPower.magnitude >= 0));
+      || (v.legendaryPower.id === 'power.' + v.templateId
+        && Number.isFinite(v.legendaryPower.magnitude)
+        && v.legendaryPower.magnitude >= 0 && v.legendaryPower.magnitude <= 1_000_000));
 }
