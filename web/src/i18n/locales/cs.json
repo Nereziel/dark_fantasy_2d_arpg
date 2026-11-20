@@ -113,7 +113,7 @@
     "moveSpeed": "Rychlost pohybu",
     "damageMin": "Minimální poškození",
     "damageMax": "Maximální poškození",
-    "maxHealth": "Maximální zdraví",
+    "maxHealth": "Maximální životy",
     "healthRegen": "Obnova životů / s",
     "maxResource": "Maximum zdroje",
     "resourceRegen": "Obnova zdrojů",
