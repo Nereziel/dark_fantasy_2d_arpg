@@ -6,6 +6,7 @@
  */
 import { CLASSES, type ClassId, type PrimaryStats } from '../data/classes';
 import type { Equipment } from '../data/items';
+import { levelGrowth, MAX_LEVEL } from '../progression/progressionRules';
 
 export interface DerivedStats extends PrimaryStats {
   maxHealth: number;
@@ -40,10 +41,20 @@ export type DerivedStatKey = keyof DerivedStats;
 const percent = (value: number, max = 75): number =>
   Number(Math.max(0, Math.min(max, value)).toFixed(1));
 
-export function deriveStats(classId: ClassId, equipment: Equipment): DerivedStats {
+export function deriveStats(classId: ClassId, equipment: Equipment, level = 1): DerivedStats {
   const klass = CLASSES[classId];
   // Keep class bases immutable. Equipment and affixes are additive inputs.
   const primary: PrimaryStats = { ...klass.primary };
+  // Advancement is reconstructed from level: no duplicated primary stat state in saves.
+  const boundedLevel = Number.isSafeInteger(level) ? Math.max(1, Math.min(MAX_LEVEL, level)) : 1;
+  for (let target = 2; target <= boundedLevel; target++) {
+    const growth = levelGrowth(classId, target)!.primary;
+    primary.strength += growth.strength;
+    primary.dexterity += growth.dexterity;
+    primary.intelligence += growth.intelligence;
+    primary.vitality += growth.vitality;
+    primary.willpower += growth.willpower;
+  }
   let armor = 0, minDmg = 4, maxDmg = 8, block = 0, crit = 0, move = 0;
   for (const item of Object.values(equipment)) {
     if (!item) continue;
@@ -71,8 +82,8 @@ export function deriveStats(classId: ClassId, equipment: Equipment): DerivedStat
     ...primary,
     maxHealth: Math.round(50 + vitality * 12 + strength * 2),
     healthRegen: Number((0.5 + vitality * 0.07).toFixed(2)),
-    maxResource: klass.resourceMax,
-    resourceRegen: klass.regenRate,
+    maxResource: klass.resourceMax + (boundedLevel - 1) * 2,
+    resourceRegen: klass.regenRate + (boundedLevel - 1) * 0.04,
     armor,
     physicalResist: Math.round(100 * armor / (armor + 250)),
     fireResist: percent(willpower * 0.24 + intelligence * 0.12),
@@ -83,8 +94,8 @@ export function deriveStats(classId: ClassId, equipment: Equipment): DerivedStat
     holyResist: percent(willpower * 0.26 + strength * 0.08),
     critChance: percent(5 + dexterity * 0.2 + crit),
     critDamage: 70, // Existing combat calculation is a 1.7x critical multiplier.
-    damageMin: minDmg,
-    damageMax: Math.max(minDmg, maxDmg),
+    damageMin: minDmg + Math.floor((boundedLevel - 1) * 0.5),
+    damageMax: Math.max(minDmg, maxDmg) + Math.floor((boundedLevel - 1) * 0.7),
     attackSpeed: Number((1 + dexterity * 0.008).toFixed(2)),
     moveSpeed: Number((100 + dexterity * 0.25 + move).toFixed(1)),
     dodgeChance: percent(dexterity * 0.12, 40),
