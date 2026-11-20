@@ -273,7 +273,7 @@ function assertWorld(value: unknown): asserts value is WildernessRuntimeWorld {
     || !Array.isArray(terrain.tiles) || !Array.isArray(terrain.roads)
     || layout.obstacles.length > MAX_WALLS || layout.encounterPositions.length !== 3
     || world.features.length < MANDATORY_FEATURE_IDS.length || world.features.length > MAX_FEATURES
-    || terrain.tiles.length !== (WORLD_WIDTH / TILE_SIZE) * Math.ceil(WORLD_HEIGHT / TILE_SIZE)
+    || terrain.tiles.length !== Math.ceil(WORLD_WIDTH / TILE_SIZE) * Math.ceil(WORLD_HEIGHT / TILE_SIZE)
     || terrain.roads.length > MAX_ROADS
     || terrain.layout.obstacles.length !== layout.obstacles.length
     || terrain.layout.encounterPositions.length !== layout.encounterPositions.length) {
@@ -468,7 +468,7 @@ export function validateChunkIndex(value: unknown): value is ChunkIndex {
       anchorIds.add(anchor.id);
     }
   }
-  if (tileCount !== (WORLD_WIDTH / TILE_SIZE) * Math.ceil(WORLD_HEIGHT / TILE_SIZE)) return false;
+  if (tileCount !== Math.ceil(WORLD_WIDTH / TILE_SIZE) * Math.ceil(WORLD_HEIGHT / TILE_SIZE)) return false;
   const seen = new Set<string>();
   for (const target of input.factTargets) {
     if (!record(target) || !FACT_KINDS.includes(target.kind)
