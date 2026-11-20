@@ -11,10 +11,10 @@ const SLOT = 'first-character';
  * Persistent character only. A new session always starts with fresh monsters,
  * fresh ground loot, full health, zero cooldowns, and no temporary effects.
  *
- * Legacy character-only format 8 is migrated explicitly; world snapshots remain unsupported.
+ * Legacy character-only formats 8 and 9 are migrated explicitly to v10; world snapshots remain unsupported.
  */
 export interface SavedGame {
-  format: 9;
+  format: 10;
   characterId: string;
   savedAt: number;
   character: CharacterProgress;
@@ -31,7 +31,7 @@ export function validateCharacter(raw: unknown): CharacterProgress | null {
 export function createSaveRecord(raw: unknown, savedAt = Date.now()): SavedGame | null {
   const character = validateCharacter(raw);
   if (!character || !Number.isFinite(savedAt) || savedAt < 0) return null;
-  return { format: 9, characterId: 'hero', savedAt, character };
+  return { format: 10, characterId: 'hero', savedAt, character };
 }
 
 /**
@@ -54,12 +54,20 @@ export function migrateV8Character(raw: unknown): CharacterProgress | null {
   });
 }
 
+/** V9 characters had no stash; migration cannot fabricate or lose old items. */
+export function migrateV9Character(raw: unknown): CharacterProgress | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)
+    || Object.hasOwn(raw, 'stash')) return null;
+  return validateCharacter({ ...(raw as CharacterProgress), stash: Array(24).fill(null) });
+}
+
 export function readSaveRecord(raw: unknown): CharacterProgress | null {
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as Partial<SavedGame>;
   if (record.characterId !== 'hero') return null;
   const format: unknown = (raw as { format?: unknown }).format;
-  if (format === 9) return validateCharacter(record.character);
+  if (format === 10) return validateCharacter(record.character);
+  if (format === 9) return migrateV9Character(record.character);
   if (format === 8) return migrateV8Character(record.character);
   return null;
 }
