@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { get } from 'svelte/store';
 import { _ as translate } from 'svelte-i18n';
 import { planCombatVfx } from './combatVfxPlan';
+import { statusVisuals } from '../status/statusVisuals';
+import type { StatusInstance } from '../status/statusRuntime';
 import type { GameBridge } from '../bridge/GameBridge';
 import { CLASSES } from '../data/classes';
 import { RARITIES } from '../data/items';
@@ -197,6 +199,35 @@ export class FrontierScene extends Phaser.Scene {
 
   private timedFrame(elapsed: number, total: number): number {
     return Math.max(0, Math.min(3, Math.floor(4 * elapsed / Math.max(1, total))));
+  }
+
+  /** Entire status catalog is represented with consistent passive combat glyphs. */
+  private drawStatuses(x:number,y:number,statuses:readonly StatusInstance[]):void {
+    const visuals = statusVisuals(statuses);
+    for(let i=0;i<visuals.length;i++) {
+      const visual = visuals[i]!;
+      const radius = 24 + Math.min(i,8)*3;
+      const pulse = 0.72 + 0.18*Math.sin(this.time.now*0.005+i*1.7);
+      this.statusVisuals.lineStyle(2,visual.color,pulse)
+        .strokeCircle(x,y,radius);
+      if (visual.glyph === 'shield') {
+        this.statusVisuals.lineStyle(3,visual.color,pulse)
+          .strokeTriangle(x-8,y-22,x+8,y-22,x,y-10);
+      } else if (visual.glyph === 'root') {
+        this.statusVisuals.lineStyle(3,visual.color,pulse)
+          .lineBetween(x-16,y+18,x-7,y+28).lineBetween(x+16,y+18,x+7,y+28);
+      } else if(visual.glyph === 'cross') {
+        this.statusVisuals.lineStyle(3,visual.color,pulse)
+          .lineBetween(x-11,y-30,x+11,y-12)
+          .lineBetween(x-11,y-12,x+11,y-30);
+      } else if(visual.glyph === 'rune') {
+        this.statusVisuals.lineStyle(2,visual.color,pulse)
+          .strokeTriangle(x-11,y-35,x+11,y-35,x,y-16);
+      } else if(visual.glyph === 'spark') {
+        this.statusVisuals.fillStyle(visual.color,pulse)
+          .fillCircle(x+16,y-22,4).fillCircle(x-14,y-28,3);
+      }
+    }
   }
 
   private uiCapturesPointer(): boolean {
@@ -631,7 +662,7 @@ export class FrontierScene extends Phaser.Scene {
         .strokeCircle(portal.x, portal.y, 66);
     }
     for (const unit of state.enemies) {
-      const { actor, intent, effects } = unit;
+      const { actor, intent } = unit;
       if (!actor.alive) continue;
       if (intent) {
         const progress = Math.max(0, 1 - intent.remaining / intent.total);
@@ -642,26 +673,7 @@ export class FrontierScene extends Phaser.Scene {
         this.telegraph.fillStyle(0xffd3a7, 0.55 + progress * 0.4)
           .fillCircle(intent.x, intent.y, 4);
       }
-      const canonicalEffects = state.statusEffects?.enemies?.[actor.id] ?? [];
-      if (canonicalEffects.some(effect => effect.id === 'fortified')) {
-        this.statusVisuals.lineStyle(3, 0x9ac7ee, 0.9).strokeCircle(actor.x, actor.y, 33);
-      }
-      if (canonicalEffects.some(effect => effect.id === 'poisoned')) {
-        this.statusVisuals.fillStyle(0x73d478, 0.24).fillCircle(actor.x, actor.y, 31);
-      }
-      if (effects.some(effect => effect.id === 'stunned')) {
-        this.statusVisuals.lineStyle(4, 0xf6cc73, 0.95)
-          .strokeCircle(actor.x, actor.y, 30);
-      } else if (effects.some(effect => effect.id === 'chilled')) {
-        this.statusVisuals.lineStyle(4, 0x89d8ff, 0.8)
-          .strokeCircle(actor.x, actor.y, 28);
-      }
-      if (effects.some(effect => effect.id === 'burning')) {
-        this.statusVisuals.fillStyle(0xff7041, 0.22).fillCircle(actor.x, actor.y, 31);
-      }
-      if (effects.some(effect => effect.id === 'poisoned')) {
-        this.statusVisuals.fillStyle(0x73d478, 0.24).fillCircle(actor.x, actor.y, 31);
-      }
+      this.drawStatuses(actor.x,actor.y,state.statusEffects?.enemies?.[actor.id] ?? []);
       this.healthBar.fillStyle(0x080a10, 0.9)
         .fillRect(actor.x - 26, actor.y - 45, 52, 8);
       this.healthBar.fillStyle(0xa3494c)
@@ -715,7 +727,8 @@ export class FrontierScene extends Phaser.Scene {
       this.debugMarkers.lineStyle(1, 0x76d9af, 0.65)
         .lineBetween(state.player.x, state.player.y, p.x, p.y);
     }
-    if (state.shield > 0) {
+    this.drawStatuses(state.player.x,state.player.y,state.statusEffects?.player ?? []);
+    if (state.shield > 0 && !(state.statusEffects?.player.some(s=>s.id==='shielded'))) {
       this.statusVisuals.lineStyle(3, 0x8dc6f6, 0.65)
         .strokeCircle(state.player.x, state.player.y, 27);
     }
