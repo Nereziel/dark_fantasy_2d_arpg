@@ -16,7 +16,7 @@ We will now complete foundational prompts in numeric order, even though early ve
 | **08 — Animation & game feel** | **Core complete (PR #21; acceptance CI green)** | All six classes share authoritative hit-frame timelines. Animated 4-frame original Phaser pixel atlases for all hero/enemy types cover idle/walk/run/attack/cast/channel/hit/block/dodge/death; VFX pooling, crit, trail, death and block hooks. Higher-quality hand-painted art and visual tuning can expand later. |
 | **09 — Status effect framework** | **Core complete (PR #21; acceptance CI green)** | All 15 statuses share one reducer with source/stack/expiry/immunity/dispel, visual hooks, CS/EN timers, and ability/on-hit producers for full initial catalog. Legacy HUD projections do not tick separately. |
 | **10–11 — Enemy AI and families** | **Core complete (PR #21; acceptance CI green)** | Nine pure AI policies, active tactical roles including ranged, charger, caster, healer/support, collision-aware navigation/leashing. All 14 family definitions spawn with data-driven abilities, independent cooldowns, pixel art/animations and localized names. Dedicated summoner-family encounter and more complex boss phases remain future content. |
-| 12–17 — Progression and items | Partial; Wave C agents prepared, not dispatched | Six non-overlapping assignments (agents 16–21) in docs/plan/agents/WAVE_C.md; no claim that agent modules or runtime gates have been implemented. |
+| **12–17 — Progression, items and elites** | **Runtime integrated in PR #28 — full acceptance verification underway** | All six isolated agent PRs are merged. Runtime simulation, saves, UI, loot and elite combat are connected. Merge only after green check/test/build/Chromium/site; GitHub Pages deployment verified after merge. |
 | 18–29 — Act I content | Early vertical-slice prototype | Keep town, quest, commerce and crypt as integration fixtures until core gates pass |
 | 30–63 | Not audited | Follow sequential prompts only after earlier acceptance criteria are met |
 
@@ -29,9 +29,25 @@ We will now complete foundational prompts in numeric order, even though early ve
 
 **Scope boundary:** Prompt 08 provides functional original pixel spritesheets, not purchased art or elaborate frame-by-frame hand-drawn production animation. The nine AI role policies are supported at planner level; actual Act I families exercise the roles assigned by their data (no family is currently a summoner). Additional classes' skill trees, potion UI, bespoke monster phases and world content belong to later numbered prompts.
 
-## Wave C: preparatory agent work only
+## Wave C integration status (Prompts 12–17)
 
-[Wave C plan](plan/agents/WAVE_C.md) and [integration plan](plan/agents/INTEGRATION_C.md), plus individual agent prompts `16/TASK.md`–`21/TASK.md`, assign six exactly non-overlapping source/test pairs for Prompts 12–17. The six agents **have not been launched**. Start from a common green `main` SHA after PR #21 merge and follow TDD and integration gates.
+The six agent-owned modules were reviewed and merged to `main` in **prompt order**:
+**#22 (XP) → #27 (catalog) → #23 (affixes) → #26 (inventory) → #24 (loot) → #25 (elites)**.
+Their isolated green CI was necessary but did not itself constitute working runtime functionality.
+[Integration PR #28](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/28) is the coordinator-owned runtime integration.
+
+| Prompt | Implemented runtime behavior | Regression evidence |
+| --- | --- | --- |
+| 12 XP and levels | `awardProgression` + activity rewards (kills, boss, quest, exploration, crypt); configurable curve with multi-level rewards, five primary stats, HP/resource/damage, skill and talent points; HUD and Character Sheet | `WaveCProgressionRuntime.test.ts`, existing quest and dungeon suites |
+| 13 Item model | 23 shared catalog bases including 14 weapon types, all 12 equipment slots, one/two-hand and offhand; six rarities, socket metadata and legendary damage effects, level gates, stable instance IDs | `Agent17ItemCatalog.test.ts`, `WaveCRuntimeIntegration.test.ts`, `WaveCSystemRegressions.test.ts` |
+| 14 Affixes | Seeded prefix/suffix rolls with tier/item-level/rarity constraints and compatible pools; all rolled stat bonuses feed `deriveStats`; localized grammatical CS/EN names without reroll | `Agent18AffixGeneration.test.ts`, `WaveCLocalization.test.ts` |
+| 15 Inventory and equipment | Authoritative atomic equip/unequip/swap/sort/drop/flags, full-bag and two-hand safeguards, offhand dual wield, save of flags, read-only comparison projection, UI rarity filter | `Agent19EquipmentRules.test.ts`, `WaveCSystemRegressions.test.ts` |
+| 16 Loot | Contextual table rolls weighted by species, region, level, rarity, elite/boss; boss guaranteed + random, colored labels and beams, click-to-pickup and full-bag behavior | `Agent20LootTables.test.ts`, `ItemsAndClasses.test.ts`, `WaveCRuntimeIntegration.test.ts` |
+| 17 Elites | Seeded compatible 1–3-modifier rolls, stats/resistance/visuals, status on hit, shield, regen, aura/hazard, teleport, summons and one-shot death burst. Scheduled damage uses `dealPlayerDamage` | `Agent21EliteModifiers.test.ts`, `WaveCRuntimeIntegration.test.ts`, `WaveCSystemRegressions.test.ts` |
+
+**Persistence:** New character-only **format v9** keeps existing bag/gear IDs, affix rolls, flags, XP, level and point balances. `migrateV8Character` explicitly imports legacy v8 characters with original ten equipment slots into the twelve-slot model, preserving all owned items. v5–v7 world snapshots remain unsupported. Transient enemies, loot, projectiles, auras, zones, seeds, combat timers and world effects are deliberately excluded from character saves.
+
+**Release gate:** Dedicated CI must pass npm ci, svelte-check, Vitest, build, Chromium Playwright and root `tests/site.test.mjs` for the **last integration commit**. Merge PR #28 only after this gate, then verify a successful Pages deployment of the merged SHA. Optional content after Wave C includes socket gem insertion, talent spending trees, additional world events and additional dungeon areas; these are separate future prompts, not claims of current gameplay.
 
 ## Prompt 02 implementation boundaries
 
@@ -40,14 +56,14 @@ We will now complete foundational prompts in numeric order, even though early ve
 - Health/resource rules for character creation, gear-driven max-health changes and fixed-step class resource regeneration live in `web/src/game/entities/player.ts`.
 - `GameSimulation.snapshot().stats` exposes the authoritative current values to the localized `web/src/ui/CharacterSheet.svelte` (C / Escape).
 - Dodge, block, type-based resistances and transient shields are applied to actual incoming attacks; additional class/status/item stat modifiers will be added in later prompts.
-- Saves still contain only class, level, equipment, inventory, gold and quest progression. No duplicate derived stats, UI state or combat state are written into IndexedDB.
+- Saves contain only persistent class, level, XP, point balances, equipment, inventory, item flags, gold, kills and quest progression. No duplicate derived stats, UI state or combat state are written into IndexedDB.
 - Unit regression tests: `Stats.test.ts`, `PlayerModel.test.ts`; browser check of C and in-dialog locale switching: `startup.spec.ts`.
 
 ## Completed agent merge and runtime integration
 
 All five parallel agent PRs were merged separately (#1, #5, #2, #3, #4), then connected in PR #6. PR #7 completes the remaining core acceptance behaviors: held movement with throttling, interaction targets, configurable controls, cursor-based skill aiming, root/stun, healing/shields and projectile/resistance resolution. Unit and browser tests validate runtime behavior rather than merely imported modules. Remaining content expansion belongs to later prompts.
 
-**Compatibility:** Q/RMB remains the first implemented skill, 1 the second. Future potion and skill slots 2–4 have configurable action bindings but no abilities until their implementation prompts. Browser-local input preferences are not part of character saves. Character-only IndexedDB format v8 remains unchanged; evade cooldown, shields, missiles, chest/shrine uses, input state, world seed, enemies and combat remain ephemeral.
+**Compatibility:** Q/RMB remains the first implemented skill, 1 the second. Future potion and skill slots 2–4 have configurable action bindings but no abilities until their implementation prompts. Browser-local input preferences are not part of character saves. Character-only IndexedDB format v9 explicitly migrates v8; evade cooldown, shields, missiles, chest/shrine uses, input state, world seed, enemies and combat remain ephemeral.
 
 ## Multi-agent contribution policy
 
