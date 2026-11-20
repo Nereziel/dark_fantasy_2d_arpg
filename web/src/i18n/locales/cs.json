@@ -973,5 +973,27 @@
       "short": "DMG",
       "description": "Zvýší způsobené poškození o 20 % na 10 sekund."
     }
+  },
+  "stash": {
+    "tabs": "Záložky úschovny",
+    "tab": "Záložka",
+    "search": "Hledat předmět",
+    "rarity": "Vzácnost",
+    "category": "Kategorie",
+    "sort": "Řazení",
+    "all": "Vše",
+    "moveTo": "Přesunout do záložky",
+    "organize": "Uspořádat záložku",
+    "noMatches": "Žádné předměty neodpovídají filtrům.",
+    "categoryNames": {
+      "weapon": "Zbraně",
+      "armor": "Zbroj",
+      "accessory": "Doplňky"
+    },
+    "sortModes": {
+      "rarity": "Vzácnost",
+      "level": "Úroveň",
+      "name": "Název předmětu"
+    }
   }
 }
