@@ -1335,6 +1335,28 @@ export class GameSimulation {
       this.tryInteractCrypt();
       return;
     }
+    if(command.type==='interactEnvironment') {
+      const object=this.zone==='wilderness'&&!this.paused
+        ? planEnvironmentInteraction(command.id,this.environmentPlan,[...this.environmentUsed])
+        : null;
+      if(!object)return;
+      this.warriorAction=null;
+      this.classAction=null;
+      this.warriorPending=null;
+      this.movePath=[];
+      this.attackTarget=null;
+      this.pickupTarget=null;
+      this.pendingNpc=null;
+      this.pendingTown=null;
+      this.pendingSkill=null;
+      this.pendingAim=null;
+      this.pendingPortal=false;
+      this.pendingObject=null;
+      this.pendingCryptPropId=null;
+      this.pendingEnvironmentId=object.id;
+      this.tryInteractEnvironment();
+      return;
+    }
     if (command.type === 'interactObject') {
       this.warriorAction = null;
       this.classAction = null;
@@ -2929,6 +2951,12 @@ export class GameSimulation {
       if (!prop) this.pendingCryptPropId = null;
       else if (distance(this.player, prop.position) <= prop.reach) this.tryInteractCrypt();
       else this.follow(this.player, prop.position, speed, dt, Math.max(6, prop.reach - 12));
+    } else if(this.pendingEnvironmentId) {
+      const object=planEnvironmentInteraction(this.pendingEnvironmentId,
+        this.environmentPlan,[...this.environmentUsed]);
+      if(!object||this.zone!=='wilderness')this.pendingEnvironmentId=null;
+      else if(distance(this.player,object.position)<=object.reach)this.tryInteractEnvironment();
+      else this.follow(this.player,object.position,speed,dt,Math.max(5,object.reach-10));
     } else if (this.pendingObject) {
       const object = getWorldObject(this.pendingObject, this.zone);
       if (!object) this.pendingObject = null;
@@ -3400,7 +3428,7 @@ export class GameSimulation {
     const status = this.paused ? 'paused' : !this.player.alive ? 'dead'
       : this.attackTarget || this.pendingSkill || this.warriorAction || this.warriorPending
         || this.classAction ? 'combat'
-      : this.movePath.length || this.pickupTarget || this.pendingObject
+      : this.movePath.length || this.pickupTarget || this.pendingEnvironmentId || this.pendingObject
         || this.pendingNpc || this.pendingTown || this.pendingPortal ? 'moving' : 'ready';
     return {
       version: 5,
@@ -3421,7 +3449,12 @@ export class GameSimulation {
       projectiles: this.projectiles.map(p => ({ ...p, target: { ...p.target } })),
       usedInteractables: [...this.usedObjects],
       interactables: worldObjectsFor(this.zone).filter(o => !this.usedObjects.has(o.id)),
-      moveDestination: this.movePath.length ? { ...this.movePath[this.movePath.length - 1]! } : null,
+      environmentObjects:this.environmentView(),
+      environmentUsedIds:[...this.environmentUsed],
+      environmentBlessings:this.shrineBlessings.map(b=>({...b})),
+      moveDestination: this.pendingEnvironmentId
+        ? {...this.environmentPlan.find(o=>o.id===this.pendingEnvironmentId)!.position}
+        : this.movePath.length ? { ...this.movePath[this.movePath.length - 1]! } : null,
       holdPosition: this.holdPosition,
       evadeCooldown: this.evadeCooldown,
       kills: this.kills,
