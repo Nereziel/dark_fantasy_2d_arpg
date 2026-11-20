@@ -191,7 +191,7 @@ export function planCraft(state:CraftState,request:CraftRequest):CraftPlan {
     else delete nextMaterial[id];
   }
   const newInventory=state.inventory.map(entry=>entry?{
-    ...entry,affixes:entry.affixes.map(a=>({...a})),
+    ...entry,affixes:entry.affixes.map((a: Item['affixes'][number])=>({...a})),
     ...(entry.sockets?{sockets:[...entry.sockets]}:{})
   }:null);
   if(request.kind==='salvage')newInventory[request.index]=null;
