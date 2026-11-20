@@ -17,6 +17,7 @@ import type { StatusInstance } from '../status/statusRuntime';
 import type { StatusId } from '../status/statusDefinitions';
 import type { WorldObject, WorldObjectId } from '../world/interactables';
 import type { MapDiscoveryState } from '../world/mapDiscovery';
+import type { CryptInteractable } from '../world/cryptTheme';
 import type { WorldFactLedger } from '../world/chunkStreaming';
 
 export interface Point { x: number; y: number }
@@ -28,6 +29,9 @@ export interface WorldSessionProgress {
   seed: number;
   mapDiscovery: MapDiscoveryState;
   worldFacts: WorldFactLedger;
+  /** Stable one-shot crypt facts. Never an enemy/map/world snapshot. */
+  cryptUsedPropIds?: string[];
+  cryptTriggeredTrapIds?: string[];
 }
 export type ZoneId = 'wilderness' | 'crypt';
 export interface ActorSnapshot extends Point {
@@ -137,6 +141,10 @@ export interface GameSnapshot {
   /** Session/world scoped map and immutable facts (not character progression). */
   mapDiscovery?: MapDiscoveryState;
   worldFacts?: WorldFactLedger;
+  /** Transient projection. Persist only canonical one-shot facts through WorldSessionProgress. */
+  cryptInteractables?: CryptInteractable[];
+  cryptUsedPropIds?: string[];
+  cryptTriggeredTrapIds?: string[];
   paused: boolean;
   status: GameStatus;
 }
@@ -154,6 +162,7 @@ export type GameCommand =
   | { type: 'stashWithdraw'; index: number }
   | { type: 'usePortal' }
   | { type: 'interactObject'; id: WorldObjectId }
+  | { type: 'interactCrypt'; id: string }
   | { type: 'buyItem'; offerId: ShopOfferId }
   | { type: 'sellItem'; index: number }
   | { type: 'temperItem'; slot: EquipmentSlot }
@@ -177,6 +186,9 @@ export type GameEvent =
   | { type: 'projectileLaunch'; id: string; sourceId: string }
   | { type: 'projectileImpact'; id: string; hit: boolean }
   | { type: 'worldInteract'; id: WorldObjectId; kind: 'shrine' | 'chest' }
+  | { type: 'cryptInteract'; id: string; capability: string; goldAwarded: number }
+  | { type: 'cryptTrap'; id: string; damage: number; x: number; y: number }
+  | { type: 'cryptTrapWindup'; id: string; x: number; y: number; radius: number }
   | { type: 'defeat'; targetId: string; kills: number }
   | { type: 'loot'; id: string }
   | { type: 'pickup'; id: string }
