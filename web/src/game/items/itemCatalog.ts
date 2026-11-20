@@ -106,10 +106,10 @@ export const ITEM_BASES = Object.freeze({
   gauntlets: base('gauntlets', 'armor', ['gloves'], null, 1, 1, 25),
   greaves: base('greaves', 'armor', ['boots'], null, 1, 1, 26),
   belt: base('belt', 'armor', ['belt'], null, 1, 1, 22),
-  bloodstone: base('bloodstone', 'accessory', ['amulet'], null, 1, 0, 48),
-  signet: base('signet', 'accessory', ['ring1', 'ring2'], null, 1, 0, 35),
-  relic: base('relic', 'accessory', ['relic'], null, 10, 0, 150),
-  charm: base('charm', 'accessory', ['charm'], null, 1, 0, 40)
+  bloodstone: base('bloodstone', 'accessory', ['amulet'], null, 1, 1, 48),
+  signet: base('signet', 'accessory', ['ring1', 'ring2'], null, 1, 1, 35),
+  relic: base('relic', 'accessory', ['relic'], null, 10, 1, 150),
+  charm: base('charm', 'accessory', ['charm'], null, 1, 1, 40)
 } as const satisfies Record<string, CatalogItemBase>);
 export type CatalogTemplateId = keyof typeof ITEM_BASES;
 

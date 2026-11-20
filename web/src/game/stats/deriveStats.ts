@@ -7,6 +7,7 @@
 import { CLASSES, type ClassId, type PrimaryStats } from '../data/classes';
 import type { Equipment } from '../data/items';
 import { levelGrowth, MAX_LEVEL } from '../progression/progressionRules';
+import { itemSocketBonus } from '../gems/gemCatalog';
 
 export interface DerivedStats extends PrimaryStats {
   maxHealth: number;
@@ -62,12 +63,26 @@ export function deriveStats(classId: ClassId, equipment: Equipment, level = 1): 
   let critDamageBonus = 0, attackSpeedBonus = 0, bonusHealth = 0;
   let fireResistBonus = 0, frostResistBonus = 0, poisonResistBonus = 0;
   let resourceRegenBonus = 0, resourceBonus = 0, cooldownBonus = 0, summonBonus = 0, skillBonus = 0;
+  let socketHealthRegenBonus = 0;
   for (const item of Object.values(equipment)) {
     if (!item) continue;
     armor += item.armor;
     minDmg += item.minDmg;
     maxDmg += item.maxDmg;
     block += item.block;
+    // Fully derived, slot-category-specific socket bonuses. No stat duplication
+    // into item affixes or the character-only v11 save.
+    const socket = itemSocketBonus(item);
+    minDmg += socket.damage;
+    maxDmg += socket.damage;
+    armor += socket.armor;
+    fireResistBonus += socket.fireResist;
+    frostResistBonus += socket.frostResist;
+    poisonResistBonus += socket.poisonResist;
+    resourceRegenBonus += socket.resourceRegen;
+    resourceBonus += socket.maxResource;
+    socketHealthRegenBonus += socket.healthRegen;
+    crit += socket.critChance;
     // Legendary powers are bound to item instances, not rolled on load/locale change.
     if (item.legendaryPower) {
       const power = Math.max(1, Math.floor(item.legendaryPower.magnitude * 0.15));
@@ -109,7 +124,7 @@ export function deriveStats(classId: ClassId, equipment: Equipment, level = 1): 
   return {
     ...primary,
     maxHealth: Math.round(50 + vitality * 12 + strength * 2 + (boundedLevel - 1) * 4 + bonusHealth),
-    healthRegen: Number((0.5 + vitality * 0.07).toFixed(2)),
+    healthRegen: Number((0.5 + vitality * 0.07 + socketHealthRegenBonus).toFixed(2)),
     maxResource: klass.resourceMax + (boundedLevel - 1) * 2 + resourceBonus,
     resourceRegen: klass.regenRate + (boundedLevel - 1) * 0.04 + resourceRegenBonus,
     armor,

@@ -24,6 +24,8 @@ import type { RespawnCheckpointId, RespawnDestination } from './deathRespawn';
 import type { TalentRanks, WarriorTalentId } from '../progression/talentTree';
 import type { WorldFactLedger } from '../world/chunkStreaming';
 import type { Materials, CraftKind } from '../crafting/craftingRules';
+import type { GemAction, GemWallet } from '../gems/gemRules';
+import type { GemId } from '../gems/gemCatalog';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
@@ -64,6 +66,8 @@ export interface CharacterProgress {
   talentRanks?: TalentRanks;
   /** Optional character-only crafting ledger; absent on legacy v11 saves. */
   materials?: Materials;
+  /** Character-owned loose gems/runes; item sockets store canonical IDs. */
+  gems?: GemWallet;
   gold: number;
   kills: number;
   inventory: Array<Item | null>;
@@ -125,6 +129,7 @@ export interface GameSnapshot {
   talentPoints?: number;
   talentRanks?: TalentRanks;
   materials?: Materials;
+  gems?: GemWallet;
   gold: number;
   resource: number;
   rngState: number;
@@ -194,6 +199,7 @@ export type GameCommand =
   | { type: 'sellItem'; index: number }
   | { type: 'temperItem'; slot: EquipmentSlot }
   | { type: 'craft'; kind: CraftKind; index: number; affixIndex?: number }
+  | GemAction
   | { type: 'questAccept'; questId?: string }
   | { type: 'questTurnIn'; questId?: string }
   | { type: 'pickup'; id: string }
@@ -231,6 +237,8 @@ export type GameEvent =
   | { type: 'talentSpent'; id: WarriorTalentId; rank: number }
   | { type: 'talentsRespecced'; goldSpent: number }
   | { type: 'craftCompleted'; kind: CraftKind; itemId: string; goldSpent: number }
+  | { type: 'gemTransacted'; action: GemAction['type']; gemId: GemId;
+      itemId?: string; goldSpent: number }
   | { type: 'playerDeath' }
   | { type: 'checkpointActivated'; id: RespawnCheckpointId }
   | { type: 'playerRespawn'; checkpointId: RespawnDestination['id'];

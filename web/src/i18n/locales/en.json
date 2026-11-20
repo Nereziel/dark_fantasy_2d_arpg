@@ -900,5 +900,50 @@
     "free": "Free",
     "protected": "Locked and favorite items cannot be crafted or salvaged.",
     "completed": "Blacksmith crafting completed."
+  },
+  "gems": {
+    "title": "Gems and Runes",
+    "description": "Forge gems from materials, combine three identical stones into a higher tier, and insert them into empty sockets. Effects depend on the equipment category. Extraction costs gold and returns the stone to your wallet.",
+    "forgeTitle": "Gem and Rune Forging",
+    "forge": "Forge",
+    "wallet": "Gem and Rune Wallet",
+    "held": "Owned",
+    "tier": "Tier",
+    "combine": "Combine 3",
+    "emptyWallet": "You do not own any gems or runes yet.",
+    "socketsTitle": "Equipment Sockets",
+    "socket": "Socket",
+    "emptySocket": "Empty",
+    "insert": "Insert",
+    "remove": "Extract",
+    "noSocketedGear": "No socketable gear in your bag or equipment. You can add an empty socket through Crafting.",
+    "categories": {
+      "weapon": "weapon",
+      "armor": "armor",
+      "jewelry": "jewelry"
+    },
+    "names": {
+      "gem": {
+        "ruby": "Ruby",
+        "sapphire": "Sapphire",
+        "emerald": "Emerald"
+      },
+      "rune": {
+        "ash": "Ash Rune",
+        "ward": "Ward Rune",
+        "focus": "Focus Rune"
+      }
+    },
+    "bonuses": {
+      "damage": "damage",
+      "armor": "armor",
+      "fireResist": "fire resistance",
+      "frostResist": "frost resistance",
+      "poisonResist": "poison resistance",
+      "resourceRegen": "resource regeneration",
+      "maxResource": "max. resource",
+      "healthRegen": "health regeneration",
+      "critChance": "critical chance"
+    }
   }
 }

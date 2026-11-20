@@ -900,5 +900,50 @@
     "free": "Zdarma",
     "protected": "Chráněný nebo oblíbený předmět nelze zpracovat.",
     "completed": "Úprava u kováře dokončena."
+  },
+  "gems": {
+    "title": "Gemy a runy",
+    "description": "Kuj kameny ze surovin, spoj tři stejné kameny do vyšší úrovně a vkládej je do prázdných socketů. Účinky se liší podle typu vybavení. Vyjmutí stojí zlato, kámen se vrátí do zásob.",
+    "forgeTitle": "Kování gemů a run",
+    "forge": "Vyrobit",
+    "wallet": "Zásoba gemů a run",
+    "held": "Kusy",
+    "tier": "Úroveň",
+    "combine": "Spojit 3",
+    "emptyWallet": "Zatím nevlastníš žádné gemy ani runy.",
+    "socketsTitle": "Sockety vybavení",
+    "socket": "Socket",
+    "emptySocket": "Prázdný",
+    "insert": "Vložit",
+    "remove": "Vyjmout",
+    "noSocketedGear": "V batohu ani na postavě není předmět se socketem. Socket lze vytvořit v sekci Crafting.",
+    "categories": {
+      "weapon": "zbraň",
+      "armor": "brnění",
+      "jewelry": "šperk"
+    },
+    "names": {
+      "gem": {
+        "ruby": "Rubín",
+        "sapphire": "Safír",
+        "emerald": "Smaragd"
+      },
+      "rune": {
+        "ash": "Runa popela",
+        "ward": "Runa ochrany",
+        "focus": "Runa soustředění"
+      }
+    },
+    "bonuses": {
+      "damage": "poškození",
+      "armor": "brnění",
+      "fireResist": "odolnost ohni",
+      "frostResist": "odolnost mrazu",
+      "poisonResist": "odolnost jedu",
+      "resourceRegen": "regenerace zdroje",
+      "maxResource": "max. zdroj",
+      "healthRegen": "regenerace životů",
+      "critChance": "šance na kritický zásah"
+    }
   }
 }
