@@ -768,5 +768,12 @@
     "town": "Camp",
     "quest": "Quest",
     "unknownQuest": "Unexplored quest destination"
-  }
+  },
+  "miniBossNames": {
+    "bandit_captain": "Bandit Captain",
+    "morrow_gravebound": "Morrow, Graveyard Warden",
+    "brood_mother": "Brood Mother",
+    "corrupted_knight": "Corrupted Knight"
+  },
+  "miniBoss": { "phase": "Phase" }
 }
