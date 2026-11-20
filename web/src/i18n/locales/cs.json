@@ -1009,5 +1009,34 @@
     "nearSource": "Přistup k aktivovanému waypointu.",
     "activated": "Táborový rozcestník byl aktivován.",
     "arrived": "Rychlé cestování dokončeno."
+  },
+  "worldEvents": {
+    "title": "Události světa",
+    "started": "Začala světová událost.",
+    "completed": "Světová událost dokončena. Odměny získány.",
+    "defeatGuards": "Poraz nepřátele",
+    "reward": "Odměna za událost",
+    "xp": "ZK",
+    "materialsAndLoot": "materiály a vybavení",
+    "status": {
+      "available": "Přibliž se a začni",
+      "active": "Probíhá boj",
+      "completed": "Dokončeno"
+    },
+    "regions": {
+      "ashenRoad": "Popelavá cesta",
+      "corruptedWilds": "Zkažená divočina",
+      "graveApproach": "Pohřební stezka"
+    },
+    "kinds": {
+      "banditAmbush": "Přepad banditů",
+      "demonIncursion": "Démonický vpád",
+      "caravanDefense": "Obrana karavany",
+      "cursedShrine": "Prokletá svatyně",
+      "eliteHunt": "Lov elity",
+      "rescueEvent": "Záchranná výprava",
+      "ritualInterruption": "Přerušení rituálu",
+      "treasureAmbush": "Přepadení u pokladu"
+    }
   }
 }
