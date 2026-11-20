@@ -100,7 +100,7 @@
       },
       "waypoint_camp": {
         "name": "Táborový rozcestník",
-        "description": "Připravovaný cestovní bod pro budoucí rychlé přesuny."
+        "description": "Prastarý rozcestník. Aktivací získáš možnost cestovat mezi již probuzenými waypointy."
       },
       "civilian_mira": {
         "name": "Mira",
@@ -763,7 +763,7 @@
     "open": "Mapa",
     "close": "Zavřít mapu",
     "minimap": "Minimapa",
-    "legend": "Objevené oblasti jsou zelené, neprozkoumané zůstávají skryté. Klávesa M otevře mapu.",
+    "legend": "Objevené oblasti jsou zelené, neprozkoumané zůstávají skryté. Z aktivovaného waypointu lze cestovat k jinému aktivovanému bodu. Klávesa M otevře mapu.",
     "player": "Hrdina",
     "town": "Tábor",
     "quest": "Úkol",
@@ -995,5 +995,19 @@
       "level": "Úroveň",
       "name": "Název předmětu"
     }
+  },
+  "waypoints": {
+    "title": "Rychlé cestování",
+    "open": "Otevřít rozcestník",
+    "field": {
+      "name": "Rozcestník Svatyně duší"
+    },
+    "requireActivation": "Nejdříve waypoint navštiv a aktivuj. Cestovat lze jen z blízkosti aktivovaného rozcestníku.",
+    "noActive": "Zatím nemáš aktivovaný žádný waypoint.",
+    "travel": "Cestovat",
+    "unavailable": "Nedostupné",
+    "nearSource": "Přistup k aktivovanému waypointu.",
+    "activated": "Táborový rozcestník byl aktivován.",
+    "arrived": "Rychlé cestování dokončeno."
   }
 }

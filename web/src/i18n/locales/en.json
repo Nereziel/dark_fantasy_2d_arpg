@@ -100,7 +100,7 @@
       },
       "waypoint_camp": {
         "name": "Camp Waypoint",
-        "description": "A future travel marker for fast travel."
+        "description": "An ancient travel marker. Activate it to travel between previously awakened waypoints."
       },
       "civilian_mira": {
         "name": "Mira",
@@ -763,7 +763,7 @@
     "open": "Map",
     "close": "Close Map",
     "minimap": "Minimap",
-    "legend": "Explored terrain is green; undiscovered areas stay hidden. Press M to open the map.",
+    "legend": "Explored terrain is green; undiscovered areas stay hidden. Activated waypoints allow fast travel when you stand near one. Press M to open the map.",
     "player": "Hero",
     "town": "Camp",
     "quest": "Quest",
@@ -995,5 +995,19 @@
       "level": "Level",
       "name": "Item name"
     }
+  },
+  "waypoints": {
+    "title": "Fast Travel",
+    "open": "Open waypoint",
+    "field": {
+      "name": "Soul Shrine Waypoint"
+    },
+    "requireActivation": "Visit and activate a waypoint before using it. Travel only works while standing near an activated waypoint.",
+    "noActive": "No activated waypoints yet.",
+    "travel": "Travel",
+    "unavailable": "Not available",
+    "nearSource": "Approach an activated waypoint to travel.",
+    "activated": "Camp waypoint activated.",
+    "arrived": "Fast travel completed."
   }
 }

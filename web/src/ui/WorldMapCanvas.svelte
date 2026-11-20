@@ -40,6 +40,11 @@
         {#if marker.kind === 'player'}
           <circle cx={marker.position.x} cy={marker.position.y} r="25"
             fill="none" stroke="#f3dfad" stroke-width="2" />
+        {:else if marker.kind === 'waypoint'}
+          <circle cx={marker.position.x} cy={marker.position.y} r={marker.activated ? 18 : 14}
+            fill="none" stroke={marker.activated ? '#9fe9ec' : '#6d8290'}
+            stroke-width={marker.activated ? 3 : 2}
+            data-waypoint-active={marker.activated ? 'true' : 'false'} />
         {/if}
         {#if !compact}
           <text x={marker.position.x + 19} y={marker.position.y - 15}

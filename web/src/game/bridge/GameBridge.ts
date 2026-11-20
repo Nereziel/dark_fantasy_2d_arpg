@@ -74,7 +74,7 @@ export class GameBridge implements GameStateReader {
   }
 
   command(command: GameCommand): void {
-    if (command.type === 'reset' || command.type === 'respawn') {
+    if (command.type === 'reset' || command.type === 'respawn' || command.type === 'travelWaypoint') {
       this.pointerWorld = null;
       this.pointerEnemy = null;
     }
