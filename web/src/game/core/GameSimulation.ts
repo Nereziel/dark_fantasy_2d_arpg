@@ -2,6 +2,11 @@ import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnap
 import { spawnPlayer, updateHealthLimit, advanceResource, regenerateHealth } from '../entities/player';
 import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
 import { applyOrRefreshEffect } from '../status/effectStack';
+import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../skills/warriorKit';
+import { canActivateWarriorSkill, spendAndStartCooldown, advanceWarriorCooldowns, applyWarriorRageDelta, type WarriorActivationRequest } from '../skills/warriorEconomy';
+import { startCombatTimeline, advanceCombatTimeline, cancelCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
+import { STATUS_DEFINITIONS, type StatusId } from '../status/statusDefinitions';
+import { applyStatus, advanceStatuses, dispelStatuses, getStatusModifiers, type StatusInstance, type StatusRule } from '../status/statusRuntime';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
 import { resolveTypedDamage, resolveHealing, type DamageType, type DamageResult } from '../combat/typedDamage';
 import type { SkillAim } from '../input/skillAiming';
@@ -12,8 +17,11 @@ import {
 } from '../skills/skills';
 import {
   ENEMY_DEFINITIONS, PACK_SIZE, createPack, createCryptPack, validEnemyType, validIntent,
+  packTypesForWave, enemyArchetype,
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
+import { planEnemyBehavior } from '../enemies/behaviorPlanner';
+import { getEnemyArchetype } from '../enemies/archetypeCatalog';
 import { ACTOR_RADIUS, canOccupy, findPath, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
@@ -68,12 +76,46 @@ function validActor(actor: ActorSnapshot, id: string, obstacles: readonly Obstac
  * Renderer-independent multi-enemy simulation. All damage and attack windows
  * are resolved on fixed ticks; the Phaser scene only visualizes snapshots.
  */
+
+function validWaveBState(s: GameSnapshot): boolean {
+  if (s.warriorCooldowns !== undefined && (!s.warriorCooldowns ||
+    Object.entries(s.warriorCooldowns).some(([id, n]) =>
+      !getWarriorAbility(id) || !Number.isFinite(n) || n! < 0 || n! > 360))) return false;
+  if (s.warriorAction) {
+    const action = s.warriorAction;
+    const state = action.timeline;
+    if (!getWarriorAbility(action.id) || !state
+      || !Number.isSafeInteger(action.hitCount) || action.hitCount < 0 || action.hitCount > 100
+      || !Number.isSafeInteger(state.elapsedTicks) || state.elapsedTicks < 0
+      || !Number.isSafeInteger(state.windupTicks) || state.windupTicks < 0
+      || !Number.isSafeInteger(state.recoveryTicks) || state.recoveryTicks < 0
+      || !Number.isSafeInteger(state.sustainTicks) || state.sustainTicks < 0
+      || (state.totalTicks !== null && (!Number.isSafeInteger(state.totalTicks) || state.totalTicks < state.elapsedTicks))
+      || typeof state.movementLocked !== 'boolean'
+      || typeof state.impactEmitted !== 'boolean') return false;
+  }
+  if (s.statusEffects === undefined) return true;
+  const valid = (values: unknown) => Array.isArray(values) && values.length <= 16
+    && values.every(e => e && typeof e.id === 'string' && Object.hasOwn(STATUS_DEFINITIONS, e.id)
+      && advanceStatuses([e as StatusInstance], 0).statuses.length === 1);
+  return !!s.statusEffects && valid(s.statusEffects.player)
+    && !!s.statusEffects.enemies && typeof s.statusEffects.enemies === 'object'
+    && !Array.isArray(s.statusEffects.enemies)
+    && Object.entries(s.statusEffects.enemies).every(([id, values]) =>
+      Array.isArray(s.enemies) && s.enemies.some(unit => unit?.actor?.id === id)
+      && valid(values));
+}
+
 export class GameSimulation {
   private classId: ClassId = 'WARRIOR';
   private equipment: Equipment = createEquipment();
   private inventory: Array<Item | null> = Array(INVENTORY_SIZE).fill(null);
   private rng = new SeededRng();
   private cooldowns: Cooldowns = emptyCooldowns();
+  private warriorCooldowns: Partial<Record<WarriorAbilityId, number>> = {};
+  private warriorPending: { id: WarriorAbilityId; targetId: string | null } | null = null;
+  private warriorAction: { id: WarriorAbilityId; targetId: string | null; timeline: CombatTimelineState; hitCount: number } | null = null;
+  private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
   private effects: ActiveEffects = emptyEffects();
   private world: WorldLayout = generateWorld(0);
   private zone: ZoneId = 'wilderness';
@@ -115,7 +157,8 @@ export class GameSimulation {
   constructor(seed = 0) { this.reset('WARRIOR', seed); }
 
   private get immobilized(): boolean {
-    return this.effects.player.some(e => e.id === 'stunned' || e.id === 'rooted');
+    return this.effects.player.some(e => e.id === 'stunned' || e.id === 'rooted')
+      || this.statusEffects.player.some(e => e.id === 'stunned' || e.id === 'frozen' || e.id === 'rooted');
   }
 
   private follow(actor: Point, target: Point, speed: number, dt: number, stop = 0): void {
@@ -175,6 +218,8 @@ export class GameSimulation {
       moveActor(this.player, goal, 115, ACTOR_RADIUS, this.world.obstacles);
       if (distance(before, this.player) < 1) return;
       this.evadeCooldown = 2.5;
+      this.warriorPending = null;
+      this.warriorAction = null;
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
@@ -219,6 +264,8 @@ export class GameSimulation {
     }
     if (!this.player.alive || this.paused) return;
     if (command.type === 'interactObject') {
+      this.warriorAction = null;
+      this.warriorPending = null;
       const object = getWorldObject(command.id, this.zone);
       if (!object || this.usedObjects.has(object.id)) return;
       this.movePath = [];
@@ -233,6 +280,8 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'usePortal') {
+      this.warriorAction = null;
+      this.warriorPending = null;
       this.movePath = [];
       this.attackTarget = null;
       this.pickupTarget = null;
@@ -245,6 +294,8 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'interactNpc') {
+      this.warriorAction = null;
+      this.warriorPending = null;
       if (this.zone !== 'wilderness' || !isNpcId(command.npcId)) return;
       this.movePath = [];
       this.attackTarget = null;
@@ -258,6 +309,13 @@ export class GameSimulation {
       } else {
         this.pendingNpc = command.npcId;
       }
+      return;
+    }
+    if (command.type === 'warriorAbility') {
+      if (this.classId !== 'WARRIOR' || !getWarriorAbility(command.id)) return;
+      const unit = command.targetId === undefined ? this.focusedUnit
+        : this.units.find(u => u.actor.alive && u.actor.id === command.targetId);
+      this.requestWarriorAbility(command.id, unit?.actor.id ?? null);
       return;
     }
     if (command.type === 'cast') {
@@ -279,6 +337,8 @@ export class GameSimulation {
         this.player, command.destination, ACTOR_RADIUS, this.world.obstacles
       );
       if (!target) return;
+      this.warriorPending = null;
+      this.warriorAction = null;
       const route = findPath(this.player, target, ACTOR_RADIUS, this.world.obstacles);
       if (!route.length) return;
       this.movePath = route;
@@ -293,6 +353,8 @@ export class GameSimulation {
       const selected = this.units.find(unit => unit.actor.id === command.targetId && unit.actor.alive);
       if (!selected) return;
       this.selectedTargetId = selected.actor.id;
+      this.warriorPending = null;
+      this.warriorAction = null;
       this.attackTarget = selected.actor.id;
       this.movePath = [];
       this.pickupTarget = null;
@@ -404,7 +466,202 @@ export class GameSimulation {
     updateHealthLimit(this.player, max);
   }
 
+
+  /** Decide if a Warrior ability should cast now or approach its target first. */
+  private warriorActivation(id: WarriorAbilityId, targetId: string | null): WarriorActivationRequest {
+    const ability = WARRIOR_ABILITIES[id];
+    const actor = targetId ? this.units.find(u => u.actor.alive && u.actor.id === targetId)?.actor : null;
+    return {
+      skill: {
+        id, cost: ability.rageCost, cooldown: ability.cooldown,
+        range: ability.range, target: ability.target,
+        autoApproach: ability.autoApproach,
+        silenceRestricted: ability.tags.includes('BUFF') || ability.tags.includes('CHANNELING'),
+        movementSkill: ability.tags.includes('MOVEMENT')
+      },
+      state: {
+        rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+        cooldowns: { ...this.warriorCooldowns,
+          cleave: Math.max(this.warriorCooldowns.cleave ?? 0, this.cooldowns.rmb),
+          charge: Math.max(this.warriorCooldowns.charge ?? 0, this.cooldowns.slot1) }
+      },
+      actor: this.player, target: actor ?? null,
+      stunned: this.effects.player.some(e => e.id === 'stunned')
+        || this.statusEffects.player.some(e => e.id === 'stunned' || e.id === 'frozen'),
+      silenced: this.statusEffects.player.some(e => e.id === 'silenced'),
+      holdPosition: this.holdPosition, canMove: !this.immobilized
+    };
+  }
+
+  private requestWarriorAbility(id: WarriorAbilityId, targetId: string | null): void {
+    if (!this.player.alive || this.paused || this.classId !== 'WARRIOR' || this.warriorAction) return;
+    const ability = WARRIOR_ABILITIES[id];
+    const request = this.warriorActivation(id, targetId);
+    const decision = canActivateWarriorSkill(request);
+    if (decision.status === 'approach') {
+      this.warriorPending = { id, targetId };
+      this.movePath = [];
+      this.attackTarget = null;
+      this.pendingSkill = null;
+      this.pendingAim = null;
+      this.pickupTarget = null;
+      return;
+    }
+    if (decision.status !== 'ready') {
+      this.warriorPending = null;
+      return;
+    }
+    const spent = spendAndStartCooldown(request);
+    if (spent.decision.status !== 'ready') return;
+    this.resource = spent.state.rage;
+    this.warriorCooldowns = { ...spent.state.cooldowns } as Partial<Record<WarriorAbilityId, number>>;
+    if (id === 'cleave') this.cooldowns.rmb = ability.cooldown;
+    if (id === 'charge') this.cooldowns.slot1 = ability.cooldown;
+    this.warriorPending = null;
+    this.movePath = [];
+    this.attackTarget = null;
+    this.pendingSkill = null;
+    this.pendingAim = null;
+    const timeline = startCombatTimeline({
+      actionId: id,
+      animation: ability.channel ? 'channel' : ability.tags.includes('BUFF') ? 'cast' : 'attack',
+      windupTicks: Math.max(1, Math.round(ability.hit / FIXED_STEP)),
+      sustainTicks: ability.channel ? Math.round(ability.channel.duration / FIXED_STEP) : 0,
+      recoveryTicks: Math.max(1, Math.round(ability.recovery / FIXED_STEP)),
+      movementLocked: true
+    }).state;
+    this.warriorAction = { id, targetId, timeline, hitCount: 0 };
+    const target = targetId ? this.units.find(u => u.actor.id === targetId)?.actor : null;
+    this.events.push({ type: 'cast', skillId: id, x: target?.x ?? this.player.x, y: target?.y ?? this.player.y });
+  }
+
+  private applyCanonicalStatus(
+    recipient: 'player' | 'enemy', id: StatusId, sourceId: string,
+    magnitude?: number, duration?: number, unit?: EnemyUnit
+  ): void {
+    const definition = STATUS_DEFINITIONS[id];
+    const rule: StatusRule = {
+      id, duration: duration ?? definition.duration,
+      magnitude: magnitude ?? definition.magnitude,
+      stacking: definition.stackMode === 'stack' ? 'add' : 'refresh',
+      maxStacks: definition.maxStacks,
+      tickInterval: definition.tickInterval ?? undefined,
+      dispelCategory: definition.dispelCategory,
+      immunityTags: definition.immunityGroup ? [definition.immunityGroup] : [],
+      visualHook: definition.visualHook,
+      modifiers: definition.modifierKind === 'speedBoost' ? { moveSpeed: 1 }
+        : definition.modifierKind === 'movementSpeed' ? { moveSpeed: -1 }
+        : definition.modifierKind === 'damageReduction' ? { damageReduction: 1 }
+        : definition.modifierKind === 'damageTaken' ? { damageTaken: 1 } : {}
+    };
+    if (recipient === 'player') {
+      this.statusEffects.player = applyStatus(this.statusEffects.player, rule, sourceId);
+    } else if (unit?.actor.alive) {
+      this.statusEffects.enemies[unit.actor.id] = applyStatus(
+        this.statusEffects.enemies[unit.actor.id] ?? [], rule, sourceId);
+    }
+  }
+
+  private tickCanonicalStatuses(dt: number): void {
+    const player = advanceStatuses(this.statusEffects.player, dt);
+    this.statusEffects.player = player.statuses;
+    for (const tick of player.ticks) {
+      if (!this.player.alive) break;
+      if (tick.statusId === 'regeneration') {
+        this.player.health = resolveHealing(this.player.health, this.player.maxHealth, tick.magnitude).health;
+      } else if (tick.statusId === 'burning' || tick.statusId === 'poisoned' || tick.statusId === 'bleeding') {
+        this.dealPlayerDamage(tick.magnitude,
+          tick.statusId === 'burning' ? 'fire' : tick.statusId === 'poisoned' ? 'poison' : 'physical', tick.sourceId);
+      }
+    }
+    for (const unit of this.units) {
+      const result = advanceStatuses(this.statusEffects.enemies[unit.actor.id] ?? [], dt);
+      if (!unit.actor.alive || result.statuses.length === 0) delete this.statusEffects.enemies[unit.actor.id];
+      else this.statusEffects.enemies[unit.actor.id] = result.statuses;
+      for (const tick of result.ticks) {
+        if (!unit.actor.alive) break;
+        if (tick.statusId === 'regeneration') {
+          unit.actor.health = resolveHealing(unit.actor.health, unit.actor.maxHealth, tick.magnitude).health;
+        } else if (tick.statusId === 'burning' || tick.statusId === 'poisoned' || tick.statusId === 'bleeding') {
+          this.resolveEnemyDamage(tick.magnitude, unit,
+            tick.statusId === 'burning' ? 'fire' : tick.statusId === 'poisoned' ? 'poison' : 'physical', tick.sourceId);
+        }
+      }
+    }
+  }
+
+  private warriorImpact(id: WarriorAbilityId, targetId: string | null): void {
+    const ability = WARRIOR_ABILITIES[id];
+    const target = targetId ? this.units.find(u => u.actor.alive && u.actor.id === targetId) : null;
+    if (id === 'warCry') {
+      this.applyCanonicalStatus('player', 'haste', 'hero', 0.2, 8);
+      this.applyCanonicalStatus('player', 'fortified', 'hero', 0.2, 8);
+      this.resource = applyWarriorRageDelta({
+        rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+        cooldowns: this.warriorCooldowns
+      }, ability.rageGain).rage;
+    } else {
+      if (id === 'charge' && target) {
+        moveActor(this.player, target.actor, Math.max(0, distance(this.player, target.actor) - 52),
+          ACTOR_RADIUS, this.world.obstacles);
+      }
+      const victims = ability.radius !== undefined
+        ? [...this.aliveEnemies].filter(u => distance(this.player, u.actor) <= ability.radius! + 0.5)
+        : target && distance(this.player, target.actor) <= ability.range + 0.5 ? [target] : [];
+      for (const unit of victims) {
+        const power = ability.condition
+          && unit.actor.health / unit.actor.maxHealth <= ability.condition.threshold
+          ? ability.condition.bonusPower : ability.power;
+        const dealt = this.applyDamage(power, unit, 'physical');
+        if (dealt > 0 && ability.rageGain > 0) {
+          this.resource = applyWarriorRageDelta({
+            rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+            cooldowns: this.warriorCooldowns
+          }, ability.rageGain).rage;
+        }
+        const stun = ability.effects.find(e => e.id === 'stunned');
+        if (stun && unit.actor.alive) {
+          this.applyEffect('enemy',
+            { id: 'stunned', remaining: stun.duration, magnitude: 0, tick: 0 }, unit);
+        }
+      }
+    }
+    this.events.push({ type: 'warriorImpact', id, x: this.player.x, y: this.player.y });
+  }
+
+  private tickWarriorTimeline(): void {
+    const action = this.warriorAction;
+    if (!action) return;
+    // Stun/freeze interrupts the windup and the remaining channel ticks.
+    // The cancelled timeline never emits an impact cue or applies damage.
+    if (this.effects.player.some(e => e.id === 'stunned')
+      || this.statusEffects.player.some(e => e.id === 'stunned' || e.id === 'frozen')) {
+      cancelCombatTimeline(action.timeline);
+      this.warriorAction = null;
+      return;
+    }
+    const result = advanceCombatTimeline(action.timeline, 1);
+    action.timeline = result.state;
+    for (const event of result.events) {
+      if (event.type === 'impact' && this.player.alive) {
+        this.warriorImpact(action.id, action.targetId);
+        action.hitCount++;
+      }
+    }
+    const ability = WARRIOR_ABILITIES[action.id];
+    if (ability.channel && action.timeline.phase === 'sustain' && this.player.alive) {
+      const elapsed = action.timeline.elapsedTicks - action.timeline.windupTicks;
+      const interval = Math.max(1, Math.round(ability.channel.tickInterval / FIXED_STEP));
+      if (elapsed > 0 && elapsed % interval === 0) {
+        this.warriorImpact(action.id, action.targetId);
+        action.hitCount++;
+      }
+    }
+    if (action.timeline.phase === 'complete' || action.timeline.phase === 'cancelled') this.warriorAction = null;
+  }
+
   private requestCast(slot: SkillSlot, aim?: SkillAim): void {
+    if (this.warriorAction) return;
     const skill = SKILLS[this.classId][slot];
     if (skill.kind === 'dash' && this.holdPosition) return;
     if (this.effects.player.some(e => e.id === 'stunned')
@@ -488,7 +745,8 @@ export class GameSimulation {
     const result = resolveTypedDamage({
       type, base, multiplier, critChance,
       defenderArmor: 10 + this.level * 3, defenderLevel: this.level,
-      resistancePercent: this.enemyResistance(unit, type)
+      resistancePercent: Math.min(95, this.enemyResistance(unit, type) +
+        100 * Math.min(0.8, getStatusModifiers(this.statusEffects.enemies[unit.actor.id] ?? []).damageReduction ?? 0))
     }, this.rng);
     this.publishDamage(sourceId, unit.actor.id, type, result);
     return this.hitEnemy(result.damage, unit);
@@ -517,7 +775,9 @@ export class GameSimulation {
       : type === 'holy' ? stats.holyResist : 0;
     const result = resolveTypedDamage({
       type, base, defenderArmor: stats.armor, defenderLevel: this.level,
-      resistancePercent: resistance, dodgeChance: stats.dodgeChance,
+      resistancePercent: Math.min(95, resistance +
+        100 * Math.min(0.8, getStatusModifiers(this.statusEffects.player).damageReduction ?? 0)),
+      dodgeChance: stats.dodgeChance,
       blockChance: stats.blockChance, shield: this.shield
     }, this.rng);
     this.shield = result.shieldRemaining;
@@ -584,6 +844,7 @@ export class GameSimulation {
     return dealt;
   }
   private performCast(slot: SkillSlot, aim?: SkillAim): void {
+    if (this.warriorAction) return;
     const skill = SKILLS[this.classId][slot];
     const unit = this.focusedUnit;
     if (this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
@@ -592,6 +853,7 @@ export class GameSimulation {
       && (!unit.actor.alive || distance(this.player, unit.actor) > skill.range + 0.5)) return;
     this.resource = Math.max(0, this.resource - skill.cost);
     this.cooldowns[slot] = skill.cooldown;
+    if (this.classId === 'WARRIOR') this.warriorCooldowns[skill.id as WarriorAbilityId] = skill.cooldown;
     this.pendingSkill = null;
     this.pendingAim = null;
     const point = (aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA')
@@ -661,6 +923,8 @@ export class GameSimulation {
     this.events.push({ type: 'hit', targetId: this.player.id, damage: applied });
     if (this.player.health === 0) {
       this.player.alive = false;
+      this.warriorPending = null;
+      this.warriorAction = null;
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
@@ -712,6 +976,75 @@ export class GameSimulation {
     this.effects.player = this.effects.player.filter(effect => effect.remaining > 0);
   }
 
+
+  /** Data-driven Wave B AI runs in the deterministic TypeScript simulation. */
+  private updateMonsterTactics(unit: EnemyUnit, dt: number): void {
+    const actor = unit.actor;
+    const def = ENEMY_DEFINITIONS[actor.type];
+    const profile = getEnemyArchetype(enemyArchetype(actor.type));
+    if (!profile || !actor.alive || !this.player.alive) return;
+    const index = this.units.indexOf(unit);
+    const spawn = this.world.encounterPositions[index];
+    if (!spawn) return;
+    const origin = { x: spawn.x, y: spawn.y + (this.wave % 2) * 25 };
+    const role = enemyArchetype(actor.type);
+    const allies = this.units.filter(u => u !== unit && u.actor.alive).map(u => ({
+      ...u.actor, lineOfSight: true,
+      reachable: distance(actor, u.actor) <= profile.aggroRange
+    }));
+    const decision = planEnemyBehavior({
+      actor, origin, target: this.player, allies,
+      config: {
+        archetypeId: role, aggroRange: def.aggro,
+        attackRange: def.attackRange,
+        preferredDistance: Math.min(def.preferredRange, def.attackRange),
+        leashRange: Math.max(profile.leashRange, def.aggro + 100),
+        specialRange: role === 'healer' ? 220 : Math.min(def.aggro, Math.max(def.attackRange, 230)),
+        healHealthRatio: 0.88,
+        fleeHealthRatio: profile.retreatThreshold
+      },
+      attackCooldown: unit.cooldown, abilityCooldown: unit.cooldown,
+      lineOfSight: true,
+      navigation: {
+        targetReachable: canOccupy(this.player, ACTOR_RADIUS, this.world.obstacles),
+        originReachable: canOccupy(origin, ACTOR_RADIUS, this.world.obstacles),
+        repositionReachable: true, retreatReachable: true, patrolReachable: true
+      }
+    });
+    if (decision.action === 'heal') {
+      const ally = this.units.find(u => u.actor.id === decision.targetId && u.actor.alive);
+      if (ally && unit.cooldown <= 0 && distance(actor, ally.actor) <= 220) {
+        ally.actor.health = resolveHealing(ally.actor.health, ally.actor.maxHealth, 36).health;
+        this.statusEffects.enemies[ally.actor.id] = dispelStatuses(
+          this.statusEffects.enemies[ally.actor.id] ?? [], { categories: ['curse'] });
+        unit.cooldown = 6.5;
+        this.events.push({ type: 'enemyHeal', enemyId: actor.id, targetId: ally.actor.id, amount: 36 });
+      }
+    } else if (decision.action === 'cast' && decision.targetId !== this.player.id) {
+      const ally = this.units.find(u => u.actor.id === decision.targetId && u.actor.alive);
+      if (ally && unit.cooldown <= 0) {
+        this.applyCanonicalStatus('enemy', 'fortified', actor.id, 0.2, 6, ally);
+        unit.cooldown = 8;
+      }
+    } else if (decision.action === 'attack' || decision.action === 'cast') {
+      if (unit.cooldown > 0) return;
+      const center = def.attack === 'sweep' ? actor : this.player;
+      unit.intent = {
+        pattern: def.attack, x: center.x, y: center.y,
+        radius: def.dangerRadius, remaining: def.windup, total: def.windup
+      };
+      this.events.push({ type: 'enemyWindup', enemyId: actor.id, pattern: def.attack });
+    } else if ('destination' in decision) {
+      const point = decision.destination;
+      if (canOccupy(point, ACTOR_RADIUS, this.world.obstacles)) {
+        const pace = def.speed * profile.speedMultiplier
+          * (this.statusEffects.enemies[actor.id]?.some(e => e.id === 'slowed') ? 0.7 : 1);
+        const stop = decision.action === 'chase' ? Math.max(0, def.preferredRange - 4) : 0;
+        this.follow(actor, point, pace, dt, stop);
+      }
+    }
+  }
+
   private updateEnemyAI(unit: EnemyUnit, dt: number): void {
     if (!unit.actor.alive || !this.player.alive) { unit.intent = null; return; }
     // The starter camp is a sanctuary even if the player retreats mid-combat.
@@ -749,6 +1082,9 @@ export class GameSimulation {
       const hit = distance(this.player, intent) <= intent.radius
         && this.dealPlayerDamage(def.baseDamage + this.level * 2,
           intent.pattern === 'leap' ? 'poison' : 'physical', actor.id);
+      if (hit && intent.pattern === 'sweep' && actor.type === 'spider' && this.player.alive) {
+        this.applyCanonicalStatus('player', 'poisoned', actor.id, 3, 4);
+      }
       if (hit && intent.pattern === 'leap' && this.player.alive) {
         this.applyEffect('player',
           { id: 'poisoned', remaining: 3, magnitude: 3, tick: 0 });
@@ -757,6 +1093,10 @@ export class GameSimulation {
       return;
     }
 
+    if (this.zone === 'wilderness' && this.wave >= 2) {
+      this.updateMonsterTactics(unit, dt);
+      return;
+    }
     const dist = distance(actor, this.player);
     if (dist > def.aggro) return;
     const slowed = unit.effects.some(effect => effect.id === 'chilled');
@@ -820,6 +1160,10 @@ export class GameSimulation {
     this.groundLoot = [];
     this.effects = emptyEffects();
     this.cooldowns = emptyCooldowns();
+    this.warriorCooldowns = {};
+    this.warriorPending = null;
+    this.warriorAction = null;
+    this.statusEffects = { player: [], enemies: {} };
     this.attackTimer = 0;
     this.accumulator = 0;
     this.holdPosition = false;
@@ -851,7 +1195,15 @@ export class GameSimulation {
     for (const slot of ['rmb', 'slot1'] as const) {
       this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
     }
+    this.warriorCooldowns = { ...advanceWarriorCooldowns({
+      rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+      cooldowns: this.warriorCooldowns
+    }, dt).cooldowns } as Partial<Record<WarriorAbilityId, number>>;
+    this.warriorCooldowns.cleave = this.cooldowns.rmb;
+    this.warriorCooldowns.charge = this.cooldowns.slot1;
     this.tickEffects(dt);
+    this.tickCanonicalStatuses(dt);
+    this.tickWarriorTimeline();
     if (this.player.alive) {
       const regen = regenerateHealth(
         this.player.health, this.player.maxHealth,
@@ -867,6 +1219,7 @@ export class GameSimulation {
         if (this.respawnTimer <= 0) {
           this.wave++;
           this.units = createPack(this.wave, this.level, this.world.encounterPositions);
+          this.statusEffects.enemies = {};
           this.respawnTimer = 0;
           this.selectedTargetId = null;
         }
@@ -876,6 +1229,7 @@ export class GameSimulation {
           this.dungeonStage = 1;
           this.wave = 1;
           this.units = createCryptPack(1, this.level, CRYPT_BOSS_POSITIONS);
+          this.statusEffects.enemies = {};
           this.respawnTimer = 0;
           this.selectedTargetId = null;
         }
@@ -888,7 +1242,9 @@ export class GameSimulation {
       }
     }
 
-    const speed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment).moveSpeed / 100);
+    const haste = getStatusModifiers(this.statusEffects.player).moveSpeed ?? 0;
+    const speed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment).moveSpeed / 100)
+      * Math.max(0.25, Math.min(1.6, 1 + haste));
     const focus = this.focusedUnit;
     if (this.pendingPortal) {
       if (distance(this.player, this.portalPosition) <= 78) {
@@ -909,6 +1265,16 @@ export class GameSimulation {
       if (!object) this.pendingObject = null;
       else if (distance(this.player, object.position) <= object.reach) this.tryInteractObject();
       else this.follow(this.player, object.position, speed, dt, object.reach - 10);
+    } else if (this.warriorAction?.timeline.movementLocked) {
+      this.movementSpeed = 0;
+    } else if (this.warriorPending) {
+      const pending = this.warriorPending;
+      const target = pending.targetId ? this.units.find(u => u.actor.alive && u.actor.id === pending.targetId) : null;
+      if (WARRIOR_ABILITIES[pending.id].target === 'enemy' && !target) this.warriorPending = null;
+      else if (target && distance(this.player, target.actor) > WARRIOR_ABILITIES[pending.id].range) {
+        if (this.holdPosition || this.immobilized) this.warriorPending = null;
+        else this.follow(this.player, target.actor, speed, dt, WARRIOR_ABILITIES[pending.id].range - 4);
+      } else this.requestWarriorAbility(pending.id, pending.targetId);
     } else if (this.pendingSkill && (focus.actor.alive || this.pendingAim !== null)) {
       const skill = SKILLS[this.classId][this.pendingSkill];
       const aim = this.pendingAim;
@@ -975,6 +1341,7 @@ export class GameSimulation {
     unit.actor.alive = false;
     unit.intent = null;
     unit.effects = [];
+    delete this.statusEffects.enemies[unit.actor.id];
     if (this.attackTarget === unit.actor.id) this.attackTarget = null;
     if (this.selectedTargetId === unit.actor.id) {
       this.selectedTargetId = null;
@@ -1071,7 +1438,7 @@ export class GameSimulation {
   snapshot(): GameSnapshot {
     const focus = this.focusedUnit;
     const status = this.paused ? 'paused' : !this.player.alive ? 'dead'
-      : this.attackTarget || this.pendingSkill ? 'combat'
+      : this.attackTarget || this.pendingSkill || this.warriorAction || this.warriorPending ? 'combat'
       : this.movePath.length || this.pickupTarget || this.pendingObject
         || this.pendingNpc || this.pendingPortal ? 'moving' : 'ready';
     return {
@@ -1103,6 +1470,15 @@ export class GameSimulation {
       resource: this.resource,
       rngState: this.rng.state,
       cooldowns: { ...this.cooldowns },
+      warriorCooldowns: { ...this.warriorCooldowns },
+      warriorAction: this.warriorAction ? {
+        ...this.warriorAction, timeline: { ...this.warriorAction.timeline }
+      } : null,
+      statusEffects: {
+        player: this.statusEffects.player.map(s => ({ ...s, modifiers: { ...s.modifiers }, immunityTags: [...s.immunityTags] })),
+        enemies: Object.fromEntries(Object.entries(this.statusEffects.enemies)
+          .map(([id, values]) => [id, values.map(s => ({ ...s, modifiers: { ...s.modifiers }, immunityTags: [...s.immunityTags] }))]))
+      },
       effects: {
         player: this.effects.player.map(effect => ({ ...effect })),
         enemy: focus.effects.map(effect => ({ ...effect }))
@@ -1165,6 +1541,7 @@ export class GameSimulation {
       || !Number.isFinite(s.evadeCooldown) || s.evadeCooldown < 0 || s.evadeCooldown > 2.5
       || !s.cooldowns || !(['rmb', 'slot1'] as const).every(slot =>
         Number.isFinite(s.cooldowns[slot]) && s.cooldowns[slot] >= 0 && s.cooldowns[slot] <= 360)
+      || !validWaveBState(s)
       || !s.effects || !Array.isArray(s.effects.player)
       || s.effects.player.length > 8 || !s.effects.player.every(isActiveEffect)
       || !Array.isArray(s.enemies) || s.enemies.length !== PACK_SIZE
@@ -1174,7 +1551,7 @@ export class GameSimulation {
           ? unit.actor.type === (s.dungeonStage === 0
             ? (['skeleton', 'wolf', 'wraith'] as const)[index]
             : (['crypt_lord', 'skeleton', 'wraith'] as const)[index])
-          : unit.actor.type === (['wraith', 'skeleton', 'wolf'] as const)[index])
+          : unit.actor.type === packTypesForWave(s.wave)[index])
         && validActor(unit.actor, unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && validIntent(unit.intent)
         && (unit.intent === null || unit.intent.pattern === ENEMY_DEFINITIONS[unit.actor.type].attack)
@@ -1223,6 +1600,16 @@ export class GameSimulation {
     this.resource = s.resource;
     this.rng = new SeededRng(s.rngState);
     this.cooldowns = { ...s.cooldowns };
+    this.warriorCooldowns = s.warriorCooldowns ? { ...s.warriorCooldowns } : {};
+    this.warriorAction = s.warriorAction ? {
+      ...s.warriorAction, timeline: { ...s.warriorAction.timeline }
+    } : null;
+    this.warriorPending = null;
+    this.statusEffects = {
+      player: (s.statusEffects?.player ?? []).map(e => ({ ...e })),
+      enemies: Object.fromEntries(Object.entries(s.statusEffects?.enemies ?? {})
+        .map(([id, arr]) => [id, arr.map(e => ({ ...e }))]))
+    };
     this.effects = { player: s.effects.player.map(effect => ({ ...effect })), enemy: [] };
     this.paused = false;
     this.movePath = [];
@@ -1258,6 +1645,10 @@ export class GameSimulation {
     this.inventory = Array(INVENTORY_SIZE).fill(null);
     this.rng = new SeededRng(seed === 0 ? 0x49ac127b : ((seed ^ 0x49ac127b) >>> 0));
     this.cooldowns = emptyCooldowns();
+    this.warriorCooldowns = {};
+    this.warriorAction = null;
+    this.warriorPending = null;
+    this.statusEffects = { player: [], enemies: {} };
     this.effects = emptyEffects();
     this.quest = freshQuest();
     this.pendingNpc = null;

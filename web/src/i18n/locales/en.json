@@ -198,7 +198,9 @@
     "skills": "Abilities",
     "effects": "Active effects",
     "warning": "Incoming attack",
-    "dodge": "Red ground markers show dangerous zones. Click outside to dodge."
+    "dodge": "Red ground markers show dangerous zones. Click outside to dodge.",
+    "blocked": "Blocked",
+    "dodged": "Dodged"
   },
   "effects": {
     "stunned": "Stunned",
@@ -206,7 +208,18 @@
     "burning": "Burning",
     "poisoned": "Poisoned",
     "consecration": "Consecration",
-    "skeleton": "Skeleton ally"
+    "skeleton": "Skeleton ally",
+    "frozen": "Frozen",
+    "bleeding": "Bleeding",
+    "slowed": "Slowed",
+    "rooted": "Rooted",
+    "silenced": "Silenced",
+    "cursed": "Cursed",
+    "vulnerable": "Vulnerable",
+    "fortified": "Fortified",
+    "shielded": "Shielded",
+    "regeneration": "Regeneration",
+    "haste": "Haste"
   },
   "skills": {
     "cleave": {
@@ -256,6 +269,26 @@
     "soulBurn": {
       "name": "Soul Burn",
       "desc": "Curse an enemy with lingering soulfire damage."
+    },
+    "basicAttack": {
+      "name": "Basic Attack",
+      "desc": "A melee hit that generates Rage when it connects."
+    },
+    "groundSlam": {
+      "name": "Ground Slam",
+      "desc": "After a short wind-up, hit and stun enemies around the hero."
+    },
+    "warCry": {
+      "name": "War Cry",
+      "desc": "Gain Rage, increase movement speed and strengthen defenses briefly."
+    },
+    "whirlwind": {
+      "name": "Whirlwind",
+      "desc": "Channel a flurry of repeated hits against nearby enemies."
+    },
+    "execute": {
+      "name": "Execute",
+      "desc": "A powerful strike dealing extra damage to weakened enemies."
     }
   },
   "enemies": {
@@ -274,6 +307,54 @@
     "crypt_lord": {
       "name": "Crypt Lord",
       "desc": "An ancient ruler of the tomb. Heavily armored with a sweeping attack."
+    },
+    "skeletonArcher": {
+      "name": "Skeleton Archer",
+      "desc": "A wilderness enemy."
+    },
+    "skeletonMage": {
+      "name": "Skeleton Mage",
+      "desc": "A wilderness enemy."
+    },
+    "ghoul": {
+      "name": "Ghoul",
+      "desc": "A wilderness enemy."
+    },
+    "zombie": {
+      "name": "Zombie",
+      "desc": "A wilderness enemy."
+    },
+    "spider": {
+      "name": "Spider",
+      "desc": "A wilderness enemy."
+    },
+    "corruptedBoar": {
+      "name": "Corrupted Boar",
+      "desc": "A wilderness enemy."
+    },
+    "banditFighter": {
+      "name": "Bandit Fighter",
+      "desc": "A wilderness enemy."
+    },
+    "banditArcher": {
+      "name": "Bandit Archer",
+      "desc": "A wilderness enemy."
+    },
+    "banditRogue": {
+      "name": "Bandit Rogue",
+      "desc": "A wilderness enemy."
+    },
+    "fanatic": {
+      "name": "Fanatic",
+      "desc": "A wilderness enemy."
+    },
+    "cultMage": {
+      "name": "Cult Mage",
+      "desc": "A wilderness enemy."
+    },
+    "cultHealer": {
+      "name": "Cult Healer",
+      "desc": "A wilderness enemy."
     }
   },
   "npc": {
@@ -379,7 +460,9 @@
       "TALENTS": "Talents (future)",
       "MAP": "Map (future)",
       "JOURNAL": "Journal (future)",
-      "MENU": "Menu / pause"
+      "MENU": "Menu / pause",
+      "SLOT_5": "Ability 5 – Execute",
+      "SLOT_6": "Ability 6 – Basic Attack"
     }
   },
   "worldObjects": {

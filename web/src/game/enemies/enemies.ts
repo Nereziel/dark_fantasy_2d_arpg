@@ -1,8 +1,11 @@
 import type { ActorSnapshot, Point } from '../core/types';
 import type { ActiveEffect } from '../skills/skills';
+import { UNDEAD_BEAST_MONSTERS, getUndeadBeastMonster, type UndeadBeastMonsterId } from './families/undeadBeasts';
+import { BANDIT_CULTIST_MONSTERS, getBanditCultistMonster, type BanditCultistMonsterId } from './families/banditsCultists';
+import type { EnemyBehaviorId } from './behaviorPlanner';
 
 /** All enemy movement and attack decisions stay in the TypeScript simulation. */
-export type EnemyType = 'wraith' | 'skeleton' | 'wolf' | 'crypt_lord';
+export type EnemyType = 'wraith' | 'crypt_lord' | UndeadBeastMonsterId | BanditCultistMonsterId;
 export type AttackPattern = 'bolt' | 'sweep' | 'leap';
 
 export interface EnemyDefinition {
@@ -20,7 +23,7 @@ export interface EnemyDefinition {
   baseDamage: number;
 }
 
-export const ENEMY_DEFINITIONS: Record<EnemyType, EnemyDefinition> = {
+const LEGACY_ENEMIES: Record<'wraith' | 'skeleton' | 'wolf' | 'crypt_lord', EnemyDefinition> = {
   wraith: {
     id: 'wraith', attack: 'bolt', color: 0x9c83bf,
     health: 72, speed: 70, aggro: 330, preferredRange: 174,
@@ -46,6 +49,60 @@ export const ENEMY_DEFINITIONS: Record<EnemyType, EnemyDefinition> = {
     baseDamage: 29
   }
 };
+
+
+/**
+ * Turn Wave B family catalogs into the existing numeric combat contract.
+ * The first two wave rosters and crypt encounters retain their original values.
+ * Archetype policies are applied by GameSimulation, not by these definitions.
+ */
+const FAMILY_MONSTERS = [...UNDEAD_BEAST_MONSTERS, ...BANDIT_CULTIST_MONSTERS];
+const FAMILY_DEFINITIONS = Object.fromEntries(FAMILY_MONSTERS
+  .filter(monster => monster.id !== 'skeleton' && monster.id !== 'wolf')
+  .map(monster => {
+    const first = monster.abilities[0];
+    const melee = monster.archetypeId === 'meleeAggressor'
+      || monster.archetypeId === 'defensive' || monster.archetypeId === 'ambusher';
+    const charger = monster.archetypeId === 'charger';
+    const attack: AttackPattern = charger ? 'leap' : melee ? 'sweep' : 'bolt';
+    const windup = first && 'windupSeconds' in first ? first.windupSeconds : 0.9;
+    const cooldown = first && 'cooldownSeconds' in first ? first.cooldownSeconds
+      : first && 'cooldown' in first ? first.cooldown : 2.8;
+    const color = monster.family === 'undead' ? 0xc3c2ab
+      : monster.family === 'beast' ? 0xa88469
+      : monster.family === 'bandit' ? 0xb2947c : 0x9e85bb;
+    return [monster.id, {
+      id: monster.id, attack, color,
+      health: monster.health, speed: monster.speed, aggro: monster.aggroRange,
+      preferredRange: monster.preferredDistance, attackRange: monster.attackRange,
+      dangerRadius: attack === 'sweep' ? 82 : attack === 'leap' ? 64 : 48,
+      windup: Math.max(0.6, windup), cooldown, baseDamage: monster.baseDamage
+    }];
+  })) as Record<Exclude<EnemyType, 'wraith' | 'skeleton' | 'wolf' | 'crypt_lord'>, EnemyDefinition>;
+
+export const ENEMY_DEFINITIONS: Record<EnemyType, EnemyDefinition> = {
+  ...LEGACY_ENEMIES,
+  ...FAMILY_DEFINITIONS
+};
+
+export function enemyArchetype(type: EnemyType): EnemyBehaviorId {
+  if (type === 'wraith') return 'rangedAttacker';
+  if (type === 'crypt_lord') return 'defensive';
+  return getUndeadBeastMonster(type)?.archetypeId
+    ?? getBanditCultistMonster(type)?.archetypeId ?? 'meleeAggressor';
+}
+
+/** Deterministic three-enemy rosters. Tutorial and wave one remain unchanged. */
+export function packTypesForWave(wave: number): readonly EnemyType[] {
+  if (wave < 2 || !Number.isSafeInteger(wave)) return ['wraith', 'skeleton', 'wolf'];
+  const rosters: readonly (readonly EnemyType[])[] = [
+    ['skeletonArcher', 'ghoul', 'zombie'],
+    ['spider', 'corruptedBoar', 'skeletonMage'],
+    ['banditFighter', 'banditArcher', 'banditRogue'],
+    ['fanatic', 'cultMage', 'cultHealer']
+  ];
+  return rosters[(wave - 2) % rosters.length]!;
+}
 
 export interface EnemySnapshot extends ActorSnapshot {
   type: EnemyType;
@@ -73,7 +130,7 @@ const PACK_POSITIONS: readonly Point[] = [
 
 /** Three enemies simultaneously; IDs remain unique across successive waves. */
 export function createPack(wave: number, level: number, positions: readonly Point[] = PACK_POSITIONS): EnemyUnit[] {
-  const types: readonly EnemyType[] = ['wraith', 'skeleton', 'wolf'];
+  const types = packTypesForWave(wave);
   return types.map((type, index) => {
     const def = ENEMY_DEFINITIONS[type];
     const pos = positions[index]!;

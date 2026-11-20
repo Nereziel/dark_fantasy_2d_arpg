@@ -12,10 +12,10 @@ We will now complete foundational prompts in numeric order, even though early ve
 | 04 — Mouse context resolver | **Core complete** | Ground, enemy, NPC, loot, UI, portal/door, chest and shrine resolve through one picker; in-world target highlight and distance checks active |
 | 05 — Force move / hold position / skill aiming | **Core complete** | Configurable bindings with browser-local UI, Shift stand-still, mouse force move, 5 target modes, aim via cursor. More active skill slots and potions belong to later prompts |
 | 06 — Central combat | **Core complete** | Physical + elemental damage, AoE, authoritative enemy projectile, crit, dodge, armor/resists, block, shield, healing and observable combat events; more attack families and balance follow |
-| 07 — Warrior skills | Prototype | Full Warrior kit, cooldowns and animation timing |
-| 08 — Animation & game feel | Not complete | Visual animation state machine, timed hit frames and hit reactions |
-| 09 — Status effect framework | Prototype | Generic stacking, expiry, resistance and dispel framework |
-| 10–11 — Enemy AI and families | Prototype | Reusable AI behaviors, more families and actual differentiated combat roles |
+| 07 — Warrior skills | Runtime integration underway | Seven Warrior abilities available: Cleave/Charge retain backward-compatible controls; five additional skills use fixed-tick impacts, Rage/cooldown handling and UI. Unify the original two cast paths with the new timeline in a later gate. |
+| 08 — Animation & game feel | Partially integrated | Wave B timeline drives delayed impacts of five Warrior skills; damage events feed Phaser VFX descriptors and a hit feedback renderer. Atlas sprites, weapon trails/pooling and full old-skill hit timing still pending. |
+| 09 — Status effect framework | Partially integrated | 15 registered status definitions; active status reducer handles War Cry haste/fortification and monster venom, periodic ticking and UI queries. Legacy effects remain temporarily separate; not every status is connected to skills and dispel UI. |
+| 10–11 — Enemy AI and families | Partially integrated | Tactical planner and archetypes run for later wilderness waves, including caster/ranged and healer behavior. Rotating rosters instantiate the family catalogs after wave 1. Dedicated licensed sprites, per-monster abilities and navigation refinements remain. |
 | 12–17 — Progression and items | Partial | Per-prompt acceptance gates rather than broader content additions |
 | 18–29 — Act I content | Early vertical-slice prototype | Keep town, quest, commerce and crypt as integration fixtures until core gates pass |
 | 30–63 | Not audited | Follow sequential prompts only after earlier acceptance criteria are met |
@@ -39,3 +39,7 @@ All five parallel agent PRs were merged separately (#1, #5, #2, #3, #4), then co
 ## Multi-agent contribution policy
 
 Independent coding agents can work on **separate feature branches and pull requests**, each limited to a single numbered prompt or a non-overlapping subsystem. Avoid concurrent edits to `GameSimulation.ts`, the shared type contracts, the save DTO and locale catalogs without an integration owner; combine PRs only after typecheck, deterministic tests, browser smoke tests and Pages deployment checks succeed. The main branch remains the released integration point.
+
+## Wave B integration checkpoint
+
+The ten isolated Wave B modules (agents 06–15) were merged earlier. This coordinator integration connects them to runtime on the dedicated integration PR. Public save DTO v8 and the initial wilderness tutorial/crypt encounters are unchanged. New content cycles into wilderness waves 2–5. Only mark Prompts 07–11 complete after all original acceptance criteria, full deterministic tests, visual asset coverage and browser gameplay regression gates are met. Avoid claiming that the merged helper modules alone satisfy full prompts.

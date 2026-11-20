@@ -7,6 +7,7 @@ export function playerAnimation(state: GameSnapshot): HeroAnimation {
   if (!state.player.alive) return 'dead';
   if (state.effects.player.some(effect => effect.id === 'stunned')) return 'stunned';
   if (state.evadeCooldown > 2.1) return 'evading';
+  if (state.warriorAction?.timeline && state.warriorAction.timeline.phase !== 'complete') return 'attacking';
   if (state.status === 'moving' || state.moveDestination !== null) return 'running';
   if (state.status === 'combat') return 'attacking';
   return 'idle';

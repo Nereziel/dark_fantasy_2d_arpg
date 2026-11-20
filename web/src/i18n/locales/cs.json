@@ -198,7 +198,9 @@
     "skills": "Schopnosti",
     "effects": "Aktivní efekty",
     "warning": "Pozor – připravovaný útok",
-    "dodge": "Červené označení na zemi ukazuje nebezpečnou oblast. Ustup kliknutím mimo ni."
+    "dodge": "Červené označení na zemi ukazuje nebezpečnou oblast. Ustup kliknutím mimo ni.",
+    "blocked": "Zablokováno",
+    "dodged": "Úhyb"
   },
   "effects": {
     "stunned": "Omráčení",
@@ -206,7 +208,18 @@
     "burning": "Hoření",
     "poisoned": "Otrava",
     "consecration": "Posvěcení",
-    "skeleton": "Kostěný společník"
+    "skeleton": "Kostěný společník",
+    "frozen": "Zmrazení",
+    "bleeding": "Krvácení",
+    "slowed": "Zpomalení",
+    "rooted": "Přikování",
+    "silenced": "Umlčení",
+    "cursed": "Prokletí",
+    "vulnerable": "Zranitelnost",
+    "fortified": "Opevnění",
+    "shielded": "Štít",
+    "regeneration": "Regenerace",
+    "haste": "Spěch"
   },
   "skills": {
     "cleave": {
@@ -256,6 +269,26 @@
     "soulBurn": {
       "name": "Žár duší",
       "desc": "Prokleje nepřítele plamenem, který jej dále spaluje."
+    },
+    "basicAttack": {
+      "name": "Základní úder",
+      "desc": "Úder zblízka, který při zásahu vytváří zuřivost."
+    },
+    "groundSlam": {
+      "name": "Úder do země",
+      "desc": "Po krátkém nápřahu zasáhne a omráčí nepřátele kolem hrdiny."
+    },
+    "warCry": {
+      "name": "Válečný pokřik",
+      "desc": "Dodá zuřivost, zrychlí pohyb a na krátko posílí obranu."
+    },
+    "whirlwind": {
+      "name": "Smršť čepelí",
+      "desc": "Během krátkého soustředění opakovaně zasahuje okolní nepřátele."
+    },
+    "execute": {
+      "name": "Poprava",
+      "desc": "Silný úder, který způsobí více poškození oslabeným nepřátelům."
     }
   },
   "enemies": {
@@ -274,6 +307,54 @@
     "crypt_lord": {
       "name": "Vládce krypty",
       "desc": "Prastarý vládce hrobek. Má mnoho životů a zasahuje širokou oblast."
+    },
+    "skeletonArcher": {
+      "name": "Kostlivý lučištník",
+      "desc": "Nepřítel z divočiny."
+    },
+    "skeletonMage": {
+      "name": "Kostlivý mág",
+      "desc": "Nepřítel z divočiny."
+    },
+    "ghoul": {
+      "name": "Ghúl",
+      "desc": "Nepřítel z divočiny."
+    },
+    "zombie": {
+      "name": "Zombie",
+      "desc": "Nepřítel z divočiny."
+    },
+    "spider": {
+      "name": "Pavouk",
+      "desc": "Nepřítel z divočiny."
+    },
+    "corruptedBoar": {
+      "name": "Zkažený kanec",
+      "desc": "Nepřítel z divočiny."
+    },
+    "banditFighter": {
+      "name": "Bandita",
+      "desc": "Nepřítel z divočiny."
+    },
+    "banditArcher": {
+      "name": "Bandita lučištník",
+      "desc": "Nepřítel z divočiny."
+    },
+    "banditRogue": {
+      "name": "Bandita zabiják",
+      "desc": "Nepřítel z divočiny."
+    },
+    "fanatic": {
+      "name": "Fanatik",
+      "desc": "Nepřítel z divočiny."
+    },
+    "cultMage": {
+      "name": "Kultovní mág",
+      "desc": "Nepřítel z divočiny."
+    },
+    "cultHealer": {
+      "name": "Kultovní léčitel",
+      "desc": "Nepřítel z divočiny."
     }
   },
   "npc": {
@@ -379,7 +460,9 @@
       "TALENTS": "Talenty (připravují se)",
       "MAP": "Mapa (připravuje se)",
       "JOURNAL": "Deník (připravuje se)",
-      "MENU": "Menu / pauza"
+      "MENU": "Menu / pauza",
+      "SLOT_5": "Schopnost 5 – Poprava",
+      "SLOT_6": "Schopnost 6 – Základní úder"
     }
   },
   "worldObjects": {
