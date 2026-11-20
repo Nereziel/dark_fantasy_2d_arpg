@@ -7,6 +7,7 @@ Pro koordinovanou paralelní práci platí **[docs/plan/agents/README.md](docs/p
 - Pracuj ve **vlastní větvi / worktree**, nikdy přímo do `main`.
 - Zapisuj **pouze** soubory uvedené jako povolené v zadání. Jestli potřebuješ jiný soubor, zastav se a požádej integrátora o změnu rozsahu.
 - Před úpravou napiš selhávající test (TDD), po úpravě ověř typy, jednotkové testy i build.
+- Pro nové vlny používej [workflow a cache runbook](docs/plan/agents/WORKFLOW_CACHE.md): izolované worktree, sdílenou npm download cache a stupňovanou validaci. Výsledky CI platí jen pro přesné SHA.
 - Neměň sdílené API, schéma uložených postav ani pravidla licence bez schválení integrátora.
 - Soubojový a světový stav se neukládají; perzistentní je pouze postava a její pokrok. Současný character-only save v9 a již existující migrace v8→v9 nesmí být rozbity; změny save formátu smí řešit pouze integrátor.
 - Zachovej CS/EN, determinismus simulace a GPL-3.0-only pro vlastní tvorbu; licence externích zdrojů musí být respektované.
