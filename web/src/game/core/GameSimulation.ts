@@ -68,6 +68,26 @@ function cloneUnit(unit: EnemyUnit): EnemyUnit {
     ...(unit.abilityCooldowns ? { abilityCooldowns: { ...unit.abilityCooldowns } } : {})
   };
 }
+function validTransientAim(value: unknown): value is SkillAim {
+  if (!value || typeof value !== 'object') return false;
+  const aim = value as Partial<SkillAim>;
+  if (aim.mode === 'SELF') return true;
+  if (aim.mode === 'TARGET_ENTITY') {
+    return typeof aim.targetId === 'string' && aim.targetId.length > 0 && aim.targetId.length <= 128;
+  }
+  if (aim.mode === 'AREA' || aim.mode === 'GROUND_POSITION') {
+    const point = (aim as { position?: Point }).position;
+    return !!point && Number.isFinite(point.x) && Number.isFinite(point.y)
+      && point.x >= 0 && point.y >= 0 && point.x <= 2200 && point.y <= 1400;
+  }
+  if (aim.mode === 'DIRECTION') {
+    const point = (aim as { direction?: Point }).direction;
+    return !!point && Number.isFinite(point.x) && Number.isFinite(point.y)
+      && Math.hypot(point.x,point.y) >= 0.5 && Math.hypot(point.x,point.y) <= 1.1;
+  }
+  return false;
+}
+
 function validActor(actor: ActorSnapshot, id: string, obstacles: readonly Obstacle[]): boolean {
   return !!actor && actor.id === id
     && [actor.x, actor.y, actor.health, actor.maxHealth].every(Number.isFinite)
@@ -101,9 +121,13 @@ function validWaveBState(s: GameSnapshot): boolean {
   if (s.classAction) {
     const action = s.classAction;
     const timeline = action.timeline;
-    if (!timeline || !['basic', 'skill'].includes(action.kind)
+    if (!timeline || s.classId === 'WARRIOR' || !['basic', 'skill'].includes(action.kind)
       || (action.kind === 'basic' ? action.slot !== null : !isSkillSlot(action.slot))
       || typeof action.targetId !== 'string' && action.targetId !== null
+      || (typeof action.targetId === 'string' && action.targetId.length > 128)
+      || (action.aim !== undefined && !validTransientAim(action.aim))
+      || timeline.actionId !== (action.kind === 'basic' ? 'basicAttack'
+        : SKILLS[s.classId][action.slot as SkillSlot].id)
       || !Number.isSafeInteger(timeline.elapsedTicks) || timeline.elapsedTicks < 0
       || !Number.isSafeInteger(timeline.windupTicks) || timeline.windupTicks < 1
       || !Number.isSafeInteger(timeline.recoveryTicks) || timeline.recoveryTicks < 0
@@ -242,7 +266,6 @@ export class GameSimulation {
       this.evadeCooldown = 2.5;
       this.warriorPending = null;
       this.warriorAction = null;
-    this.classAction = null;
       this.classAction = null;
       this.movePath = [];
       this.attackTarget = null;
@@ -289,7 +312,6 @@ export class GameSimulation {
     if (!this.player.alive || this.paused) return;
     if (command.type === 'interactObject') {
       this.warriorAction = null;
-    this.classAction = null;
       this.classAction = null;
       this.warriorPending = null;
       const object = getWorldObject(command.id, this.zone);
@@ -307,7 +329,6 @@ export class GameSimulation {
     }
     if (command.type === 'usePortal') {
       this.warriorAction = null;
-    this.classAction = null;
       this.classAction = null;
       this.warriorPending = null;
       this.movePath = [];
@@ -323,7 +344,6 @@ export class GameSimulation {
     }
     if (command.type === 'interactNpc') {
       this.warriorAction = null;
-    this.classAction = null;
       this.classAction = null;
       this.warriorPending = null;
       if (this.zone !== 'wilderness' || !isNpcId(command.npcId)) return;
@@ -369,7 +389,6 @@ export class GameSimulation {
       if (!target) return;
       this.warriorPending = null;
       this.warriorAction = null;
-    this.classAction = null;
       this.classAction = null;
       const route = findPath(this.player, target, ACTOR_RADIUS, this.world.obstacles);
       if (!route.length) return;
@@ -387,7 +406,6 @@ export class GameSimulation {
       this.selectedTargetId = selected.actor.id;
       this.warriorPending = null;
       this.warriorAction = null;
-    this.classAction = null;
       this.classAction = null;
       this.attackTarget = selected.actor.id;
       this.movePath = [];
@@ -719,7 +737,6 @@ export class GameSimulation {
       || this.statusEffects.player.some(e => e.id === 'stunned' || e.id === 'frozen')) {
       cancelCombatTimeline(action.timeline);
       this.warriorAction = null;
-    this.classAction = null;
       this.classAction = null;
       return;
     }
@@ -1116,7 +1133,6 @@ export class GameSimulation {
       this.player.alive = false;
       this.warriorPending = null;
       this.warriorAction = null;
-    this.classAction = null;
       this.classAction = null;
       this.pendingSkill = null;
       this.pendingAim = null;
