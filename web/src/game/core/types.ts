@@ -132,7 +132,7 @@ export type GameCommand =
   | { type: 'questAccept' }
   | { type: 'questTurnIn' }
   | { type: 'pickup'; id: string }
-  | { type: 'equip'; index: number }
+  | { type: 'equip'; index: number; slot?: EquipmentSlot }
   | { type: 'unequip'; slot: EquipmentSlot }
   | { type: 'swapInventory'; fromIndex: number; toIndex: number }
   | { type: 'sortInventory' }
