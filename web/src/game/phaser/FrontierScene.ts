@@ -24,10 +24,11 @@ import {
 import { ACTOR_RADIUS, canOccupy, type Obstacle } from '../world/navigation';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
 import {
-  CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
-  generateCrypt
+  CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS
 } from '../world/generator';
 import { buildWilderness } from '../world/wildernessRuntime';
+import { buildCryptWorld } from '../world/dungeonRuntime';
+import type { ProceduralDungeonResult, DungeonRoomType } from '../world/proceduralDungeon';
 import {
   createChunkIndex, planVisibleChunks,
   type ChunkIndex, type ChunkManifest
@@ -994,29 +995,42 @@ export class FrontierScene extends Phaser.Scene {
 
   private paintCrypt(
     g: Phaser.GameObjects.Graphics, seed: number,
-    walls: readonly { x: number; y: number; width: number; height: number }[]
+    walls: readonly { x: number; y: number; width: number; height: number }[],
+    dungeon: ProceduralDungeonResult
   ): void {
     g.fillStyle(0x0a0c14).fillRect(0, 0, WIDTH, HEIGHT);
-    let state = (seed ^ 0x7aa0b1c3) >>> 0;
-    const random = () => {
-      state = (Math.imul(1664525, state) + 1013904223) >>> 0;
-      return state / 4294967296;
+    // Render only walkable tiles supplied by the same pure plan as collisions.
+    // No decorative path is allowed to pass through an authoritative wall.
+    const roomPalette: Record<DungeonRoomType, number> = {
+      entrance: 0x343a3a, corridor: 0x2d323b, combat: 0x3b3034,
+      elite: 0x45313b, event: 0x333c42, treasure: 0x4c4031,
+      trap: 0x49363b, secret: 0x303b39, boss: 0x493038
     };
-    for (let y = 0; y < HEIGHT; y += 52) {
-      for (let x = 0; x < WIDTH; x += 52) {
-        g.fillStyle(random() > 0.5 ? 0x1b1f29 : 0x24232e, 0.95)
-          .fillRect(x + 1, y + 1, 50, 50);
-        if (random() < 0.10) {
-          g.lineStyle(2, 0x4d4050, 0.32)
-            .lineBetween(x + 8, y + 9, x + 37, y + 31);
-        }
-      }
+    const roomById = new Map(dungeon.rooms.map(room => [room.id, room]));
+    for (const tile of dungeon.tiles) {
+      if (tile.kind !== 'floor') continue;
+      const room = tile.roomId ? roomById.get(tile.roomId) : undefined;
+      const palette = room ? roomPalette[room.type] : 0x34313b;
+      const shade = ((tile.x / 40 + tile.y / 40 + seed) % 4) * 0.035;
+      g.fillStyle(palette, 0.76 + shade).fillRect(tile.x + 1, tile.y + 1, 38, 38);
+      g.lineStyle(1, 0x786c76, 0.11)
+        .strokeRect(tile.x + 2, tile.y + 2, 36, 36);
     }
-    // Worn central processional path towards the tomb throne.
-    g.fillStyle(0x37303b, 0.55)
-      .fillRoundedRect(230, 560, 1490, 248, 35);
-    g.lineStyle(3, 0x6b515c, 0.4)
-      .strokeRoundedRect(235, 566, 1480, 238, 30);
+    for (const door of dungeon.doors) {
+      const color = door.kind === 'hidden' ? 0x64837c : 0x9b8481;
+      g.lineStyle(3, color, door.kind === 'hidden' ? 0.42 : 0.7)
+        .lineBetween(door.portalA.x, door.portalA.y,
+          door.portalB.x, door.portalB.y);
+    }
+    for (const room of dungeon.rooms) {
+      if (!room.feature) continue;
+      const color = room.type === 'trap' ? 0xbd565c
+        : room.type === 'treasure' ? 0xc8a46e
+        : room.type === 'secret' ? 0x63968d
+        : room.type === 'boss' ? 0xd28187 : 0x827c9f;
+      g.lineStyle(room.type === 'boss' ? 4 : 2, color, 0.42)
+        .strokeCircle(room.center.x, room.center.y, room.type === 'boss' ? 120 : 52);
+    }
     for (const wall of walls) {
       g.fillStyle(0x42434f).fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 4);
       g.lineStyle(3, 0x77727a, 0.85)
@@ -1027,7 +1041,7 @@ export class FrontierScene extends Phaser.Scene {
       }
     }
     // Boss arena sigil and the return portal.
-    const boss = CRYPT_BOSS_POSITIONS[0]!;
+    const boss = dungeon.bossSpawn;
     g.lineStyle(5, 0xa24f58, 0.52).strokeCircle(boss.x, boss.y, 174);
     g.lineStyle(2, 0xcf8584, 0.48).strokeCircle(boss.x, boss.y, 141);
     for (let i = 0; i < 8; i++) {
@@ -1041,7 +1055,8 @@ export class FrontierScene extends Phaser.Scene {
 
   private paintWorld(worldSeed: number, zone: ZoneId): void {
     const wilderness = zone === 'wilderness' ? buildWilderness(worldSeed) : null;
-    const layout = zone === 'crypt' ? generateCrypt(worldSeed) : wilderness!.layout;
+    const crypt = zone === 'crypt' ? buildCryptWorld(worldSeed) : null;
+    const layout = crypt?.layout ?? wilderness!.layout;
     if (!this.terrain) this.terrain = this.add.graphics().setDepth(-100);
     const ground = this.terrain;
     ground.clear();
@@ -1051,7 +1066,7 @@ export class FrontierScene extends Phaser.Scene {
     this.activeObstacles = layout.obstacles;
     this.activeStoryFeatures = wilderness?.features ?? [];
     if (zone === 'crypt') {
-      this.paintCrypt(ground, worldSeed, layout.obstacles);
+      this.paintCrypt(ground, worldSeed, layout.obstacles, crypt!.dungeon);
       return;
     }
     ground.fillStyle(0x10161d).fillRect(0, 0, WIDTH, HEIGHT);
