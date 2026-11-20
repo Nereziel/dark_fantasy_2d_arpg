@@ -269,8 +269,8 @@ describe('Agent 25: Act I quest-chain data and compatibility', () => {
       (l: QuestLedger) => { (l.quests[1].counters as Record<string, number>)[ACT_I_MILESTONES[0].objectiveId] = -1; },
       (l: QuestLedger) => { (l.quests[0] as { rewardClaimed: boolean }).rewardClaimed = true; },
       (l: QuestLedger) => { (l.quests[1] as { questId: string }).questId = '__proto__'; },
-      (l: QuestLedger) => { (l.quests[1] as { processedEventIds: string[] }).processedEventIds = ['x', 'x']; },
-      (l: QuestLedger) => { (l.quests[1] as { processedEventIds: string[] }).processedEventIds = ['bad id']; }
+      (l: QuestLedger) => { (l.quests[1] as unknown as { processedEventIds: string[] }).processedEventIds = ['x', 'x']; },
+      (l: QuestLedger) => { (l.quests[1] as unknown as { processedEventIds: string[] }).processedEventIds = ['bad id']; }
     ];
     for (const corrupt of invalids) {
       const candidate = parsed(full);
