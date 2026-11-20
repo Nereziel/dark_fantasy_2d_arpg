@@ -1,6 +1,6 @@
 # Integrátor — Wave E, Prompty 21–22, agenti 25–27
 
-**Účel:** dokončit reálný Act I příběh a seedovanou divočinu v prohlížeči v malých PR. Tato dokumentace je příprava, **nic zatím není implementováno ani sloučeno**. Vlastníci agenta a write-setů: [WAVE_E.md](WAVE_E.md).
+**Účel:** historický runbook integrace Act I a seedované divočiny. **Agentní moduly i runtime core už byly sloučeny**; kontrolní políčka níže jsou původní plán, nikoli automaticky prokázaná full acceptance. Viz skutečný záznam v závěru. Vlastníci agenta a write-setů: [WAVE_E.md](WAVE_E.md).
 
 ## 0 — Před dispatchí
 
@@ -42,3 +42,12 @@
 **STOP** při save-loss v8/v9/v10, dvojím XP/gold, záměně NPC/quest IDs, nedosažitelném story cíli, cyklu/prerequisite deadlock, kolizi town, nestabilním seedu, ad-hoc `Math.random`, UI authority, rozbitém Pages subpath, fail v check/test/build/E2E nebo změně mimo exact write-set. Vrať blocker k příslušnému rozhraní; nezakrývej regresi vypnutím testu.
 
 **Waypoint fast travel není součástí Wave E; Prompt 36 zůstává samostatný.** Po uzavření Wave E pokračuj v číselném pořadí Promptem 23 (world chunking), nikoli předběžnou implementací cestování.
+
+## Skutečný closeout integrátora — 20. 11. 2026
+
+- Agent 25 [#42](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/42) → Agent 26 [#41](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/41) → Agent 27 [#43](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/43), všechny exact-write-set a CI GREEN; integrátor provedl všechny merge.
+- [#44](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/44): společný `buildWilderness` pro simulaci a Phaser, spawn/kolize/terrain/roads/POI mapy. [CI 44737499897](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44737499897) GREEN.
+- [#45](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/45): serverless autoritativní quest ledger, Act I eventy, Morrow, evidence, krypta, závěrečné hlášení Vesně, CS/EN journal/dialogue, quest markery, save v11 character-only s migracemi v8/v9/v10. Zachována historická první odměna i stash v10. [CI 44740992933](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44740992933) GREEN: **547/547 Vitest, 13/13 Chromium Playwright, 0 type errors, 0 warnings, Vite build a legacy HTML test**. Runtime merge SHA `5763b1d84d4037512ca448871b83c8b9312686dd`.
+- Ověřené integrační unit scénáře: první vyšetřování přidá progress po skutečné blízkosti landmarku, 1× reward a save/reload; vyplácení hlášení Vesně pouze ve městě a bez duplikace po načtení.
+- **Neuzavřeno:** full no-debug browser Act I route a případné live treasure/event interakce generovaných optional POI; finální Pages deployment musí být ověřen zvlášť pro head main. Není oprávněné označit full acceptance bez těchto bodů.
+- Prompt 36 waypoint fast travel beze změny.
