@@ -71,7 +71,7 @@ describe('Prompt 08 — all original classes share authoritative fixed-hit timel
       frames(sim,1);
       expect(sim.snapshot().classAction?.kind).toBe('basic');
       expect(sim.snapshot().enemies[1]!.actor.health).toBe(enemy.health);
-      frames(sim,BASIC_ATTACK_TIMELINE.windupTicks!-2);
+      frames(sim,BASIC_ATTACK_TIMELINE.windupTicks!-1);
       expect(sim.snapshot().enemies[1]!.actor.health).toBe(enemy.health);
       frames(sim,1);
       expect(sim.snapshot().enemies[1]!.actor.health).toBeLessThan(enemy.health);
