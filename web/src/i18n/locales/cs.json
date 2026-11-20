@@ -544,5 +544,19 @@
     "experience": "Zkušenosti",
     "skillPoints": "Body dovedností",
     "talentPoints": "Talentové body"
+  },
+  "eliteModifier": {
+    "extraHealth": "Zvýšené životy",
+    "increasedDamage": "Silnější útok",
+    "fast": "Rychlý",
+    "fireAura": "Ohnivá aura",
+    "frostAttacks": "Mrazivé útoky",
+    "poisonAttacks": "Jedové útoky",
+    "teleporting": "Teleportace",
+    "shielded": "Ochranný štít",
+    "regenerating": "Regenerace",
+    "summoner": "Vyvolávač",
+    "explodesOnDeath": "Výbuch po smrti",
+    "hazardousGround": "Nebezpečná zem"
   }
 }
