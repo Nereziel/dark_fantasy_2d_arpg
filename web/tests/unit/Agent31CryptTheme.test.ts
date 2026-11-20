@@ -319,7 +319,7 @@ describe('Agent 31 — immutable outputs and forged dungeon rejection', () => {
       d => { d.bossGuardSpawns[0] = { x: 0, y: 0 }; },
       d => { d.rooms[0].props = [{ id: 'forged' }]; }
     ];
-    const invalidFlag = structuredClone(original);
+    const invalidFlag: any = structuredClone(original);
     invalidFlag.validation.valid = false;
     expect(() => buildCryptTheme(invalidFlag)).toThrow(RangeError);
     for (const corrupt of corruptions) {
