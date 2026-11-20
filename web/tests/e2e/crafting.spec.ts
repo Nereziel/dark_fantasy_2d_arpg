@@ -1,0 +1,30 @@
+import { test, expect } from '@playwright/test';
+
+test('blacksmith salvages real purchased item, persists material wallet and denies double salvage', async ({page}) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button',{name:'Enter the world'}).click();
+  await page.getByRole('button',{name:'Browse wares'}).click();
+  const merchant=page.getByRole('dialog',{name:'Merchant Bram'});
+  await merchant.getByRole('button',{name:'Buy Studded War Belt'}).click();
+  await merchant.getByRole('button',{name:'Leave'}).click();
+  await page.getByRole('button',{name:'Visit blacksmith'}).click();
+  const smith=page.getByRole('dialog',{name:'Blacksmith Odan'});
+  await expect(smith).toContainText('Crafting and Salvage');
+  const wallet=smith.getByTestId('materials-wallet');
+  await expect(wallet.locator('[data-material="iron"]')).toHaveText('0');
+  const belt=smith.locator('[data-craft-id^="trade-belt-"]');
+  await expect(belt).toBeVisible();
+  await belt.getByRole('button',{name:/Salvage/}).click();
+  await expect(belt).toHaveCount(0);
+  await expect(wallet.locator('[data-material="iron"]')).not.toHaveText('0');
+  await smith.getByRole('button',{name:'Leave'}).click();
+  await page.getByRole('button',{name:'Save'}).click();
+  await expect(page.getByRole('status')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button',{name:'Load'}).click();
+  await page.getByRole('button',{name:'Visit blacksmith'}).click();
+  const restored=page.getByRole('dialog',{name:'Blacksmith Odan'});
+  await expect(restored.locator('[data-material="iron"]')).not.toHaveText('0');
+  await expect(restored.locator('[data-craft-id^="trade-belt-"]')).toHaveCount(0);
+});
