@@ -110,7 +110,7 @@ jobs:
 
   deploy:
     needs: verify
-    if: github.event_name != 'pull_request' && needs.verify.outputs.publish == 'true'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.verify.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
