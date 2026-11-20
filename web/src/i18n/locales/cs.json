@@ -872,5 +872,11 @@
         }
       }
     }
+  },
+  "skillModifiers": {
+    "enhanced": "Změněno",
+    "radius": "Dosah",
+    "pull": "Přitažení",
+    "bleeding": "Krvácení"
   }
 }
