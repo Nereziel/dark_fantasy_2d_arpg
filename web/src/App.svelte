@@ -96,6 +96,7 @@
         bridge.command({ type: 'pause', value: true });
       }
       if (event.type === 'townServiceUsed' && playing) messageKey = 'town.serviceSuccess';
+      if (event.type === 'tradeRejected' && playing) messageKey = 'trade.error.' + event.reason;
       if (event.type === 'npcDialogue' && playing) {
         inventoryOpen = false;
         if (event.npcId === WARDEN_ID) {

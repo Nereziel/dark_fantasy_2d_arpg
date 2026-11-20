@@ -510,6 +510,12 @@
     }
   },
   "trade": {
+    "error": {
+      "funds": "Nemáš dost zlata.",
+      "inventory": "V batohu není volné místo.",
+      "protected": "Zamčené nebo oblíbené předměty nelze prodat.",
+      "invalid": "Obchodní transakci nelze provést."
+    },
     "campServices": "Služby tábora",
     "browse": "Prohlédnout zboží",
     "visitSmith": "Navštívit kováře",

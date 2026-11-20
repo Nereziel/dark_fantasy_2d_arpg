@@ -510,6 +510,12 @@
     }
   },
   "trade": {
+    "error": {
+      "funds": "Not enough gold.",
+      "inventory": "Your inventory is full.",
+      "protected": "Locked or favorite items cannot be sold.",
+      "invalid": "The trade could not be completed."
+    },
     "campServices": "Camp services",
     "browse": "Browse wares",
     "visitSmith": "Visit blacksmith",

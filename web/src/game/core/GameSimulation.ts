@@ -43,7 +43,9 @@ import {
   nearNpc, nearWarden, isNpcId, NPC_POSITIONS, NPC_INTERACT_RANGE,
   MERCHANT_ID, BLACKSMITH_ID, type NpcId
 } from '../world/npcs';
-import { getOffer, createShopItem, sellPrice, temperCost, temperItem } from '../trade/commerce';
+import { getOffer, createShopItem, temperItem } from '../trade/commerce';
+import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planService,
+  selectVendorStock, type EconomyFailure } from '../trade/economyRules';
 import { townEntry, canInteractTownEntry } from '../world/townManifest';
 import {
   freshQuest, validQuest, QUEST_REQUIRED_KILLS, QUEST_REWARD_GOLD, QUEST_REWARD_XP,
@@ -534,12 +536,30 @@ export class GameSimulation {
     return this.zone === 'wilderness' && this.player.alive && nearNpc(this.player, npcId);
   }
 
+  private rejectTrade(reason: EconomyFailure): void {
+    this.events.push({ type: 'tradeRejected', reason: reason === 'INSUFFICIENT_GOLD'
+      ? 'funds' : reason === 'INVENTORY_FULL' ? 'inventory'
+        : reason === 'LOCKED_ITEM' || reason === 'FAVORITE_ITEM' ? 'protected' : 'invalid' });
+  }
+
+  /** All money and item mutations commit only after a canonical domain plan. */
   private buyItem(offerId: string): void {
     if (!this.shopAllowed(MERCHANT_ID)) return;
+    const stock = selectVendorStock({
+      vendorId: MERCHANT_ID, playerLevel: this.level, gold: this.gold,
+      seed: this.world.seed, epoch: 0
+    });
     const offer = getOffer(offerId);
+    if (!stock.ok || !offer || !stock.offers.some(current => current.id === offer.id)) {
+      this.rejectTrade('OUT_OF_STOCK');
+      return;
+    }
     const index = this.inventory.findIndex(item => item === null);
-    if (!offer || index < 0 || this.gold < offer.price) return;
-    // IDs must not collide with purchased items from previous sessions.
+    const quote = quotePurchase(offer);
+    const plan = planPurchase(quote, this.gold,
+      this.inventory.filter(item => item === null).length, { playerLevel: this.level });
+    if (!plan.ok) { this.rejectTrade(plan.reason); return; }
+    if (index < 0) { this.rejectTrade('INVENTORY_FULL'); return; }
     const existing = new Set(
       [...this.inventory, ...Object.values(this.equipment)]
         .filter((item): item is Item => item !== null)
@@ -547,16 +567,23 @@ export class GameSimulation {
     );
     let suffix = 1;
     while (existing.has(`trade-${offer.id}-${suffix}`)) suffix++;
-    this.inventory[index] = createShopItem(offer, `trade-${offer.id}-${suffix}`);
-    this.gold -= offer.price;
+    const newItem = createShopItem(offer, `trade-${offer.id}-${suffix}`);
+    this.inventory[index] = newItem;
+    this.gold = plan.goldAfter;
   }
 
   private sellItem(index: number): void {
     if (!this.shopAllowed(MERCHANT_ID)
       || !Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return;
     const item = this.inventory[index];
-    if (!item || this.itemFlags[item.id]?.locked || this.itemFlags[item.id]?.favorite) return;
-    this.gold += sellPrice(item);
+    if (!item) return;
+    const quote = quoteSale(item);
+    const plan = planSale(quote, this.gold, {
+      owned: true, locked: this.itemFlags[item.id]?.locked ?? false,
+      favorite: this.itemFlags[item.id]?.favorite ?? false
+    });
+    if (!plan.ok) { this.rejectTrade(plan.reason); return; }
+    this.gold = plan.goldAfter;
     delete this.itemFlags[item.id];
     this.inventory[index] = null;
   }
@@ -565,12 +592,13 @@ export class GameSimulation {
     if (!this.shopAllowed(BLACKSMITH_ID) || !isEquipmentSlot(slot)) return;
     const item = this.equipment[slot];
     if (!item) return;
+    const quote = quoteTempering(item);
+    const plan = planService(quote, this.gold, { playerLevel: this.level });
+    if (!plan.ok) { this.rejectTrade(plan.reason); return; }
     const forged = temperItem(item);
-    if (!forged) return;
-    const price = temperCost(item);
-    if (this.gold < price) return;
+    if (!forged) { this.rejectTrade('SERVICE_UNAVAILABLE'); return; }
     this.equipment[slot] = forged;
-    this.gold -= price;
+    this.gold = plan.goldAfter;
     this.refreshHealthLimit();
   }
 
