@@ -1062,6 +1062,25 @@ export class GameSimulation {
       !isLegacyStatus(effect.id) && effect.remaining > 0);
   }
 
+  private beginMonsterAttack(unit: EnemyUnit, choice?: MonsterAction): void {
+    const actor = unit.actor;
+    const def = ENEMY_DEFINITIONS[actor.type];
+    const pattern = choice?.attack ?? def.attack;
+    const center = pattern === 'sweep' ? actor : this.player;
+    const windup = choice?.windup ?? def.windup;
+    unit.intent = {
+      pattern, x: center.x, y: center.y,
+      radius: choice?.areaRadius ?? (choice && pattern === 'sweep'
+        ? Math.max(65, choice.range) : def.dangerRadius),
+      remaining: windup, total: windup,
+      ...(choice ? { abilityId: choice.id } : {})
+    };
+    if (choice) {
+      (unit.abilityCooldowns ??= {})[choice.id] = choice.cooldown;
+    }
+    this.events.push({ type: 'enemyWindup', enemyId: actor.id, pattern });
+  }
+
   /** Deterministic tactical planner: obstacle-aware movement, role-specific actions. */
   private updateMonsterTactics(unit: EnemyUnit, dt: number): void {
     const actor = unit.actor;
@@ -1114,6 +1133,24 @@ export class GameSimulation {
       unit.cooldown = Math.max(unit.cooldown, 0.65);
       this.syncLegacyStatuses();
       this.events.push({ type: 'enemyBuff', enemyId: actor.id, abilityId: buff.id });
+      return;
+    }
+
+    // Charge, pounce and ranged control can start beyond ordinary attack range.
+    // Defensive area skills may fire inside their radius before a caster flees.
+    const specialist = target && unit.cooldown <= 0
+      && distance(actor, origin) <= profile.leashRange
+      && distance(origin, target) <= profile.leashRange
+      ? actions.find(action => (action.kind === 'damage' || action.kind === 'debuff')
+        && ready(action) && toPlayer <= action.range
+        && (lineOfSight || action.attack === 'sweep')
+        && (action.attack === 'leap' && toPlayer > def.attackRange
+          || action.attack === 'bolt' && action.statusId !== undefined
+            && toPlayer > def.attackRange
+          || action.attack === 'sweep' && action.areaRadius !== undefined
+            && toPlayer <= action.areaRadius && role === 'caster')) : undefined;
+    if (specialist) {
+      this.beginMonsterAttack(unit, specialist);
       return;
     }
 
@@ -1173,18 +1210,7 @@ export class GameSimulation {
         (action.kind === 'damage' || action.kind === 'debuff') && ready(action)
         && toPlayer <= action.range
         && (lineOfSight || action.attack === 'sweep'));
-      const pattern = choice?.attack ?? def.attack;
-      const center = pattern === 'sweep' ? actor : this.player;
-      unit.intent = {
-        pattern, x: center.x, y: center.y,
-        radius: choice?.areaRadius ?? (choice && pattern === 'sweep'
-          ? Math.max(65, choice.range) : def.dangerRadius),
-        remaining: choice?.windup ?? def.windup,
-        total: choice?.windup ?? def.windup,
-        ...(choice ? { abilityId: choice.id } : {})
-      };
-      if (choice) abilityCooldowns[choice.id] = choice.cooldown;
-      this.events.push({ type: 'enemyWindup', enemyId: actor.id, pattern });
+      this.beginMonsterAttack(unit, choice);
       return;
     }
     if ('destination' in decision) {
