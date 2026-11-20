@@ -728,8 +728,11 @@ export class GameSimulation {
       }
       return;
     }
-    if (skill.kind === 'dash' && this.holdPosition) return;
-    if (this.immobilized || this.statusEffects.player.some(e => e.id === 'silenced')
+    if (skill.kind === 'dash' && (this.holdPosition || this.immobilized)) return;
+    // Root restricts movement and dashes, not stationary spells.
+    if (this.effects.player.some(e => e.id === 'stunned')
+      || this.statusEffects.player.some(e =>
+        e.id === 'stunned' || e.id === 'frozen' || e.id === 'silenced')
       || this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
 
     // Aimed positions and directions are validated by the authoritative simulation.
