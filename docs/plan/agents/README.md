@@ -1,6 +1,23 @@
-# Koordinace agentů — Wave E core integrována (agenti 25–27)
+# Koordinace agentů — Wave F připravena (agenti 28–30, Prompty 23–25)
 
-**Aktuální záznam / historický plán:** [WAVE_E.md](WAVE_E.md), [INTEGRATION_E.md](INTEGRATION_E.md), [25/TASK.md](25/TASK.md), [26/TASK.md](26/TASK.md), [27/TASK.md](27/TASK.md). **Max. 3 paralelní agenti**, dva výhradní soubory na agenta, společné BASE_SHA stanoví integrátor až při dispatchi z aktuálního HEAD main. Prompt 21 = Act I quest chain (25); Prompt 22 = procedurální terén (26) a POI/události (27). Agentní PR #42/#41/#43 a runtime PR #44/#45 byly integrovány do `main`. CS/EN a charakterové migrace v8/v9/v10→v11 jsou připojeny; 547/547 jednotkových a 13/13 Chromium prošlo. Plná no-debug příběhová E2E cesta a live optional POI rewards zbývají jako acceptance closeout. Agenty **25–27 znovu nespouštěj**. **Waypoint fast travel = budoucí Prompt 36.** Použít [WORKFLOW_CACHE.md](WORKFLOW_CACHE.md).
+**Aktuální zadání:** [WAVE_F.md](WAVE_F.md), [INTEGRATION_F.md](INTEGRATION_F.md) a konkrétní [Agent 28](28/TASK.md), [Agent 29](29/TASK.md), [Agent 30](30/TASK.md). Max. **3 paralelní agenti** na přesně vyhrazených, nepřekrývajících se dvousouborových write-setech. Všichni začínají ze **stejného 40znakového BASE_SHA určeného až integrátorem při dispatchi**, po merge plánovacího PR do aktuálního `main`.
+
+| Agent | Originální prompt | Pouze produkční soubor a unikátní test |
+| --- | --- | --- |
+| **28** | **23 — World Chunking and Streaming** | `web/src/game/world/chunkStreaming.ts` + `web/tests/unit/Agent28ChunkStreaming.test.ts` |
+| **29** | **24 — Map, Minimap, Fog of War** | `web/src/game/world/mapDiscovery.ts` + `web/tests/unit/Agent29MapDiscovery.test.ts` |
+| **30** | **25 — Procedural Dungeon Generator** | `web/src/game/world/proceduralDungeon.ts` + `web/tests/unit/Agent30ProceduralDungeon.test.ts` |
+
+**Dispatch:** až po ověření společného HEAD; pro každý nový worktree použít `bash scripts/agent-bootstrap.sh`, pak RED→GREEN a `bash scripts/verify.sh targeted ...` → `bash scripts/verify.sh agent` podle [WORKFLOW_CACHE.md](WORKFLOW_CACHE.md). Žádný agent nesmí měnit `GameSimulation`, `FrontierScene`, Svelte UI, save v11, i18n ani moduly dalších agentů. Výstup pouze **draft PR**, bez merge; následný integrátor slučuje **28 → 29 → 30** a teprve potom propojuje streaming/mapu/dungeon v samostatných runtime PR. **Příprava Wave F neznamená její implementaci.**
+
+**Waypoint fast travel = až Prompt 36.** Aktuální **character-only save v11** se nemění agentními PR; budoucí perzistenci mapových/world faktů integrátor explicitně odliší od seedově dočasného stavu a bude verzovat bez ztráty v8/v9/v10/v11.
+
+---
+
+## Archiv: Wave E — story & wilderness core integrována (agenti 25–27)
+
+[WAVE_E.md](WAVE_E.md), [INTEGRATION_E.md](INTEGRATION_E.md), [25/TASK.md](25/TASK.md), [26/TASK.md](26/TASK.md), [27/TASK.md](27/TASK.md).
+Agentní PR #42/#41/#43 a runtime PR #44/#45 jsou sloučené do `main`; dokumentace #46. 547/547 jednotkových a 13/13 Chromium testů prošlo v PR runtime, dokončen byl i CS/EN a character-only save v11 (migrace v8/v9/v10). Uživatel potvrdil manuální průchod celým Aktem I; **automatický full no-debug Act I E2E a interaktivní optional POI event/treasure** zůstávají k doložení. **Agenty 25–27 znovu nespouštěj**.
 
 ---
 
