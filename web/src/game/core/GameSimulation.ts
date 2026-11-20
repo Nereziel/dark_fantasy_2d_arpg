@@ -22,8 +22,9 @@ import {
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
 import { planEnemyBehavior } from '../enemies/behaviorPlanner';
+import { monsterActions, monsterAction, type MonsterAction } from '../enemies/monsterRuntime';
 import { getEnemyArchetype } from '../enemies/archetypeCatalog';
-import { ACTOR_RADIUS, canOccupy, findPath, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
+import { ACTOR_RADIUS, canOccupy, findPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
   generateWorld, generateCrypt, type WorldLayout
@@ -62,7 +63,8 @@ function cloneUnit(unit: EnemyUnit): EnemyUnit {
     actor: { ...unit.actor },
     intent: unit.intent ? { ...unit.intent } : null,
     cooldown: unit.cooldown,
-    effects: unit.effects.map(effect => ({ ...effect }))
+    effects: unit.effects.map(effect => ({ ...effect })),
+    ...(unit.abilityCooldowns ? { abilityCooldowns: { ...unit.abilityCooldowns } } : {})
   };
 }
 function validActor(actor: ActorSnapshot, id: string, obstacles: readonly Obstacle[]): boolean {
@@ -860,12 +862,16 @@ export class GameSimulation {
     return result.damage > 0;
   }
 
-  private fireBolt(source: EnemyUnit, target: Point, radius: number, base: number): void {
+  private fireBolt(source: EnemyUnit, target: Point, radius: number, base: number, action?: MonsterAction): void {
     const shot: ProjectileSnapshot = {
       id: 'projectile-' + (++this.nextProjectileId),
       sourceId: source.actor.id, x: source.actor.x, y: source.actor.y,
-      target: { ...target }, type: 'shadow',
-      speed: 560, radius, remaining: 2.5, base
+      target: { ...target }, type: action?.statusId === 'poisoned' ? 'poison'
+        : action?.statusId === 'slowed' ? 'frost' : 'shadow',
+      speed: 560, radius, remaining: 2.5, base,
+      ...(action?.statusId ? { statusId: action.statusId } : {}),
+      ...(action?.statusDuration ? { statusDuration: action.statusDuration } : {}),
+      ...(action?.statusMagnitude ? { statusMagnitude: action.statusMagnitude } : {})
     };
     this.projectiles.push(shot);
     this.events.push({ type: 'projectileLaunch', id: shot.id, sourceId: shot.sourceId });
@@ -889,9 +895,14 @@ export class GameSimulation {
       }
       const sanctuary = this.zone === 'wilderness'
         && distance(this.player, this.world.camp) <= CAMP_RADIUS;
-      const hit = !blocked && landed && !sanctuary
-        && distance(this.player, shot.target) <= shot.radius
-        && this.dealPlayerDamage(shot.base, shot.type, shot.sourceId);
+      const impact = !blocked && landed && !sanctuary
+        && distance(this.player, shot.target) <= shot.radius && this.player.alive;
+      const hit = impact && (shot.base <= 0
+        || this.dealPlayerDamage(shot.base, shot.type, shot.sourceId));
+      if (hit && shot.statusId) {
+        this.applyCanonicalStatus('player', shot.statusId, shot.sourceId,
+          shot.statusMagnitude, shot.statusDuration);
+      }
       this.events.push({ type: 'projectileImpact', id: shot.id, hit: Boolean(hit) });
       this.events.push({ type: 'enemyAttack', enemyId: shot.sourceId, hit: Boolean(hit) });
     }
@@ -1121,6 +1132,11 @@ export class GameSimulation {
       return;
     }
     unit.cooldown = Math.max(0, unit.cooldown - dt);
+    if (unit.abilityCooldowns) {
+      for (const id of Object.keys(unit.abilityCooldowns)) {
+        unit.abilityCooldowns[id] = Math.max(0, unit.abilityCooldowns[id]! - dt);
+      }
+    }
     const actor = unit.actor;
     const def = ENEMY_DEFINITIONS[actor.type];
     if (unit.effects.some(effect => effect.id === 'stunned')
@@ -1145,19 +1161,20 @@ export class GameSimulation {
           actor.y = intent.y;
         }
       }
+      const action = intent.abilityId ? monsterAction(actor.type, intent.abilityId) : undefined;
+      const baseDamage = action ? action.damage : def.baseDamage + this.level * 2;
       if (intent.pattern === 'bolt') {
-        this.fireBolt(unit, intent, intent.radius, def.baseDamage + this.level * 2);
+        this.fireBolt(unit, intent, intent.radius, baseDamage, action);
         return;
       }
       const hit = distance(this.player, intent) <= intent.radius
-        && this.dealPlayerDamage(def.baseDamage + this.level * 2,
-          intent.pattern === 'leap' ? 'poison' : 'physical', actor.id);
-      if (hit && intent.pattern === 'sweep' && actor.type === 'spider' && this.player.alive) {
-        this.applyCanonicalStatus('player', 'poisoned', actor.id, 3, 4);
-      }
-      if (hit && intent.pattern === 'leap' && this.player.alive) {
-        this.applyEffect('player',
-          { id: 'poisoned', remaining: 3, magnitude: 3, tick: 0 });
+        && (baseDamage <= 0 || this.dealPlayerDamage(baseDamage,
+          intent.pattern === 'leap' && !action ? 'poison' : 'physical', actor.id));
+      if (hit && action?.statusId && this.player.alive) {
+        this.applyCanonicalStatus('player', action.statusId, actor.id,
+          action.statusMagnitude, action.statusDuration);
+      } else if (hit && !action && intent.pattern === 'leap' && this.player.alive) {
+        this.applyCanonicalStatus('player', 'poisoned', actor.id, 3, 3);
       }
       this.events.push({ type: 'enemyAttack', enemyId: actor.id, hit: Boolean(hit) });
       return;
@@ -1605,6 +1622,12 @@ export class GameSimulation {
         && [p.x, p.y, p.target.x, p.target.y, p.speed, p.radius, p.remaining, p.base].every(Number.isFinite)
         && p.speed > 0 && p.remaining > 0 && p.remaining <= 5
         && p.radius > 0 && p.radius <= 250 && p.base >= 0
+        && (p.statusId === undefined || (typeof p.statusId === 'string'
+          && Object.hasOwn(STATUS_DEFINITIONS, p.statusId)))
+        && (p.statusDuration === undefined || (Number.isFinite(p.statusDuration)
+          && p.statusDuration > 0 && p.statusDuration <= 120))
+        && (p.statusMagnitude === undefined || (Number.isFinite(p.statusMagnitude)
+          && p.statusMagnitude >= 0 && p.statusMagnitude <= 10000))
         && ['physical', 'fire', 'frost', 'lightning', 'poison', 'holy', 'shadow', 'arcane'].includes(p.type))
       || !Array.isArray(s.usedInteractables) || s.usedInteractables.length > 8
       || !s.usedInteractables.every(isWorldObjectId)
@@ -1632,8 +1655,17 @@ export class GameSimulation {
           : unit.actor.type === packTypesForWave(s.wave)[index])
         && validActor(unit.actor, unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && validIntent(unit.intent)
-        && (unit.intent === null || unit.intent.pattern === ENEMY_DEFINITIONS[unit.actor.type].attack)
+        && (unit.intent?.abilityId === undefined
+          || monsterAction(unit.actor.type, unit.intent.abilityId) !== undefined)
+        && (unit.intent === null
+          || unit.intent.abilityId !== undefined
+          || unit.intent.pattern === ENEMY_DEFINITIONS[unit.actor.type].attack)
         && Number.isFinite(unit.cooldown) && unit.cooldown >= 0 && unit.cooldown <= 20
+        && (unit.abilityCooldowns === undefined || (!!unit.abilityCooldowns
+          && !Array.isArray(unit.abilityCooldowns)
+          && typeof unit.abilityCooldowns === 'object'
+          && Object.entries(unit.abilityCooldowns).every(([id, cd]) =>
+            !!monsterAction(unit.actor.type, id) && Number.isFinite(cd) && cd >= 0 && cd <= 30)))
         && Array.isArray(unit.effects) && unit.effects.length <= 8
         && unit.effects.every(isActiveEffect))
       || (s.selectedTargetId !== null && (
