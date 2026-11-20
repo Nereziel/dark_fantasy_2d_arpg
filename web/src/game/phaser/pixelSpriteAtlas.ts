@@ -1,12 +1,13 @@
 /**
  * Original, GPL-3.0-only procedural pixel-art frame atlas.
  * Deterministic 4-frame sequences for ten named combat animations. All 6 hero
- * classes and 15 enemy sprites share the same pixel scale but have distinct
+ * classes and 16 enemy sprites share the same pixel scale but have distinct
  * silhouettes, armor, weapons, colors and locomotion. No external assets.
  *
  * All drawing runs once at Phaser scene creation, never on a simulation tick.
  * Gameplay and collision remain owned by GameSimulation.
  */
+import type { CombatTimelineState } from '../animation/combatTimeline';
 import type { ClassId } from '../data/classes';
 import type { EnemyType } from '../enemies/enemies';
 
@@ -17,6 +18,21 @@ export type PixelAnimation = typeof PIXEL_ANIMATIONS[number];
 export const PIXEL_FRAME_WIDTH = 48;
 export const PIXEL_FRAME_HEIGHT = 56;
 export const PIXEL_ANIMATION_FRAMES = 4;
+
+/** Four visual frames align their contact pose to the authoritative damage tick.
+ * Before impact only anticipation frames play. Contact is exactly frame 2,
+ * independent of the action's overall recovery/channel duration.
+ */
+export function pixelTimelineFrame(state: Readonly<CombatTimelineState>): number {
+  if (state.phase === 'complete' || state.phase === 'cancelled' || state.phase === 'dead') return 3;
+  const impact = state.impactTick ?? state.windupTicks;
+  if (state.elapsedTicks < impact) {
+    return state.elapsedTicks * 2 < impact ? 0 : 1;
+  }
+  if (state.elapsedTicks === impact) return 2;
+  if (state.phase === 'sustain') return 2 + Math.floor((state.elapsedTicks - impact) / 8) % 2;
+  return 3;
+}
 
 export type PixelActor = ClassId | EnemyType;
 export type PixelActorShape = 'warrior' | 'mage' | 'rogue' | 'cleric'
