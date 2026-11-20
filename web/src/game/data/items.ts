@@ -7,7 +7,7 @@ export type { DerivedStats } from '../stats/deriveStats';
 export type EquipmentSlot = 'HELMET' | 'AMULET' | 'CHEST' | 'MAIN_HAND' | 'OFF_HAND' |
   'GLOVES' | 'BELT' | 'BOOTS' | 'RING_1' | 'RING_2' | 'RELIC' | 'CHARM';
 export type RarityId = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'MYTHIC';
-export type ItemStat = 'armor' | 'minDmg' | 'maxDmg' | 'blockChance' | AffixStat | 'resource';
+export type ItemStat = 'armor' | 'minDmg' | 'maxDmg' | 'blockChance' | AffixStat | 'resource' | 'willpower';
 export interface ItemAffix { id: string; stat: ItemStat; value: number; tier?: number; kind?: 'prefix' | 'suffix' }
 export interface Item {
   id: string;
