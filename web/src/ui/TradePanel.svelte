@@ -8,6 +8,7 @@
   } from '../game/trade/commerce';
   import { quotePurchase, quoteSale, quoteTempering } from '../game/trade/economyRules';
   import { MATERIAL_IDS, quoteCraft, type CraftKind } from '../game/crafting/craftingRules';
+  import GemForgePanel from './GemForgePanel.svelte';
   import {
     MERCHANT_ID, BLACKSMITH_ID, type TradeNpcId
   } from '../game/world/npcs';
@@ -207,6 +208,7 @@
           {/if}
         </div>
       </section>
+      <GemForgePanel {view} {bridge} />
     {/if}
     <footer class="trade-footer">
       <button class="secondary" onclick={close}>{$t('npc.leave')}</button>
