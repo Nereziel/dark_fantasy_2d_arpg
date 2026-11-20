@@ -82,6 +82,34 @@ describe('Wave D persistent, safe 24-slot camp stash', () => {
     expect(next.snapshot().stash?.[0]).toBeNull();
   });
 
+  it('never reuses a purchased ID when an earlier copy is stored in the stash', () => {
+    const sim = new GameSimulation();
+    sim.command({ type: 'buyItem', offerId: 'belt' });
+    atStash(sim);
+    sim.command({ type: 'stashDeposit', index: 0 });
+    const first = sim.snapshot().stash?.[0]?.id;
+    expect(first).toBe('trade-belt-1');
+    sim.command({ type: 'buyItem', offerId: 'belt' });
+    expect(sim.snapshot().inventory[0]?.id).toBe('trade-belt-2');
+    expect(sim.snapshot().stash?.[0]?.id).toBe(first);
+    expect(sim.snapshot().gold).toBe(11);
+    expect(createSaveRecord(sim.character())).not.toBeNull();
+  });
+
+  it('will not withdraw if the bag is full, even when stash has a valid item', () => {
+    const base = new GameSimulation().snapshot();
+    const inventory = Array.from({ length: 24 }, (_, i) =>
+      rollItem(i + 100, 1, new SeededRng(i + 700)));
+    const saved = rollItem(200, 1, new SeededRng(45));
+    const state = { inventory, equipment: base.equipment,
+      stash: [saved, ...Array(STASH_SIZE - 1).fill(null)] };
+    expect(validateStashContents(state)).toBe(true);
+    const planned = planStashWithdraw(state, 0);
+    expect(planned).toEqual({ ok: false, reason: 'INVENTORY_FULL' });
+    expect(state.inventory.every(Boolean)).toBe(true);
+    expect(state.stash[0]).toBe(saved);
+  });
+
   it('migrates v9 character data to an empty stash without altering old inventory, quest or gold', () => {
     const sim = new GameSimulation();
     sim.command({ type: 'buyItem', offerId: 'belt' });
