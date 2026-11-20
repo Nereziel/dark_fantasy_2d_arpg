@@ -1,12 +1,13 @@
 import Phaser from 'phaser';
 import { get } from 'svelte/store';
-import { _ as translate } from 'svelte-i18n';
+import { _ as translate, locale } from 'svelte-i18n';
 import { planCombatVfx } from './combatVfxPlan';
 import { statusVisuals } from '../status/statusVisuals';
 import type { StatusInstance } from '../status/statusRuntime';
 import type { GameBridge } from '../bridge/GameBridge';
 import { CLASSES } from '../data/classes';
 import { RARITIES } from '../data/items';
+import { itemDisplayName } from '../items/itemName';
 import { SKILLS } from '../skills/skills';
 import type { GameEvent, ZoneId, Point } from '../core/types';
 import {
@@ -55,6 +56,7 @@ export class FrontierScene extends Phaser.Scene {
   private readonly campDecor: Array<Phaser.GameObjects.Graphics | Phaser.GameObjects.Text> = [];
   private healthBar!: Phaser.GameObjects.Graphics;
   private groundItems!: Phaser.GameObjects.Graphics;
+  private readonly groundLabels = new Map<string, Phaser.GameObjects.Text>();
   private statusVisuals!: Phaser.GameObjects.Graphics;
   private telegraph!: Phaser.GameObjects.Graphics;
   private terrain!: Phaser.GameObjects.Graphics;
@@ -168,6 +170,8 @@ export class FrontierScene extends Phaser.Scene {
       this.heroSprite.destroy();
       for (const graphic of this.impactPool) graphic.destroy();
       this.impactPool.length = 0;
+      for (const label of this.groundLabels.values()) label.destroy();
+      this.groundLabels.clear();
       this.enemyHitUntil.clear();
       this.enemyBlockUntil.clear();
     });
@@ -757,16 +761,38 @@ export class FrontierScene extends Phaser.Scene {
         .strokeCircle(state.player.x, state.player.y, 27);
     }
     this.groundItems.clear();
+    const activeDrops = new Set(state.groundLoot.map(drop => drop.id));
+    for (const [id, label] of this.groundLabels) {
+      if (activeDrops.has(id)) continue;
+      label.destroy();
+      this.groundLabels.delete(id);
+    }
+    const translateItem = get(translate);
+    const language = get(locale) ?? 'en';
     for (const drop of state.groundLoot) {
       const hex = RARITIES[drop.item.rarity].color.replace('#', '');
       const color = Number.parseInt(hex, 16);
       if (this.hoveredId === drop.id) {
         this.groundItems.lineStyle(3, 0xffdc8d).strokeCircle(drop.x, drop.y, 25);
       }
+      this.groundItems.lineStyle(4, color, 0.35)
+        .lineBetween(drop.x, drop.y - 10, drop.x, drop.y - 44);
       this.groundItems.fillStyle(color, 0.13).fillCircle(drop.x, drop.y, 21);
       this.groundItems.lineStyle(2, color, 0.95).strokeCircle(drop.x, drop.y, 17);
       this.groundItems.fillStyle(color).fillRect(drop.x - 7, drop.y - 7, 14, 14);
       this.groundItems.lineStyle(2, 0xece6d7, 0.5).strokeRect(drop.x - 7, drop.y - 7, 14, 14);
+      let label = this.groundLabels.get(drop.id);
+      if (!label) {
+        label = this.add.text(drop.x, drop.y - 58, '', {
+          fontFamily: 'Georgia, serif', fontSize: '12px', color: '#' + hex,
+          stroke: '#090c11', strokeThickness: 3, align: 'center'
+        }).setOrigin(0.5).setDepth(55);
+        this.groundLabels.set(drop.id, label);
+      }
+      label.setPosition(drop.x, drop.y - 58).setColor('#' + hex).setText(
+        itemDisplayName(drop.item, language,
+          translateItem('item.base.' + drop.item.templateId))
+      );
     }
 
   }
