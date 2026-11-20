@@ -5,7 +5,60 @@
       "history": "Vzpomínky na první výpravu",
       "ask": "Zeptat se na původ nákazy",
       "details": "Z hrobek se šíří prach a temné šeptání. Vesničané mizí. Nejdřív zastav nakažené tvory před branou, pak se vrať s hlášením.",
-      "back": "Zpět k úkolu"
+      "back": "Zpět k úkolu",
+      "actI": {
+        "open": "Hrozba za branou",
+        "hub": "Vesna rozvine mapu. Co chceš vědět o stopách korupce?",
+        "back": "Zpět k mapě",
+        "trail_of_black_ash": {
+          "offer": "Zeptejte se na stopu černého popela",
+          "active": "Vypátrej ohnisko mezi pokřivenými stromy.",
+          "ready": "Našel jsi místo, odkud vychází nákaza.",
+          "briefing": "Hlídej popel. Vede tě přímo k jejímu srdci."
+        },
+        "blighted_pack": {
+          "offer": "Zeptat se na nakažená zvířata",
+          "active": "Vystopuj a poraz nakažené kance v pustině.",
+          "ready": "Nakažená smečka je poražena.",
+          "briefing": "Bestie se šíří od starého pohřebiště. Nesmíš je nechat dojít k městu."
+        },
+        "forgotten_graves": {
+          "offer": "Zeptat se na hřbitov",
+          "active": "Najdi staré náhrobky ukryté za lesem.",
+          "ready": "Hřbitov byl nalezen.",
+          "briefing": "Na hřbitov už léta nikdo nevkročil. Přesto odtud slyšíme zvony."
+        },
+        "morrow_gravebound": {
+          "offer": "Zeptat se na Morrowa",
+          "active": "Poraz pojmenovaného strážce hrobů Morrowa.",
+          "ready": "Morrow padl a hroby utichly.",
+          "briefing": "Morrow kdysi bránil mrtvé před znesvěcením. Nyní sám slouží zkáze."
+        },
+        "seal_of_rot": {
+          "offer": "Zeptat se na pečeť",
+          "active": "Najdi důkaz ukazující k temnému vstupu do krypty.",
+          "ready": "Důkaz z krypty je zajištěn.",
+          "briefing": "Pečeť náleží dávnému rodu. Jeho král se nejspíš nikdy neuložil ke spánku."
+        },
+        "crypt_descent": {
+          "offer": "Zeptat se na kryptu",
+          "active": "Projdi branou do krypty Duté koruny.",
+          "ready": "Vstoupil jsi do krypty.",
+          "briefing": "Nechej světlo za zády, ale nezapomeň na cestu zpět."
+        },
+        "crypt_lord_fallen": {
+          "offer": "Zeptat se na Pána krypty",
+          "active": "Poraz Pána krypty a přeruš zdroj nákazy.",
+          "ready": "Pán krypty byl poražen.",
+          "briefing": "Po generace se tu skrývala zkáza. Musíš ji přerušit u pramene."
+        },
+        "vesnas_report": {
+          "offer": "Předat Vesně zprávu",
+          "active": "Vrať se do města a řekni Vesně o vítězství.",
+          "ready": "Vesna čeká na závěrečné hlášení.",
+          "briefing": "Přines zprávy z krypty. Město musí znát cenu tvého vítězství."
+        }
+      }
     }
   },
   "town": {
@@ -490,6 +543,9 @@
     "cultHealer": {
       "name": "Kultovní léčitel",
       "desc": "Nepřítel z divočiny."
+    },
+    "morrow_gravebound": {
+      "name": "Morrow, spoutaný hrobem"
     }
   },
   "npc": {
@@ -523,6 +579,66 @@
       "completed": "Úkol dokončen",
       "readyHint": "Vrať se ke strážkyni Vesně.",
       "reward": "Odměna"
+    },
+    "actI": {
+      "trail_of_black_ash": {
+        "title": "Stopa černého popela",
+        "description": "Vesna tě vyšle za branou vystopovat zdroj černého popela. V korunách stromů se drží cizí šeptání.",
+        "objective": "Prozkoumej ohnisko korupce",
+        "accept": "Přijmout pátrání",
+        "turnIn": "Odevzdat zjištění"
+      },
+      "blighted_pack": {
+        "title": "Smečka zkázy",
+        "description": "Stopy vedou k nakaženým šelmám. Jejich hlad není přirozený a jejich krev znečišťuje půdu.",
+        "objective": "Zabij tři nakažené kance",
+        "accept": "Přijmout lov",
+        "turnIn": "Dokončit lov"
+      },
+      "forgotten_graves": {
+        "title": "Zapomenuté hroby",
+        "description": "Nedaleko staré cesty zarůstá hřbitov. Z podzemí uniká hlas, který volá mrtvé jménem.",
+        "objective": "Najdi opuštěný hřbitov",
+        "accept": "Prozkoumat hřbitov",
+        "turnIn": "Nahlásit polohu"
+      },
+      "morrow_gravebound": {
+        "title": "Morrow, spoutaný hrobem",
+        "description": "Strážce hřbitova Morrow podlehl nákaze a chrání starou pečeť. Přeruš jeho stráž.",
+        "objective": "Poraz Morrowa na hřbitově",
+        "accept": "Vyzvat Morrowa",
+        "turnIn": "Nahlásit vítězství"
+      },
+      "seal_of_rot": {
+        "title": "Pečeť hniloby",
+        "description": "Ve zpustošených hrobech zůstala stopa vedoucí do krypty. Získej důkaz, který odhalí jejího pána.",
+        "objective": "Získej důkaz o kryptě",
+        "accept": "Hledat důkazy",
+        "turnIn": "Předat pečeť"
+      },
+      "crypt_descent": {
+        "title": "Sestup do krypty",
+        "description": "Temná brána je otevřená. Sestup pod zemi a zjisti, kdo živí nákazu na povrchu.",
+        "objective": "Vstup do krypty",
+        "accept": "Sestoupit",
+        "turnIn": "Potvrdit sestup"
+      },
+      "crypt_lord_fallen": {
+        "title": "Pád Pána krypty",
+        "description": "Vládce Duté koruny probouzí mrtvé a otravuje kraj. Znič ho v jeho síni.",
+        "objective": "Poraz Pána krypty",
+        "accept": "Vyzvat Pána",
+        "turnIn": "Nahlásit jeho pád"
+      },
+      "vesnas_report": {
+        "title": "Návrat k Vesně",
+        "description": "Zdroj nákazy umlkl. Vrať se ke strážkyni Vesně, předej zjištění a přijmi odměnu.",
+        "objective": "Promluv s Vesnou ve městě",
+        "accept": "Přijmout hlášení",
+        "turnIn": "Odevzdat hlášení"
+      },
+      "returnToVesna": "Vrať se ke strážkyni Vesně a přijmi odměnu.",
+      "nextUnlocked": "Akt I dokončen. Další kapitola je odemčená."
     }
   },
   "trade": {
@@ -628,5 +744,18 @@
     "summoner": "Vyvolávač",
     "explodesOnDeath": "Výbuch po smrti",
     "hazardousGround": "Nebezpečná zem"
+  },
+  "world": {
+    "corruptionSite": "Ohnisko korupce",
+    "corruptedForest": "Zkažený les",
+    "abandonedGraveyard": "Opuštěný hřbitov",
+    "evidenceLead": "Stopa vedoucí do krypty",
+    "graveWarden": "Morrowův hrob",
+    "taintedBeasts": "Nakažená smečka",
+    "cryptEntrance": "Vstup do krypty",
+    "optionalEncounter": "Nebezpečné střetnutí",
+    "optionalPoi": "Tajemné místo",
+    "optionalTreasure": "Skrytý poklad",
+    "optionalEvent": "Událost v pustině"
   }
 }

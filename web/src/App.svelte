@@ -191,11 +191,11 @@
     bridge.command({ type: 'interactNpc', npcId });
   }
   function talkToWarden(): void { interact(WARDEN_ID); }
-  function acceptQuest(): void {
-    bridge.command({ type: 'questAccept' });
+  function acceptQuest(questId?: string): void {
+    bridge.command({ type: 'questAccept', ...(questId ? { questId } : {}) });
   }
-  function turnInQuest(): void {
-    bridge.command({ type: 'questTurnIn' });
+  function turnInQuest(questId?: string): void {
+    bridge.command({ type: 'questTurnIn', ...(questId ? { questId } : {}) });
   }
   function closeDialogue(): void {
     dialogueOpen = false;
@@ -407,7 +407,7 @@
             aria-pressed={unit.actor.id === view.selectedTargetId}
             onclick={() => bridge.command({ type: 'attack', targetId: unit.actor.id })}
           >
-            <span>{unit.elite ? $t('hud.elite') + ' · ' : ''}{$t('enemies.' + unit.actor.type + '.name')}
+            <span>{unit.elite ? $t('hud.elite') + ' · ' : ''}{$t(unit.actor.id === 'morrow_gravebound' ? 'enemies.morrow_gravebound.name' : 'enemies.' + unit.actor.type + '.name')}
               {#if unit.elite}
                 <small class="elite-modifiers">{unit.elite.modifiers.map(id => $t('eliteModifier.' + id)).join(' · ')}</small>
               {/if}
@@ -434,7 +434,7 @@
         </div>
         <div class="status-panel">
           <div class="status-label">{$t('hud.enemy')}</div>
-          <div class="status-value enemy-name">{$t('enemies.' + view.enemy.type + '.name')}</div>
+          <div class="status-value enemy-name">{$t(view.enemy.id === 'morrow_gravebound' ? 'enemies.morrow_gravebound.name' : 'enemies.' + view.enemy.type + '.name')}</div>
           <div class="enemy-health">{view.enemy.alive
             ? Math.round(100 * view.enemy.health / view.enemy.maxHealth) + '%'
             : '—'}</div>
@@ -488,7 +488,7 @@
             close={() => { controlsOpen = false; }} />
         </div>
       {:else if dialogueOpen}
-        <NpcDialogue quest={view.quest} accept={acceptQuest} turnIn={turnInQuest} close={closeDialogue} />
+        <NpcDialogue quest={view.quest} questLedger={view.questLedger} accept={acceptQuest} turnIn={turnInQuest} close={closeDialogue} />
       {:else if inventoryOpen}
         <InventoryPanel {view} {bridge} close={closeInventory} />
       {:else if characterOpen}

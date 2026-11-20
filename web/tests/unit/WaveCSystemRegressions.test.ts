@@ -88,7 +88,7 @@ describe('Wave C integration edge regressions', () => {
     expect(sim.snapshot().groundLoot).toHaveLength(0);
     sim.command({ type: 'sortInventory' });
     const record = createSaveRecord(sim.character(), 1024);
-    expect(record?.format).toBe(10);
+    expect(record?.format).toBe(11);
     const restored = new GameSimulation();
     expect(restored.restoreCharacter(readSaveRecord(record)!)).toBe(true);
     expect(restored.character().itemFlags?.[great.id]).toEqual({ favorite: true, locked: true });

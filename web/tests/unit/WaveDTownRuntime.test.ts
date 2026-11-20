@@ -76,7 +76,7 @@ describe('Wave D town runtime adapter', () => {
     expect(sim.restore({ ...initial, player: { ...initial.player, ...entry.position, health: 1 } })).toBe(true);
     sim.command({ type: 'useTownService', entryId: entry.id });
     const record = createSaveRecord(sim.character());
-    expect(record?.format).toBe(10);
+    expect(record?.format).toBe(11);
     const loaded = readSaveRecord(record)!;
     expect(loaded.gold).toBe(60);
     const fresh = new GameSimulation();

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
+import { createActIQuestLedger } from '../../src/game/quests/actIQuestChain';
 import { FIRST_QUEST_ID, WARDEN_ID, QUEST_REWARD_GOLD } from '../../src/game/quests/firstQuest';
 import { validateQuestCatalog, evaluateDialogue, chooseDialogueOption,
   acceptQuest, advanceObjective, turnInQuest } from '../../src/game/quests/questDialogue';
@@ -58,7 +59,8 @@ describe('Wave D generic quest runtime and branching dialogue integration', () =
     sim.command({ type: 'questAccept' });
     expect(sim.snapshot().quest.status).toBe('active');
     const ready = { ...sim.snapshot(),
-      quest: { id: FIRST_QUEST_ID, status: 'ready' as const, defeated: 3 } };
+      quest: { id: FIRST_QUEST_ID, status: 'ready' as const, defeated: 3 },
+      questLedger: createActIQuestLedger({ id: FIRST_QUEST_ID, status: 'ready', defeated: 3 })! };
     expect(sim.restore(ready)).toBe(true);
     sim.command({ type: 'questTurnIn' });
     expect(sim.snapshot().quest.status).toBe('completed');
@@ -68,7 +70,7 @@ describe('Wave D generic quest runtime and branching dialogue integration', () =
     expect(sim.snapshot().gold).toBe(paid.gold);
     expect(sim.snapshot().xp).toBe(paid.xp);
     const record = createSaveRecord(sim.character());
-    expect(record?.format).toBe(10);
+    expect(record?.format).toBe(11);
     expect(JSON.stringify(record)).not.toContain('worldSeed');
     const loaded = new GameSimulation();
     expect(loaded.restoreCharacter(readSaveRecord(record)!, 1007)).toBe(true);

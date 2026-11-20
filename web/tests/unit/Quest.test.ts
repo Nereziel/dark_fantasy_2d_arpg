@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
+import { createActIQuestLedger } from '../../src/game/quests/actIQuestChain';
 import { createSaveRecord, readSaveRecord } from '../../src/persistence/SaveRepository';
 import { QUEST_REWARD_GOLD, QUEST_REQUIRED_KILLS, validQuest, WARDEN_ID } from '../../src/game/quests/firstQuest';
 import { WARDEN_POSITION } from '../../src/game/world/npcs';
@@ -99,9 +100,9 @@ describe('first permanent campaign quest and NPC interaction', () => {
     sim.command({ type: 'questAccept' });
     const state = sim.snapshot();
     const quest = { ...state.quest, status: 'active' as const, defeated: 2 };
-    expect(sim.restore({ ...state, quest })).toBe(true);
+    expect(sim.restore({ ...state, quest, questLedger: createActIQuestLedger(quest)! })).toBe(true);
     const record = createSaveRecord(sim.character());
-    expect(record?.format).toBe(10);
+    expect(record?.format).toBe(11);
     expect(record?.character.quest).toEqual(quest);
     expect(JSON.stringify(record)).not.toContain('worldSeed');
     const next = new GameSimulation(123);

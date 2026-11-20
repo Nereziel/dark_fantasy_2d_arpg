@@ -5,32 +5,39 @@
     QUEST_REWARD_GOLD, QUEST_REWARD_XP, QUEST_REQUIRED_KILLS, WARDEN_ID
   } from '../game/quests/firstQuest';
   import { evaluateDialogue, chooseDialogueOption } from '../game/quests/questDialogue';
-  import { STARTER_QUEST_CATALOG, firstQuestLedger } from '../game/quests/starterQuestRegistry';
+  import { ACT_I_QUEST_CATALOG, createActIQuestLedger } from '../game/quests/actIQuestChain';
+  import type { QuestLedger } from '../game/quests/questDialogue';
+  import { FIRST_QUEST_ID } from '../game/quests/firstQuest';
 
   let {
-    quest, accept, turnIn, close
+    quest, questLedger, accept, turnIn, close
   }: {
     quest: QuestProgress;
-    accept: () => void;
-    turnIn: () => void;
+    questLedger?: QuestLedger;
+    accept: (questId?: string) => void;
+    turnIn: (questId?: string) => void;
     close: () => void;
   } = $props();
 
   let nodeId = $state('vesna.root');
   const context = { npcId: WARDEN_ID };
-  const ledger = $derived(firstQuestLedger(quest));
+  const ledger = $derived(createActIQuestLedger(questLedger ?? quest));
   const dialogue = $derived(ledger
-    ? evaluateDialogue(STARTER_QUEST_CATALOG, ledger, nodeId, context) : null);
+    ? evaluateDialogue(ACT_I_QUEST_CATALOG, ledger, nodeId, context) : null);
+  const activeStory = $derived(ledger?.quests.find(entry => entry.questId !== FIRST_QUEST_ID
+    && (entry.status === 'active' || entry.status === 'ready')) ?? null);
+  const storyDefinition = $derived(ACT_I_QUEST_CATALOG.quests.find(entry =>
+    entry.id === activeStory?.questId));
 
   function choose(optionId: string): void {
     if (!ledger) return;
     // Always recheck option visibility/availability against the current
     // ledger. UI never changes quest state or awards gold/XP itself.
-    const option = chooseDialogueOption(STARTER_QUEST_CATALOG,
+    const option = chooseDialogueOption(ACT_I_QUEST_CATALOG,
       ledger, nodeId, optionId, context);
     if (!option) return;
-    if (option.action?.type === 'acceptQuest') accept();
-    if (option.action?.type === 'turnInQuest') turnIn();
+    if (option.action?.type === 'acceptQuest') accept(option.action.questId);
+    if (option.action?.type === 'turnInQuest') turnIn(option.action.questId);
     if (option.action?.type === 'close') close();
     if (option.nextNodeId) nodeId = option.nextNodeId;
   }
@@ -40,8 +47,11 @@
   <div class="npc-dialog" role="dialog" aria-modal="true" aria-label={$t('npc.warden.name')}>
     <div class="npc-kicker">{$t('npc.warden.title')}</div>
     <h2>{$t('npc.warden.name')}</h2>
-    <h3>{$t('quest.ashes.title')}</h3>
+    <h3>{storyDefinition ? $t(storyDefinition.titleKey) : $t('quest.ashes.title')}</h3>
     <p>{$t(dialogue?.textKey ?? 'dialogue.vesna.root')}</p>
+    {#if storyDefinition}
+      <p>{$t(storyDefinition.descriptionKey)}</p>
+    {/if}
     <p class="quest-current-story">
       {#if quest.status === 'available'}
         {$t('quest.ashes.intro')}

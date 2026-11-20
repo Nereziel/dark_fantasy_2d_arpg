@@ -28,6 +28,8 @@ import {
   generateCrypt
 } from '../world/generator';
 import { buildWilderness } from '../world/wildernessRuntime';
+import type { WildernessFeature } from '../world/wildernessFeatures';
+import { ACT_I_MILESTONES } from '../quests/actIQuestChain';
 import {
   WARDEN_POSITION, NPC_POSITIONS, MERCHANT_ID, BLACKSMITH_ID
 } from '../world/npcs';
@@ -65,6 +67,7 @@ export class FrontierScene extends Phaser.Scene {
   private renderedSeed: number | null = null;
   private renderedZone: ZoneId | null = null;
   private activeObstacles: readonly Obstacle[] = [];
+  private activeStoryFeatures: readonly WildernessFeature[] = [];
   private readonly heldMovement = new HeldPointerMovement();
   private hoveredId: string | null = null;
   private interactableVisuals!: Phaser.GameObjects.Graphics;
@@ -630,9 +633,13 @@ export class FrontierScene extends Phaser.Scene {
       : animation === 'evading' ? 0.9 : 1);
     this.hero.setAlpha(this.time.now < this.heroHitUntil ? 0.45
       : animation === 'stunned' ? 0.72 : 1);
-    this.wardenMarker.setText(state.quest.status === 'ready' ? '?'
+    this.wardenMarker.setText(state.questLedger?.quests.some(quest =>
+      quest.questId === 'vesnas_report' && quest.status === 'ready') ? '?'
+      : state.quest.status === 'ready' ? '?'
       : state.quest.status === 'available' ? '!' : '·');
-    this.wardenMarker.setVisible(state.zone === 'wilderness' && state.quest.status !== 'completed');
+    this.wardenMarker.setVisible(state.zone === 'wilderness' && (state.quest.status !== 'completed'
+      || state.questLedger?.quests.some(quest => quest.questId === 'vesnas_report'
+        && (quest.status === 'active' || quest.status === 'ready')) === true));
     this.hero.setVisible(false);
     const visualPose = this.time.now < this.heroBlockUntil ? 'block'
       : this.time.now < this.heroHitUntil ? 'hit' : this.pixelPose(animation);
@@ -700,6 +707,34 @@ export class FrontierScene extends Phaser.Scene {
     this.healthBar.clear();
     this.telegraph.clear();
     this.statusVisuals.clear();
+    // The current story objective, not every optional POI, receives a pulsing
+    // readable quest marker. All positions originate from the validated world.
+    const currentStory = state.questLedger?.quests.find(quest =>
+      quest.questId !== 'ashes_at_gate' && (quest.status === 'active' || quest.status === 'ready'));
+    const beat = ACT_I_MILESTONES.find(milestone => milestone.questId === currentStory?.questId);
+    if (beat) {
+      const featureIds: Record<string, string> = {
+        corruption_site: 'act1.corruption_site',
+        infected_beast_den: 'act1.tainted_beasts',
+        abandoned_graveyard: 'act1.abandoned_graveyard',
+        gravebound_morrow: 'act1.grave_warden',
+        crypt_evidence: 'act1.evidence_lead',
+        crypt_entrance: 'act1.crypt_entrance'
+      };
+      const feature = this.activeStoryFeatures.find(entry => entry.id === featureIds[beat.markerId]);
+      const position = beat.markerId === 'warden_vesna' && state.zone === 'wilderness'
+        ? WARDEN_POSITION : beat.markerId === 'crypt_boss_chamber' && state.zone === 'crypt'
+          ? CRYPT_BOSS_POSITIONS[0] : state.zone === 'wilderness' ? feature?.position : undefined;
+      if (position) {
+        const pulse = 38 + Math.sin(this.time.now * 0.003) * 6;
+        this.statusVisuals.lineStyle(4, 0xf4ca7f, 0.88).strokeCircle(position.x, position.y, pulse);
+        this.statusVisuals.fillStyle(0xf4ca7f, 0.86).fillTriangle(
+          position.x - 8, position.y - pulse - 25,
+          position.x + 8, position.y - pulse - 25,
+          position.x, position.y - pulse - 10
+        );
+      }
+    }
     if (animation === 'channeling' || animation === 'casting') {
       const progress = (state.warriorAction?.timeline ?? state.classAction?.timeline)?.elapsedTicks ?? 0;
       this.statusVisuals.lineStyle(2, animation === 'channeling' ? 0xe5b56a : 0xc8ceee, 0.65)
@@ -904,6 +939,7 @@ export class FrontierScene extends Phaser.Scene {
     this.renderedSeed = worldSeed;
     this.renderedZone = zone;
     this.activeObstacles = layout.obstacles;
+    this.activeStoryFeatures = wilderness?.features ?? [];
     if (zone === 'crypt') {
       this.paintCrypt(ground, worldSeed, layout.obstacles);
       return;
