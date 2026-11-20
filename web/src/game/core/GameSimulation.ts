@@ -63,7 +63,9 @@ function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 function cloneItem(item: Item | null): Item | null {
-  return item ? { ...item, affixes: item.affixes.map(a => ({ ...a })) } : null;
+  return item ? { ...item, affixes: item.affixes.map(a => ({ ...a })),
+    ...(item.sockets ? { sockets: [...item.sockets] } : {}),
+    ...(item.legendaryPower ? { legendaryPower: { ...item.legendaryPower } } : {}) } : null;
 }
 function cloneEquipment(equipment: Equipment): Equipment {
   return Object.fromEntries(Object.entries(equipment).map(([key, item]) => [key, cloneItem(item)])) as Equipment;
@@ -294,7 +296,7 @@ export class GameSimulation {
       this.pendingPortal = false;
       return;
     }
-    if (command.type === 'equip') { this.equip(command.index); return; }
+    if (command.type === 'equip') { this.equip(command.index, command.slot); return; }
     if (command.type === 'unequip') { this.unequip(command.slot); return; }
     // Shop actions must be checked inside the authoritative simulation.
     // A shop panel pauses combat, but doesn't disable transactions.
@@ -457,6 +459,10 @@ export class GameSimulation {
       return;
     }
     if (distance(this.player, object.position) > object.reach) return;
+    if (object.kind === 'chest' && this.groundLoot.length >= 100) {
+      this.pendingObject = null;
+      return;
+    }
     this.pendingObject = null;
     this.usedObjects.add(object.id);
     if (object.kind === 'shrine') {
@@ -547,19 +553,19 @@ export class GameSimulation {
     this.resource = Math.min(cap, this.resource);
   }
 
-  private equip(index: number): void {
+  private equip(index: number, targetSlot?: EquipmentSlot): void {
     const item = this.inventory[index];
     if (!item) return;
-    const selected = item.slot === 'RING_1' && this.equipment.RING_1 && !this.equipment.RING_2
-      ? 'RING_2' : undefined;
+    const selected = targetSlot ?? (item.slot === 'RING_1' && this.equipment.RING_1 && !this.equipment.RING_2
+      ? 'RING_2' : undefined);
     this.updateInventory(planEquip(this.inventoryState(), index, selected, this.inventoryRules()));
   }
 
   /** Pure, authoritative candidate projection for the equipment comparison panel. */
-  previewEquipment(index: number): { armor: number; damageMin: number;
+  previewEquipment(index: number, targetSlot?: EquipmentSlot): { armor: number; damageMin: number;
     damageMax: number; maxHealth: number } | null {
     if (!Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return null;
-    const candidate = planEquip(this.inventoryState(), index, undefined, this.inventoryRules());
+    const candidate = planEquip(this.inventoryState(), index, targetSlot, this.inventoryRules());
     if (!candidate.ok) return null;
     const before = deriveStats(this.classId, this.equipment, this.level);
     const after = deriveStats(this.classId, candidate.state.equipment as Equipment, this.level);
@@ -578,7 +584,10 @@ export class GameSimulation {
   private dropInventory(index: number): void {
     const result = planDrop(this.inventoryState(), index, this.inventoryRules());
     if (!result.ok || this.groundLoot.length >= 100) return;
-    const id = 'discard-' + this.kills + '-' + this.rng.state + '-' + index;
+    const prefix = 'discard-' + this.kills + '-' + this.rng.state + '-' + index;
+    let id = prefix;
+    let attempt = 1;
+    while (this.groundLoot.some(loot => loot.id === id)) id = prefix + '-' + attempt++;
     this.updateInventory(result);
     this.groundLoot.push({ id, item: result.dropped, x: this.player.x, y: this.player.y });
     this.events.push({ type: 'loot', id });
@@ -1977,7 +1986,8 @@ export class GameSimulation {
       kills: this.kills,
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
-      ...(Object.keys(this.itemFlags).length ? { itemFlags: { ...this.itemFlags } } : {}),
+      ...(Object.keys(this.itemFlags).length ? { itemFlags: Object.fromEntries(
+        Object.entries(this.itemFlags).map(([id, flags]) => [id, { ...flags }])) } : {}),
       quest: { ...this.quest }
     };
   }
@@ -2084,7 +2094,8 @@ export class GameSimulation {
       stats: deriveStats(this.classId, this.equipment, this.level),
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
-      ...(Object.keys(this.itemFlags).length ? { itemFlags: { ...this.itemFlags } } : {}),
+      ...(Object.keys(this.itemFlags).length ? { itemFlags: Object.fromEntries(
+        Object.entries(this.itemFlags).map(([id, flags]) => [id, { ...flags }])) } : {}),
       groundLoot: this.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! })),
       quest: { ...this.quest },
       paused: this.paused,
