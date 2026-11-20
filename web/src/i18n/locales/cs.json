@@ -95,7 +95,9 @@
     "swapPrompt": "Vyber cílovou pozici",
     "requireLevel": "Vyžadovaná úroveň",
     "twoHanded": "Obouruční",
-    "comparison": "Změna statistik"
+    "comparison": "Změna statistik",
+    "offHandEquip": "Nasadit do druhé ruky",
+    "legendaryPower": "Legendární vlastnost"
   },
   "stat": {
     "strength": "Síla",
