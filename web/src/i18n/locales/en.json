@@ -775,5 +775,19 @@
     "brood_mother": "Brood Mother",
     "corrupted_knight": "Corrupted Knight"
   },
-  "miniBoss": { "phase": "Phase" }
+  "miniBoss": { "phase": "Phase" },
+  "boss": { "hollowKing": {
+      "name": "The Hollow King",
+      "phase1": "Phase I — Royal Blade",
+      "phase2": "Phase II — Rise of the Dead",
+      "phase3": "Phase III — Crown of Ruin",
+      "ability": {
+        "royal_cleave": "Royal Cleave",
+        "grave_lunge": "Grave Lunge",
+        "raise_dead": "Raise the Dead",
+        "grave_circle": "Grave Circle",
+        "rune_storm": "Rune Storm",
+        "kings_judgment": "King's Judgment"
+      }
+    } }
 }
