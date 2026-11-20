@@ -1,4 +1,13 @@
 {
+  "dialogue": {
+    "vesna": {
+      "root": "Warden Vesna looks toward the blackened trees beyond the gate. Do you want to know what started the blight?",
+      "history": "Memories of the first patrol",
+      "ask": "Ask about the source of corruption",
+      "details": "Dust and dark whispers are spreading from the crypts. Villagers have vanished. First stop the corrupted creatures outside the gate, then report back.",
+      "back": "Back to the quest"
+    }
+  },
   "town": {
     "serviceSuccess": "Service completed.",
     "restoreHealth": "Restore health",

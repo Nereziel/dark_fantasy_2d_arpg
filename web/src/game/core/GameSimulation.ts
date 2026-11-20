@@ -48,9 +48,10 @@ import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planS
   selectVendorStock, type EconomyFailure } from '../trade/economyRules';
 import { townEntry, canInteractTownEntry } from '../world/townManifest';
 import {
-  freshQuest, validQuest, QUEST_REQUIRED_KILLS, QUEST_REWARD_GOLD, QUEST_REWARD_XP,
-  WARDEN_ID, type QuestProgress
+  freshQuest, validQuest, FIRST_QUEST_ID, type QuestProgress
 } from '../quests/firstQuest';
+import { acceptQuest, advanceObjective, turnInQuest } from '../quests/questDialogue';
+import { STARTER_QUEST_CATALOG, firstQuestLedger, firstQuestFromLedger } from '../quests/starterQuestRegistry';
 import {
   SeededRng, createEquipment, deriveStats, isEquipmentSlot, isItem, rollItem, rollItemForBase,
   type Equipment, type EquipmentSlot, type GroundItem, type Item
@@ -318,24 +319,38 @@ export class GameSimulation {
       this.temperEquipment(command.slot);
       return;
     }
-    // Dialogue pauses the world, not the quest interaction.
+    // Dialogue pauses the world, but authoritative quest transitions and
+    // one-time rewards are evaluated through the shared typed quest engine.
     if (command.type === 'questAccept') {
-      if (this.zone === 'wilderness' && this.player.alive && nearWarden(this.player) && this.quest.status === 'available') {
-        this.quest = { id: this.quest.id, status: 'active', defeated: 0 };
-        this.events.push({ type: 'questUpdated', status: this.quest.status, defeated: this.quest.defeated });
+      if (this.zone !== 'wilderness' || !this.player.alive || !nearWarden(this.player)) return;
+      const ledger = firstQuestLedger(this.quest);
+      const transition = ledger && acceptQuest(STARTER_QUEST_CATALOG, ledger, FIRST_QUEST_ID);
+      const next = transition?.changed ? firstQuestFromLedger(transition.ledger) : null;
+      if (next) {
+        this.quest = next;
+        this.events.push({ type: 'questUpdated', status: next.status, defeated: next.defeated });
       }
       return;
     }
     if (command.type === 'questTurnIn') {
-      if (this.zone === 'wilderness' && this.player.alive && nearWarden(this.player) && this.quest.status === 'ready') {
-        this.quest = { ...this.quest, status: 'completed' };
-        this.gold += QUEST_REWARD_GOLD;
-        this.awardExperience(Math.max(QUEST_REWARD_XP, rewardForActivity('quest', this.level, this.level)));
-        this.events.push({ type: 'questUpdated', status: this.quest.status, defeated: this.quest.defeated });
+      if (this.zone !== 'wilderness' || !this.player.alive || !nearWarden(this.player)) return;
+      const ledger = firstQuestLedger(this.quest);
+      const transition = ledger && turnInQuest(STARTER_QUEST_CATALOG, ledger, FIRST_QUEST_ID);
+      const reward = transition?.rewardPlan;
+      const next = transition?.changed ? firstQuestFromLedger(transition.ledger) : null;
+      // Commit reward plus the quest completion together; no second payment
+      // is possible after saving, loading or repeatedly pressing Turn In.
+      if (reward && next && this.gold <= Number.MAX_SAFE_INTEGER - reward.gold) {
+        this.quest = next;
+        this.gold += reward.gold;
+        this.awardExperience(Math.max(reward.xp,
+          rewardForActivity('quest', this.level, this.level)));
+        this.events.push({ type: 'questUpdated', status: next.status, defeated: next.defeated });
       }
       return;
     }
     if (command.type === 'useTownService') {
+      // Town services must work while the modal pauses the combat simulation.
       const entry = townEntry(command.entryId);
       if (!entry || !this.player.alive || this.zone !== 'wilderness'
         || !canInteractTownEntry(this.player, entry.id)) return;
@@ -2020,12 +2035,14 @@ export class GameSimulation {
     this.awardExperience(Math.round(rewardForActivity('enemy', this.level, this.level)
       * (unit.elite ? 1.75 : 1)));
     if (this.zone === 'wilderness' && this.quest.status === 'active') {
-      const defeated = Math.min(QUEST_REQUIRED_KILLS, this.quest.defeated + 1);
-      this.quest = {
-        ...this.quest, defeated,
-        status: defeated === QUEST_REQUIRED_KILLS ? 'ready' : 'active'
-      };
-      this.events.push({ type: 'questUpdated', status: this.quest.status, defeated });
+      const ledger = firstQuestLedger(this.quest);
+      const transition = ledger && advanceObjective(STARTER_QUEST_CATALOG, ledger,
+        FIRST_QUEST_ID, 'enemy_defeated', 'enemy_' + this.kills);
+      const next = transition?.changed ? firstQuestFromLedger(transition.ledger) : null;
+      if (next) {
+        this.quest = next;
+        this.events.push({ type: 'questUpdated', status: next.status, defeated: next.defeated });
+      }
     }
     if (unit.actor.type === 'crypt_lord') {
       this.gold += 100;
