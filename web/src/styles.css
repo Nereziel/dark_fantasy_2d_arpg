@@ -93,3 +93,6 @@ h1 span,.brand-mark span{color:#b88b59}
 .camp-services button{flex:1;min-width:95px;font-size:.67rem;padding:8px 5px;border-color:#806c4b;background:#282d32}
 @media(max-width:720px){.camp-services{top:475px;left:10px;width:185px;max-width:47vw;padding:6px;gap:4px}
   .camp-services button{font-size:.59rem;min-width:75px;padding:6px 4px}.camp-services-label{font-size:.57rem}}
+
+/* Localized elite labels remain legible in the compact enemy target roster. */
+.elite-modifiers{display:block;color:#e9b873;font-size:.64rem;max-width:220px;line-height:1.35;white-space:normal}
