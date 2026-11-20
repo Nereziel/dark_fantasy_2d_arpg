@@ -2743,7 +2743,7 @@ export class GameSimulation {
       return entries.every(([id, state]) => MINI_BOSS_IDS.includes(id as MiniBossId)
         && validateMiniBossState(state) && state.bossId === id
         && state.occurrenceId === id
-        && s.enemies.some(unit => unit.actor.id === id
+        && Array.isArray(s.enemies) && s.enemies.some(unit => unit?.actor?.id === id
           && unit.actor.type === getMiniBossDefinition(id)?.enemyType));
     };
     const validDungeonIds = (ids: unknown, known: readonly string[]): boolean =>
