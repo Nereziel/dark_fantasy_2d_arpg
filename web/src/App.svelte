@@ -20,6 +20,7 @@
   import SkillBar from './ui/SkillBar.svelte';
   import QuestJournal from './ui/QuestJournal.svelte';
   import WorldMapCanvas from './ui/WorldMapCanvas.svelte';
+  import WorldEventPanel from './ui/WorldEventPanel.svelte';
   import WaypointPanel from './ui/WaypointPanel.svelte';
   import NpcDialogue from './ui/NpcDialogue.svelte';
   import TradePanel from './ui/TradePanel.svelte';
@@ -112,6 +113,8 @@
     } catch { /* Invalid settings fall back to defaults. */ }
     const unsubscribeEvents = bridge.onEvent((event) => {
       if (event.type === 'dungeonCleared' && playing) messageKey = 'dungeon.clearedToast';
+      if (event.type === 'worldEventStarted' && playing) messageKey = 'worldEvents.started';
+      if (event.type === 'worldEventCompleted' && playing) messageKey = 'worldEvents.completed';
       if (event.type === 'checkpointActivated' && playing) messageKey = 'respawn.checkpointActivated';
       if (event.type === 'waypointActivated' && playing && event.id === 'town.waypoint')
         messageKey = 'waypoints.activated';
@@ -525,6 +528,7 @@
         </div>
       {/if}
       <DungeonPanel {view} {bridge} />
+      <WorldEventPanel {view} />
       <aside class="enemy-roster" aria-label={$t('hud.enemies')}>
         <div class="enemy-roster-title">{$t('hud.enemies')} · {view.enemies.filter(unit => unit.actor.alive).length}/{view.enemies.length} · {$t('hud.wave')} {view.wave + 1}</div>
         {#each view.enemies as unit (unit.actor.id)}
