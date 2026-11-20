@@ -503,8 +503,9 @@ export class GameSimulation {
     if (!this.shopAllowed(MERCHANT_ID)
       || !Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return;
     const item = this.inventory[index];
-    if (!item) return;
+    if (!item || this.itemFlags[item.id]?.locked || this.itemFlags[item.id]?.favorite) return;
     this.gold += sellPrice(item);
+    delete this.itemFlags[item.id];
     this.inventory[index] = null;
   }
 
