@@ -1009,5 +1009,34 @@
     "nearSource": "Approach an activated waypoint to travel.",
     "activated": "Camp waypoint activated.",
     "arrived": "Fast travel completed."
+  },
+  "worldEvents": {
+    "title": "World Events",
+    "started": "A world event has begun.",
+    "completed": "World event completed. Rewards granted.",
+    "defeatGuards": "Defeat enemies",
+    "reward": "Event reward",
+    "xp": "XP",
+    "materialsAndLoot": "materials and equipment",
+    "status": {
+      "available": "Approach to begin",
+      "active": "Under attack",
+      "completed": "Completed"
+    },
+    "regions": {
+      "ashenRoad": "Ashen Road",
+      "corruptedWilds": "Corrupted Wilds",
+      "graveApproach": "Grave Approach"
+    },
+    "kinds": {
+      "banditAmbush": "Bandit Ambush",
+      "demonIncursion": "Demon Incursion",
+      "caravanDefense": "Caravan Defense",
+      "cursedShrine": "Cursed Shrine",
+      "eliteHunt": "Elite Hunt",
+      "rescueEvent": "Rescue Event",
+      "ritualInterruption": "Ritual Interruption",
+      "treasureAmbush": "Treasure Ambush"
+    }
   }
 }
