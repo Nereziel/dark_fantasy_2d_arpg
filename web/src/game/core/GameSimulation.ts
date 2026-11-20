@@ -475,7 +475,8 @@ export class GameSimulation {
       });
       // Chests preserve item ownership; never evict another ground item due to overflow.
     }
-    this.awardExperience(rewardForActivity('exploration', this.level, this.level));
+    this.awardExperience(rewardForActivity(object.kind === 'shrine' ? 'event' : 'exploration',
+      this.level, this.level));
     this.events.push({ type: 'worldInteract', id: object.id, kind: object.kind });
   }
 
