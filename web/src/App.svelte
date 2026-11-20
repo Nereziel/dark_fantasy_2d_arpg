@@ -108,7 +108,7 @@
     const unsubscribeEvents = bridge.onEvent((event) => {
       if (event.type === 'dungeonCleared' && playing) messageKey = 'dungeon.clearedToast';
       if (event.type === 'checkpointActivated' && playing) messageKey = 'respawn.checkpointActivated';
-      if (event.type === 'worldInteract' && playing) {
+      if (event.type === 'worldInteract' && playing && event.id !== 'soul-shrine') {
         messageKey = event.kind === 'shrine' ? 'worldObjects.shrine' : 'worldObjects.chest';
       }
       if (event.type === 'zoneChanged' && playing) messageKey = '';
