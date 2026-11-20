@@ -5,7 +5,7 @@ test('town waypoint activates only on arrival and survives world save/reload', a
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
 
-  await page.getByRole('button', { name: 'Map', exact: true }).click();
+  await page.locator('.game-header').getByRole('button', { name: 'Map', exact: true }).click();
   const initialMap = page.getByRole('dialog', { name: 'World Map' });
   await expect(initialMap.getByText('No activated waypoints yet.')).toBeVisible();
   await expect(initialMap.locator('[data-map-marker="shrine.soul-shrine"]')).toHaveCount(0);
@@ -19,7 +19,7 @@ test('town waypoint activates only on arrival and survives world save/reload', a
   await expect(waypoint.locator('[data-waypoint-destination="shrine.soul-shrine"]')).toHaveCount(0);
   await waypoint.getByRole('button', { name: 'Leave' }).click();
 
-  await page.getByRole('button', { name: 'Map', exact: true }).click();
+  await page.locator('.game-header').getByRole('button', { name: 'Map', exact: true }).click();
   const map = page.getByRole('dialog', { name: 'World Map' });
   await expect(map.locator('[data-map-marker="town.waypoint"]')).toHaveAttribute('data-marker-kind', 'waypoint');
   await expect(map.locator('[data-map-marker="shrine.soul-shrine"]')).toHaveCount(0);
@@ -29,9 +29,9 @@ test('town waypoint activates only on arrival and survives world save/reload', a
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
-  await page.getByRole('button', { name: 'Map', exact: true }).click();
+  await page.locator('.game-header').getByRole('button', { name: 'Map', exact: true }).click();
   const restoredMap = page.getByRole('dialog', { name: 'World Map' });
   await expect(restoredMap.locator('[data-map-marker="town.waypoint"]')).toHaveCount(1);
-  await expect(restoredMap.getByText('Camp Waypoint')).toBeVisible();
+  await expect(restoredMap.locator('[data-waypoint-destination="town.waypoint"]')).toContainText('Camp Waypoint');
   await expect(restoredMap.locator('[data-map-marker="shrine.soul-shrine"]')).toHaveCount(0);
 });
