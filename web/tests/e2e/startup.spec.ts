@@ -95,13 +95,14 @@ test('autosaves only the hero and generates fresh wilderness on reopening', asyn
           .objectStore('saves').get('first-character');
         get.onerror = () => { db.close(); resolve(null); };
         get.onsuccess = () => {
-          const record = get.result as { format?: number; character?: { classId?: string } } | undefined;
+          const record = get.result as { format?: number; character?: { classId?: string; stash?: unknown[] } } | undefined;
           db.close();
-          resolve(record?.format === 9 && record.character?.classId === 'ROGUE' ? 9 : null);
+          resolve(record?.format === 10 && record.character?.classId === 'ROGUE'
+            && record.character.stash?.length === 24 ? 10 : null);
         };
       };
     });
-  })).toBe(9);
+  })).toBe(10);
 
   await page.reload();
   await page.getByRole('button', { name: 'Load' }).click();
