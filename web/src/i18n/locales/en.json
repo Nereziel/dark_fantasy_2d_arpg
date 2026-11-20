@@ -88,7 +88,7 @@
       },
       "potion_vendor_lena": {
         "name": "Apothecary Lena",
-        "description": "Replenishes your combat resource for 12 gold. Carryable potions will arrive later."
+        "description": "Restores your combat resource for 12 gold and sells one-charge refills for your potions."
       },
       "healer_iva": {
         "name": "Healer Iva",
