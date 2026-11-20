@@ -83,7 +83,7 @@ describe('Prompt 07/08 — one authoritative Warrior hit timing path', () => {
     expect(result.resource).toBeGreaterThan(before.resource);
     expect(result.statusEffects?.player.map(effect => effect.id))
       .toEqual(expect.arrayContaining(['haste', 'fortified']));
-    expect(result.effects.player.some(effect => effect.id === 'haste')).toBe(false);
+    expect(result.effects.player.map(effect => effect.id)).not.toContain('haste');
   });
 
   it('Charge with a directional cursor uses the same timeline and respects Shift hold', () => {
