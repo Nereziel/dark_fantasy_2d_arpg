@@ -5,7 +5,7 @@ import { rollItemForBase, SeededRng } from '../../src/game/data/items';
 import { ITEM_BASES } from '../../src/game/items/itemCatalog';
 import {
   CRAFT_RECIPES, MATERIAL_IDS, emptyMaterials, validateMaterials,
-  quoteCraft, planCraft, type CraftKind
+  quoteCraft, planCraft, type CraftKind, type CraftState
 } from '../../src/game/crafting/craftingRules';
 import { createSaveRecord, readSaveRecord } from '../../src/persistence/SaveRepository';
 import { NPC_POSITIONS, BLACKSMITH_ID } from '../../src/game/world/npcs';
@@ -86,14 +86,14 @@ describe('Prompt 32 pure crafting', () => {
     expect(planCraft({...rich,gold:0},{kind:'upgrade',index:0}).ok).toBe(false);
     expect(planCraft({...rich,materials:{iron:0,steel:100}},
       {kind:'upgrade',index:0}).ok).toBe(false);
-    let state=rich;
+    let state: CraftState = rich;
     for(let i=0;i<3;i++){
       const applied=planCraft(state,{kind:'upgrade',index:0});
       expect(applied.ok).toBe(true);
       if(!applied.ok) return;
       expect(applied.inventory[0]?.upgrades).toBe(i+1);
       expect(applied.inventory[0]!.maxDmg).toBeGreaterThan(item.maxDmg);
-      state={inventory:applied.inventory as typeof rich.inventory,
+      state={inventory:applied.inventory,
         gold:applied.gold,materials:applied.materials,flags:{}};
     }
     expect(planCraft(state,{kind:'upgrade',index:0}).ok).toBe(false);
