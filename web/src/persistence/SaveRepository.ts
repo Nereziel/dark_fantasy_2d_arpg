@@ -70,7 +70,8 @@ export function readSaveRecord(raw: unknown): CharacterProgress | null {
   // stored items, so only the dedicated v8/v9 migration may create an empty one.
   if (format === 10) {
     if (!record.character || typeof record.character !== 'object'
-      || !Object.hasOwn(record.character, 'stash')) return null;
+      || !Object.hasOwn(record.character, 'stash')
+      || !Array.isArray(record.character.stash)) return null;
     return validateCharacter(record.character);
   }
   if (format === 9) return migrateV9Character(record.character);
