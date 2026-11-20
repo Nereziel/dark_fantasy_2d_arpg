@@ -107,7 +107,8 @@
     } catch { /* Invalid settings fall back to defaults. */ }
     const unsubscribeEvents = bridge.onEvent((event) => {
       if (event.type === 'dungeonCleared' && playing) messageKey = 'dungeon.clearedToast';
-      if (event.type === 'worldInteract' && playing) {
+      if (event.type === 'checkpointActivated' && playing) messageKey = 'respawn.checkpointActivated';
+      if (event.type === 'worldInteract' && playing && event.id !== 'soul-shrine') {
         messageKey = event.kind === 'shrine' ? 'worldObjects.shrine' : 'worldObjects.chest';
       }
       if (event.type === 'zoneChanged' && playing) messageKey = '';
@@ -160,6 +161,19 @@
       void worldAutosaver.dispose().catch(() => {});
     };
   });
+
+  function respawn(): void {
+    if (!playing || view.player.alive) return;
+    heldShiftKeys.clear();
+    inventoryOpen = false;
+    characterOpen = false;
+    controlsOpen = false;
+    mapOpen = false;
+    dialogueOpen = false;
+    tradeNpc = null;
+    townModal = null;
+    bridge.command({ type: 'respawn' });
+  }
 
   function newGame(): void {
     bridge.command({ type: 'reset', classId: selectedClass });
@@ -426,7 +440,7 @@
           </select>
           <button class="small-button" disabled={view.zone !== 'wilderness' || view.paused}
             onclick={openMap}>{$t('map.open')}</button>
-          <button class="small-button" onclick={togglePause}>{view.paused ? $t('menu.resume') : $t('menu.paused')}</button>
+          <button class="small-button" disabled={!view.player.alive} onclick={togglePause}>{view.paused ? $t('menu.resume') : $t('menu.paused')}</button>
           <button class="small-button" onclick={menu}>{$t('menu.back')}</button>
         </div>
       </header>
@@ -580,6 +594,20 @@
         <InventoryPanel {view} {bridge} close={closeInventory} />
       {:else if characterOpen}
         <CharacterSheet {view} close={closeCharacterSheet} />
+      {:else if !view.player.alive}
+        <div class="modal-shield" data-testid="death-overlay">
+          <div class="pause-card" role="dialog" aria-modal="true" aria-label={$t('respawn.title')}>
+            <h2>{$t('respawn.title')}</h2>
+            <p>{$t('respawn.description')}</p>
+            <p class="respawn-destination">
+              {$t('respawn.destination')}:
+              {$t(view.respawnAt?.id === 'shrine.soul-shrine'
+                ? 'respawn.soulShrine' : 'respawn.townWaypoint')}
+            </p>
+            <button class="primary" data-testid="respawn-button"
+              onclick={respawn}>{$t('respawn.action')}</button>
+          </div>
+        </div>
       {:else if view.paused}
         <div class="modal-shield">
           <section class="pause-card" aria-label={$t('menu.paused')}>
@@ -589,19 +617,13 @@
             <button class="secondary" onclick={menu}>{$t('menu.back')}</button>
           </section>
         </div>
-      {:else if !view.player.alive}
-        <div class="modal-shield">
-          <section class="pause-card">
-            <h2>{$t('hud.gameOver')}</h2>
-            <button class="primary" onclick={newGame}>{$t('battle.respawn')}</button>
-          </section>
-        </div>
       {/if}
     </main>
   {/if}
 </div>
 
 <style>
+  .respawn-destination { color: #d9bc86; margin: 12px 0; }
   .minimap-overlay {
     position: absolute;
     z-index: 2;

@@ -789,5 +789,14 @@
         "rune_storm": "Runová bouře",
         "kings_judgment": "Králův soud"
       }
-    } }
+    } },
+  "respawn": {
+    "title": "Padl jsi",
+    "description": "Boj byl přerušen. Vybavení, úroveň i postup úkolů zůstávají zachované.",
+    "destination": "Místo znovuzrození",
+    "townWaypoint": "Městský waypoint",
+    "soulShrine": "Svatyně duší",
+    "action": "Znovu povstat",
+    "checkpointActivated": "Svatyně duší byla aktivována jako bod znovuzrození."
+  }
 }

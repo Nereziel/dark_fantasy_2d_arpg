@@ -789,5 +789,14 @@
         "rune_storm": "Rune Storm",
         "kings_judgment": "King's Judgment"
       }
-    } }
+    } },
+  "respawn": {
+    "title": "You Have Fallen",
+    "description": "Combat has ended. Your equipment, level, and quest progress are preserved.",
+    "destination": "Respawn location",
+    "townWaypoint": "Town waypoint",
+    "soulShrine": "Soul Shrine",
+    "action": "Respawn",
+    "checkpointActivated": "Soul Shrine activated as a respawn checkpoint."
+  }
 }
