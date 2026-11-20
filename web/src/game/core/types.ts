@@ -26,6 +26,7 @@ import type { WorldFactLedger } from '../world/chunkStreaming';
 import type { Materials, CraftKind } from '../crafting/craftingRules';
 import type { GemAction, GemWallet } from '../gems/gemRules';
 import type { GemId } from '../gems/gemCatalog';
+import type { PotionCharges, PotionId, PotionState } from '../consumables/potionRules';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
@@ -68,6 +69,11 @@ export interface CharacterProgress {
   materials?: Materials;
   /** Character-owned loose gems/runes; item sockets store canonical IDs. */
   gems?: GemWallet;
+  /** Character-owned charges; temporary buffs remain session-only. */
+  potionCharges?: PotionCharges;
+  potionSelected?: PotionId;
+  /** Persist the anti-spam lockout, not the full combat snapshot. */
+  potionCooldown?: number;
   gold: number;
   kills: number;
   inventory: Array<Item | null>;
@@ -130,6 +136,7 @@ export interface GameSnapshot {
   talentRanks?: TalentRanks;
   materials?: Materials;
   gems?: GemWallet;
+  potions?: PotionState;
   gold: number;
   resource: number;
   rngState: number;
@@ -190,6 +197,9 @@ export type GameCommand =
   | { type: 'interactNpc'; npcId: NpcId }
   | { type: 'interactTown'; entryId: string }
   | { type: 'useTownService'; entryId: string }
+  | { type: 'refillPotion'; entryId: string; potionId: PotionId }
+  | { type: 'selectPotion'; potionId: PotionId }
+  | { type: 'usePotion' }
   | { type: 'stashDeposit'; index: number }
   | { type: 'stashWithdraw'; index: number }
   | { type: 'usePortal' }
@@ -239,6 +249,9 @@ export type GameEvent =
   | { type: 'craftCompleted'; kind: CraftKind; itemId: string; goldSpent: number }
   | { type: 'gemTransacted'; action: GemAction['type']; gemId: GemId;
       itemId?: string; goldSpent: number }
+  | { type: 'potionUsed'; potionId: PotionId; healthRestored: number;
+      resourceRestored: number; x: number; y: number }
+  | { type: 'potionRefilled'; potionId: PotionId; goldSpent: number }
   | { type: 'playerDeath' }
   | { type: 'checkpointActivated'; id: RespawnCheckpointId }
   | { type: 'playerRespawn'; checkpointId: RespawnDestination['id'];
