@@ -78,7 +78,9 @@ describe('Prompt 33 — canonical gem/rune types, tiers and effects', () => {
     expect(isItem({...weapon,sockets:['rune.ward.3']})).toBe(true);
     expect(isItem({...weapon,sockets:['__proto__']})).toBe(false);
     expect(isItem({...weapon,sockets:['gem.ruby.99']})).toBe(false);
-    expect(isItem({...weapon,sockets:['gem.ruby.1','gem.ruby.1']})).toBe(false);
+    // Two legitimately owned copies may occupy separate sockets.
+    expect(isItem({...weapon,sockets:['gem.ruby.1','gem.ruby.1']})).toBe(true);
+    expect(isItem({...weapon,sockets:Array(4).fill('gem.ruby.1')})).toBe(false);
     expect(isItem({...weapon,sockets:[]})).toBe(true);
   });
 });
@@ -94,7 +96,7 @@ describe('Prompt 33 — atomic gem and rune transactions', () => {
     if(!created.ok)return;
     expect(created.state.gems['gem.ruby.1']).toBe(5);
     expect(created.state.gold).toBeLessThan(source.gold);
-    expect(created.state.materials.iron).toBeLessThan(source.materials.iron);
+    expect(created.state.materials.iron ?? 0).toBeLessThan(source.materials.iron ?? 0);
     expect(source.gems['gem.ruby.1']).toBe(4);
     const merged=planGemAction(created.state,{type:'upgradeGem',gemId:'gem.ruby.1'});
     expect(merged.ok).toBe(true);
