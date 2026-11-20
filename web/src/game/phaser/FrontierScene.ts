@@ -14,6 +14,10 @@ import {
 import { resolvePointerAction } from '../input/bindings';
 import { HeldPointerMovement } from '../input/heldMovement';
 import { playerAnimation } from '../entities/playerAnimation';
+import {
+  PIXEL_ANIMATIONS, PIXEL_ANIMATION_FRAMES, PIXEL_FRAME_HEIGHT, PIXEL_FRAME_WIDTH,
+  pixelAtlasKey, pixelFrame, renderPixelAtlas, type PixelActor, type PixelAnimation
+} from './pixelSpriteAtlas';
 import { ACTOR_RADIUS, canOccupy, type Obstacle } from '../world/navigation';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
 import {
@@ -34,6 +38,11 @@ const HEIGHT = 1400;
 export class FrontierScene extends Phaser.Scene {
   private readonly bridge: GameBridge;
   private hero!: Phaser.GameObjects.Graphics;
+  private heroSprite!: Phaser.GameObjects.Sprite;
+  private readonly enemySprites = new Map<string, Phaser.GameObjects.Sprite>();
+  private readonly enemyPositions = new Map<string, Point>();
+  private readonly enemyDeadUntil = new Map<string, number>();
+  private heroDeadUntil = 0;
   private wardenMarker!: Phaser.GameObjects.Text;
   private readonly enemyGraphics = new Map<string, Phaser.GameObjects.Graphics>();
   private readonly impactPool: Phaser.GameObjects.Graphics[] = [];
@@ -114,7 +123,11 @@ export class FrontierScene extends Phaser.Scene {
     this.hero.fillStyle(CLASSES[this.bridge.snapshot().classId].color).fillTriangle(-14, 8, 14, 8, 0, -26);
     this.hero.fillStyle(0xd7c3a0).fillCircle(0, -13, 5);
     this.hero.lineStyle(4, 0xb7a77a).lineBetween(14, 5, 25, -22);
-    this.hero.setDepth(50);
+    this.hero.setDepth(50).setVisible(false); // camera-follow anchor (gameplay lives in simulation)
+    const heroKey = this.ensurePixelAtlas(entry.classId);
+    this.heroSprite = this.add.sprite(entry.player.x, entry.player.y, heroKey,
+      pixelFrame('idle', 0)).setOrigin(0.5, 0.9).setDepth(52);
+    this.heroSprite.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
 
     this.healthBar = this.add.graphics().setDepth(60);
     this.groundItems = this.add.graphics().setDepth(44);
@@ -144,10 +157,46 @@ export class FrontierScene extends Phaser.Scene {
       unsubscribeEvents();
       for (const actor of this.enemyGraphics.values()) actor.destroy();
       this.enemyGraphics.clear();
+      for (const actor of this.enemySprites.values()) actor.destroy();
+      this.enemySprites.clear();
+      this.enemyPositions.clear();
+      this.enemyDeadUntil.clear();
+      this.heroSprite.destroy();
       for (const graphic of this.impactPool) graphic.destroy();
       this.impactPool.length = 0;
       this.enemyHitUntil.clear();
     });
+  }
+
+  /** One-time Canvas2D-generated sprite atlases, shared by all actors of a type. */
+  private ensurePixelAtlas(actor: PixelActor): string {
+    const key = pixelAtlasKey(actor);
+    if (this.textures.exists(key)) return key;
+    const texture = this.textures.addCanvas(key, renderPixelAtlas(actor));
+    if (!texture) throw new Error('Unable to register original pixel atlas: ' + key);
+    PIXEL_ANIMATIONS.forEach((animation, row) => {
+      for (let frame = 0; frame < PIXEL_ANIMATION_FRAMES; frame++) {
+        texture.add(pixelFrame(animation, frame), 0,
+          frame * PIXEL_FRAME_WIDTH, row * PIXEL_FRAME_HEIGHT,
+          PIXEL_FRAME_WIDTH, PIXEL_FRAME_HEIGHT);
+      }
+    });
+    return key;
+  }
+
+  private pixelPose(animation: ReturnType<typeof playerAnimation>): PixelAnimation {
+    if (animation === 'running') return 'run';
+    if (animation === 'attacking') return 'attack';
+    if (animation === 'casting') return 'cast';
+    if (animation === 'channeling') return 'channel';
+    if (animation === 'evading') return 'dodge';
+    if (animation === 'stunned') return 'hit';
+    if (animation === 'dead') return 'death';
+    return 'idle';
+  }
+
+  private timedFrame(elapsed: number, total: number): number {
+    return Math.max(0, Math.min(3, Math.floor(4 * elapsed / Math.max(1, total))));
   }
 
   private uiCapturesPointer(): boolean {
@@ -363,7 +412,11 @@ export class FrontierScene extends Phaser.Scene {
       const state = this.bridge.snapshot();
       const actor = event.type === 'playerDeath' ? state.player
         : state.enemies.find(unit => unit.actor.id === event.targetId)?.actor;
-      if (actor) this.showDeathFeedback(actor.id, { x: actor.x, y: actor.y });
+      if (actor) {
+        this.showDeathFeedback(actor.id, { x: actor.x, y: actor.y });
+        if (event.type === 'playerDeath') this.heroDeadUntil = this.time.now + 650;
+        else this.enemyDeadUntil.set(actor.id, this.time.now + 650);
+      }
     } else if (event.type === 'enemyBuff') {
       const actor = this.bridge.snapshot().enemies.find(u => u.actor.id === event.enemyId)?.actor;
       if (!actor) return;
@@ -482,6 +535,10 @@ export class FrontierScene extends Phaser.Scene {
     }
     for (const actor of this.campDecor) actor.setVisible(state.zone === 'wilderness');
     this.hero.setPosition(state.player.x, state.player.y);
+    if (this.heroSprite.texture.key !== pixelAtlasKey(state.classId)) {
+      this.heroSprite.setTexture(this.ensurePixelAtlas(state.classId), pixelFrame('idle', 0));
+    }
+    this.heroSprite.setPosition(state.player.x, state.player.y);
     const animation = playerAnimation(state);
     const oscillation = Math.sin(this.time.now * 0.015);
     this.hero.setScale(animation === 'running' ? 1 + oscillation * 0.045
@@ -494,12 +551,26 @@ export class FrontierScene extends Phaser.Scene {
     this.wardenMarker.setText(state.quest.status === 'ready' ? '?'
       : state.quest.status === 'available' ? '!' : '·');
     this.wardenMarker.setVisible(state.zone === 'wilderness' && state.quest.status !== 'completed');
-    this.hero.setVisible(state.player.alive);
+    this.hero.setVisible(false);
+    const visualPose = this.time.now < this.heroHitUntil ? 'hit' : this.pixelPose(animation);
+    const castTicks = state.warriorAction?.timeline ?? state.classAction?.timeline;
+    const heroFrame = castTicks && (visualPose === 'attack' || visualPose === 'cast'
+      || visualPose === 'channel')
+      ? this.timedFrame(castTicks.elapsedTicks, castTicks.totalTicks ?? 1)
+      : Math.floor(this.time.now / (visualPose === 'run' ? 95 : 150)) % PIXEL_ANIMATION_FRAMES;
+    this.heroSprite.setFrame(pixelFrame(visualPose, heroFrame));
+    this.heroSprite.setVisible(state.player.alive || this.time.now < this.heroDeadUntil);
+    this.heroSprite.setAlpha(this.time.now < this.heroHitUntil ? 0.6 : 1);
+    this.heroSprite.setScale(animation === 'evading' ? 0.92 : 1);
     const ids = new Set(state.enemies.map(unit => unit.actor.id));
     for (const [id, sprite] of this.enemyGraphics) {
       if (!ids.has(id)) {
         sprite.destroy();
         this.enemyGraphics.delete(id);
+        this.enemySprites.get(id)?.destroy();
+        this.enemySprites.delete(id);
+        this.enemyPositions.delete(id);
+        this.enemyDeadUntil.delete(id);
         this.enemyHitUntil.delete(id);
       }
     }
@@ -509,13 +580,36 @@ export class FrontierScene extends Phaser.Scene {
         sprite = this.add.graphics().setDepth(48);
         this.drawEnemy(actor.type, sprite);
         this.enemyGraphics.set(actor.id, sprite);
+        const art = this.add.sprite(actor.x, actor.y, this.ensurePixelAtlas(actor.type),
+          pixelFrame('idle', 0)).setOrigin(0.5, 0.9).setDepth(49);
+        art.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+        this.enemySprites.set(actor.id, art);
       }
       const bob = actor.type === 'wraith'
         ? Math.sin(this.time.now * 0.0045 + actor.x) * 4
         : Math.sin(this.time.now * (actor.type === 'wolf' ? 0.015 : 0.008) + actor.y) * 1.5;
-      sprite.setPosition(actor.x, actor.y + bob);
-      sprite.setVisible(actor.alive);
-      sprite.setAlpha(this.time.now < (this.enemyHitUntil.get(actor.id) ?? 0) ? 0.45 : 1);
+      sprite.setPosition(actor.x, actor.y + bob).setVisible(false);
+      const art = this.enemySprites.get(actor.id);
+      if (art) {
+        const last = this.enemyPositions.get(actor.id);
+        const moving = !!last && Math.hypot(actor.x-last.x, actor.y-last.y) > 0.3;
+        const underHit = this.time.now < (this.enemyHitUntil.get(actor.id) ?? 0);
+        const pose: PixelAnimation = !actor.alive ? 'death'
+          : underHit ? 'hit' : state.enemies.find(u => u.actor.id === actor.id)?.intent
+            ? ENEMY_DEFINITIONS[actor.type].attack === 'bolt' ? 'cast' : 'attack'
+            : moving ? 'run' : 'idle';
+        const intent = state.enemies.find(u => u.actor.id === actor.id)?.intent;
+        const progress = intent && (pose === 'attack' || pose === 'cast')
+          ? this.timedFrame(intent.total-intent.remaining, intent.total)
+          : Math.floor(this.time.now / (pose === 'run' ? 110 : 170)) % PIXEL_ANIMATION_FRAMES;
+        const frame = !actor.alive
+          ? this.timedFrame(650 - Math.max(0,(this.enemyDeadUntil.get(actor.id) ?? 0)-this.time.now),650)
+          : progress;
+        art.setPosition(actor.x,actor.y+bob).setFrame(pixelFrame(pose,frame))
+          .setVisible(actor.alive || this.time.now < (this.enemyDeadUntil.get(actor.id) ?? 0))
+          .setAlpha(underHit ? 0.55 : 1);
+      }
+      this.enemyPositions.set(actor.id, { x: actor.x, y: actor.y });
     }
 
     this.healthBar.clear();
