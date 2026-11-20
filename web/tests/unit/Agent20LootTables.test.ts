@@ -195,7 +195,11 @@ describe('Agent 20 / Prompt 16 — deterministic, pure loot tables', () => {
     for (const attempt of invalid) {
       expect(eligibleLootEntries(attempt)).toEqual([]);
       expect(rollLootTable(attempt, new SeededRng(12))).toBeNull();
-      expect(bossGuaranteedLoot({ ...attempt, isBoss: true })).toEqual([]);
+      // Keep the malformed isBoss case malformed; set the others to boss.
+      const bossAttempt = typeof attempt.isBoss === 'boolean'
+        ? { ...attempt, isBoss: true }
+        : attempt;
+      expect(bossGuaranteedLoot(bossAttempt)).toEqual([]);
     }
     expect(eligibleLootEntries(null as unknown as LootContext)).toEqual([]);
   });
