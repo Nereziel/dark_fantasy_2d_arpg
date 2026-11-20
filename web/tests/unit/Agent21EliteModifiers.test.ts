@@ -19,7 +19,7 @@ describe('Agent 21 — isolated elite modifiers (Prompt 17)', () => {
   it('defines exactly twelve stable, immutable effects and safe lookups', () => {
     expect(ELITE_MODIFIER_IDS).toEqual(IDs);
     expect(Object.keys(ELITE_MODIFIERS).sort()).toEqual([...IDs].sort());
-    expect(new Set(IDS).size).toBe(12);
+    expect(new Set(IDs).size).toBe(12);
     expect(Object.isFrozen(ELITE_MODIFIER_IDS)).toBe(true);
     expect(Object.isFrozen(ELITE_MODIFIERS)).toBe(true);
     for (const id of IDs) {
