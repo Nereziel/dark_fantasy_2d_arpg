@@ -44,6 +44,7 @@ import {
   MERCHANT_ID, BLACKSMITH_ID, type NpcId
 } from '../world/npcs';
 import { getOffer, createShopItem, sellPrice, temperCost, temperItem } from '../trade/commerce';
+import { townEntry, canInteractTownEntry } from '../world/townManifest';
 import {
   freshQuest, validQuest, QUEST_REQUIRED_KILLS, QUEST_REWARD_GOLD, QUEST_REWARD_XP,
   WARDEN_ID, type QuestProgress
@@ -190,6 +191,7 @@ export class GameSimulation {
   private selectedTargetId: string | null = null;
   private quest: QuestProgress = freshQuest();
   private pendingNpc: NpcId | null = null;
+  private pendingTown: string | null = null;
   private pendingSkill: SkillSlot | null = null;
   private pendingAim: SkillAim | null = null;
   private player = spawnPlayer('WARRIOR', this.equipment, { x: 390, y: 470 });
@@ -265,6 +267,7 @@ export class GameSimulation {
         this.movePath = [];
         this.pickupTarget = null;
         this.pendingNpc = null;
+    this.pendingTown = null;
         this.pendingPortal = false;
       }
       return;
@@ -293,6 +296,7 @@ export class GameSimulation {
       this.pendingAim = null;
       this.pickupTarget = null;
       this.pendingNpc = null;
+    this.pendingTown = null;
       this.pendingPortal = false;
       return;
     }
@@ -344,6 +348,7 @@ export class GameSimulation {
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingNpc = null;
+    this.pendingTown = null;
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingPortal = false;
@@ -361,9 +366,50 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
+    this.pendingTown = null;
       this.pendingObject = null;
       this.pendingPortal = true;
       if (distance(this.player, this.portalPosition) <= 78) this.changeZone();
+      return;
+    }
+    if (command.type === 'interactTown') {
+      const entry = townEntry(command.entryId);
+      if (!entry || entry.capability === 'existing' || this.zone !== 'wilderness' || !this.player.alive || this.paused) return;
+      this.warriorAction = null;
+      this.classAction = null;
+      this.warriorPending = null;
+      this.movePath = [];
+      this.attackTarget = null;
+      this.pickupTarget = null;
+      this.pendingSkill = null;
+      this.pendingAim = null;
+      this.pendingObject = null;
+      this.pendingPortal = false;
+      this.pendingNpc = null;
+    this.pendingTown = null;
+      if (canInteractTownEntry(this.player, entry.id)) {
+        this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
+        this.pendingTown = null;
+      } else {
+        this.pendingTown = entry.id;
+      }
+      return;
+    }
+    if (command.type === 'useTownService') {
+      const entry = townEntry(command.entryId);
+      if (!entry || !this.player.alive || this.zone !== 'wilderness'
+        || !canInteractTownEntry(this.player, entry.id)) return;
+      const healer = entry.role === 'healer';
+      const restorer = entry.role === 'potionVendor';
+      if (!healer && !restorer) return;
+      const price = healer ? 15 : 12;
+      if (this.gold < price) return;
+      if (healer && this.player.health >= this.player.maxHealth) return;
+      if (restorer && this.resource >= deriveStats(this.classId, this.equipment, this.level).maxResource) return;
+      this.gold -= price;
+      if (healer) this.player.health = this.player.maxHealth;
+      if (restorer) this.resource = deriveStats(this.classId, this.equipment, this.level).maxResource;
+      this.events.push({ type: 'townServiceUsed', entryId: entry.id, goldSpent: price });
       return;
     }
     if (command.type === 'interactNpc') {
@@ -422,6 +468,7 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
+    this.pendingTown = null;
       this.pendingObject = null;
       this.pendingPortal = false;
     } else if (command.type === 'attack') {
@@ -437,6 +484,7 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
+    this.pendingTown = null;
       this.pendingObject = null;
       this.pendingPortal = false;
     } else if (command.type === 'pickup' && this.groundLoot.some(loot => loot.id === command.id)) {
@@ -446,6 +494,7 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
+    this.pendingTown = null;
       this.pendingObject = null;
       this.pendingPortal = false;
     }
@@ -881,6 +930,7 @@ export class GameSimulation {
         this.attackTarget = null;
         this.pickupTarget = null;
         this.pendingNpc = null;
+    this.pendingTown = null;
         this.pendingObject = null;
         this.pendingPortal = false;
         return;
@@ -910,6 +960,7 @@ export class GameSimulation {
     this.attackTarget = null;
     this.pickupTarget = null;
     this.pendingNpc = null;
+    this.pendingTown = null;
     this.pendingObject = null;
     this.pendingPortal = false;
     if (distance(this.player, this.enemy) > skill.range) {
@@ -1232,6 +1283,7 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
+    this.pendingTown = null;
       this.movePath = [];
       this.attackTarget = null;
       this.pickupTarget = null;
@@ -1581,6 +1633,7 @@ export class GameSimulation {
     this.pendingSkill = null;
     this.pendingAim = null;
     this.pendingNpc = null;
+    this.pendingTown = null;
     this.pendingPortal = false;
     this.selectedTargetId = null;
     this.events.push({ type: 'zoneChanged', zone: destination });
@@ -1666,10 +1719,20 @@ export class GameSimulation {
         return;
       }
       this.follow(this.player, this.portalPosition, speed, dt, 70);
+    } else if (this.pendingTown) {
+      const entry = townEntry(this.pendingTown);
+      if (!entry || this.zone !== 'wilderness') this.pendingTown = null;
+      else if (canInteractTownEntry(this.player, entry.id)) {
+        this.pendingTown = null;
+        this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
+      } else {
+        this.follow(this.player, entry.position, speed, dt, Math.max(1, entry.interactionRange - 10));
+      }
     } else if (this.pendingNpc) {
       if (nearNpc(this.player, this.pendingNpc)) {
         const id = this.pendingNpc;
         this.pendingNpc = null;
+    this.pendingTown = null;
         this.events.push({ type: 'npcDialogue', npcId: id });
       } else {
         this.follow(this.player, NPC_POSITIONS[this.pendingNpc], speed, dt, NPC_INTERACT_RANGE - 10);
@@ -2046,7 +2109,7 @@ export class GameSimulation {
       : this.attackTarget || this.pendingSkill || this.warriorAction || this.warriorPending
         || this.classAction ? 'combat'
       : this.movePath.length || this.pickupTarget || this.pendingObject
-        || this.pendingNpc || this.pendingPortal ? 'moving' : 'ready';
+        || this.pendingNpc || this.pendingTown || this.pendingPortal ? 'moving' : 'ready';
     return {
       version: 5,
       worldSeed: this.world.seed,
@@ -2277,6 +2340,7 @@ export class GameSimulation {
     this.pendingSkill = null;
     this.pendingAim = null;
     this.pendingNpc = null;
+    this.pendingTown = null;
     this.pendingPortal = false;
     this.pickupTarget = null;
     this.attackTimer = 0;
@@ -2315,6 +2379,7 @@ export class GameSimulation {
     this.effects = emptyEffects();
     this.quest = freshQuest();
     this.pendingNpc = null;
+    this.pendingTown = null;
     this.units = createPack(0, 1, this.world.encounterPositions);
     this.selectedTargetId = null;
     this.pendingSkill = null;
