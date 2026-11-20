@@ -468,5 +468,10 @@
   "worldObjects": {
     "shrine": "The soul shrine grants a protective shield.",
     "chest": "You opened a field chest."
+  },
+  "progression": {
+    "experience": "Experience",
+    "skillPoints": "Skill points",
+    "talentPoints": "Talent points"
   }
 }
