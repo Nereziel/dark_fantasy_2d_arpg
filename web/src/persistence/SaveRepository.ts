@@ -11,10 +11,10 @@ const SLOT = 'first-character';
  * Persistent character only. A new session always starts with fresh monsters,
  * fresh ground loot, full health, zero cooldowns, and no temporary effects.
  *
- * Legacy character-only formats 8 and 9 are migrated explicitly to v10; world snapshots remain unsupported.
+ * Legacy character-only formats 8, 9 and 10 migrate explicitly to v11; world snapshots remain unsupported.
  */
 export interface SavedGame {
-  format: 10;
+  format: 11;
   characterId: string;
   savedAt: number;
   character: CharacterProgress;
@@ -31,7 +31,7 @@ export function validateCharacter(raw: unknown): CharacterProgress | null {
 export function createSaveRecord(raw: unknown, savedAt = Date.now()): SavedGame | null {
   const character = validateCharacter(raw);
   if (!character || !Number.isFinite(savedAt) || savedAt < 0) return null;
-  return { format: 10, characterId: 'hero', savedAt, character };
+  return { format: 11, characterId: 'hero', savedAt, character };
 }
 
 /**
@@ -66,8 +66,17 @@ export function readSaveRecord(raw: unknown): CharacterProgress | null {
   const record = raw as Partial<SavedGame>;
   if (record.characterId !== 'hero') return null;
   const format: unknown = (raw as { format?: unknown }).format;
-  // A v10 record must explicitly contain stash. Missing data may hide lost
-  // stored items, so only the dedicated v8/v9 migration may create an empty one.
+  // V11 explicitly stores both stash and the complete story ledger.
+  // Missing ledger must fail closed, never reset paid quest rewards.
+  if (format === 11) {
+    if (!record.character || typeof record.character !== 'object'
+      || !Object.hasOwn(record.character, 'stash')
+      || !Array.isArray(record.character.stash)
+      || !Object.hasOwn(record.character, 'questLedger')) return null;
+    return validateCharacter(record.character);
+  }
+  // V10 had a mandatory stash but only the historical first quest.
+  // RestoreCharacter expands it to an Act I ledger without losing reward status.
   if (format === 10) {
     if (!record.character || typeof record.character !== 'object'
       || !Object.hasOwn(record.character, 'stash')
