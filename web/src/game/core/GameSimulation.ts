@@ -1056,7 +1056,7 @@ export class GameSimulation {
       !isLegacyStatus(effect.id) && effect.remaining > 0);
   }
 
-  /** Data-driven Wave B AI runs in the deterministic TypeScript simulation. */
+  /** Deterministic tactical planner: obstacle-aware movement, role-specific actions. */
   private updateMonsterTactics(unit: EnemyUnit, dt: number): void {
     const actor = unit.actor;
     const def = ENEMY_DEFINITIONS[actor.type];
@@ -1067,60 +1067,127 @@ export class GameSimulation {
     if (!spawn) return;
     const origin = { x: spawn.x, y: spawn.y + (this.wave % 2) * 25 };
     const role = enemyArchetype(actor.type);
+    const sanctuary = this.zone === 'wilderness'
+      && distance(this.player, this.world.camp) <= CAMP_RADIUS;
+    const target = sanctuary ? null : this.player;
+    const toPlayer = distance(actor, this.player);
+    const lineOfSight = hasLineOfSight(actor, this.player, this.world.obstacles);
+    const abilityCooldowns = unit.abilityCooldowns ?? (unit.abilityCooldowns = {});
+    const actions = monsterActions(actor.type);
+    const ready = (action: MonsterAction): boolean =>
+      (abilityCooldowns[action.id] ?? 0) <= 0;
     const allies = this.units.filter(u => u !== unit && u.actor.alive).map(u => ({
-      ...u.actor, lineOfSight: true,
-      reachable: distance(actor, u.actor) <= profile.aggroRange
+      ...u.actor,
+      lineOfSight: hasLineOfSight(actor, u.actor, this.world.obstacles),
+      reachable: findPath(actor, u.actor, ACTOR_RADIUS, this.world.obstacles).length > 0
     }));
+
+    // Buffs are committed as simulation statuses, not cosmetic renderer effects.
+    // Damaging frenzy uses the same canonical damageDealt modifier as Cursed.
+    const buff = target && toPlayer <= def.aggro && unit.cooldown <= 0
+      ? actions.find(action => action.kind === 'buff' && ready(action)
+        && this.units.some(u => u !== unit && u.actor.alive
+          && distance(actor, u.actor) <= action.range)) : undefined;
+    if (buff && buff.statusId) {
+      const base = statusRule(buff.statusId, buff.statusMagnitude, buff.statusDuration);
+      const rule = buff.buffType === 'damageBonus'
+        ? { ...base, modifiers: { damageDealt: 1 } } : base;
+      for (const ally of this.units) {
+        if (!ally.actor.alive || distance(actor, ally.actor) > buff.range) continue;
+        this.statusEffects.enemies[ally.actor.id] = applyStatus(
+          this.statusEffects.enemies[ally.actor.id] ?? [], rule,
+          actor.id, monsterStatusImmunities(ally.actor.type));
+      }
+      abilityCooldowns[buff.id] = buff.cooldown;
+      unit.cooldown = Math.max(unit.cooldown, 0.65);
+      this.syncLegacyStatuses();
+      this.events.push({ type: 'enemyBuff', enemyId: actor.id, abilityId: buff.id });
+      return;
+    }
+
+    const healSkill = actions.find(action => action.kind === 'heal');
+    const travel = target ? findPath(actor, target, ACTOR_RADIUS, this.world.obstacles) : [];
+    const patrol = {
+      x: origin.x + (index % 2 === 0 ? 36 : -36),
+      y: origin.y + (index === 1 ? 26 : -26)
+    };
     const decision = planEnemyBehavior({
-      actor, origin, target: this.player, allies,
+      actor, origin, target, allies,
       config: {
         archetypeId: role, aggroRange: def.aggro,
         attackRange: def.attackRange,
         preferredDistance: Math.min(def.preferredRange, def.attackRange),
         leashRange: Math.max(profile.leashRange, def.aggro + 100),
-        specialRange: role === 'healer' ? 220 : Math.min(def.aggro, Math.max(def.attackRange, 230)),
+        specialRange: role === 'healer' ? (healSkill?.range ?? 220)
+          : role === 'ambusher' ? Math.min(def.aggro, 230)
+            : Math.min(def.aggro, Math.max(def.attackRange, 230)),
         healHealthRatio: 0.88,
         fleeHealthRatio: profile.retreatThreshold
       },
-      attackCooldown: unit.cooldown, abilityCooldown: unit.cooldown,
-      lineOfSight: true,
+      attackCooldown: unit.cooldown,
+      abilityCooldown: healSkill ? Math.max(unit.cooldown, abilityCooldowns[healSkill.id] ?? 0)
+        : unit.cooldown,
+      lineOfSight,
       navigation: {
-        targetReachable: canOccupy(this.player, ACTOR_RADIUS, this.world.obstacles),
-        originReachable: canOccupy(origin, ACTOR_RADIUS, this.world.obstacles),
-        repositionReachable: true, retreatReachable: true, patrolReachable: true
-      }
+        targetReachable: target === null || travel.length > 0,
+        originReachable: findPath(actor, origin, ACTOR_RADIUS, this.world.obstacles).length > 0,
+        repositionReachable: true,
+        retreatReachable: true,
+        patrolReachable: canOccupy(patrol, ACTOR_RADIUS, this.world.obstacles)
+      },
+      patrolTarget: patrol
     });
+
     if (decision.action === 'heal') {
       const ally = this.units.find(u => u.actor.id === decision.targetId && u.actor.alive);
-      if (ally && unit.cooldown <= 0 && distance(actor, ally.actor) <= 220) {
-        ally.actor.health = resolveHealing(ally.actor.health, ally.actor.maxHealth, 36).health;
+      if (ally && healSkill && ready(healSkill) && unit.cooldown <= 0
+        && distance(actor, ally.actor) <= healSkill.range
+        && hasLineOfSight(actor, ally.actor, this.world.obstacles)) {
+        const healed = resolveHealing(ally.actor.health, ally.actor.maxHealth, healSkill.damage);
+        ally.actor.health = healed.health;
         this.statusEffects.enemies[ally.actor.id] = dispelStatuses(
           this.statusEffects.enemies[ally.actor.id] ?? [], { categories: ['curse'] });
-        unit.cooldown = 6.5;
-        this.events.push({ type: 'enemyHeal', enemyId: actor.id, targetId: ally.actor.id, amount: 36 });
+        abilityCooldowns[healSkill.id] = healSkill.cooldown;
+        unit.cooldown = Math.max(unit.cooldown, 0.65);
+        this.syncLegacyStatuses();
+        this.events.push({
+          type: 'enemyHeal', enemyId: actor.id, targetId: ally.actor.id, amount: healed.healed
+        });
       }
-    } else if (decision.action === 'cast' && decision.targetId !== this.player.id) {
-      const ally = this.units.find(u => u.actor.id === decision.targetId && u.actor.alive);
-      if (ally && unit.cooldown <= 0) {
-        this.applyCanonicalStatus('enemy', 'fortified', actor.id, 0.2, 6, ally);
-        unit.cooldown = 8;
-      }
-    } else if (decision.action === 'attack' || decision.action === 'cast') {
-      if (unit.cooldown > 0) return;
-      const center = def.attack === 'sweep' ? actor : this.player;
+      return;
+    }
+    if (decision.action === 'attack' || decision.action === 'cast') {
+      if (decision.targetId !== this.player.id || unit.cooldown > 0 || !target) return;
+      const choice = actions.find(action =>
+        (action.kind === 'damage' || action.kind === 'debuff') && ready(action)
+        && toPlayer <= action.range
+        && (lineOfSight || action.attack === 'sweep'));
+      const pattern = choice?.attack ?? def.attack;
+      const center = pattern === 'sweep' ? actor : this.player;
       unit.intent = {
-        pattern: def.attack, x: center.x, y: center.y,
-        radius: def.dangerRadius, remaining: def.windup, total: def.windup
+        pattern, x: center.x, y: center.y,
+        radius: choice?.areaRadius ?? (choice && pattern === 'sweep'
+          ? Math.max(65, choice.range) : def.dangerRadius),
+        remaining: choice?.windup ?? def.windup,
+        total: choice?.windup ?? def.windup,
+        ...(choice ? { abilityId: choice.id } : {})
       };
-      this.events.push({ type: 'enemyWindup', enemyId: actor.id, pattern: def.attack });
-    } else if ('destination' in decision) {
-      const point = decision.destination;
-      if (canOccupy(point, ACTOR_RADIUS, this.world.obstacles)) {
-        const pace = def.speed * profile.speedMultiplier
-          * (this.statusEffects.enemies[actor.id]?.some(e => e.id === 'slowed') ? 0.7 : 1);
-        const stop = decision.action === 'chase' ? Math.max(0, def.preferredRange - 4) : 0;
-        this.follow(actor, point, pace, dt, stop);
-      }
+      if (choice) abilityCooldowns[choice.id] = choice.cooldown;
+      this.events.push({ type: 'enemyWindup', enemyId: actor.id, pattern });
+      return;
+    }
+    if ('destination' in decision) {
+      const dest = decision.destination;
+      if (!canOccupy(dest, ACTOR_RADIUS, this.world.obstacles)) return;
+      const route = findPath(actor, dest, ACTOR_RADIUS, this.world.obstacles);
+      if (!route.length) return;
+      const point = route[0]!;
+      const slowed = getStatusModifiers(this.statusEffects.enemies[actor.id] ?? []).moveSpeed ?? 0;
+      const pace = def.speed * profile.speedMultiplier * Math.max(0.25, 1 + slowed);
+      const stop = decision.action === 'chase' && route.length === 1
+        && decision.targetId === undefined && distance(dest, this.player) < 0.01
+        ? Math.max(0, def.preferredRange - 4) : 0;
+      this.follow(actor, point, pace, dt, stop);
     }
   }
 
