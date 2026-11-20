@@ -66,7 +66,13 @@ export function readSaveRecord(raw: unknown): CharacterProgress | null {
   const record = raw as Partial<SavedGame>;
   if (record.characterId !== 'hero') return null;
   const format: unknown = (raw as { format?: unknown }).format;
-  if (format === 10) return validateCharacter(record.character);
+  // A v10 record must explicitly contain stash. Missing data may hide lost
+  // stored items, so only the dedicated v8/v9 migration may create an empty one.
+  if (format === 10) {
+    if (!record.character || typeof record.character !== 'object'
+      || !Object.hasOwn(record.character, 'stash')) return null;
+    return validateCharacter(record.character);
+  }
   if (format === 9) return migrateV9Character(record.character);
   if (format === 8) return migrateV8Character(record.character);
   return null;
