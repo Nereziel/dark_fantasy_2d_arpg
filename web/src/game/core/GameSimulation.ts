@@ -467,6 +467,7 @@ export class GameSimulation {
     const applied=applyWorldFact(this.worldIndex,this.worldFacts,fact);
     if(!applied.changed)return;
     this.worldFacts=applied.state;
+    this.kills+=plan.enemySpawns.length; // commit fight kills only with the one-shot fact
     const reward=worldEventReward(plan.kind,this.level);
     if(!reward)return;
     this.gold=Math.min(Number.MAX_SAFE_INTEGER,this.gold+reward.gold);
@@ -3151,14 +3152,14 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
     }
-    this.kills++;
+    if(!eventEnemy)this.kills++;
     // Partial event kills yield no per-enemy gold, XP or loot.
     if(!eventEnemy) {
       this.gold += 12 + this.level * 3;
       this.awardExperience(Math.round(rewardForActivity('enemy', this.level, this.level)
         * (unit.elite ? 1.75 : 1)));
     }
-    if (this.zone === 'wilderness') {
+    if (this.zone === 'wilderness' && !eventEnemy) {
       this.commitQuestTransition(
         advanceObjective(ACT_I_QUEST_CATALOG, this.actILedger,
           FIRST_QUEST_ID, 'enemy_defeated', 'enemy_' + this.kills), FIRST_QUEST_ID
