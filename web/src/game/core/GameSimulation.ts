@@ -1947,7 +1947,7 @@ export class GameSimulation {
   private dropEnemyLoot(unit: EnemyUnit): void {
     const boss = unit.actor.type === 'crypt_lord';
     const context: LootContext = {
-      playerLevel: this.level, monsterLevel: this.level,
+      playerLevel: this.level, monsterLevel: this.level, enemyType: unit.actor.type,
       zone: this.zone, isBoss: boss, difficulty: 'normal',
       eliteModifiers: unit.elite?.modifiers ?? [],
       magicFind: deriveStats(this.classId, this.equipment, this.level).magicFind
