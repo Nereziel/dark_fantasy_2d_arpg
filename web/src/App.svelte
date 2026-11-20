@@ -391,6 +391,10 @@
             onclick={() => interact(MERCHANT_ID)}>{$t('trade.browse')}</button>
           <button disabled={!view.player.alive || view.paused}
             onclick={() => interact(BLACKSMITH_ID)}>{$t('trade.visitSmith')}</button>
+          <button disabled={!view.player.alive || view.paused}
+            onclick={() => bridge.command({ type: 'interactTown', entryId: 'stash_camp' })}>
+            {$t('town.stashAccess')}
+          </button>
         </div>
       {/if}
       <DungeonPanel {view} {bridge} />
