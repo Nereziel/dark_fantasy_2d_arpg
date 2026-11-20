@@ -58,7 +58,7 @@ describe('Prompt 36 — canonical waypoint rules', () => {
       ['shrine.soul-shrine','fake'],
       ['__proto__'],
       Array(99).fill('town.waypoint')
-    ]) expect(planWaypointTravel({ ...context(), activated: invalid }, 'shrine.soul-shrine'))
+    ]) expect(planWaypointTravel({ ...context(), activated: invalid as never }, 'shrine.soul-shrine'))
       .toBeNull();
   });
   it('fails closed on blocked destinations and invalid layouts', () => {
