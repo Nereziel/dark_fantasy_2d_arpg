@@ -148,7 +148,7 @@ describe('Prompt 38 — authoritative click and persistence integration',()=>{
     loaded.advance(150);
     expect(loaded.character()).toEqual(unchanged);
     expect(new GameSimulation(43).restoreWorldProgress(progress)).toBe(false);
-    expect(loaded.restoreWorldProgress({...progress,environmentUsedIds:['fake']})).toBe(false);
+    expect(loaded.restoreWorldProgress({...progress,environmentUsedIds:['fake']} as unknown as typeof progress)).toBe(false);
   });
   it('traps are one-shot and damage only after real close-range activation; forged snapshots fail closed',()=>{
     const sim=new GameSimulation(42);
@@ -164,7 +164,7 @@ describe('Prompt 38 — authoritative click and persistence integration',()=>{
     expect(sim.snapshot().player.health).toBe(after.player.health);
     expect(sim.restore({...after,environmentUsedIds:['env.chest','env.chest']})).toBe(false);
     expect(sim.snapshot()).toEqual(after);
-    expect(sim.restore({...after,environmentBlessings:[{kind:'fake',remaining:12}]} as typeof after)).toBe(false);
+    expect(sim.restore({...after,environmentBlessings:[{kind:'fake',remaining:12}]} as unknown as typeof after)).toBe(false);
     expect(sim.snapshot()).toEqual(after);
   });
 });
