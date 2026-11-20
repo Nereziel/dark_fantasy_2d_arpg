@@ -126,7 +126,7 @@ describe('Prompt 37 — real simulation, rewards and world saves', () => {
       expect(completed.materials?.[material as keyof typeof reward.materials])
         .toBe((before.materials?.[material as keyof typeof reward.materials] ?? 0)+amount);
     }
-    expect(completed.inventory.some(item=>item?.id===`world-event-42-${plan.id}-reward`))
+    expect(completed.inventory.some(item=>item?.id===`world-event-42-${plan.id.replaceAll('.','_')}-reward`))
       .toBe(true);
     const rewards=sim.drainEvents().filter(e=>e.type==='worldEventCompleted');
     expect(rewards).toHaveLength(1);
