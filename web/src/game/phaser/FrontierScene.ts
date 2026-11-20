@@ -28,6 +28,10 @@ import {
   generateCrypt
 } from '../world/generator';
 import { buildWilderness } from '../world/wildernessRuntime';
+import {
+  createChunkIndex, planVisibleChunks,
+  type ChunkIndex, type ChunkManifest
+} from '../world/chunkStreaming';
 import type { WildernessFeature } from '../world/wildernessFeatures';
 import { ACT_I_MILESTONES } from '../quests/actIQuestChain';
 import {
@@ -64,6 +68,10 @@ export class FrontierScene extends Phaser.Scene {
   private statusVisuals!: Phaser.GameObjects.Graphics;
   private telegraph!: Phaser.GameObjects.Graphics;
   private terrain!: Phaser.GameObjects.Graphics;
+  private streamIndex: ChunkIndex | null = null;
+  private readonly chunkGraphics = new Map<string, Phaser.GameObjects.Graphics>();
+  private activeChunkIds: string[] = [];
+  private nextStreamUpdate = 0;
   private renderedSeed: number | null = null;
   private renderedZone: ZoneId | null = null;
   private activeObstacles: readonly Obstacle[] = [];
@@ -200,6 +208,7 @@ export class FrontierScene extends Phaser.Scene {
       this.groundLabels.clear();
       this.enemyHitUntil.clear();
       this.enemyBlockUntil.clear();
+      this.releaseChunkGraphics();
     });
   }
 
@@ -618,6 +627,10 @@ export class FrontierScene extends Phaser.Scene {
     if (this.renderedSeed !== state.worldSeed || this.renderedZone !== state.zone) {
       this.paintWorld(state.worldSeed, state.zone);
     }
+    if (state.zone === 'wilderness' && this.time.now >= this.nextStreamUpdate) {
+      this.advanceChunkGraphics(state.player, 4);
+      this.nextStreamUpdate = this.time.now + 120;
+    }
     for (const actor of this.campDecor) actor.setVisible(state.zone === 'wilderness');
     this.hero.setPosition(state.player.x, state.player.y);
     if (this.heroSprite.texture.key !== pixelAtlasKey(state.classId)) {
@@ -873,6 +886,102 @@ export class FrontierScene extends Phaser.Scene {
 
   }
 
+
+  /** Release all visible tile resources on zone change, reset and scene shutdown. */
+  private releaseChunkGraphics(): void {
+    for (const graphics of this.chunkGraphics.values()) graphics.destroy();
+    this.chunkGraphics.clear();
+    this.activeChunkIds = [];
+    this.streamIndex = null;
+    this.nextStreamUpdate = 0;
+  }
+
+  /**
+   * Apply a bounded chunk delta, not a full-world repaint.
+   * Only active chunks own terrain/road/wall Graphics. The authoritative
+   * collision layout remains held by GameSimulation, never by this adapter.
+   */
+  private advanceChunkGraphics(player: Point, budget: number): void {
+    if (!this.streamIndex) return;
+    const plan = planVisibleChunks(this.streamIndex, player, this.activeChunkIds, {
+      loadRadius: 1, unloadRadius: 2, loadBudget: budget, unloadBudget: budget
+    });
+    if (!plan.ok) return;
+    for (const id of plan.unload) {
+      this.chunkGraphics.get(id)?.destroy();
+      this.chunkGraphics.delete(id);
+    }
+    for (const id of plan.load) {
+      const chunk = this.streamIndex.chunks.find(candidate => candidate.id === id);
+      if (!chunk || this.chunkGraphics.has(id)) continue;
+      const graphics = this.add.graphics().setDepth(-90);
+      this.paintChunk(graphics, chunk);
+      this.chunkGraphics.set(id, graphics);
+    }
+    this.activeChunkIds = [...plan.nextActive];
+  }
+
+  private paintChunk(g: Phaser.GameObjects.Graphics, chunk: ChunkManifest): void {
+    const palette: Record<string, number> = {
+      town_clearing: 0x25302e, dark_grass: 0x1b2928,
+      dead_leaves: 0x293029, corrupted_soil: 0x342729,
+      broken_stone: 0x343536, dirt_road: 0x3b382f
+    };
+    for (const tile of chunk.tiles) {
+      g.fillStyle(palette[tile.terrainId] ?? 0x172222, 0.72 + tile.variant * 0.06);
+      g.fillRect(tile.x, tile.y, tile.width, tile.height);
+    }
+    for (const segment of chunk.roads) {
+      g.lineStyle(segment.width, 0x665a42, 0.52)
+        .lineBetween(segment.from.x, segment.from.y, segment.to.x, segment.to.y);
+    }
+    for (const wall of chunk.obstacles) {
+      if (wall.id === 'shrine') continue;
+      g.fillStyle(0x48515a, 0.96)
+        .fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 5);
+      g.lineStyle(3, 0x747c7e, 0.75)
+        .strokeRoundedRect(wall.x, wall.y, wall.width, wall.height, 5);
+    }
+    // Decorations are deterministic for this chunk and discarded on unload.
+    let state = chunk.seed;
+    const rand = (): number => {
+      state = (Math.imul(1664525, state) + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+    for (let i = 0; i < 14; i++) {
+      const x = chunk.bounds.minX + rand() * (chunk.bounds.maxX - chunk.bounds.minX);
+      const y = chunk.bounds.minY + rand() * (chunk.bounds.maxY - chunk.bounds.minY);
+      if (Math.hypot(x - 390, y - 470) < CAMP_RADIUS + 45) continue;
+      const size = 12 + rand() * 17;
+      g.fillStyle(0x0a1117, 0.45).fillEllipse(x + 6, y + 8, size * 2, 13);
+      g.fillStyle(0x34443d, 0.88)
+        .fillTriangle(x - size, y + 5, x + size, y + 5, x, y - size * 1.8);
+    }
+    if (chunk.anchors.some(anchor => anchor.kind === 'camp')) {
+      g.fillStyle(0x151f22, 0.88).fillCircle(390, 470, CAMP_RADIUS);
+      g.lineStyle(4, 0x8a7956, 0.84)
+        .strokeCircle(390, 470, CAMP_RADIUS - 9);
+      g.fillStyle(0xdb793d, 0.92).fillCircle(422, 532, 13);
+    }
+    const featureIds = new Set(chunk.featureIds);
+    for (const feature of this.activeStoryFeatures) {
+      if (!featureIds.has(feature.id) || feature.kind === 'cryptEntrance') continue;
+      const color = feature.kind === 'graveyard' ? 0xa6a2a8
+        : feature.kind === 'evidence' ? 0xd3b273
+        : feature.kind === 'miniBoss' ? 0xc77580
+        : feature.kind === 'forest' ? 0x718f6b
+        : feature.kind === 'corruption' ? 0xa36aa0 : 0x79958b;
+      const radius = Math.min(30, feature.radius * 0.5);
+      g.fillStyle(color, feature.mandatory ? 0.25 : 0.12)
+        .fillCircle(feature.position.x, feature.position.y, radius);
+      g.lineStyle(feature.mandatory ? 3 : 1, color, 0.78)
+        .strokeCircle(feature.position.x, feature.position.y, radius);
+    }
+    if (chunk.anchors.some(anchor => anchor.kind === 'cryptGate')) {
+      this.paintPortal(g, CRYPT_GATE.x, CRYPT_GATE.y, 0x96afbc);
+    }
+  }
+
   private paintPortal(g: Phaser.GameObjects.Graphics, x: number, y: number, glow: number): void {
     g.fillStyle(0x090f17, 0.8).fillEllipse(x, y + 24, 115, 35);
     g.fillStyle(0x30343f).fillRoundedRect(x - 50, y - 45, 100, 69, 8);
@@ -936,6 +1045,7 @@ export class FrontierScene extends Phaser.Scene {
     if (!this.terrain) this.terrain = this.add.graphics().setDepth(-100);
     const ground = this.terrain;
     ground.clear();
+    this.releaseChunkGraphics();
     this.renderedSeed = worldSeed;
     this.renderedZone = zone;
     this.activeObstacles = layout.obstacles;
@@ -944,108 +1054,8 @@ export class FrontierScene extends Phaser.Scene {
       this.paintCrypt(ground, worldSeed, layout.obstacles);
       return;
     }
-    ground.fillStyle(0x131921).fillRect(0, 0, WIDTH, HEIGHT);
-
-    // Terrain/tile layers originate from the same validated world as collision.
-    const terrainColors = {
-      town_clearing: 0x25302e, dark_grass: 0x1b2928,
-      dead_leaves: 0x293029, corrupted_soil: 0x342729,
-      broken_stone: 0x343536, dirt_road: 0x3b382f
-    } as const;
-    for (const tile of wilderness!.terrain.tiles) {
-      const shade = terrainColors[tile.terrainId];
-      ground.fillStyle(shade, 0.72 + tile.variant * 0.06)
-        .fillRect(tile.x, tile.y, tile.width, tile.height);
-    }
-    for (const road of wilderness!.terrain.roads) {
-      ground.lineStyle(road.width, 0x665a42, 0.52);
-      for (let i = 1; i < road.points.length; i++) {
-        const previous = road.points[i - 1]!;
-        const next = road.points[i]!;
-        ground.lineBetween(previous.x, previous.y, next.x, next.y);
-      }
-    }
-    // Decorative forest variation only; never changes the world pathfinder.
-    let seed = (worldSeed ^ 0x8237ab19) >>> 0;
-    const random = () => {
-      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-      return seed / 4294967296;
-    };
-
-    // A safe encampment is the hero's spawn and re-entry point.
-    const camp = layout.camp;
-    ground.fillStyle(0x151f22, 0.96).fillCircle(camp.x, camp.y, CAMP_RADIUS);
-    ground.lineStyle(5, 0x8a7956, 0.82)
-      .strokeCircle(camp.x, camp.y, CAMP_RADIUS - 9);
-    ground.lineStyle(2, 0xc9aa73, 0.42)
-      .strokeCircle(camp.x, camp.y, CAMP_RADIUS - 22);
-    // Dark tents, banners and a central brazier. Purely cosmetic.
-    for (const dx of [-105, 110]) {
-      ground.fillStyle(0x111823).fillEllipse(camp.x + dx, camp.y - 82, 69, 18);
-      ground.fillStyle(0x46515a).fillTriangle(
-        camp.x + dx - 33, camp.y - 78,
-        camp.x + dx + 33, camp.y - 78,
-        camp.x + dx, camp.y - 122);
-      ground.lineStyle(3, 0x9b8767, 0.65).lineBetween(
-        camp.x + dx, camp.y - 78, camp.x + dx, camp.y - 122);
-    }
-    ground.fillStyle(0x0b1017).fillCircle(camp.x + 34, camp.y + 65, 24);
-    ground.lineStyle(5, 0x6d5345).strokeCircle(camp.x + 34, camp.y + 65, 21);
-    ground.fillStyle(0xdb793d, 0.92).fillTriangle(
-      camp.x + 21, camp.y + 68, camp.x + 47, camp.y + 68, camp.x + 34, camp.y + 32);
-    ground.fillStyle(0xffd49a, 0.86).fillTriangle(
-      camp.x + 26, camp.y + 64, camp.x + 42, camp.y + 64, camp.x + 34, camp.y + 44);
-
-    for (let i = 0; i < 120; i++) {
-      const x = 60 + random() * (WIDTH - 120);
-      const y = 60 + random() * (HEIGHT - 120);
-      if (y > 350 && y < 660 && x < 1400) continue;
-      const size = 12 + random() * 24;
-      ground.fillStyle(0x090f14, 0.5).fillEllipse(x + 7, y + 8, size * 2.2, 14);
-      ground.fillStyle(0x202d2c).fillTriangle(x - size, y + 7, x + size, y + 7, x, y - size * 1.8);
-      ground.fillStyle(0x34443d).fillTriangle(x - size * 0.7, y, x + size * 0.7, y, x, y - size * 1.8);
-      if (random() < 0.15) {
-        ground.fillStyle(0x64745a, 0.25).fillCircle(x, y - size * 0.6, size * 0.55);
-      }
-    }
-
-    // Walkability and visuals share the same authoritative obstacle definitions.
-    for (const wall of layout.obstacles) {
-      if (wall.id === 'shrine') continue;
-      ground.fillStyle(0x48515a, 0.95)
-        .fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 5);
-      ground.lineStyle(4, 0x747c7e, 0.75)
-        .strokeRoundedRect(wall.x, wall.y, wall.width, wall.height, 5);
-      ground.lineStyle(2, 0x27313d, 0.75)
-        .lineBetween(wall.x + 20, wall.y + 8, wall.x + wall.width - 16, wall.y + wall.height - 9);
-    }
-
-    // Cracked shrine and runic wisps; animation can be introduced later.
-    ground.fillStyle(0x141924).fillEllipse(1030, 412, 150, 42);
-    ground.fillStyle(0x49535a).fillRoundedRect(1001, 345, 58, 60, 6);
-    ground.fillStyle(0x737e83).fillTriangle(990, 350, 1070, 350, 1030, 315);
-    ground.lineStyle(3, 0x92c2ac, 0.5).strokeCircle(1030, 385, 14);
-
-    // Seeded story landmarks, treasures and encounters are visible in-world.
-    // Decorative geometry only: actor collision uses the same terrain layout.
-    for (const feature of wilderness!.features) {
-      if (feature.kind === 'cryptEntrance') continue;
-      const color = feature.kind === 'graveyard' ? 0xa6a2a8
-        : feature.kind === 'evidence' ? 0xd3b273
-        : feature.kind === 'miniBoss' ? 0xc77580
-        : feature.kind === 'forest' ? 0x718f6b
-        : feature.kind === 'corruption' ? 0xa36aa0 : 0x79958b;
-      const radius = Math.min(30, feature.radius * 0.5);
-      ground.fillStyle(color, feature.mandatory ? 0.25 : 0.12)
-        .fillCircle(feature.position.x, feature.position.y, radius);
-      ground.lineStyle(feature.mandatory ? 3 : 1, color, 0.78)
-        .strokeCircle(feature.position.x, feature.position.y, radius);
-    }
-
-    // The old crypt gateway is a physical interaction point.
-    this.paintPortal(ground, CRYPT_GATE.x, CRYPT_GATE.y, 0x96afbc);
-
-    // A visible playable border makes the initial sandbox readable.
-    ground.lineStyle(9, 0x364149, 0.65).strokeRect(5, 5, WIDTH - 10, HEIGHT - 10);
+    ground.fillStyle(0x10161d).fillRect(0, 0, WIDTH, HEIGHT);
+    this.streamIndex = createChunkIndex(wilderness!);
+    this.advanceChunkGraphics(this.bridge.snapshot().player, 9);
   }
 }
