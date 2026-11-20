@@ -1,11 +1,21 @@
 // GPL-3.0-only — Wave F / Prompt 25 integration adapter.
 // One seed, one validated room/door/tiles/collision plan for simulation and Phaser.
-import { CRYPT_EXIT, type WorldLayout } from './generator';
+import { CRYPT_EXIT, CRYPT_BOSS_POSITIONS, type WorldLayout } from './generator';
 import {
   generateProceduralDungeon, validateProceduralDungeon,
   type ProceduralDungeonResult
 } from './proceduralDungeon';
 import { ACTOR_RADIUS, canOccupy, findPath } from './navigation';
+
+/**
+ * Keep legacy crypt encounter identities while moving the westernmost retainer
+ * 30 units into its boss arena. This grants safe melee approach clearance:
+ * the generated boss room begins at x=1280 and an 18-radius actor standing
+ * 34 units left of the retainer must not collide with its west wall.
+ */
+export const CRYPT_RUNTIME_BOSS_POSITIONS: readonly Readonly<{ x: number; y: number }>[] =
+  CRYPT_BOSS_POSITIONS.map((position, index) => index === 2
+    ? { x: position.x + 30, y: position.y } : { ...position });
 
 export interface DungeonRuntimeWorld {
   readonly dungeon: ProceduralDungeonResult;
@@ -37,7 +47,7 @@ export function buildCryptWorld(seed: number): DungeonRuntimeWorld {
     encounterPositions: encounters
   };
   if (layout.camp.x !== CRYPT_EXIT.x || layout.camp.y !== CRYPT_EXIT.y
-    || [layout.camp, ...encounters, dungeon.bossSpawn, ...dungeon.bossGuardSpawns]
+    || [layout.camp, ...encounters, ...CRYPT_RUNTIME_BOSS_POSITIONS]
       .some(position => !canOccupy(position, ACTOR_RADIUS, layout.obstacles)
         || findPath(layout.camp, position, ACTOR_RADIUS, layout.obstacles).length === 0)) {
     throw new RangeError('Crypt pathing or legacy portal invariant failed');
