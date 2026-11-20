@@ -21,6 +21,7 @@
   import QuestJournal from './ui/QuestJournal.svelte';
   import WorldMapCanvas from './ui/WorldMapCanvas.svelte';
   import WorldEventPanel from './ui/WorldEventPanel.svelte';
+  import EnvironmentPanel from './ui/EnvironmentPanel.svelte';
   import WaypointPanel from './ui/WaypointPanel.svelte';
   import NpcDialogue from './ui/NpcDialogue.svelte';
   import TradePanel from './ui/TradePanel.svelte';
@@ -122,6 +123,9 @@
         messageKey = 'waypoints.arrived';
         if (mapOpen) closeMap();
         else if (townModal !== null) closeDialogue();
+      }
+      if (event.type === 'environmentInteracted' && playing) {
+        messageKey = 'environment.feedback.' + event.kind;
       }
       if (event.type === 'worldInteract' && playing && event.id !== 'soul-shrine') {
         messageKey = event.kind === 'shrine' ? 'worldObjects.shrine' : 'worldObjects.chest';
@@ -529,6 +533,7 @@
       {/if}
       <DungeonPanel {view} {bridge} />
       <WorldEventPanel {view} />
+      <EnvironmentPanel {view} />
       <aside class="enemy-roster" aria-label={$t('hud.enemies')}>
         <div class="enemy-roster-title">{$t('hud.enemies')} · {view.enemies.filter(unit => unit.actor.alive).length}/{view.enemies.length} · {$t('hud.wave')} {view.wave + 1}</div>
         {#each view.enemies as unit (unit.actor.id)}
