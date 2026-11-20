@@ -725,7 +725,10 @@ export class FrontierScene extends Phaser.Scene {
     }
     this.projectileVisuals.clear();
     for (const missile of state.projectiles) {
-      const color = missile.type === 'shadow' ? 0xa78bcd : 0xe8a25f;
+      const color = missile.type === 'shadow' ? 0xa78bcd
+        : missile.type === 'frost' ? 0x7fd6f4
+        : missile.type === 'poison' ? 0x80d48a
+        : missile.type === 'holy' ? 0xf2d887 : 0xe8a25f;
       this.projectileVisuals.fillStyle(color, 0.25).fillCircle(missile.x, missile.y, 14);
       this.projectileVisuals.fillStyle(color, 0.95).fillCircle(missile.x, missile.y, 6);
     }
