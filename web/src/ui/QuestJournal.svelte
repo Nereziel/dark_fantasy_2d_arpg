@@ -1,25 +1,47 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
   import type { GameSnapshot } from '../game/core/types';
-  import { QUEST_REQUIRED_KILLS } from '../game/quests/firstQuest';
+  import { QUEST_REQUIRED_KILLS, FIRST_QUEST_ID } from '../game/quests/firstQuest';
+  import { ACT_I_QUEST_CATALOG } from '../game/quests/actIQuestChain';
 
   let { view, talk }: { view: GameSnapshot; talk: () => void } = $props();
+  const storyState = $derived(view.questLedger?.quests.find(quest =>
+    quest.questId !== FIRST_QUEST_ID && (quest.status === 'active' || quest.status === 'ready')) ?? null);
+  const storyDefinition = $derived(ACT_I_QUEST_CATALOG.quests.find(quest =>
+    quest.id === storyState?.questId) ?? null);
+  const currentObjective = $derived(storyDefinition?.objectives[0] ?? null);
+  const objectiveCount = $derived(currentObjective && storyState
+    ? storyState.counters[currentObjective.id] ?? 0 : 0);
 </script>
 
 <aside class="quest-journal" aria-label={$t('quest.journal')}>
   <div class="quest-heading">{$t('quest.journal')}</div>
-  <strong>{$t('quest.ashes.title')}</strong>
-  <div class="quest-progress">
-    {#if view.quest.status === 'available'}
-      {$t('quest.ashes.unstarted')}
-    {:else if view.quest.status === 'completed'}
-      {$t('quest.ashes.completed')}
-    {:else}
-      {$t('quest.ashes.objective')} · {view.quest.defeated}/{QUEST_REQUIRED_KILLS}
+  {#if storyDefinition && storyState}
+    <strong>{$t(storyDefinition.titleKey)}</strong>
+    <div class="quest-progress">
+      {$t(storyDefinition.objectiveKey)}
+      {#if currentObjective}
+        · {objectiveCount}/{currentObjective.targetCount}
+      {/if}
+    </div>
+    <div class="quest-progress">{$t(storyDefinition.descriptionKey)}</div>
+    {#if storyState.status === 'ready'}
+      <div class="quest-ready">{$t('quest.actI.returnToVesna')}</div>
     {/if}
-  </div>
-  {#if view.quest.status === 'ready'}
-    <div class="quest-ready">{$t('quest.ashes.readyHint')}</div>
+  {:else}
+    <strong>{$t('quest.ashes.title')}</strong>
+    <div class="quest-progress">
+      {#if view.quest.status === 'available'}
+        {$t('quest.ashes.unstarted')}
+      {:else if view.quest.status === 'completed'}
+        {view.actIIUnlocked ? $t('quest.actI.nextUnlocked') : $t('quest.ashes.completed')}
+      {:else}
+        {$t('quest.ashes.objective')} · {view.quest.defeated}/{QUEST_REQUIRED_KILLS}
+      {/if}
+    </div>
+    {#if view.quest.status === 'ready'}
+      <div class="quest-ready">{$t('quest.ashes.readyHint')}</div>
+    {/if}
   {/if}
   <button class="quest-talk" disabled={!view.player.alive || view.paused || view.zone !== 'wilderness'} onclick={talk}>
     {$t('npc.talk')}
