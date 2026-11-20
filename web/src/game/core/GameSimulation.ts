@@ -46,6 +46,10 @@ import {
 } from '../world/generator';
 import { buildWilderness, type WildernessRuntimeWorld } from '../world/wildernessRuntime';
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonRuntime';
+import {
+  applyTalentStats, planSpendTalent, planRespecTalents, projectTalentBonuses,
+  validateTalentBuild, type TalentRanks, type WarriorTalentId
+} from '../progression/talentTree';
 import { buildHollowKingRuntime } from '../bosses/hollowKingRuntime';
 import {
   stepHollowKing, validateHollowKingState,
@@ -265,6 +269,7 @@ export class GameSimulation {
   private xp = 0;
   private skillPoints = 0;
   private talentPoints = 0;
+  private talentRanks: TalentRanks = {};
   private gold = 75;
   private resource = CLASSES.WARRIOR.resourceInitial;
   private attackTimer = 0;
@@ -806,7 +811,7 @@ export class GameSimulation {
     this.player = spawnPlayer(this.classId, this.equipment, checkpoint.position);
     this.refreshHealthLimit();
     this.player.health = this.player.maxHealth;
-    this.resource = deriveStats(this.classId, this.equipment, this.level).maxResource;
+    this.resource = this.currentStats().maxResource;
     this.dungeonStage = 0;
     this.dungeonCleared = false;
     this.wave = 0;
@@ -876,6 +881,14 @@ export class GameSimulation {
     }
     if (command.type === 'respawn') {
       if (!this.player.alive) this.respawnPlayer();
+      return;
+    }
+    if (command.type === 'spendTalent') {
+      this.spendTalent(command.id);
+      return;
+    }
+    if (command.type === 'respecTalents') {
+      this.respecTalents();
       return;
     }
     // No inventory, trade, teleport, ability or world interaction on a corpse.
@@ -961,10 +974,10 @@ export class GameSimulation {
       const price = healer ? 15 : 12;
       if (this.gold < price) return;
       if (healer && this.player.health >= this.player.maxHealth) return;
-      if (restorer && this.resource >= deriveStats(this.classId, this.equipment, this.level).maxResource) return;
+      if (restorer && this.resource >= this.currentStats().maxResource) return;
       this.gold -= price;
       if (healer) this.player.health = this.player.maxHealth;
-      if (restorer) this.resource = deriveStats(this.classId, this.equipment, this.level).maxResource;
+      if (restorer) this.resource = this.currentStats().maxResource;
       this.events.push({ type: 'townServiceUsed', entryId: entry.id, goldSpent: price });
       return;
     }
@@ -1296,7 +1309,7 @@ export class GameSimulation {
     this.itemFlags = Object.fromEntries(Object.entries(result.state.flags ?? {})
       .map(([id, flags]) => [id, { ...flags }]));
     this.refreshHealthLimit();
-    const cap = deriveStats(this.classId, this.equipment, this.level).maxResource;
+    const cap = this.currentStats().maxResource;
     this.resource = Math.min(cap, this.resource);
   }
 
@@ -1314,8 +1327,8 @@ export class GameSimulation {
     if (!Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return null;
     const candidate = planEquip(this.inventoryState(), index, targetSlot, this.inventoryRules());
     if (!candidate.ok) return null;
-    const before = deriveStats(this.classId, this.equipment, this.level);
-    const after = deriveStats(this.classId, candidate.state.equipment as Equipment, this.level);
+    const before = this.currentStats();
+    const after = this.currentStats(candidate.state.equipment as Equipment);
     return {
       armor: after.armor - before.armor,
       damageMin: after.damageMin - before.damageMin,
@@ -1340,8 +1353,42 @@ export class GameSimulation {
     this.events.push({ type: 'loot', id });
   }
 
+
+  /** Single derived stat projection; talent effects never mutate equipment or DTOs. */
+  private currentStats(equipment: Equipment = this.equipment, level = this.level) {
+    const base = deriveStats(this.classId, equipment, level);
+    return this.classId === 'WARRIOR'
+      ? applyTalentStats(base, this.talentRanks) : base;
+  }
+
+  /** Modal UI sends a request; only simulation checks/commits spent ranks. */
+  private spendTalent(id: WarriorTalentId): void {
+    if (!this.player.alive) return;
+    const plan = planSpendTalent(this.classId, this.level, this.talentPoints,
+      this.talentRanks, id);
+    if (!plan.ok) return;
+    this.talentRanks = plan.ranks;
+    this.talentPoints = plan.unspent;
+    this.refreshHealthLimit();
+    this.resource = Math.min(this.resource, this.currentStats().maxResource);
+    this.events.push({ type:'talentSpent', id, rank:this.talentRanks[id]! });
+  }
+
+  private respecTalents(): void {
+    if (!this.player.alive) return;
+    const plan = planRespecTalents(this.classId, this.level,
+      this.talentPoints, this.talentRanks, this.gold);
+    if (!plan.ok) return;
+    this.talentRanks = plan.ranks;
+    this.talentPoints = plan.unspent;
+    this.gold = plan.gold;
+    this.refreshHealthLimit();
+    this.resource = Math.min(this.resource, this.currentStats().maxResource);
+    this.events.push({ type:'talentsRespecced', goldSpent:plan.spentGold });
+  }
+
   private refreshHealthLimit(): void {
-    const max = deriveStats(this.classId, this.equipment, this.level).maxHealth;
+    const max = this.currentStats().maxHealth;
     updateHealthLimit(this.player, max);
   }
 
@@ -1364,7 +1411,7 @@ export class GameSimulation {
         movementSkill: ability.tags.includes('MOVEMENT')
       },
       state: {
-        rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
+        rage: this.resource, maxRage: this.currentStats().maxResource,
         cooldowns: { ...this.warriorCooldowns,
           cleave: Math.max(this.warriorCooldowns.cleave ?? 0, this.cooldowns.rmb),
           charge: Math.max(this.warriorCooldowns.charge ?? 0, this.cooldowns.slot1) }
@@ -1409,12 +1456,14 @@ export class GameSimulation {
     this.attackTarget = null;
     this.pendingSkill = null;
     this.pendingAim = null;
+    const speedFactor = ['basicAttack','cleave','execute'].includes(id)
+      ? 1 + projectTalentBonuses(this.talentRanks).attackSpeed : 1;
     const timeline = startCombatTimeline({
       actionId: id,
       animation: ability.channel ? 'channel' : ability.tags.includes('BUFF') ? 'cast' : 'attack',
-      windupTicks: Math.max(1, Math.round(ability.hit / FIXED_STEP)),
+      windupTicks: Math.max(1, Math.round(ability.hit / (FIXED_STEP * speedFactor))),
       sustainTicks: ability.channel ? Math.round(ability.channel.duration / FIXED_STEP) : 0,
-      recoveryTicks: Math.max(1, Math.round(ability.recovery / FIXED_STEP)),
+      recoveryTicks: Math.max(1, Math.round(ability.recovery / (FIXED_STEP * speedFactor))),
       movementLocked: true
     }).state;
     this.warriorAction = { id, targetId, ...(aim ? { aim } : {}), timeline, hitCount: 0 };
@@ -1499,13 +1548,20 @@ export class GameSimulation {
   private warriorImpact(id: WarriorAbilityId, targetId: string | null, aim?: SkillAim): void {
     const ability = WARRIOR_ABILITIES[id];
     const target = targetId ? this.units.find(u => u.actor.alive && u.actor.id === targetId) : null;
+    const talents = projectTalentBonuses(this.talentRanks);
     if (id === 'warCry') {
-      this.applyCanonicalStatus('player', 'haste', 'hero', 0.2, 8);
-      this.applyCanonicalStatus('player', 'fortified', 'hero', 0.2, 8);
+      this.applyCanonicalStatus('player', 'haste', 'hero',
+        0.2 + talents.warCryStrength, 8 + talents.warCryDuration);
+      this.applyCanonicalStatus('player', 'fortified', 'hero',
+        0.2 + talents.warCryStrength, 8 + talents.warCryDuration);
+      if (talents.shieldOnWarCryPercent > 0) {
+        this.shield = Math.max(this.shield,
+          Math.round(this.player.maxHealth * talents.shieldOnWarCryPercent));
+      }
       this.resource = applyWarriorRageDelta({
-        rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
+        rage: this.resource, maxRage: this.currentStats().maxResource,
         cooldowns: this.warriorCooldowns
-      }, ability.rageGain).rage;
+      }, ability.rageGain + talents.rageGain + talents.warCryRage).rage;
     } else {
       if (id === 'charge') {
         if (aim?.mode === 'DIRECTION') {
@@ -1539,16 +1595,17 @@ export class GameSimulation {
           && unit.actor.health / unit.actor.maxHealth <= ability.condition.threshold
           ? ability.condition.bonusPower : ability.power;
         const dealt = this.applyDamage(power, unit, 'physical');
-        if (dealt > 0 && ability.rageGain > 0) {
+        if (dealt > 0 && ability.rageGain + talents.rageGain > 0) {
           this.resource = applyWarriorRageDelta({
-            rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
+            rage: this.resource, maxRage: this.currentStats().maxResource,
             cooldowns: this.warriorCooldowns
-          }, ability.rageGain).rage;
+          }, ability.rageGain + talents.rageGain).rage;
         }
         const stun = ability.effects.find(e => e.id === 'stunned');
         if (stun && unit.actor.alive) {
           this.applyEffect('enemy',
-            { id: 'stunned', remaining: stun.duration, magnitude: 0, tick: 0 }, unit);
+            { id: 'stunned', remaining: stun.duration + talents.stunDuration,
+              magnitude: 0, tick: 0 }, unit);
         }
       }
     }
@@ -1715,19 +1772,22 @@ export class GameSimulation {
 
   private applyDamage(power: number, unit = this.focusedUnit, type: DamageType = 'physical'): number {
     if (!unit.actor.alive) return 0;
-    const stats = deriveStats(this.classId, this.equipment, this.level);
+    const stats = this.currentStats();
     const rolled = stats.damageMin + this.rng.next() * (stats.damageMax - stats.damageMin);
     const primary = ['MAGE', 'NECROMANCER', 'WARLOCK'].includes(this.classId)
       ? stats.intelligence : stats.strength;
     return this.resolveEnemyDamage(
       rolled, unit, type, 'hero',
-      (1 + primary * 0.035) * Math.max(0, power), stats.critChance
+      (1 + primary * 0.035) * Math.max(0, power)
+        * (this.classId === 'WARRIOR' && this.player.health <= this.player.maxHealth * 0.4
+          ? 1 + projectTalentBonuses(this.talentRanks).lowHealthDamageMultiplier : 1),
+      stats.critChance
     );
   }
 
   private dealPlayerDamage(base: number, type: DamageType, sourceId: string): boolean {
     if (!this.player.alive || this.respawnProtectionSeconds > 0) return false;
-    const stats = deriveStats(this.classId, this.equipment, this.level);
+    const stats = this.currentStats();
     const resistance = type === 'fire' ? stats.fireResist
       : type === 'frost' ? stats.frostResist
       : type === 'lightning' ? stats.lightningResist
@@ -1906,7 +1966,7 @@ export class GameSimulation {
         if (target.actor.alive && skill.duration) {
           this.applyEffect('enemy', {
             id: 'burning', remaining: skill.duration,
-            magnitude: Math.max(3, Math.round(2 + deriveStats(this.classId, this.equipment, this.level).intelligence * 0.25)),
+            magnitude: Math.max(3, Math.round(2 + this.currentStats().intelligence * 0.25)),
             tick: 0
           }, target);
         }
@@ -1936,7 +1996,7 @@ export class GameSimulation {
       if (skill.effect && skill.duration && unit.actor.alive
         && ['stunned', 'poisoned', 'burning'].includes(skill.effect)) {
         const magnitude = skill.effect === 'stunned' ? 0
-          : Math.max(3, Math.round(2 + deriveStats(this.classId, this.equipment, this.level).intelligence * 0.25));
+          : Math.max(3, Math.round(2 + this.currentStats().intelligence * 0.25));
         this.applyEffect('enemy',
           { id: skill.effect, remaining: skill.duration, magnitude, tick: 0 }, unit);
       }
@@ -2383,7 +2443,7 @@ export class GameSimulation {
   private step(dt: number): void {
     this.respawnProtectionSeconds = Math.max(0, this.respawnProtectionSeconds - dt);
     const definition = CLASSES[this.classId];
-    const currentStats = deriveStats(this.classId, this.equipment, this.level);
+    const currentStats = this.currentStats();
     this.resource = advanceResource(this.resource, currentStats.resourceRegen,
       currentStats.maxResource, dt);
     this.attackTimer = Math.max(0, this.attackTimer - dt);
@@ -2392,7 +2452,7 @@ export class GameSimulation {
       this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
     }
     this.warriorCooldowns = { ...advanceWarriorCooldowns({
-      rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
+      rage: this.resource, maxRage: this.currentStats().maxResource,
       cooldowns: this.warriorCooldowns
     }, dt).cooldowns } as Partial<Record<WarriorAbilityId, number>>;
     this.warriorCooldowns.cleave = this.cooldowns.rmb;
@@ -2405,7 +2465,7 @@ export class GameSimulation {
     if (this.player.alive) {
       const regen = regenerateHealth(
         this.player.health, this.player.maxHealth,
-        deriveStats(this.classId, this.equipment, this.level).healthRegen, dt, this.healthRegenCarry
+        this.currentStats().healthRegen, dt, this.healthRegenCarry
       );
       this.player.health = regen.health;
       this.healthRegenCarry = regen.carry;
@@ -2453,7 +2513,7 @@ export class GameSimulation {
     }
 
     const haste = getStatusModifiers(this.statusEffects.player).moveSpeed ?? 0;
-    const speed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment, this.level).moveSpeed / 100)
+    const speed = PLAYER_SPEED * (this.currentStats().moveSpeed / 100)
       * Math.max(0.25, Math.min(1.6, 1 + haste));
     const focus = this.focusedUnit;
     if (this.pendingPortal) {
@@ -2554,7 +2614,7 @@ export class GameSimulation {
             this.attackTarget = target.actor.id;
           }
         } else if (!this.classAction) {
-          const stats = deriveStats(this.classId, this.equipment, this.level);
+          const stats = this.currentStats();
           this.attackTimer = 0.68 / stats.attackSpeed;
           this.classAction = {
             kind: 'basic', slot: null, targetId: target.actor.id,
@@ -2718,7 +2778,7 @@ export class GameSimulation {
     this.talentPoints += award.talentPointsGained;
     // Every level increases derived attributes, HP and class resource capacity.
     for (let level = prior + 1; level <= this.level; level++) {
-      const stats = deriveStats(this.classId, this.equipment, level);
+      const stats = this.currentStats(this.equipment, level);
       updateHealthLimit(this.player, stats.maxHealth);
       this.resource = Math.min(stats.maxResource, this.resource + 2);
       this.player.health = resolveHealing(
@@ -2816,7 +2876,7 @@ export class GameSimulation {
       playerLevel: this.level, monsterLevel: this.level, enemyType: unit.actor.type,
       zone: this.zone, isBoss: boss, difficulty: 'normal',
       eliteModifiers: unit.elite?.modifiers ?? [],
-      magicFind: deriveStats(this.classId, this.equipment, this.level).magicFind
+      magicFind: this.currentStats().magicFind
     };
     const selected = rollLootTable(context, this.rng);
     const rolls: LootRoll[] = [
@@ -2852,6 +2912,8 @@ export class GameSimulation {
       xp: this.xp,
       skillPoints: this.skillPoints,
       talentPoints: this.talentPoints,
+      ...(Object.keys(this.talentRanks).length
+        ? { talentRanks: { ...this.talentRanks } } : {}),
       gold: this.gold,
       kills: this.kills,
       inventory: this.inventory.map(cloneItem),
@@ -2881,6 +2943,7 @@ export class GameSimulation {
       xp: progress.xp,
       skillPoints: progress.skillPoints ?? Math.max(0, Math.min(MAX_LEVEL - 1, progress.level - 1)),
       talentPoints: progress.talentPoints ?? Math.floor(Math.min(MAX_LEVEL, progress.level) / 5),
+      talentRanks: progress.talentRanks ?? {},
       gold: progress.gold,
       kills: progress.kills,
       inventory: progress.inventory,
@@ -2897,6 +2960,7 @@ export class GameSimulation {
     this.xp = progress.xp;
     this.skillPoints = scratch.skillPoints;
     this.talentPoints = scratch.talentPoints;
+    this.talentRanks = { ...scratch.talentRanks };
     this.gold = progress.gold;
     this.kills = progress.kills;
     this.inventory = progress.inventory.map(cloneItem);
@@ -2947,6 +3011,7 @@ export class GameSimulation {
       xp: this.xp,
       skillPoints: this.skillPoints,
       talentPoints: this.talentPoints,
+      talentRanks: { ...this.talentRanks },
       gold: this.gold,
       resource: this.resource,
       rngState: this.rng.state,
@@ -2968,7 +3033,7 @@ export class GameSimulation {
         player: this.effects.player.map(effect => ({ ...effect })),
         enemy: focus.effects.map(effect => ({ ...effect }))
       },
-      stats: deriveStats(this.classId, this.equipment, this.level),
+      stats: this.currentStats(),
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
       stash: this.stash.map(cloneItem),
@@ -3094,8 +3159,8 @@ export class GameSimulation {
       || (s.level === MAX_LEVEL ? s.xp !== 0 : s.xp >= xpRequiredForLevel(s.level))
       || (s.skillPoints !== undefined && (!Number.isSafeInteger(s.skillPoints)
         || s.skillPoints < 0 || s.skillPoints > s.level - 1))
-      || (s.talentPoints !== undefined && (!Number.isSafeInteger(s.talentPoints)
-        || s.talentPoints < 0 || s.talentPoints > Math.floor(s.level / 5)))
+      || !validateTalentBuild(s.classId, s.level,
+        s.talentPoints ?? Math.floor(s.level / 5), s.talentRanks ?? {})
       || !Number.isSafeInteger(s.gold) || s.gold < 0
       || !validQuest(s.quest)
       || !createActIQuestLedger(s.questLedger ?? s.quest)
@@ -3106,7 +3171,7 @@ export class GameSimulation {
           || original.status !== s.quest.status || original.defeated !== s.quest.defeated;
       })()
       || !Number.isInteger(s.rngState) || s.rngState < 0 || s.rngState > 0xffffffff
-      || !Number.isFinite(s.resource) || s.resource < 0 || s.resource > CLASSES[s.classId].resourceMax + (s.level - 1) * 2
+      || !Number.isFinite(s.resource) || s.resource < 0
       || !Number.isFinite(s.respawnTimer) || s.respawnTimer < 0 || s.respawnTimer > 5
       || !Number.isFinite(s.shield) || s.shield < 0 || s.shield > 100000
       || !Array.isArray(s.projectiles) || s.projectiles.length > 80
@@ -3193,6 +3258,10 @@ export class GameSimulation {
       || !Array.isArray(s.groundLoot) || s.groundLoot.length > 100
       || !s.groundLoot.every(loot => !!loot && typeof loot.id === 'string'
         && canOccupy(loot, 0, layout.obstacles) && isItem(loot.item))
+      || s.resource > applyTalentStats(
+        deriveStats(s.classId, s.equipment, s.level),
+        s.classId === 'WARRIOR' ? (s.talentRanks ?? {}) : {}
+      ).maxResource
     ) return false;
 
     this.world = layout;
@@ -3253,6 +3322,7 @@ export class GameSimulation {
     this.xp = s.xp;
     this.skillPoints = s.skillPoints ?? s.level - 1;
     this.talentPoints = s.talentPoints ?? Math.floor(s.level / 5);
+    this.talentRanks = { ...(s.talentRanks ?? {}) };
     this.gold = s.gold;
     this.resource = s.resource;
     this.rng = new SeededRng(s.rngState);
@@ -3352,6 +3422,7 @@ export class GameSimulation {
     this.xp = 0;
     this.skillPoints = 0;
     this.talentPoints = 0;
+    this.talentRanks = {};
     this.gold = 75;
     this.resource = CLASSES[classId].resourceInitial;
     this.paused = false;

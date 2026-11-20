@@ -798,5 +798,79 @@
     "soulShrine": "Svatyně duší",
     "action": "Znovu povstat",
     "checkpointActivated": "Svatyně duší byla aktivována jako bod znovuzrození."
+  },
+  "talents": {
+    "open": "Talenty",
+    "title": "Strom talentů válečníka",
+    "available": "Volné talentové body",
+    "invested": "Investováno",
+    "unlockLevel": "Odemkne se na úrovni",
+    "prerequisite": "Vyžaduje",
+    "investPoint": "Investovat bod",
+    "investIn": "Investovat do talentu {talent}",
+    "respec": "Přerozdělit talenty",
+    "respecInfo": "Vrátit všechny investované body za",
+    "warriorOnly": "Talentové větve válečníka jsou dostupné pouze válečníkům.",
+    "branches": {
+      "berserker": "Berserker",
+      "guardian": "Ochránce",
+      "warlord": "Vojevůdce"
+    },
+    "nodes": {
+      "berserker": {
+        "battleFury": {
+          "name": "Bojová zuřivost",
+          "description": "Za rank +2 hněvu při úspěšném útoku a válečném pokřiku, +3 k maximálnímu hněvu."
+        },
+        "bloodlust": {
+          "name": "Krvežíznivost",
+          "description": "Za rank +6 % rychlosti útoku. Zrychluje základní útok a přípravu úderů."
+        },
+        "executioner": {
+          "name": "Kat",
+          "description": "Za rank +2,5 procentního bodu šance na kritický zásah."
+        },
+        "lastStand": {
+          "name": "Poslední vzdor",
+          "description": "Při 40 % životů nebo méně způsobuje za rank +14 % poškození."
+        }
+      },
+      "guardian": {
+        "ironSkin": {
+          "name": "Železná kůže",
+          "description": "Za rank +16 brnění, které zvyšuje fyzickou odolnost."
+        },
+        "shieldMastery": {
+          "name": "Mistrovství štítu",
+          "description": "Za rank +4 procentní body blokování, nejvýše do limitu."
+        },
+        "stalwart": {
+          "name": "Nezlomný",
+          "description": "Za rank +24 maximálních životů."
+        },
+        "bulwark": {
+          "name": "Bašta",
+          "description": "Válečný pokřik přidává štít ve výši 8 % maximálních životů za rank."
+        }
+      },
+      "warlord": {
+        "commandingCry": {
+          "name": "Velitelský pokřik",
+          "description": "Zrychlení a opevnění z válečného pokřiku trvají o 1,5 sekundy déle za rank."
+        },
+        "shockwave": {
+          "name": "Rázová vlna",
+          "description": "Prodlouží omráčení válečnickými dovednostmi o 0,25 sekundy za rank."
+        },
+        "warDrums": {
+          "name": "Válečné bubny",
+          "description": "Válečný pokřik dodá +5 hněvu a regeneraci zdroje +0,2 za rank."
+        },
+        "commander": {
+          "name": "Velitel",
+          "description": "Za rank posílí zrychlení a opevnění z válečného pokřiku o 6 procentních bodů."
+        }
+      }
+    }
   }
 }
