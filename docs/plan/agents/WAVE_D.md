@@ -46,8 +46,8 @@ Koordinátorův postup je v [INTEGRATION_D.md](INTEGRATION_D.md). **Další vlna
 
 ## Výsledek vlny D (záznam integrátora)
 
-- **Agent 22 → PR #30**: seedově stálý katalog města; **runtime PR #33**: NPC rendering/klikací interakce, léčení a zdroje za zlato, CS/EN, bezpečný charakterový save. **Prompt 18 partial**, protože skutečná osobní úschovna zatím chybí; waypoint není implementované rychlé cestování.
+- **Agent 22 → PR #30**: seedově stálý katalog města; **runtime PR #33**: NPC rendering/klikací interakce, léčení a zdroje za zlato, CS/EN. **Closeout PR #37** doplnil 24slotovou perzistentní osobní úschovnu a migrace v8/v9→v10. **Prompt 18 core complete**; waypoint fast travel zůstává Promptem 36.
 - **Agent 23 → PR #32**: cenové a transakční plány; **runtime PR #34**: autoritativní nabídky buy/sell/temper, atomicita, chráněné předměty, formátované ceny, bez změny cenové politiky. **Prompt 19 core complete**; opravování/crafting/respec zůstávají budoucím obsahem.
 - **Agent 24 → PR #31**: obecný typovaný quest/dialog model; **runtime PR #35**: adaptér starého v9 questu, branching Vesna dialog, one-time gold/XP odměny, CS/EN a Playwright scénář. **Prompt 20 core complete** pro první funkční quest; rozšířená Act I linie je Prompt 21.
 - Finální PR #35 acceptance: [Actions #44719246543](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44719246543) **GREEN**: 0 check warnings/errors, **488/488 Vitest**, **12/12 Chromium Playwright**, produkční build a původní HTML test.
-- Hra zůstává character-only v9 s v8 migrací; žádný enemy/world snapshot ani nové závislosti. Po merge zkontrolovat `main` Pages run a přesný release SHA (viz [INTEGRATION_D.md](INTEGRATION_D.md)).
+- Hra je character-only v10 s migracemi v8/v9, včetně perzistentní úschovny (#37); žádný enemy/world snapshot ani nové závislosti. Po merge zkontrolovat `main` Pages run a přesný release SHA (viz [INTEGRATION_D.md](INTEGRATION_D.md)).
