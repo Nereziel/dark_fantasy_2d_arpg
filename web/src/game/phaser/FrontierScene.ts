@@ -485,6 +485,8 @@ export class FrontierScene extends Phaser.Scene {
     const animation = playerAnimation(state);
     const oscillation = Math.sin(this.time.now * 0.015);
     this.hero.setScale(animation === 'running' ? 1 + oscillation * 0.045
+      : animation === 'channeling' ? 1 + oscillation * 0.035
+      : animation === 'casting' ? 1 + oscillation * 0.02
       : animation === 'attacking' ? 1 + oscillation * 0.025
       : animation === 'evading' ? 0.9 : 1);
     this.hero.setAlpha(this.time.now < this.heroHitUntil ? 0.45
@@ -518,6 +520,11 @@ export class FrontierScene extends Phaser.Scene {
     this.healthBar.clear();
     this.telegraph.clear();
     this.statusVisuals.clear();
+    if (animation === 'channeling' || animation === 'casting') {
+      const progress = state.warriorAction?.timeline.elapsedTicks ?? 0;
+      this.statusVisuals.lineStyle(2, animation === 'channeling' ? 0xe5b56a : 0xc8ceee, 0.65)
+        .strokeCircle(state.player.x, state.player.y, 27 + Math.sin(progress * 0.12) * 4);
+    }
     if (state.zone === 'wilderness' && this.hoveredId) {
       const npc = NPC_POSITIONS[this.hoveredId as NpcId];
       if (npc) this.statusVisuals.lineStyle(2, 0xf3d49e, 0.86)
