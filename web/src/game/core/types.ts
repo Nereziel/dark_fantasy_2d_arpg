@@ -5,6 +5,7 @@ import type { ItemFlags } from '../inventory/equipmentRules';
 import type { ActiveEffects, Cooldowns, SkillSlot } from '../skills/skills';
 import type { EnemySnapshot, EnemyIntent, EnemyUnit } from '../enemies/enemies';
 import type { QuestProgress } from '../quests/firstQuest';
+import type { QuestLedger } from '../quests/questDialogue';
 import type { NpcId } from '../world/npcs';
 import type { TownServiceRole } from '../world/townManifest';
 import type { ShopOfferId } from '../trade/commerce';
@@ -44,6 +45,8 @@ export interface CharacterProgress {
   stash?: Array<Item | null>;
   itemFlags?: Record<string, ItemFlags>;
   quest: QuestProgress;
+  /** Complete Act I story progress, character-only; optional on legacy records. */
+  questLedger?: QuestLedger;
 }
 
 /** Session-only authoritative missile; never included in CharacterProgress. */
@@ -118,6 +121,9 @@ export interface GameSnapshot {
   groundLoot: GroundItem[];
   itemFlags?: Record<string, ItemFlags>;
   quest: QuestProgress;
+  /** Read-only derived story states; never world or enemy persistence. */
+  questLedger?: QuestLedger;
+  actIIUnlocked?: boolean;
   paused: boolean;
   status: GameStatus;
 }
@@ -138,8 +144,8 @@ export type GameCommand =
   | { type: 'buyItem'; offerId: ShopOfferId }
   | { type: 'sellItem'; index: number }
   | { type: 'temperItem'; slot: EquipmentSlot }
-  | { type: 'questAccept' }
-  | { type: 'questTurnIn' }
+  | { type: 'questAccept'; questId?: string }
+  | { type: 'questTurnIn'; questId?: string }
   | { type: 'pickup'; id: string }
   | { type: 'equip'; index: number; slot?: EquipmentSlot }
   | { type: 'unequip'; slot: EquipmentSlot }
@@ -172,6 +178,7 @@ export type GameEvent =
   | { type: 'zoneChanged'; zone: ZoneId }
   | { type: 'dungeonCleared' }
   | { type: 'questUpdated'; status: QuestProgress['status']; defeated: number }
+  | { type: 'actIQuestUpdated'; questId: string; status: string }
   | { type: 'enemyWindup'; enemyId: string; pattern: 'bolt' | 'sweep' | 'leap' }
   | { type: 'enemyAttack'; enemyId: string; hit: boolean }
   | { type: 'enemyHeal'; enemyId: string; targetId: string; amount: number }
