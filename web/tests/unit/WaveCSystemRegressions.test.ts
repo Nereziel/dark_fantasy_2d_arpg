@@ -151,4 +151,29 @@ describe('Wave C integration edge regressions', () => {
     expect(saved).not.toContain('eliteQueue');
     expect(saved).not.toContain('"enemies"');
   });
+  it('absorbs elite shields through typedDamage and reports canonical absorption', () => {
+    const sim = new GameSimulation(455);
+    const internal = sim as unknown as {
+      units: EnemyUnit[];
+      resolveEnemyDamage: (base: number, target: EnemyUnit,
+        type: 'physical', source: string) => number;
+    };
+    const unit = internal.units[0]!;
+    unit.elite = {
+      modifiers: ['shielded'], visualTags: ['elite', 'shield'],
+      shield: 150, damageMultiplier: 1, speedMultiplier: 1,
+      elapsedSeconds: 0, deathTriggered: false
+    };
+    const hp = unit.actor.health;
+    expect(internal.resolveEnemyDamage(20, unit, 'physical', 'hero')).toBe(0);
+    expect(unit.actor.health).toBe(hp);
+    expect(unit.elite.shield).toBeLessThan(150);
+    const damage = sim.drainEvents().find(event => event.type === 'damageResolved');
+    expect(damage?.type).toBe('damageResolved');
+    if (damage?.type === 'damageResolved') {
+      expect(damage.absorbed).toBeGreaterThan(0);
+      expect(damage.damage).toBe(0);
+    }
+  });
+
 });
