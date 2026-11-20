@@ -94,14 +94,18 @@ describe('Prompt 31: authoritative Whirlwind transformation', () => {
       'berserker.battleFury':1,
       'berserker.bloodlust':1
     } as const;
-    const target = snap.enemies[0]!.actor;
+    // The initial first enemy is an undead skeleton, canonically immune to
+    // bleeding. Test the living wolf, without bypassing status immunity rules.
+    const targetIndex = snap.enemies.findIndex(unit => unit.actor.type === 'wolf');
+    expect(targetIndex).toBeGreaterThanOrEqual(0);
+    const target = snap.enemies[targetIndex]!.actor;
     const near = { x: target.x - 90, y: target.y };
     const edited = {
       ...snap, level: 25, skillPoints: 24, talentPoints: 1,
       talentRanks: ranks, resource: 90,
       player: { ...snap.player, ...near },
       enemies: snap.enemies.map((unit,index) =>
-        index === 0 ? { ...unit, cooldown: 10,
+        index === targetIndex ? { ...unit, cooldown: 10,
           actor:{...unit.actor,health:unit.actor.maxHealth} } : unit)
     };
     expect(sim.restore(edited)).toBe(true);
@@ -116,8 +120,9 @@ describe('Prompt 31: authoritative Whirlwind transformation', () => {
       type:'warriorImpact', id:'whirlwind', radius:projected.radius
     });
     expect(after.statusEffects?.enemies[target.id]?.some(e=>e.id==='bleeding')).toBe(true);
-    expect(after.enemies[0]!.actor.health).toBeLessThan(target.health);
-    expect(Math.hypot(after.enemies[0]!.actor.x-near.x,after.enemies[0]!.actor.y-near.y))
+    expect(after.enemies[targetIndex]!.actor.health).toBeLessThan(target.health);
+    expect(Math.hypot(after.enemies[targetIndex]!.actor.x-near.x,
+      after.enemies[targetIndex]!.actor.y-near.y))
       .toBeLessThan(Math.hypot(target.x-near.x,target.y-near.y));
     const record=createSaveRecord(sim.character())!;
     expect(readSaveRecord(record)?.talentRanks).toEqual(ranks);
