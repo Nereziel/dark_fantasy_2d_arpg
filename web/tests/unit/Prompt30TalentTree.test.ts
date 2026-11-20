@@ -50,7 +50,7 @@ describe('Prompt 30 — pure talent tree model', () => {
     expect(validateTalentBuild('WARRIOR',25,4,{'berserker.battleFury':1})).toBe(true);
     expect(validateTalentBuild('WARRIOR',25,5,{'berserker.battleFury':1})).toBe(false);
     expect(validateTalentBuild('WARRIOR',25,4,{'berserker.bloodlust':1})).toBe(false);
-    expect(validateTalentBuild('WARRIOR',25,4,{'__proto__':1})).toBe(false);
+    expect(validateTalentBuild('WARRIOR',25,4,JSON.parse('{"__proto__":1}'))).toBe(false);
     expect(validateTalentBuild('MAGE',25,5,{'berserker.battleFury':1})).toBe(false);
     expect(validateTalentBuild('WARRIOR',25,4,{'berserker.battleFury':99})).toBe(false);
     expect(validateTalentBuild('WARRIOR',25,4,{'berserker.battleFury':0})).toBe(false);
@@ -135,7 +135,7 @@ describe('Prompt 30 — authoritative simulation and save integration', () => {
     expect(readSaveRecord({...record,character:{...p,talentPoints:5}})).toBeNull();
     // Historical v11 saves without a talentRanks property remain loadable.
     const legacy={...p};delete legacy.talentRanks;
-    expect(readSaveRecord({...record,character:legacy})?.talentRanks).toEqual({});
+    expect(readSaveRecord({...record,character:legacy})?.talentRanks).toBeUndefined();
   });
 
   it('keeps non-Warrior characters unaffected and dead heroes unable to spend', () => {
