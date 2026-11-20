@@ -1,6 +1,6 @@
 # Integrátor — vlna D: Prompty 18–20 (agenti 22–24)
 
-Tento soubor je **runbook pro koordinátora**; žádný agent jej nesmí měnit. Jedná se o plán, nikoli potvrzení provedené implementace. Primární zadání [WAVE_D.md](WAVE_D.md).
+Tento soubor je **runbook pro koordinátora**; žádný agent jej nesmí měnit. Původně šlo o plán; následuje skutečný záznam integračního provedení. Nezaškrtané historické položky zachovávají původní acceptance checklist. Primární zadání [WAVE_D.md](WAVE_D.md).
 
 ## 0. Dispatch gate
 
@@ -58,3 +58,13 @@ STOP při překryvu write-setů, konfliktním API, neprocházející CI, chyběj
 
 ### Další etapa
 **E**: obsahové Prompty **21–22**, až stávající město/ekonomika/dialogy běží v prohlížeči. Zatím je nevydávat za dokončené.
+
+## Záznam provedení — integrátor 20. 11. 2026
+
+1. **Agentní PR**: #30 (Agent 22), #32 (Agent 23), #31 (Agent 24), všechny přesně dvousouborové, zelené a sloučené do `main` ve stanoveném pořadí.
+2. **Town / #33**: Phaser/Svelte/simulation propojení deseti manifestových entit, safe-zone a dosah, léčitel za 15 gold a obnova resource za 12 gold, překlady. [CI #44716711079](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44716711079) GREEN. `stash_camp` zůstává připravený bez vlastního inventory/save executor; `waypoint_camp` je přístupná dekorativní služba bez fast travel. Proto **Prompt 18 PARTIAL**.
+3. **Economy / #34**: autoritativní ceny a prodej / nákup / kování přes quote+plan, prověření levelu, kapacity, locked/favorite, gold cap, CS/EN a v9 save. [CI #44717393726](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44717393726) GREEN. **Prompt 19 CORE COMPLETE** (budoucí crafting jiné prompty).
+4. **Quests / #35**: jeden authoritative v9 quest adaptovaný do `QuestLedger`, branching dialogue, objective events a přesně jeden reward plan pro `ashes_at_gate`; nezměněné ID/gold/XP/save, CS/EN live switch. Při TDD CI odstraněn regression, která omylem vyřadila `useTownService`. [CI #44719246543](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44719246543) GREEN; **488 unit, 12 Chromium, 0 typecheck errors/warnings**, build, legacy reference. **Prompt 20 CORE COMPLETE** pro reusable model a historický quest.
+5. Finální merged runtime SHA **`70aa6df2747c7c637a5d9727edfacd4d8c152c0c`** (PR #35). Post-merge quality a Pages jsou nezávislé workflow; přesné výsledky zaznamenat až po GitHub Actions GREEN.
+
+**Zbývající vědomé omezení:** skutečná perzistentní stash a její ochrana proti ztrátě itemů potřebuje samostatné versioned save/migration práce. Rychlé cestování se plánuje pro Prompt 36, neoznačovat za hotové. **Next: vyřešit stash closeout, poté v další vlně Act I quest chain (21) a wilderness (22).**

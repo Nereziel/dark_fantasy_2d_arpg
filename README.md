@@ -40,9 +40,13 @@ Lokální adresa: http://localhost:5173/dark_fantasy_2d_arpg/
 
 Převod pokračuje **v pořadí 63 promptů** ze souboru `2d_arpg_implementation_prompts.md`. Funkční základy **promptů 02–06** jsou propojené: oddělené výpočty hráče, plynulý pohyb s omezením přepočtů, jednotný kontext interakcí, přemapování ovládání a typovaná soubojová pipeline. Podporuje elementální odolnosti u zásahů, úhyb, blokování, štíty, projektily, oblastní poškození a léčení. Integrační PR #20 a #21 propojují Prompty 07–11: sedm schopností válečníka, časování útoků i kouzel všech šesti tříd, původní pixelové atlasy pro jejich animace a všechny příšery, patnáct efektů, AI a odlišné schopnosti monster. Funkční implementace má automatické regresní testy; velkoprodukční ručně kreslené animace zůstávají výtvarným rozšířením. Prompty **12–17** nyní propojuje integrační [PR #28](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/28) po sloučení samostatných agentních modulů #22, #27, #23, #26, #24 a #25. Integrace pokrývá levelování, katalog vybavení, affixy, inventář, loot a elitní nepřátele; stav finální validace a nasazení je popsán v `docs/IMPLEMENTATION_STATUS.md`. Přesný přehled dokončení základů je v `docs/IMPLEMENTATION_STATUS.md`.
 
-## Další etapa — Wave D (připraveno, zatím nespouštěno)
+## Vlna D — město, ekonomika a questy
 
-Pro menší integrační zátěž jsou připraveni **jen 3 paralelní agenti (22–24)**: Prompt 18 — trvalé město, Prompt 19 — ekonomika a obchodníci, Prompt 20 — dialogy a questový systém. Každý má právě **2 izolované soubory** a výstupem je draft PR; následné propojení do hry a merge provádí pouze integrátor. [Wave D plán](docs/plan/agents/WAVE_D.md), [integrační runbook](docs/plan/agents/INTEGRATION_D.md), [zadání agentů](docs/plan/agents/README.md). Prompty 21–22 záměrně čekají na další vlnu.
+Vlna D proběhla se **třemi izolovanými agenty** (22, 23, 24). Jejich moduly (#30, #32, #31) byly sloučeny, načež je integrátor postupně propojil s hrou pomocí [PR #33 — město](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/33), [PR #34 — ekonomika](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/34) a [PR #35 — dialogy/questy](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/35). Ověřeno **488/488 unit testů, 12/12 Chromium E2E, build a typy**.
+
+V táboře přibyly vykreslené a interaktivní postavy, léčitel (15 zlatých) a obnova bojového zdroje (12 zlatých), obojí hlídá simulace. Obchodník a kovář používají jednotnou cenovou a transakční logiku. Rozhovor se strážkyní Vesnou nyní nabízí větvené volby; první quest používá sdílené questové jádro a odměnu lze získat jen jednou. Překlady fungují v **CS/EN**, uložení postavy zůstává ve formátu **v9**.
+
+**Omezení:** skutečná perzistentní osobní úschovna stále chybí (**Prompt 18 partial**); waypoint je zatím připraven pro budoucí rychlé cestování. Nová dějová linie a procedurální divočina náleží Promptům **21–22**. Podrobnosti a pravdivé acceptance označení: [stav implementace](docs/IMPLEMENTATION_STATUS.md) a [integrace D](docs/plan/agents/INTEGRATION_D.md).
 
 ## Wave C — XP, vybavení, loot a elity
 

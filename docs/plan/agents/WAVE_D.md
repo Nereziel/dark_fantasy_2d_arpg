@@ -1,6 +1,6 @@
 # Vlna D — tři nezávislí agenti, Prompty 18–20
 
-**Stav:** pouze připravené zadání. Žádný agent vlny D nebyl spuštěn a žádný její herní systém není tímto plánem dokončen. **Maximální počet současně pracujících agentů: 3** (záměrně méně než požadovaný strop 5).
+**Stav:** agentní PR #30/#32/#31 dokončena; integrační PR #33/#34/#35 sloučena do `main`. Tento dokument je **archiv zadání**, nepoužívat ke spuštění nové implementace. **Maximální počet současně pracujících agentů: 3** (záměrně méně než požadovaný strop 5).
 
 **Cíl:** nejprve stabilizovat město, ekonomiku a univerzální dialog/quest pravidla nad existující hratelnou vertikální ukázkou. Novou questovou linii (Prompt 21), procedurální divočinu (Prompt 22) a další obsah neposílat do této vlny; jejich integrace by vyžadovala společné změny v mnoha souborech.
 
@@ -43,3 +43,11 @@
 **Prompt DONE:** až po zapojení do živé hry, s funkčními NPC/obchody/questy, správným CS↔EN, správnou perzistencí pouze postavy, browser smoke testy, CI a úspěšným deploymentem `main`. Zatím označovat jako `planned / not integrated`.
 
 Koordinátorův postup je v [INTEGRATION_D.md](INTEGRATION_D.md). **Další vlna E:** Prompt 21 (Act I quest chain) a Prompt 22 (wilderness) teprve po zprovoznění frameworků 18–20.
+
+## Výsledek vlny D (záznam integrátora)
+
+- **Agent 22 → PR #30**: seedově stálý katalog města; **runtime PR #33**: NPC rendering/klikací interakce, léčení a zdroje za zlato, CS/EN, bezpečný charakterový save. **Prompt 18 partial**, protože skutečná osobní úschovna zatím chybí; waypoint není implementované rychlé cestování.
+- **Agent 23 → PR #32**: cenové a transakční plány; **runtime PR #34**: autoritativní nabídky buy/sell/temper, atomicita, chráněné předměty, formátované ceny, bez změny cenové politiky. **Prompt 19 core complete**; opravování/crafting/respec zůstávají budoucím obsahem.
+- **Agent 24 → PR #31**: obecný typovaný quest/dialog model; **runtime PR #35**: adaptér starého v9 questu, branching Vesna dialog, one-time gold/XP odměny, CS/EN a Playwright scénář. **Prompt 20 core complete** pro první funkční quest; rozšířená Act I linie je Prompt 21.
+- Finální PR #35 acceptance: [Actions #44719246543](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44719246543) **GREEN**: 0 check warnings/errors, **488/488 Vitest**, **12/12 Chromium Playwright**, produkční build a původní HTML test.
+- Hra zůstává character-only v9 s v8 migrací; žádný enemy/world snapshot ani nové závislosti. Po merge zkontrolovat `main` Pages run a přesný release SHA (viz [INTEGRATION_D.md](INTEGRATION_D.md)).
