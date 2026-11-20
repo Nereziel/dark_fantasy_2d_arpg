@@ -29,6 +29,7 @@ import {
 import { buildWilderness } from '../world/wildernessRuntime';
 import { buildCryptWorld } from '../world/dungeonRuntime';
 import type { ProceduralDungeonResult, DungeonRoomType } from '../world/proceduralDungeon';
+import type { CryptThemePlan } from '../world/cryptTheme';
 import {
   createChunkIndex, planVisibleChunks,
   type ChunkIndex, type ChunkManifest
@@ -996,7 +997,7 @@ export class FrontierScene extends Phaser.Scene {
   private paintCrypt(
     g: Phaser.GameObjects.Graphics, seed: number,
     walls: readonly { x: number; y: number; width: number; height: number }[],
-    dungeon: ProceduralDungeonResult
+    dungeon: ProceduralDungeonResult, theme: CryptThemePlan
   ): void {
     g.fillStyle(0x0a0c14).fillRect(0, 0, WIDTH, HEIGHT);
     // Render only walkable tiles supplied by the same pure plan as collisions.
@@ -1040,6 +1041,51 @@ export class FrontierScene extends Phaser.Scene {
           .lineBetween(wall.x + 13, wall.y + 14, wall.x + wall.width - 13, wall.y + 14);
       }
     }
+
+    // Agent31's seed-bound Corrupted Crypt theme overlays the same validated
+    // room geometry as navigation. Props are visual/nonblocking until the
+    // integrator's authoritative interactables and trap damage are connected.
+    const themedRoomIds = new Set(dungeon.rooms.map(room => room.id));
+    for (const visual of theme.roomVisuals) {
+      if (!themedRoomIds.has(visual.roomId) || !visual.initiallyVisible) continue;
+      const bounds = visual.bounds;
+      g.lineStyle(2, visual.lighting.tint, Math.min(0.65, visual.lighting.intensity * 0.65))
+        .strokeRoundedRect(bounds.x + 10, bounds.y + 10,
+          Math.max(0, bounds.width - 20), Math.max(0, bounds.height - 20), 6);
+      for (const layer of visual.layers) {
+        if (layer.layer === 'lighting') {
+          g.fillStyle(layer.fallback.color, Math.min(0.15, layer.fallback.alpha * 0.12))
+            .fillCircle(bounds.x + bounds.width * 0.5, bounds.y + bounds.height * 0.5, 80);
+        }
+      }
+    }
+    for (const prop of theme.props) {
+      if (!theme.roomVisuals.find(room => room.roomId === prop.roomId)?.initiallyVisible) continue;
+      const x = prop.position.x, y = prop.position.y, r = prop.footprintRadius;
+      const color = prop.fallback.color;
+      g.fillStyle(0x070a10, 0.6).fillEllipse(x + 3, y + 5, r * 2.5, r * 1.1);
+      if (prop.kind === 'lantern' || prop.kind === 'candelabrum') {
+        g.fillStyle(0xb5a99c, 0.9).fillRect(x - 3, y - r, 6, r + 8);
+        g.fillStyle(0xeec888, 0.28).fillCircle(x, y - r, 20);
+        g.fillStyle(0xffd093, 0.87).fillCircle(x, y - r, 5);
+      } else if (prop.kind === 'coffin' || prop.kind === 'sarcophagus') {
+        g.fillStyle(0x373f45, 0.92).fillRoundedRect(x - r, y - r / 2, r * 2, r * 1.3, 3);
+        g.lineStyle(3, color, 0.76).strokeRoundedRect(x - r, y - r / 2, r * 2, r * 1.3, 3);
+      } else if (prop.kind === 'treasureChest') {
+        g.fillStyle(0x6a492d, 0.98).fillRoundedRect(x - r, y - r, r * 2, r * 1.65, 4);
+        g.lineStyle(3, 0xd3ae65, 0.85).strokeRoundedRect(x - r, y - r, r * 2, r * 1.65, 4);
+        g.fillStyle(0xe7c880, 0.94).fillCircle(x, y - 2, 3);
+      } else {
+        g.fillStyle(color, prop.fallback.alpha).fillCircle(x, y, r * 0.8);
+        g.lineStyle(2, 0xb2a6a1, 0.65).strokeCircle(x, y, r * 0.9);
+      }
+    }
+    for (const trap of theme.traps) {
+      g.lineStyle(2, trap.kind === 'poison' ? 0x80b57f
+        : trap.kind === 'runic' ? 0x9982bd : 0xb46d67, 0.5)
+        .strokeCircle(trap.trigger.center.x, trap.trigger.center.y, trap.trigger.radius);
+    }
+
     // Boss arena sigil and the return portal.
     const boss = dungeon.bossSpawn;
     g.lineStyle(5, 0xa24f58, 0.52).strokeCircle(boss.x, boss.y, 174);
@@ -1066,7 +1112,7 @@ export class FrontierScene extends Phaser.Scene {
     this.activeObstacles = layout.obstacles;
     this.activeStoryFeatures = wilderness?.features ?? [];
     if (zone === 'crypt') {
-      this.paintCrypt(ground, worldSeed, layout.obstacles, crypt!.dungeon);
+      this.paintCrypt(ground, worldSeed, layout.obstacles, crypt!.dungeon, crypt!.theme);
       return;
     }
     ground.fillStyle(0x10161d).fillRect(0, 0, WIDTH, HEIGHT);
