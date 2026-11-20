@@ -27,6 +27,7 @@ import type { Materials, CraftKind } from '../crafting/craftingRules';
 import type { GemAction, GemWallet } from '../gems/gemRules';
 import type { GemId } from '../gems/gemCatalog';
 import type { PotionCharges, PotionId, PotionState } from '../consumables/potionRules';
+import type { WaypointId } from '../world/waypointTravel';
 import type { StashTabs } from '../inventory/stashRules';
 
 export interface Point { x: number; y: number }
@@ -201,6 +202,7 @@ export type GameCommand =
   | { type: 'warriorAbility'; id: WarriorAbilityId; targetId?: string }
   | { type: 'interactNpc'; npcId: NpcId }
   | { type: 'interactTown'; entryId: string }
+  | { type: 'travelWaypoint'; destinationId: WaypointId }
   | { type: 'useTownService'; entryId: string }
   | { type: 'refillPotion'; entryId: string; potionId: PotionId }
   | { type: 'selectPotion'; potionId: PotionId }
@@ -261,6 +263,8 @@ export type GameEvent =
   | { type: 'potionRefilled'; potionId: PotionId; goldSpent: number }
   | { type: 'playerDeath' }
   | { type: 'checkpointActivated'; id: RespawnCheckpointId }
+  | { type: 'waypointActivated'; id: WaypointId }
+  | { type: 'waypointTravel'; from: WaypointId; to: WaypointId; x: number; y: number }
   | { type: 'playerRespawn'; checkpointId: RespawnDestination['id'];
       fromZone: ZoneId; x: number; y: number }
   | { type: 'warriorImpact'; id: WarriorAbilityId; x: number; y: number;
