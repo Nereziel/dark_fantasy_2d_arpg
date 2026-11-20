@@ -18,6 +18,7 @@ import type { StatusId } from '../status/statusDefinitions';
 import type { WorldObject, WorldObjectId } from '../world/interactables';
 import type { MapDiscoveryState } from '../world/mapDiscovery';
 import type { CryptInteractable } from '../world/cryptTheme';
+import type { MiniBossState, MiniBossId } from '../enemies/miniBossRules';
 import type { WorldFactLedger } from '../world/chunkStreaming';
 
 export interface Point { x: number; y: number }
@@ -32,6 +33,8 @@ export interface WorldSessionProgress {
   /** Stable one-shot crypt facts. Never an enemy/map/world snapshot. */
   cryptUsedPropIds?: string[];
   cryptTriggeredTrapIds?: string[];
+  /** Seed-scoped one-shot miniboss victories, not enemy state snapshots. */
+  miniBossDefeatedIds?: MiniBossId[];
 }
 export type ZoneId = 'wilderness' | 'crypt';
 export interface ActorSnapshot extends Point {
@@ -145,6 +148,9 @@ export interface GameSnapshot {
   cryptInteractables?: CryptInteractable[];
   cryptUsedPropIds?: string[];
   cryptTriggeredTrapIds?: string[];
+  /** Session-only miniboss planner states; not written to character/world saves. */
+  miniBossStates?: Record<string, MiniBossState>;
+  miniBossDefeatedIds?: MiniBossId[];
   paused: boolean;
   status: GameStatus;
 }
@@ -189,6 +195,8 @@ export type GameEvent =
   | { type: 'cryptInteract'; id: string; capability: string; goldAwarded: number }
   | { type: 'cryptTrap'; id: string; damage: number; x: number; y: number }
   | { type: 'cryptTrapWindup'; id: string; x: number; y: number; radius: number }
+  | { type: 'miniBossCue'; enemyId: string; bossId: MiniBossId; kind: string;
+      abilityId?: string; x: number; y: number; radius: number; phase: number }
   | { type: 'defeat'; targetId: string; kills: number }
   | { type: 'loot'; id: string }
   | { type: 'pickup'; id: string }

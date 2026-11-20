@@ -768,5 +768,12 @@
     "town": "Tábor",
     "quest": "Úkol",
     "unknownQuest": "Neobjevený cíl úkolu"
-  }
+  },
+  "miniBossNames": {
+    "bandit_captain": "Kapitán banditů",
+    "morrow_gravebound": "Morrow, Strážce hřbitova",
+    "brood_mother": "Matka roje",
+    "corrupted_knight": "Zkažený rytíř"
+  },
+  "miniBoss": { "phase": "Fáze" }
 }

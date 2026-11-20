@@ -1,5 +1,6 @@
 import type { WorldSessionProgress } from '../game/core/types';
 import { validateMapDiscovery } from '../game/world/mapDiscovery';
+import { MINI_BOSS_IDS } from '../game/enemies/miniBossRules';
 
 /**
  * Separate versioned world-instance record; never modifies character-only v11.
@@ -32,7 +33,13 @@ export function readWorldRecord(raw: unknown): WorldSessionProgress | null {
     || ![record.progress.cryptUsedPropIds, record.progress.cryptTriggeredTrapIds]
       .every(list => list === undefined || (Array.isArray(list) && list.length <= 128
         && list.every(id => typeof id === 'string' && id.length <= 160)
-        && new Set(list).size === list.length))) return null;
+        && new Set(list).size === list.length))
+    || (record.progress.miniBossDefeatedIds !== undefined
+      && (!Array.isArray(record.progress.miniBossDefeatedIds)
+        || record.progress.miniBossDefeatedIds.length > MINI_BOSS_IDS.length
+        || record.progress.miniBossDefeatedIds.some(id => !MINI_BOSS_IDS.includes(id))
+        || new Set(record.progress.miniBossDefeatedIds).size
+          !== record.progress.miniBossDefeatedIds.length))) return null;
   try {
     if (JSON.stringify(raw).length > MAX_RECORD_BYTES) return null;
     return structuredClone(record.progress);

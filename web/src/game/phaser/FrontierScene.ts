@@ -490,7 +490,20 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private onGameEvent(event: GameEvent): void {
-    if (event.type === 'cryptTrapWindup' || event.type === 'cryptTrap') {
+    if (event.type === 'miniBossCue') {
+      const graphic = this.obtainImpact(event.x, event.y, 88);
+      const color = event.kind === 'telegraph' ? 0xf1b568
+        : event.kind === 'impact' ? 0xe16a67
+        : event.kind === 'phase' ? 0xa691db : 0x93b4b5;
+      graphic.lineStyle(event.kind === 'telegraph' ? 5 : 3, color, 0.92)
+        .strokeCircle(0, 0, Math.max(18, Math.min(140, event.radius)));
+      graphic.fillStyle(color, event.kind === 'telegraph' ? 0.16 : 0.1)
+        .fillCircle(0, 0, Math.max(18, Math.min(140, event.radius)));
+      this.tweens.add({ targets: graphic, alpha: 0,
+        scaleX: 1.2, scaleY: 1.2,
+        duration: event.kind === 'telegraph' ? 800 : 480,
+        onComplete: () => this.releaseImpact(graphic) });
+    } else if (event.type === 'cryptTrapWindup' || event.type === 'cryptTrap') {
       const ring = this.obtainImpact(event.x, event.y, 89);
       const color = event.type === 'cryptTrapWindup' ? 0xd9b477 : 0xe26973;
       ring.lineStyle(4, color, 0.95)
