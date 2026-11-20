@@ -757,5 +757,16 @@
     "optionalPoi": "Tajemné místo",
     "optionalTreasure": "Skrytý poklad",
     "optionalEvent": "Událost v pustině"
+  },
+  "map": {
+    "title": "Mapa světa",
+    "open": "Mapa",
+    "close": "Zavřít mapu",
+    "minimap": "Minimapa",
+    "legend": "Objevené oblasti jsou zelené, neprozkoumané zůstávají skryté. Klávesa M otevře mapu.",
+    "player": "Hrdina",
+    "town": "Tábor",
+    "quest": "Úkol",
+    "unknownQuest": "Neobjevený cíl úkolu"
   }
 }

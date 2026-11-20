@@ -76,7 +76,7 @@ test('casts a Paladin ability and localizes effects without restarting the game'
   await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
 });
 
-test('autosaves only the hero and generates fresh wilderness on reopening', async ({ page }) => {
+test('retains character-only save v11 and resumes separate seed-scoped world record', async ({ page }) => {
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Rogue/ }).click();
@@ -115,7 +115,9 @@ test('autosaves only the hero and generates fresh wilderness on reopening', asyn
   await expect(page.getByText('Rogue · Level 1')).toBeVisible();
   await expect(page.locator('.zone-name')).toHaveText('Emberwatch Camp');
   const secondSeed = await page.locator('.game-screen').getAttribute('data-world-seed');
-  expect(secondSeed).not.toBe(firstSeed);
+  // Wave F world-instance store retains the seed for discovered map and opened chests.
+  // The persistent hero record remains strictly character-only format 11.
+  expect(secondSeed).toBe(firstSeed);
   await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
   await expect(page.locator('.effect-chip')).toHaveCount(0);
 });

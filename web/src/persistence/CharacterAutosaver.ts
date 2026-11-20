@@ -4,28 +4,28 @@ import type { CharacterProgress } from '../game/core/types';
  * Debounced, serialized character-only autosave. It never receives GameSnapshot.
  * Failed writes may be retried by a later change or explicit save.
  */
-export class CharacterAutosaver {
-  private queued: CharacterProgress | null = null;
+export class CharacterAutosaver<T = CharacterProgress> {
+  private queued: T | null = null;
   private queuedKey: string | null = null;
   private lastSavedKey: string | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private chain: Promise<void> = Promise.resolve();
 
   constructor(
-    private readonly write: (character: CharacterProgress) => Promise<void>,
+    private readonly write: (character: T) => Promise<void>,
     private readonly delayMs = 1400,
     private readonly reportError: (error: unknown) => void = () => {}
   ) {}
 
   /** A character loaded from storage needs no immediate rewrite. */
-  prime(character: CharacterProgress): void {
+  prime(character: T): void {
     this.cancelTimer();
     this.queued = null;
     this.queuedKey = null;
     this.lastSavedKey = JSON.stringify(character);
   }
 
-  schedule(character: CharacterProgress): void {
+  schedule(character: T): void {
     const key = JSON.stringify(character);
     if (key === this.lastSavedKey) {
       // A pending unsaved change was reverted; never write the stale value.
@@ -45,7 +45,7 @@ export class CharacterAutosaver {
   }
 
   /** Save now, including any pending changes. Calls are serialized. */
-  saveNow(character: CharacterProgress): Promise<void> {
+  saveNow(character: T): Promise<void> {
     this.schedule(character);
     return this.flush();
   }

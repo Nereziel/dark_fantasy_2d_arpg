@@ -5,7 +5,8 @@ import { resolveSkillAim, type SkillAim } from '../input/skillAiming';
 import { GAME_BINDINGS } from '../input/gameBindings';
 import type { InputBinding } from '../input/bindings';
 import { SKILLS, type SkillSlot } from '../skills/skills';
-import type { CharacterProgress, GameCommand, GameEvent, GameSnapshot, GameStateReader, Point } from '../core/types';
+import type { CharacterProgress, GameCommand, GameEvent, GameSnapshot, GameStateReader, Point, WorldSessionProgress } from '../core/types';
+import type { MapProjection } from '../world/mapDiscovery';
 
 /** UI-facing presentation adapter; game state is owned by the simulation. */
 export class GameBridge implements GameStateReader {
@@ -41,13 +42,22 @@ export class GameBridge implements GameStateReader {
 
   snapshot(): GameSnapshot { return this.simulation.snapshot(); }
   character(): CharacterProgress { return this.simulation.character(); }
+  worldProgress(): WorldSessionProgress | null { return this.simulation.worldProgress(); }
+  mapProjection(mode: 'world' | 'minimap' = 'world'): MapProjection | null {
+    return this.simulation.mapProjection(mode);
+  }
+  restoreWorldProgress(progress: WorldSessionProgress): boolean {
+    const restored = this.simulation.restoreWorldProgress(progress);
+    if (restored) this.emit();
+    return restored;
+  }
   previewEquipment(index: number, slot?: EquipmentSlot): ReturnType<GameSimulation['previewEquipment']> {
     return this.simulation.previewEquipment(index, slot);
   }
-  restoreCharacter(progress: CharacterProgress): boolean {
+  restoreCharacter(progress: CharacterProgress, worldSeed = newSessionSeed()): boolean {
     this.pointerWorld = null;
     this.pointerEnemy = null;
-    const restored = this.simulation.restoreCharacter(progress, newSessionSeed());
+    const restored = this.simulation.restoreCharacter(progress, worldSeed);
     if (restored) this.emit();
     return restored;
   }

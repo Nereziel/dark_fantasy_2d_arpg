@@ -1,4 +1,4 @@
-import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point, ProjectileSnapshot, ZoneId } from './types';
+import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point, ProjectileSnapshot, ZoneId, WorldSessionProgress } from './types';
 import { spawnPlayer, updateHealthLimit, advanceResource, regenerateHealth } from '../entities/player';
 import { awardProgression, rewardForActivity, xpRequiredForLevel, MAX_LEVEL } from '../progression/progressionRules';
 import {
@@ -39,7 +39,16 @@ import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
   generateCrypt, type WorldLayout
 } from '../world/generator';
-import { buildWilderness } from '../world/wildernessRuntime';
+import { buildWilderness, type WildernessRuntimeWorld } from '../world/wildernessRuntime';
+import {
+  createChunkIndex, createWorldFactLedger, applyWorldFact, makeWorldFact,
+  validateWorldFactLedger, type ChunkIndex, type WorldFactLedger, type WorldFactKind
+} from '../world/chunkStreaming';
+import {
+  createMapDiscovery, revealAtPosition, revealTravelSegment, activateMapWaypoint,
+  validateMapDiscovery, projectMap, type MapDiscoveryState, type MapWorldInput,
+  type MapProjection, type MapQuestHint
+} from '../world/mapDiscovery';
 import {
   nearNpc, nearWarden, isNpcId, NPC_POSITIONS, NPC_INTERACT_RANGE,
   MERCHANT_ID, BLACKSMITH_ID, type NpcId
@@ -47,7 +56,7 @@ import {
 import { getOffer, createShopItem, temperItem } from '../trade/commerce';
 import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planService,
   selectVendorStock, type EconomyFailure } from '../trade/economyRules';
-import { townEntry, canInteractTownEntry } from '../world/townManifest';
+import { townEntry, canInteractTownEntry, getTownManifest } from '../world/townManifest';
 import { STASH_SIZE, planStashDeposit, planStashWithdraw, validateStashContents } from '../inventory/stashRules';
 import {
   freshQuest, validQuest, FIRST_QUEST_ID, WARDEN_ID, type QuestProgress
@@ -200,6 +209,10 @@ export class GameSimulation {
   private quest: QuestProgress = freshQuest();
   private actILedger: QuestLedger = createActIQuestLedger(freshQuest())!;
   private storyFeatures: readonly WildernessFeature[] = [];
+  private worldIndex: ChunkIndex | null = null;
+  private worldFacts: WorldFactLedger | null = null;
+  private mapWorld: MapWorldInput | null = null;
+  private mapDiscovery: MapDiscoveryState | null = null;
   private pendingNpc: NpcId | null = null;
   private pendingTown: string | null = null;
   private pendingSkill: SkillSlot | null = null;
@@ -233,6 +246,107 @@ export class GameSimulation {
   private readonly events: GameEvent[] = [];
 
   constructor(seed = 0) { this.reset('WARRIOR', seed); }
+
+
+  /** Rebuild a deterministic world-scoped index without putting world data in character saves. */
+  private mapInput(world: WildernessRuntimeWorld): MapWorldInput {
+    const waypoint = getTownManifest().find(entry => entry.role === 'waypoint');
+    return {
+      seed: world.layout.seed, worldInstanceId: 'world-' + world.layout.seed + '-hero',
+      features: world.features,
+      ...(waypoint ? { waypoints: [{
+        id: 'town.waypoint', position: { ...waypoint.position },
+        presentationKey: waypoint.nameKey
+      }] } : {})
+    };
+  }
+
+  private initWorldSystems(world: WildernessRuntimeWorld): void {
+    const index = createChunkIndex(world);
+    const input = this.mapInput(world);
+    const initial = createMapDiscovery(input, CAMP, 105);
+    if (!initial.ok) throw new Error('Cannot initialize wilderness exploration');
+    this.worldIndex = index;
+    this.worldFacts = createWorldFactLedger(index, 'hero');
+    this.mapWorld = input;
+    this.mapDiscovery = initial.value;
+  }
+
+  /** World facts are idempotent historical observations, not a second reward executor. */
+  private recordWorldFact(kind: WorldFactKind, entityId: string): void {
+    if (!this.worldIndex || !this.worldFacts) return;
+    const fact = makeWorldFact(this.worldIndex, this.worldFacts.worldInstanceId, kind, entityId);
+    this.worldFacts = applyWorldFact(this.worldIndex, this.worldFacts, fact).state;
+  }
+
+  private observeExploration(): void {
+    if (this.zone !== 'wilderness' || !this.mapWorld || !this.mapDiscovery
+      || !this.player.alive) return;
+    const previous = this.mapDiscovery;
+    const last = previous.lastObservedPosition;
+    if (last && distance(last, this.player) < 18) return;
+    const next = last && distance(last, this.player) <= 160
+      ? revealTravelSegment(previous, last, this.player, 105, this.mapWorld)
+      : revealAtPosition(previous, this.player, 105, this.mapWorld);
+    if (!next.ok) return;
+    this.mapDiscovery = next.value;
+    for (const id of next.value.discoveredLandmarkIds) {
+      if (!previous.discoveredLandmarkIds.includes(id)) {
+        this.recordWorldFact('landmarkDiscovered', id);
+      }
+    }
+  }
+
+  /** Only discovered areas and markers ever cross into the UI-facing map projection. */
+  mapProjection(mode: 'world' | 'minimap' = 'world'): MapProjection | null {
+    if (!this.mapWorld || !this.mapDiscovery || this.zone !== 'wilderness') return null;
+    const featureIdByQuest: Record<string, string> = {
+      trail_of_black_ash: 'act1.corruption_site',
+      blighted_pack: 'act1.tainted_beasts',
+      forgotten_graves: 'act1.abandoned_graveyard',
+      morrow_gravebound: 'act1.grave_warden',
+      seal_of_rot: 'act1.evidence_lead',
+      crypt_descent: 'act1.crypt_entrance'
+    };
+    const hints: MapQuestHint[] = ACT_I_MILESTONES.flatMap(beat => {
+      const state = this.actILedger.quests.find(entry => entry.questId === beat.questId);
+      if (!state || (state.status !== 'active' && state.status !== 'ready')) return [];
+      const featureId = featureIdByQuest[beat.questId];
+      return [{
+        id: beat.questId, status: 'active' as const,
+        ...(featureId ? { featureId } : {}),
+        ...(beat.questId === 'vesnas_report' ? { position: CAMP } : {}),
+        presentationKey: 'map.quest'
+      }];
+    });
+    const result = projectMap(this.mapDiscovery, this.mapWorld, this.player, hints, { mode });
+    return result.ok ? result.value : null;
+  }
+
+  /** Separate world-instance persistence; no seed or world facts in CharacterProgress v11. */
+  worldProgress(): WorldSessionProgress | null {
+    if (!this.mapDiscovery || !this.worldFacts) return null;
+    return structuredClone({
+      version: 1 as const, seed: this.worldFacts.worldSeed,
+      mapDiscovery: this.mapDiscovery, worldFacts: this.worldFacts
+    });
+  }
+
+  restoreWorldProgress(progress: WorldSessionProgress): boolean {
+    if (!progress || progress.version !== 1 || !this.mapWorld || !this.worldIndex
+      || progress.seed !== this.mapWorld.seed
+      || !validateMapDiscovery(progress.mapDiscovery, this.mapWorld)
+      || !validateWorldFactLedger(this.worldIndex, progress.worldFacts)) return false;
+    this.mapDiscovery = structuredClone(progress.mapDiscovery);
+    this.worldFacts = structuredClone(progress.worldFacts);
+    // Already-consumed seeded chest rewards cannot reappear after a reload.
+    for (const fact of this.worldFacts.entries) {
+      if (fact.kind === 'chestOpened' && getWorldObject(fact.entityId as WorldObjectId, 'wilderness')) {
+        this.usedObjects.add(fact.entityId as WorldObjectId);
+      }
+    }
+    return true;
+  }
 
   private get immobilized(): boolean {
     return this.effects.player.some(e => e.id === 'stunned' || e.id === 'rooted')
@@ -627,6 +741,9 @@ export class GameSimulation {
     }
     this.pendingObject = null;
     this.usedObjects.add(object.id);
+    if (this.zone === 'wilderness' && object.kind === 'chest') {
+      this.recordWorldFact('chestOpened', object.id);
+    }
     if (object.kind === 'shrine') {
       this.shield = Math.max(this.shield, Math.round(this.player.maxHealth * 0.3));
     } else {
@@ -1870,6 +1987,13 @@ export class GameSimulation {
       if (!entry || this.zone !== 'wilderness') this.pendingTown = null;
       else if (canInteractTownEntry(this.player, entry.id)) {
         this.pendingTown = null;
+        if (entry.role === 'waypoint' && this.mapDiscovery && this.mapWorld) {
+          const discovered = activateMapWaypoint(this.mapDiscovery, 'town.waypoint', this.mapWorld);
+          if (discovered.ok) {
+            this.mapDiscovery = discovered.value;
+            this.recordWorldFact('waypointActivated', entry.id);
+          }
+        }
         this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
       } else {
         this.follow(this.player, entry.position, speed, dt, Math.max(1, entry.interactionRange - 10));
@@ -1967,6 +2091,7 @@ export class GameSimulation {
     }
 
     this.discoverStoryLocations();
+    this.observeExploration();
     if (this.player.alive) {
       for (const unit of this.units) {
         this.updateEnemyAI(unit, dt);
@@ -2147,6 +2272,7 @@ export class GameSimulation {
         this.storyEvent('blighted_pack', 'infected_beast_slain', 'boar_' + this.kills);
       }
       if (unit.actor.id === 'morrow_gravebound') {
+        this.recordWorldFact('uniqueEnemyDefeated', 'act1.grave_warden');
         this.storyEvent('morrow_gravebound', 'morrow_gravebound_slain', 'morrow_defeat');
       }
     }
@@ -2328,6 +2454,8 @@ export class GameSimulation {
       quest: { ...this.quest },
       questLedger: structuredClone(this.actILedger),
       actIIUnlocked: this.questStatus('vesnas_report') === 'completed',
+      ...(this.mapDiscovery ? { mapDiscovery: structuredClone(this.mapDiscovery) } : {}),
+      ...(this.worldFacts ? { worldFacts: structuredClone(this.worldFacts) } : {}),
       paused: this.paused,
       status
     };
@@ -2342,7 +2470,14 @@ export class GameSimulation {
       && (s.zone === 'wilderness' || s.zone === 'crypt')
       ? (s.zone === 'crypt' ? generateCrypt(s.worldSeed) : buildWilderness(s.worldSeed).layout)
       : null;
+    const restoredWilderness = layout ? buildWilderness(s.worldSeed) : null;
+    const restoredIndex = restoredWilderness ? createChunkIndex(restoredWilderness) : null;
+    const restoredMapWorld = restoredWilderness ? this.mapInput(restoredWilderness) : null;
     if (!s || !layout || s.version !== 5 || !isClassId(s.classId)
+      || (s.mapDiscovery !== undefined && (!restoredMapWorld
+        || !validateMapDiscovery(s.mapDiscovery, restoredMapWorld)))
+      || (s.worldFacts !== undefined && (!restoredIndex
+        || !validateWorldFactLedger(restoredIndex, s.worldFacts)))
       || (s.dungeonStage !== 0 && s.dungeonStage !== 1)
       || typeof s.dungeonCleared !== 'boolean'
       || (s.zone === 'wilderness' && (s.dungeonStage !== 0 || s.dungeonCleared))
@@ -2458,7 +2593,10 @@ export class GameSimulation {
     ) return false;
 
     this.world = layout;
-    this.storyFeatures = s.zone === 'wilderness' ? buildWilderness(s.worldSeed).features : [];
+    this.storyFeatures = restoredWilderness!.features;
+    this.initWorldSystems(restoredWilderness!);
+    if (s.mapDiscovery) this.mapDiscovery = structuredClone(s.mapDiscovery);
+    if (s.worldFacts) this.worldFacts = structuredClone(s.worldFacts);
     this.actILedger = createActIQuestLedger(s.questLedger ?? s.quest)!;
     this.eliteQueue = [];
     this.zone = s.zone;
@@ -2542,6 +2680,7 @@ export class GameSimulation {
     const wilderness = buildWilderness(seed);
     this.world = wilderness.layout;
     this.storyFeatures = wilderness.features;
+    this.initWorldSystems(wilderness);
     this.classId = classId;
     this.equipment = createEquipment();
     this.inventory = Array(INVENTORY_SIZE).fill(null);

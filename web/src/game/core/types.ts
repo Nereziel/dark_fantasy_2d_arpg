@@ -16,9 +16,19 @@ import type { CombatTimelineState } from '../animation/combatTimeline';
 import type { StatusInstance } from '../status/statusRuntime';
 import type { StatusId } from '../status/statusDefinitions';
 import type { WorldObject, WorldObjectId } from '../world/interactables';
+import type { MapDiscoveryState } from '../world/mapDiscovery';
+import type { WorldFactLedger } from '../world/chunkStreaming';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
+
+/** Separate, seed-scoped exploration record; never embedded in character save v11. */
+export interface WorldSessionProgress {
+  version: 1;
+  seed: number;
+  mapDiscovery: MapDiscoveryState;
+  worldFacts: WorldFactLedger;
+}
 export type ZoneId = 'wilderness' | 'crypt';
 export interface ActorSnapshot extends Point {
   id: string;
@@ -124,6 +134,9 @@ export interface GameSnapshot {
   /** Read-only derived story states; never world or enemy persistence. */
   questLedger?: QuestLedger;
   actIIUnlocked?: boolean;
+  /** Session/world scoped map and immutable facts (not character progression). */
+  mapDiscovery?: MapDiscoveryState;
+  worldFacts?: WorldFactLedger;
   paused: boolean;
   status: GameStatus;
 }
