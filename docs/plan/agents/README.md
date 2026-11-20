@@ -1,4 +1,10 @@
-# Koordinace agentů — Wave D dokončena na úrovni runtime
+# Koordinace agentů — Wave E připravena (agenti 25–27)
+
+**Aktuální plán:** [WAVE_E.md](WAVE_E.md), [INTEGRATION_E.md](INTEGRATION_E.md), [25/TASK.md](25/TASK.md), [26/TASK.md](26/TASK.md), [27/TASK.md](27/TASK.md). **Max. 3 paralelní agenti**, dva výhradní soubory na agenta, společné BASE_SHA stanoví integrátor až při dispatchi z aktuálního HEAD main. Prompt 21 = Act I quest chain (25); Prompt 22 = procedurální terén (26) a POI/události (27). Plán ještě neznamená spuštěné agenty ani hotový runtime. Agenti pouze draft PR; integrátor propojí, ověří CS/EN, v10 migrace a E2E. **Waypoint fast travel = budoucí Prompt 36.** Použít [WORKFLOW_CACHE.md](WORKFLOW_CACHE.md).
+
+---
+
+## Archiv: Wave D dokončena na úrovni runtime
 
 Vlna D měla **3 agenty** (22–24), každý samostatný doménový modul a jednotkový test. **Žádný z těchto úkolů znovu nespouštěj.** Agenti předali izolované PR [#30](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/30), [#32](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/32) a [#31](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/31); integrátor je sloučil v pořadí 18→19→20 a napojil runtime přes [#33](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/33), [#34](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/34), [#35](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/35).
 
