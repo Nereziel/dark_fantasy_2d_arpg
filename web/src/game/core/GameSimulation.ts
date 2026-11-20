@@ -6,7 +6,8 @@ import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../
 import { canActivateWarriorSkill, spendAndStartCooldown, advanceWarriorCooldowns, applyWarriorRageDelta, type WarriorActivationRequest } from '../skills/warriorEconomy';
 import { startCombatTimeline, advanceCombatTimeline, cancelCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
 import { STATUS_DEFINITIONS, type StatusId } from '../status/statusDefinitions';
-import { applyStatus, advanceStatuses, dispelStatuses, getStatusModifiers, type StatusInstance, type StatusRule } from '../status/statusRuntime';
+import { applyStatus, advanceStatuses, dispelStatuses, getStatusModifiers, type StatusInstance } from '../status/statusRuntime';
+import { isLegacyStatus, mergedLegacyEffects, monsterStatusImmunities, statusRule } from '../status/statusIntegration';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
 import { resolveTypedDamage, resolveHealing, type DamageType, type DamageResult } from '../combat/typedDamage';
 import type { SkillAim } from '../input/skillAiming';
@@ -535,31 +536,50 @@ export class GameSimulation {
     this.events.push({ type: 'cast', skillId: id, x: target?.x ?? this.player.x, y: target?.y ?? this.player.y });
   }
 
+  /** Single authoritative status store; legacy effect DTOs are projections only. */
   private applyCanonicalStatus(
     recipient: 'player' | 'enemy', id: StatusId, sourceId: string,
     magnitude?: number, duration?: number, unit?: EnemyUnit
   ): void {
-    const definition = STATUS_DEFINITIONS[id];
-    const rule: StatusRule = {
-      id, duration: duration ?? definition.duration,
-      magnitude: magnitude ?? definition.magnitude,
-      stacking: definition.stackMode === 'stack' ? 'add' : 'refresh',
-      maxStacks: definition.maxStacks,
-      tickInterval: definition.tickInterval ?? undefined,
-      dispelCategory: definition.dispelCategory,
-      immunityTags: definition.immunityGroup ? [definition.immunityGroup] : [],
-      visualHook: definition.visualHook,
-      modifiers: definition.modifierKind === 'speedBoost' ? { moveSpeed: 1 }
-        : definition.modifierKind === 'movementSpeed' ? { moveSpeed: -1 }
-        : definition.modifierKind === 'damageReduction' ? { damageReduction: 1 }
-        : definition.modifierKind === 'damageTaken' ? { damageTaken: 1 } : {}
-    };
+    const rule = statusRule(id, magnitude, duration);
     if (recipient === 'player') {
       this.statusEffects.player = applyStatus(this.statusEffects.player, rule, sourceId);
+      if (id === 'shielded') this.shield = Math.max(this.shield, Math.round(rule.magnitude));
     } else if (unit?.actor.alive) {
       this.statusEffects.enemies[unit.actor.id] = applyStatus(
-        this.statusEffects.enemies[unit.actor.id] ?? [], rule, sourceId);
+        this.statusEffects.enemies[unit.actor.id] ?? [], rule, sourceId,
+        monsterStatusImmunities(unit.actor.type));
     }
+    this.syncLegacyStatuses();
+  }
+
+  private syncLegacyStatuses(): void {
+    this.effects.player = mergedLegacyEffects(this.effects.player, this.statusEffects.player);
+    for (const unit of this.units) {
+      unit.effects = mergedLegacyEffects(unit.effects,
+        this.statusEffects.enemies[unit.actor.id] ?? []);
+    }
+  }
+
+  /** Old transient combat snapshots remain readable, without parallel status timers. */
+  private importLegacyStatuses(): void {
+    for (const effect of this.effects.player) {
+      if (!isLegacyStatus(effect.id) || this.statusEffects.player.some(s => s.id === effect.id)) continue;
+      this.statusEffects.player = applyStatus(this.statusEffects.player,
+        statusRule(effect.id, effect.magnitude > 0 ? effect.magnitude : undefined, effect.remaining),
+        'legacy-hero');
+    }
+    for (const unit of this.units) {
+      for (const effect of unit.effects) {
+        if (!isLegacyStatus(effect.id)
+          || this.statusEffects.enemies[unit.actor.id]?.some(s => s.id === effect.id)) continue;
+        this.statusEffects.enemies[unit.actor.id] = applyStatus(
+          this.statusEffects.enemies[unit.actor.id] ?? [],
+          statusRule(effect.id, effect.magnitude > 0 ? effect.magnitude : undefined, effect.remaining),
+          'legacy-' + unit.actor.id, monsterStatusImmunities(unit.actor.type));
+      }
+    }
+    this.syncLegacyStatuses();
   }
 
   private tickCanonicalStatuses(dt: number): void {
@@ -719,6 +739,14 @@ export class GameSimulation {
   }
 
   private applyEffect(target: 'enemy' | 'player', effect: ActiveEffect, unit = this.focusedUnit): void {
+    if (isLegacyStatus(effect.id)) {
+      this.applyCanonicalStatus(target, effect.id,
+        target === 'player' ? 'status-enemy' : 'hero',
+        effect.magnitude > 0 ? effect.magnitude : undefined, effect.remaining, unit);
+      return;
+    }
+    // Consecration/Skeleton are persistent field and summon abilities,
+    // not duplicative status damage timers.
     if (target === 'player') this.effects.player = applyOrRefreshEffect(this.effects.player, effect);
     else unit.effects = applyOrRefreshEffect(unit.effects, effect);
   }
@@ -935,22 +963,20 @@ export class GameSimulation {
       this.events.push({ type: 'playerDeath' });
     }
   }
+  /** Only aura/summon ticks remain here; all 15 statuses tick in statusRuntime. */
   private tickEffects(dt: number): void {
     for (const unit of this.units) {
       for (const effect of unit.effects) {
+        if (isLegacyStatus(effect.id)) continue;
         effect.remaining -= dt;
         effect.tick += dt;
-        if ((effect.id === 'burning' || effect.id === 'poisoned') && unit.actor.alive) {
-          while (effect.tick >= 1 && unit.actor.alive) {
-            effect.tick -= 1;
-            this.resolveEnemyDamage(effect.magnitude, unit,
-              effect.id === 'poisoned' ? 'poison' : 'fire', 'status-' + effect.id);
-          }
-        }
       }
-      unit.effects = unit.actor.alive ? unit.effects.filter(effect => effect.remaining > 0) : [];
+      unit.effects = unit.actor.alive
+        ? unit.effects.filter(effect => !isLegacyStatus(effect.id) && effect.remaining > 0)
+        : [];
     }
     for (const effect of this.effects.player) {
+      if (isLegacyStatus(effect.id)) continue;
       effect.remaining -= dt;
       effect.tick += dt;
       while (effect.tick >= 1 && effect.remaining > -0.0001 && this.player.alive) {
@@ -964,18 +990,14 @@ export class GameSimulation {
             if (distance(this.player, unit.actor) <= 135) this.applyDamage(effect.magnitude, unit, 'holy');
           }
         } else if (effect.id === 'skeleton') {
-          const target = this.aliveEnemies
-            .find(unit => distance(this.player, unit.actor) <= 280);
+          const target = this.aliveEnemies.find(unit => distance(this.player, unit.actor) <= 280);
           if (target) this.applyDamage(effect.magnitude, target);
-        } else if (effect.id === 'poisoned' || effect.id === 'burning') {
-          this.dealPlayerDamage(effect.magnitude,
-            effect.id === 'poisoned' ? 'poison' : 'fire', 'status-' + effect.id);
         }
       }
     }
-    this.effects.player = this.effects.player.filter(effect => effect.remaining > 0);
+    this.effects.player = this.effects.player.filter(effect =>
+      !isLegacyStatus(effect.id) && effect.remaining > 0);
   }
-
 
   /** Data-driven Wave B AI runs in the deterministic TypeScript simulation. */
   private updateMonsterTactics(unit: EnemyUnit, dt: number): void {
@@ -1203,6 +1225,7 @@ export class GameSimulation {
     this.warriorCooldowns.charge = this.cooldowns.slot1;
     this.tickEffects(dt);
     this.tickCanonicalStatuses(dt);
+    this.syncLegacyStatuses();
     this.tickWarriorTimeline();
     if (this.player.alive) {
       const regen = regenerateHealth(
@@ -1611,6 +1634,7 @@ export class GameSimulation {
         .map(([id, arr]) => [id, arr.map(e => ({ ...e }))]))
     };
     this.effects = { player: s.effects.player.map(effect => ({ ...effect })), enemy: [] };
+    this.importLegacyStatuses();
     this.paused = false;
     this.movePath = [];
     this.attackTarget = null;
