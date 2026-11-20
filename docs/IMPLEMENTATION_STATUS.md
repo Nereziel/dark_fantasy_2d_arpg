@@ -20,7 +20,9 @@ We will now complete foundational prompts in numeric order, even though early ve
 | **18 — First persistent town** | **CORE COMPLETE (PRs #33, #37)** | Ten-entry safe-zone town, NPCs, healer/vendor, and persistent 24-slot stash with safe transfers and v10 saves; waypoint fast travel is reserved for Prompt 36 |
 | **19 — Gold economy & merchants** | **CORE COMPLETE (PR #34)** | Purchases, sales, tempering, deterministic stock, gold/item atomicity, protected flags and localized prices; future sinks belong to future prompts |
 | **20 — Dialogue and quest framework** | **CORE COMPLETE (PR #35)** | Branching/conditionally gated dialogue, typed quest ledger, starter quest adapter and once-only turn-in; v10 save retains historic quest data, additional content is Prompt 21 |
-| 21–29 — Act I story and world | Early vertical-slice prototype | Story chain, wilderness and later Act I prompts begin only after Wave D runtime passes; preserve existing town, quest, commerce and crypt fixtures |
+| **21 — Act I Quest Chain** | **CORE INTEGRATED (PRs #42, #45)** | Eight-story-quest chain after historic `ashes_at_gate`, live discovery/kill/dungeon/Vesna events, one-time gold/XP, typed journal/dialogue markers, CS/EN and character-only save v11; full no-debug beginning-to-end browser acceptance remains to be proven |
+| **22 — Procedural Wilderness** | **CORE INTEGRATED (PRs #41, #43, #44)** | Deterministic terrain/roads/obstacles and visible story/optional POI plans share one collision/navigation WorldLayout across TS simulation and Phaser. Optional event/treasure gameplay interactions and long-route browser acceptance remain pending |
+| 23–29 — Remaining Act I world | Not implemented / early prototype | Next planned prompt is 23 chunking; avoid premature waypoint fast travel (Prompt 36) |
 | 30–63 | Not audited | Follow sequential prompts only after earlier acceptance criteria are met |
 
 ## Prompt 07–11 remaining acceptance closeout (integration PR #21)
@@ -95,3 +97,8 @@ This follow-up integration is **not a parallel agent contribution**: coordinator
 ## Wave B integration checkpoint
 
 The ten isolated Wave B modules (agents 06–15) were merged earlier. This coordinator integration connects them to runtime on the dedicated integration PR. Public save DTO v8 and the initial wilderness tutorial/crypt encounters are unchanged. New content cycles into wilderness waves 2–5. Only mark Prompts 07–11 complete after all original acceptance criteria, full deterministic tests, visual asset coverage and browser gameplay regression gates are met. Avoid claiming that the merged helper modules alone satisfy full prompts.
+
+
+## Wave E runtime integration closeout (20 Nov 2026)
+
+Agent isolated PRs: [#42](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/42) (25), [#41](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/41) (26), [#43](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/43) (27); runtime integration [#44](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/44) (world) and [#45](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/45) (story). Final runtime main SHA `5763b1d84d4037512ca448871b83c8b9312686dd`. PR quality [#44740992933](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44740992933) PASS: 547 Vitest, 13 Chromium, 0 static errors/warnings, build and legacy reference. Post-merge quality/Pages for exact runtime SHA must be separately verified. Full human-playable browser E2E across all Act I beats and optional POI gameplay are not yet proven; do not mark these prompts fully accepted. Character-only save v11 preserves v8/v9/v10 migrations and stash. Waypoint travel reserved for Prompt 36.
