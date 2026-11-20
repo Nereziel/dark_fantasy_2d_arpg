@@ -2,8 +2,9 @@
 // This module describes capabilities; only existing NPCs are connected to gameplay.
 import type { Point } from '../core/types';
 import { CAMP, CAMP_RADIUS } from './generator';
+import { WARDEN_ID } from '../quests/firstQuest';
 import {
-  BLACKSMITH_ID, MERCHANT_ID, NPC_INTERACT_RANGE, NPC_POSITIONS, WARDEN_ID
+  BLACKSMITH_ID, MERCHANT_ID, NPC_INTERACT_RANGE, NPC_POSITIONS
 } from './npcs';
 import {
   ACTOR_RADIUS, canOccupy, findPath, WORLD_HEIGHT, WORLD_WIDTH, type Obstacle
