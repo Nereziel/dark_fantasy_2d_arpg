@@ -5,7 +5,60 @@
       "history": "Memories of the first patrol",
       "ask": "Ask about the source of corruption",
       "details": "Dust and dark whispers are spreading from the crypts. Villagers have vanished. First stop the corrupted creatures outside the gate, then report back.",
-      "back": "Back to the quest"
+      "back": "Back to the quest",
+      "actI": {
+        "open": "Threat Beyond the Gate",
+        "hub": "Vesna unfurls the frontier map. Which trail will you follow?",
+        "back": "Back to the map",
+        "trail_of_black_ash": {
+          "offer": "Ask about the black ash",
+          "active": "Trace the corruption to its origin among the twisted trees.",
+          "ready": "You found where the blight first spread.",
+          "briefing": "Follow the ash. It leads to the heart of the blight."
+        },
+        "blighted_pack": {
+          "offer": "Ask about the blighted beasts",
+          "active": "Track down and defeat the corrupted boars in the wilderness.",
+          "ready": "The blighted pack is defeated.",
+          "briefing": "The beasts came from the old burial grounds. Do not let them reach the town."
+        },
+        "forgotten_graves": {
+          "offer": "Ask about the graveyard",
+          "active": "Find the old headstones beyond the forest.",
+          "ready": "The abandoned graveyard has been found.",
+          "briefing": "No one has entered those grounds in years, yet we still hear its bells."
+        },
+        "morrow_gravebound": {
+          "offer": "Ask about Morrow",
+          "active": "Defeat Morrow, the named guardian of the graves.",
+          "ready": "Morrow is fallen and the graves are quiet.",
+          "briefing": "Morrow once protected the dead from desecration. Now he serves the corruption."
+        },
+        "seal_of_rot": {
+          "offer": "Ask about the seal",
+          "active": "Find evidence that leads to the dark entrance of the crypt.",
+          "ready": "Evidence of the crypt has been secured.",
+          "briefing": "The seal belonged to an ancient house. Its king may never have truly rested."
+        },
+        "crypt_descent": {
+          "offer": "Ask about the crypt",
+          "active": "Enter the Crypt of the Hollow Crown through its gate.",
+          "ready": "You have entered the crypt.",
+          "briefing": "Leave the daylight behind, but remember the way home."
+        },
+        "crypt_lord_fallen": {
+          "offer": "Ask about the Crypt Lord",
+          "active": "Defeat the Crypt Lord and break the blight at its source.",
+          "ready": "The Crypt Lord has fallen.",
+          "briefing": "Corruption has festered here for generations. End it at the source."
+        },
+        "vesnas_report": {
+          "offer": "Bring news to Vesna",
+          "active": "Return to town and tell Vesna of your victory.",
+          "ready": "Vesna awaits your final report.",
+          "briefing": "Bring word from the crypt. The town must know the cost of your victory."
+        }
+      }
     }
   },
   "town": {
@@ -490,6 +543,9 @@
     "cultHealer": {
       "name": "Cult Healer",
       "desc": "A wilderness enemy."
+    },
+    "morrow_gravebound": {
+      "name": "Morrow, Gravebound"
     }
   },
   "npc": {
@@ -523,6 +579,66 @@
       "completed": "Quest completed",
       "readyHint": "Return to Warden Vesna.",
       "reward": "Reward"
+    },
+    "actI": {
+      "trail_of_black_ash": {
+        "title": "Trail of Black Ash",
+        "description": "Vesna sends you beyond the gates to trace the source of black ash. Unnatural whispers cling to the treetops.",
+        "objective": "Investigate the corruption site",
+        "accept": "Accept the investigation",
+        "turnIn": "Report the findings"
+      },
+      "blighted_pack": {
+        "title": "The Blighted Pack",
+        "description": "The tracks lead to infected beasts. Their hunger is unnatural and their blood fouls the soil.",
+        "objective": "Defeat three corrupted boars",
+        "accept": "Accept the hunt",
+        "turnIn": "Complete the hunt"
+      },
+      "forgotten_graves": {
+        "title": "The Forgotten Graves",
+        "description": "An abandoned graveyard lies beside the old road. A voice beneath the earth calls the dead by name.",
+        "objective": "Discover the abandoned graveyard",
+        "accept": "Investigate the graves",
+        "turnIn": "Report the location"
+      },
+      "morrow_gravebound": {
+        "title": "Morrow, Gravebound",
+        "description": "Morrow, the graveyard warden, succumbed to the blight and now guards an ancient seal. End his watch.",
+        "objective": "Defeat Morrow at the graveyard",
+        "accept": "Confront Morrow",
+        "turnIn": "Report the victory"
+      },
+      "seal_of_rot": {
+        "title": "The Seal of Rot",
+        "description": "A clue remains among the ruined graves, pointing toward the crypt. Recover evidence of the power below.",
+        "objective": "Recover evidence leading to the crypt",
+        "accept": "Search for evidence",
+        "turnIn": "Deliver the seal"
+      },
+      "crypt_descent": {
+        "title": "Descent into the Crypt",
+        "description": "The dark gate stands open. Descend and discover who feeds the corruption above.",
+        "objective": "Enter the crypt",
+        "accept": "Begin the descent",
+        "turnIn": "Confirm the descent"
+      },
+      "crypt_lord_fallen": {
+        "title": "The Crypt Lord Falls",
+        "description": "The Lord of the Hollow Crown awakens the dead and poisons the frontier. Destroy him in his hall.",
+        "objective": "Defeat the Crypt Lord",
+        "accept": "Confront the lord",
+        "turnIn": "Report his fall"
+      },
+      "vesnas_report": {
+        "title": "Report to Vesna",
+        "description": "The source of corruption is silenced. Return to Warden Vesna with the truth and claim your reward.",
+        "objective": "Speak to Vesna in town",
+        "accept": "Prepare the report",
+        "turnIn": "Deliver the report"
+      },
+      "returnToVesna": "Return to Warden Vesna and claim the reward.",
+      "nextUnlocked": "Act I complete. The next chapter is unlocked."
     }
   },
   "trade": {
@@ -628,5 +744,18 @@
     "summoner": "Summoner",
     "explodesOnDeath": "Explodes on death",
     "hazardousGround": "Hazardous ground"
+  },
+  "world": {
+    "corruptionSite": "Corruption Site",
+    "corruptedForest": "Corrupted Forest",
+    "abandonedGraveyard": "Abandoned Graveyard",
+    "evidenceLead": "Evidence to the Crypt",
+    "graveWarden": "Morrow's Grave",
+    "taintedBeasts": "Blighted Pack",
+    "cryptEntrance": "Crypt Entrance",
+    "optionalEncounter": "Dangerous Encounter",
+    "optionalPoi": "Mysterious Site",
+    "optionalTreasure": "Hidden Treasure",
+    "optionalEvent": "Wilderness Event"
   }
 }
