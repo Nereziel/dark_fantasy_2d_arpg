@@ -98,6 +98,9 @@ describe('Prompt 29 death / respawn rules', () => {
     const loaded = new GameSimulation(42);
     expect(loaded.restoreWorldProgress(progress)).toBe(true);
     expect(loaded.snapshot().activatedCheckpointIds).toEqual(['shrine.soul-shrine']);
+    // A saved activation does not allow reusing the same shrine for XP or shield.
+    expect(loaded.snapshot().interactables.some(object => object.id === 'soul-shrine'))
+      .toBe(false);
     loaded.command({ type: 'respawn' });
     expect(loaded.snapshot().player.x).toBe(CAMP.x);
   });
@@ -146,7 +149,12 @@ describe('Prompt 29 death / respawn rules', () => {
     expect(readWorldRecord({ format: 1, characterId: 'hero', progress: {
       ...progress, activatedCheckpointIds: ['shrine.soul-shrine', 'shrine.soul-shrine']
     } })).toBeNull();
+    const legacy = { ...progress };
+    delete legacy.activatedCheckpointIds;
+    expect(readWorldRecord(createWorldRecord(legacy))?.activatedCheckpointIds)
+      .toBeUndefined();
     expect(new GameSimulation(0).restoreWorldProgress({
+
       ...progress, activatedCheckpointIds: ['fake'] as never
     })).toBe(false);
   });
