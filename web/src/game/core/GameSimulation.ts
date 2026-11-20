@@ -1185,7 +1185,7 @@ export class GameSimulation {
       const slowed = getStatusModifiers(this.statusEffects.enemies[actor.id] ?? []).moveSpeed ?? 0;
       const pace = def.speed * profile.speedMultiplier * Math.max(0.25, 1 + slowed);
       const stop = decision.action === 'chase' && route.length === 1
-        && decision.targetId === undefined && distance(dest, this.player) < 0.01
+        && distance(dest, this.player) < 0.01
         ? Math.max(0, def.preferredRange - 4) : 0;
       this.follow(actor, point, pace, dt, stop);
     }
@@ -1196,6 +1196,7 @@ export class GameSimulation {
     // The starter camp is a sanctuary even if the player retreats mid-combat.
     if (this.zone === 'wilderness' && distance(this.player, this.world.camp) <= CAMP_RADIUS) {
       unit.intent = null;
+      if (this.wave >= 2) this.updateMonsterTactics(unit, dt);
       return;
     }
     unit.cooldown = Math.max(0, unit.cooldown - dt);
