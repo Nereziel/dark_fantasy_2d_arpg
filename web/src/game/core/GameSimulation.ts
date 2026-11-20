@@ -1082,9 +1082,15 @@ export class GameSimulation {
       reachable: findPath(actor, u.actor, ACTOR_RADIUS, this.world.obstacles).length > 0
     }));
 
+    // Heal first when an ally is critically injured; defensive buffs are secondary.
+    const healSkill = actions.find(action => action.kind === 'heal');
+    const urgentHeal = !!healSkill && this.units.some(other =>
+      other !== unit && other.actor.alive
+      && other.actor.health / other.actor.maxHealth < 0.88
+      && distance(actor, other.actor) <= healSkill.range);
     // Buffs are committed as simulation statuses, not cosmetic renderer effects.
     // Damaging frenzy uses the same canonical damageDealt modifier as Cursed.
-    const buff = target && toPlayer <= def.aggro && unit.cooldown <= 0
+    const buff = !urgentHeal && target && toPlayer <= def.aggro && unit.cooldown <= 0
       ? actions.find(action => action.kind === 'buff' && ready(action)
         && this.units.some(u => u !== unit && u.actor.alive
           && distance(actor, u.actor) <= action.range)) : undefined;
@@ -1105,7 +1111,6 @@ export class GameSimulation {
       return;
     }
 
-    const healSkill = actions.find(action => action.kind === 'heal');
     const travel = target ? findPath(actor, target, ACTOR_RADIUS, this.world.obstacles) : [];
     const patrol = {
       x: origin.x + (index % 2 === 0 ? 36 : -36),
