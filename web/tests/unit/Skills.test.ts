@@ -73,6 +73,8 @@ describe('active skills for every class', () => {
     };
     expect(sim.restore(damaged)).toBe(true);
     sim.command({ type: 'cast', slot: 'slot1' });
+    expect(sim.snapshot().effects.player.some(effect => effect.id === 'consecration')).toBe(false);
+    for (let i = 0; i < 22; i++) sim.advance(frame);
     expect(sim.snapshot().effects.player.some(effect => effect.id === 'consecration')).toBe(true);
     for (let i = 0; i < 75; i++) sim.advance(frame);
     const after = sim.snapshot();
@@ -85,6 +87,7 @@ describe('active skills for every class', () => {
     sim.command({ type: 'reset', classId: 'MAGE' });
     sim.command({ type: 'cast', slot: 'rmb' });
     expect(advanceUntil(sim, () => sim.snapshot().cooldowns.rmb > 0)).toBe(true);
+    expect(advanceUntil(sim, () => sim.snapshot().effects.enemy.some(effect => effect.id === 'burning'))).toBe(true);
     const start = sim.snapshot();
     expect(start.effects.enemy.some(effect => effect.id === 'burning')).toBe(true);
     for (let i = 0; i < 70; i++) sim.advance(frame);
@@ -97,6 +100,7 @@ describe('active skills for every class', () => {
     const sim = new GameSimulation();
     sim.command({ type: 'reset', classId: 'NECROMANCER' });
     sim.command({ type: 'cast', slot: 'slot1' });
+    expect(advanceUntil(sim, () => sim.snapshot().effects.player.some(effect => effect.id === 'skeleton'))).toBe(true);
     const before = sim.snapshot();
     const saved = structuredClone(before);
     expect(saved.effects.player[0]?.id).toBe('skeleton');
