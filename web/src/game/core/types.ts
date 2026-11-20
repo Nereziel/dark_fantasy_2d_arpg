@@ -27,6 +27,7 @@ import type { Materials, CraftKind } from '../crafting/craftingRules';
 import type { GemAction, GemWallet } from '../gems/gemRules';
 import type { GemId } from '../gems/gemCatalog';
 import type { PotionCharges, PotionId, PotionState } from '../consumables/potionRules';
+import type { StashTabs } from '../inventory/stashRules';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
@@ -78,8 +79,10 @@ export interface CharacterProgress {
   kills: number;
   inventory: Array<Item | null>;
   equipment: Equipment;
-  /** Persistent town stash (24 slots); absent only in legacy v8/v9 saves. */
+  /** Legacy stash tab 0 (24 slots); absent only in legacy v8/v9 saves. */
   stash?: Array<Item | null>;
+  /** Two extra character-owned 24-slot tabs; optional for old v11 saves. */
+  stashTabs?: StashTabs;
   itemFlags?: Record<string, ItemFlags>;
   quest: QuestProgress;
   /** Complete Act I story progress, character-only; optional on legacy records. */
@@ -157,8 +160,10 @@ export interface GameSnapshot {
   stats: DerivedStats;
   inventory: Array<Item | null>;
   equipment: Equipment;
-  /** Character-owned stash, exposed for camp UI; older debug snapshots may omit it. */
+  /** Legacy first stash tab, exposed for camp UI; older debug snapshots may omit it. */
   stash?: Array<Item | null>;
+  /** Tabs 1 and 2, never a network/account shared save. */
+  stashTabs?: StashTabs;
   groundLoot: GroundItem[];
   itemFlags?: Record<string, ItemFlags>;
   quest: QuestProgress;
@@ -200,8 +205,10 @@ export type GameCommand =
   | { type: 'refillPotion'; entryId: string; potionId: PotionId }
   | { type: 'selectPotion'; potionId: PotionId }
   | { type: 'usePotion' }
-  | { type: 'stashDeposit'; index: number }
-  | { type: 'stashWithdraw'; index: number }
+  | { type: 'stashDeposit'; index: number; tab?: number }
+  | { type: 'stashWithdraw'; index: number; tab?: number }
+  | { type: 'stashMove'; fromTab: number; index: number; toTab: number }
+  | { type: 'stashSort'; tab: number }
   | { type: 'usePortal' }
   | { type: 'interactObject'; id: WorldObjectId }
   | { type: 'interactCrypt'; id: string }
@@ -261,7 +268,7 @@ export type GameEvent =
   | { type: 'npcDialogue'; npcId: NpcId }
   | { type: 'townInteraction'; entryId: string; role: TownServiceRole }
   | { type: 'townServiceUsed'; entryId: string; goldSpent: number }
-  | { type: 'stashUpdated'; direction: 'deposit' | 'withdraw'; itemId: string }
+  | { type: 'stashUpdated'; direction: 'deposit' | 'withdraw' | 'move' | 'sort'; itemId: string }
   | { type: 'tradeRejected'; reason: 'funds' | 'inventory' | 'protected' | 'invalid' }
   | { type: 'zoneChanged'; zone: ZoneId }
   | { type: 'dungeonCleared' }
