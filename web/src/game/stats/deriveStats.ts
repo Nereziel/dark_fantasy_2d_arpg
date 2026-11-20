@@ -80,7 +80,7 @@ export function deriveStats(classId: ClassId, equipment: Equipment, level = 1): 
   armor += Math.round(5 + strength * 1.8 + vitality * 0.4);
   return {
     ...primary,
-    maxHealth: Math.round(50 + vitality * 12 + strength * 2),
+    maxHealth: Math.round(50 + vitality * 12 + strength * 2 + (boundedLevel - 1) * 4),
     healthRegen: Number((0.5 + vitality * 0.07).toFixed(2)),
     maxResource: klass.resourceMax + (boundedLevel - 1) * 2,
     resourceRegen: klass.regenRate + (boundedLevel - 1) * 0.04,
