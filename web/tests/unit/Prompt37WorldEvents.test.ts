@@ -110,6 +110,8 @@ describe('Prompt 37 — real simulation, rewards and world saves', () => {
     const units=eventUnits(sim);
     (sim as unknown as {defeatEnemy(u:EnemyUnit):void}).defeatEnemy(units[0]!);
     expect(sim.worldProgress()!.worldFacts.entries.filter(f=>f.kind==='eventCompleted')).toEqual([]);
+    expect(sim.character().kills).toBe(before.kills);
+    expect(sim.character().questLedger).toEqual(before.questLedger);
     expect(sim.snapshot().worldEvents?.find(e=>e.id===plan.id)?.remaining)
       .toBe(plan.enemySpawns.length-1);
     clearEvent(sim);
@@ -121,6 +123,7 @@ describe('Prompt 37 — real simulation, rewards and world saves', () => {
     ]));
     const reward=worldEventReward(plan.kind,before.level)!;
     expect(completed.gold-before.gold).toBe(reward.gold);
+    expect(completed.kills-before.kills).toBe(plan.enemySpawns.length);
     expect(completed.xp).toBeGreaterThan(before.xp);
     for(const [material,amount] of Object.entries(reward.materials)) {
       expect(completed.materials?.[material as keyof typeof reward.materials])
