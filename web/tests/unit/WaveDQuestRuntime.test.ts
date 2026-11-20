@@ -35,7 +35,9 @@ describe('Wave D generic quest runtime and branching dialogue integration', () =
 
     const active = acceptQuest(STARTER_QUEST_CATALOG, base, FIRST_QUEST_ID)!.ledger;
     expect(evaluateDialogue(STARTER_QUEST_CATALOG, active, 'vesna.root', context)!
-      .options.find(option => option.id === 'accept')?.enabled).toBe(false);
+      .options.some(option => option.id === 'accept')).toBe(false);
+    expect(evaluateDialogue(STARTER_QUEST_CATALOG, active, 'vesna.root', context)!
+      .options.find(option => option.id === 'history')?.enabled).toBe(false);
     expect(chooseDialogueOption(STARTER_QUEST_CATALOG, active, 'vesna.root', 'accept', context))
       .toBeNull();
 
