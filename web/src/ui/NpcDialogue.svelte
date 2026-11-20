@@ -1,7 +1,11 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
   import type { QuestProgress } from '../game/quests/firstQuest';
-  import { QUEST_REWARD_GOLD, QUEST_REWARD_XP, QUEST_REQUIRED_KILLS } from '../game/quests/firstQuest';
+  import {
+    QUEST_REWARD_GOLD, QUEST_REWARD_XP, QUEST_REQUIRED_KILLS, WARDEN_ID
+  } from '../game/quests/firstQuest';
+  import { evaluateDialogue, chooseDialogueOption } from '../game/quests/questDialogue';
+  import { STARTER_QUEST_CATALOG, firstQuestLedger } from '../game/quests/starterQuestRegistry';
 
   let {
     quest, accept, turnIn, close
@@ -11,6 +15,25 @@
     turnIn: () => void;
     close: () => void;
   } = $props();
+
+  let nodeId = $state('vesna.root');
+  const context = { npcId: WARDEN_ID };
+  const ledger = $derived(firstQuestLedger(quest));
+  const dialogue = $derived(ledger
+    ? evaluateDialogue(STARTER_QUEST_CATALOG, ledger, nodeId, context) : null);
+
+  function choose(optionId: string): void {
+    if (!ledger) return;
+    // Always recheck option visibility/availability against the current
+    // ledger. UI never changes quest state or awards gold/XP itself.
+    const option = chooseDialogueOption(STARTER_QUEST_CATALOG,
+      ledger, nodeId, optionId, context);
+    if (!option) return;
+    if (option.action?.type === 'acceptQuest') accept();
+    if (option.action?.type === 'turnInQuest') turnIn();
+    if (option.action?.type === 'close') close();
+    if (option.nextNodeId) nodeId = option.nextNodeId;
+  }
 </script>
 
 <div class="npc-dialog-shield">
@@ -18,24 +41,30 @@
     <div class="npc-kicker">{$t('npc.warden.title')}</div>
     <h2>{$t('npc.warden.name')}</h2>
     <h3>{$t('quest.ashes.title')}</h3>
-    {#if quest.status === 'available'}
-      <p>{$t('quest.ashes.intro')}</p>
-    {:else if quest.status === 'active'}
-      <p>{$t('quest.ashes.inProgress')}</p>
-    {:else if quest.status === 'ready'}
-      <p>{$t('quest.ashes.readyDialogue')}</p>
-    {:else}
-      <p>{$t('quest.ashes.finishDialogue')}</p>
-    {/if}
+    <p>{$t(dialogue?.textKey ?? 'dialogue.vesna.root')}</p>
+    <p class="quest-current-story">
+      {#if quest.status === 'available'}
+        {$t('quest.ashes.intro')}
+      {:else if quest.status === 'active'}
+        {$t('quest.ashes.inProgress')}
+      {:else if quest.status === 'ready'}
+        {$t('quest.ashes.readyDialogue')}
+      {:else}
+        {$t('quest.ashes.finishDialogue')}
+      {/if}
+    </p>
     <div class="npc-objective">
       {$t('quest.ashes.objective')} · {quest.defeated}/{QUEST_REQUIRED_KILLS}
       <span>{$t('quest.ashes.reward')}: {QUEST_REWARD_GOLD} {$t('hud.gold')}, {QUEST_REWARD_XP} XP</span>
     </div>
     <div class="npc-actions">
-      {#if quest.status === 'available'}
-        <button class="primary" onclick={accept}>{$t('quest.ashes.accept')}</button>
-      {:else if quest.status === 'ready'}
-        <button class="primary" onclick={turnIn}>{$t('quest.ashes.turnIn')}</button>
+      {#if dialogue}
+        {#each dialogue.options as option (option.id)}
+          <button class:primary={option.action?.type === 'acceptQuest' || option.action?.type === 'turnInQuest'}
+            class:secondary={option.action === null}
+            disabled={!option.enabled}
+            onclick={() => choose(option.id)}>{$t(option.textKey)}</button>
+        {/each}
       {/if}
       <button class="secondary" onclick={close}>{$t('npc.leave')}</button>
     </div>
@@ -50,7 +79,8 @@
   .npc-kicker{color:#b59b75;letter-spacing:.22em;text-transform:uppercase;font-size:.66rem}
   h2{font-family:Georgia,serif;color:#f0dcb9;font-size:1.8rem;margin:7px 0 20px}
   h3{font-family:Georgia,serif;color:#d8b88a;font-size:1.1rem;margin:0 0 10px}
-  p{font-family:Georgia,serif;line-height:1.75;color:#dbd9d1;font-size:.96rem;min-height:90px}
+  p{font-family:Georgia,serif;line-height:1.6;color:#dbd9d1;font-size:.9rem;min-height:0}
+  .quest-current-story{opacity:.82;font-size:.82rem}
   .npc-objective{border-top:1px solid #5b5b58;border-bottom:1px solid #5b5b58;
     padding:12px 0;display:flex;flex-direction:column;gap:7px;font-size:.76rem;color:#c8bb9c}
   .npc-objective span{font-size:.7rem;color:#a4bdac}
