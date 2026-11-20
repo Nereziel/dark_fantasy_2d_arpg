@@ -1,6 +1,11 @@
 import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point, ProjectileSnapshot, ZoneId } from './types';
 import { spawnPlayer, updateHealthLimit, advanceResource, regenerateHealth } from '../entities/player';
 import { awardProgression, rewardForActivity, xpRequiredForLevel, MAX_LEVEL } from '../progression/progressionRules';
+import {
+  planEquip, planUnequip, planSwap, planDrop, sortInventory, favoriteOrLockItem,
+  type ItemFlags, type InventoryState, type EquipmentRules
+} from '../inventory/equipmentRules';
+import { ITEM_BASES, WEAPON_TYPES } from '../items/itemCatalog';
 import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
 import { applyOrRefreshEffect } from '../status/effectStack';
 import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../skills/warriorKit';
@@ -153,6 +158,7 @@ export class GameSimulation {
   private classId: ClassId = 'WARRIOR';
   private equipment: Equipment = createEquipment();
   private inventory: Array<Item | null> = Array(INVENTORY_SIZE).fill(null);
+  private itemFlags: Record<string, ItemFlags> = {};
   private rng = new SeededRng();
   private cooldowns: Cooldowns = emptyCooldowns();
   private warriorCooldowns: Partial<Record<WarriorAbilityId, number>> = {};
@@ -313,6 +319,10 @@ export class GameSimulation {
       return;
     }
     if (!this.player.alive || this.paused) return;
+    if (command.type === 'swapInventory') { this.updateInventory(planSwap(this.inventoryState(), command.fromIndex, command.toIndex, this.inventoryRules())); return; }
+    if (command.type === 'sortInventory') { this.updateInventory(sortInventory(this.inventoryState(), this.inventoryRules())); return; }
+    if (command.type === 'setItemFlag') { this.updateInventory(favoriteOrLockItem(this.inventoryState(), command.itemId, command.flag, command.value, this.inventoryRules())); return; }
+    if (command.type === 'dropInventory') { this.dropInventory(command.index); return; }
     if (command.type === 'interactObject') {
       this.warriorAction = null;
       this.classAction = null;
@@ -496,26 +506,59 @@ export class GameSimulation {
     this.refreshHealthLimit();
   }
 
+  private inventoryState(): InventoryState {
+    return { inventory: this.inventory, equipment: this.equipment, flags: this.itemFlags };
+  }
+
+  private inventoryRules(): EquipmentRules {
+    const items = [...this.inventory, ...Object.values(this.equipment)].filter(
+      (item): item is Item => item !== null
+    );
+    return {
+      playerLevel: this.level,
+      requiredLevelsById: Object.fromEntries(items.map(item => [
+        item.id, item.requiredLevel
+          ?? ITEM_BASES[item.templateId as keyof typeof ITEM_BASES]?.requiredLevel ?? 1
+      ])),
+      twoHandedItemIds: items.filter(item => item.twoHanded || (
+        !!ITEM_BASES[item.templateId as keyof typeof ITEM_BASES]?.weaponType
+        && WEAPON_TYPES[ITEM_BASES[item.templateId as keyof typeof ITEM_BASES].weaponType!].twoHanded
+      )).map(item => item.id)
+    };
+  }
+
+  private updateInventory(result: ReturnType<typeof planEquip>): void {
+    if (!result.ok) return;
+    this.inventory = result.state.inventory.map(cloneItem);
+    this.equipment = cloneEquipment(result.state.equipment as Equipment);
+    this.itemFlags = Object.fromEntries(Object.entries(result.state.flags ?? {})
+      .map(([id, flags]) => [id, { ...flags }]));
+    this.refreshHealthLimit();
+    const cap = deriveStats(this.classId, this.equipment, this.level).maxResource;
+    this.resource = Math.min(cap, this.resource);
+  }
+
   private equip(index: number): void {
-    if (!Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return;
     const item = this.inventory[index];
     if (!item) return;
-    const slot: EquipmentSlot = item.slot === 'RING_1' &&
-      this.equipment.RING_1 && !this.equipment.RING_2 ? 'RING_2' : item.slot;
-    const replaced = this.equipment[slot];
-    this.equipment[slot] = item;
-    this.inventory[index] = replaced;
-    this.refreshHealthLimit();
+    const selected = item.slot === 'RING_1' && this.equipment.RING_1 && !this.equipment.RING_2
+      ? 'RING_2' : undefined;
+    this.updateInventory(planEquip(this.inventoryState(), index, selected, this.inventoryRules()));
   }
+
   private unequip(slot: EquipmentSlot): void {
-    if (!isEquipmentSlot(slot)) return;
-    const item = this.equipment[slot];
-    const index = this.inventory.findIndex(i => i === null);
-    if (!item || index < 0) return;
-    this.inventory[index] = item;
-    this.equipment[slot] = null;
-    this.refreshHealthLimit();
+    this.updateInventory(planUnequip(this.inventoryState(), slot, this.inventoryRules()));
   }
+
+  private dropInventory(index: number): void {
+    const result = planDrop(this.inventoryState(), index, this.inventoryRules());
+    if (!result.ok || this.groundLoot.length >= 30) return;
+    const id = 'discard-' + this.kills + '-' + this.rng.state + '-' + index;
+    this.updateInventory(result);
+    this.groundLoot.push({ id, item: result.dropped, x: this.player.x, y: this.player.y });
+    this.events.push({ type: 'loot', id });
+  }
+
   private refreshHealthLimit(): void {
     const max = deriveStats(this.classId, this.equipment, this.level).maxHealth;
     updateHealthLimit(this.player, max);
@@ -1745,6 +1788,7 @@ export class GameSimulation {
       kills: this.kills,
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
+      ...(Object.keys(this.itemFlags).length ? { itemFlags: { ...this.itemFlags } } : {}),
       quest: { ...this.quest }
     };
   }
@@ -1770,6 +1814,7 @@ export class GameSimulation {
       kills: progress.kills,
       inventory: progress.inventory,
       equipment: progress.equipment,
+      itemFlags: progress.itemFlags,
       quest: progress.quest
     };
     if (!scratch.restore(candidate)) return false;
@@ -1783,6 +1828,7 @@ export class GameSimulation {
     this.kills = progress.kills;
     this.inventory = progress.inventory.map(cloneItem);
     this.equipment = cloneEquipment(progress.equipment);
+    this.itemFlags = { ...scratch.itemFlags };
     this.quest = { ...progress.quest };
     this.refreshHealthLimit();
     this.player.health = this.player.maxHealth;
@@ -1849,6 +1895,7 @@ export class GameSimulation {
       stats: deriveStats(this.classId, this.equipment, this.level),
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
+      ...(Object.keys(this.itemFlags).length ? { itemFlags: { ...this.itemFlags } } : {}),
       groundLoot: this.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! })),
       quest: { ...this.quest },
       paused: this.paused,
@@ -1949,6 +1996,9 @@ export class GameSimulation {
       || !s.equipment || Object.keys(createEquipment()).some(
         key => !(key in s.equipment)
           || (s.equipment[key as EquipmentSlot] !== null && !isItem(s.equipment[key as EquipmentSlot])))
+      || !planSwap({ inventory: s.inventory, equipment: s.equipment, flags: s.itemFlags }, 0, 0, {
+        playerLevel: s.level
+      }).ok
       || !Array.isArray(s.groundLoot) || s.groundLoot.length > 30
       || !s.groundLoot.every(loot => !!loot && typeof loot.id === 'string'
         && canOccupy(loot, 0, layout.obstacles) && isItem(loot.item))
@@ -1962,6 +2012,8 @@ export class GameSimulation {
     this.quest = { ...s.quest };
     this.equipment = cloneEquipment(s.equipment);
     this.inventory = s.inventory.map(cloneItem);
+    this.itemFlags = Object.fromEntries(Object.entries(s.itemFlags ?? {})
+      .map(([id, flags]) => [id, { ...flags }]));
     this.groundLoot = s.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! }));
     this.player = { ...s.player };
     this.units = s.enemies.map(cloneUnit);
@@ -2033,6 +2085,7 @@ export class GameSimulation {
     this.classId = classId;
     this.equipment = createEquipment();
     this.inventory = Array(INVENTORY_SIZE).fill(null);
+    this.itemFlags = {};
     this.rng = new SeededRng(seed === 0 ? 0x49ac127b : ((seed ^ 0x49ac127b) >>> 0));
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
