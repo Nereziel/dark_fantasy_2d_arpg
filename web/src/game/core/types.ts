@@ -162,7 +162,8 @@ export type GameEvent =
   | { type: 'enemyWindup'; enemyId: string; pattern: 'bolt' | 'sweep' | 'leap' }
   | { type: 'enemyAttack'; enemyId: string; hit: boolean }
   | { type: 'enemyHeal'; enemyId: string; targetId: string; amount: number }
-  | { type: 'enemyBuff'; enemyId: string; abilityId: string };
+  | { type: 'enemyBuff'; enemyId: string; abilityId: string }
+  | { type: 'eliteCue'; enemyId: string; effect: string; x: number; y: number; radius: number };
 export interface GameStateReader {
   snapshot(): GameSnapshot;
   subscribe(listener: (state: GameSnapshot) => void): () => void;
