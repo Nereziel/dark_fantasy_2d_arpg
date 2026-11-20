@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validEnemyType } from '../../src/game/enemies/enemies';
+import { getStatusDefinition } from '../../src/game/status/statusDefinitions';
 import { CRYPT_RUNTIME_BOSS_POSITIONS, buildCryptWorld } from '../../src/game/world/dungeonRuntime';
 import { ACTOR_RADIUS, canOccupy, findPath, WORLD_HEIGHT, WORLD_WIDTH } from '../../src/game/world/navigation';
 import {
@@ -213,6 +214,7 @@ describe('Agent 31 — world props, one-shot hooks and safe geometry', () => {
       expect(trap.damage.maxBaseDamage).toBeGreaterThan(0);
       expect(trap.damage.maxBaseDamage).toBeLessThanOrEqual(45);
       expect(['physical', 'poison', 'shadow']).toContain(trap.damage.type);
+      if (trap.damage.statusId) expect(getStatusDefinition(trap.damage.statusId)).toBeDefined();
       expect(trap.requiresVisited).toBe(true);
       expect(trap.oneShot).toBe(true);
       expect(trap.hookId).not.toBe(prop.onInteractHookId);
