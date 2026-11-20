@@ -592,7 +592,9 @@ export class GameSimulation {
   private updateMiniBoss(unit: EnemyUnit, dt: number): void {
     const actor = unit.actor;
     const state = this.miniBossStates.get(actor.id);
-    if (!state || !actor.alive || distance(this.player, actor) > 490) return;
+    if (!state || !actor.alive || distance(this.player, actor) > 490
+      || (this.zone === 'wilderness'
+        && distance(this.player, this.world.camp) <= CAMP_RADIUS)) return;
     if (this.statusEffects.enemies[actor.id]?.some(effect =>
       effect.id === 'stunned' || effect.id === 'frozen')) return;
     const result = stepMiniBoss(state, {
