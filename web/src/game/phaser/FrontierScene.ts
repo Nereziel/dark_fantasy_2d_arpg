@@ -490,6 +490,14 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private onGameEvent(event: GameEvent): void {
+    if (event.type === 'playerRespawn') {
+      this.heldMovement.release();
+      this.heroDeadUntil = 0;
+      this.heroHitUntil = 0;
+      this.heroBlockUntil = 0;
+      this.cameras.main.flash(420, 120, 190, 155);
+      return;
+    }
     if (event.type === 'hollowKingCue') {
       const ring = this.obtainImpact(event.x, event.y, 88);
       const tint = event.kind === 'phaseChanged' ? 0xb59ae9
@@ -944,6 +952,11 @@ export class FrontierScene extends Phaser.Scene {
         .lineBetween(state.player.x, state.player.y, p.x, p.y);
     }
     this.drawStatuses(state.player.x,state.player.y,state.statusEffects?.player ?? []);
+    if (state.player.alive && (state.respawnProtectionSeconds ?? 0) > 0) {
+      const pulse = 28 + Math.sin(this.time.now * 0.012) * 3;
+      this.statusVisuals.lineStyle(3, 0x8fd9bf, 0.75)
+        .strokeCircle(state.player.x, state.player.y, pulse);
+    }
     if (state.shield > 0 && !(state.statusEffects?.player.some(s=>s.id==='shielded'))) {
       this.statusVisuals.lineStyle(3, 0x8dc6f6, 0.65)
         .strokeCircle(state.player.x, state.player.y, 27);
