@@ -77,7 +77,7 @@ const DIFFICULTY_INDEX: Readonly<Record<LootDifficulty, number>> = Object.freeze
   normal: 0, veteran: 1, nightmare: 2, hell: 3
 });
 const RARITY_RANK: Readonly<Record<LootRarity, number>> = Object.freeze({
-  COMMON: 1, UNCOMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5
+  COMMON: 1, UNCOMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6
 });
 const ZONES: readonly LootZone[] = Object.freeze(['wilderness', 'crypt']);
 
