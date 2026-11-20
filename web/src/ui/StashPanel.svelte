@@ -31,8 +31,9 @@
   }));
   let usedSlots = $derived(stash.filter(Boolean).length);
 
-  function moveTo(index: number, toTab: number, target: HTMLSelectElement): void {
-    if (Number.isSafeInteger(toTab) && toTab >= 0 && toTab < STASH_TAB_COUNT
+  function moveTo(index: number, targetValue: string, target: HTMLSelectElement): void {
+    const toTab = Number(targetValue);
+    if (/^[012]$/.test(targetValue) && toTab < STASH_TAB_COUNT
       && toTab !== activeTab) {
       bridge.command({ type: 'stashMove', fromTab: activeTab, index, toTab });
     }
@@ -121,7 +122,7 @@
               {$t('town.stashWithdraw')}
             </button>
             <select aria-label={$t('stash.moveTo') + ': ' + item.id} value=""
-              onchange={event => moveTo(index, Number(event.currentTarget.value), event.currentTarget)}>
+              onchange={event => moveTo(index, event.currentTarget.value, event.currentTarget)}>
               <option value="">{$t('stash.moveTo')}</option>
               {#each tabs.filter(tab => tab !== activeTab) as tab}
                 <option value={tab}>{$t('stash.tab')} {tab + 1}</option>
