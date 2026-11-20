@@ -2912,7 +2912,8 @@ export class GameSimulation {
       xp: this.xp,
       skillPoints: this.skillPoints,
       talentPoints: this.talentPoints,
-      talentRanks: { ...this.talentRanks },
+      ...(Object.keys(this.talentRanks).length
+        ? { talentRanks: { ...this.talentRanks } } : {}),
       gold: this.gold,
       kills: this.kills,
       inventory: this.inventory.map(cloneItem),
@@ -3171,10 +3172,6 @@ export class GameSimulation {
       })()
       || !Number.isInteger(s.rngState) || s.rngState < 0 || s.rngState > 0xffffffff
       || !Number.isFinite(s.resource) || s.resource < 0
-      || s.resource > applyTalentStats(
-        deriveStats(s.classId, s.equipment, s.level),
-        s.classId === 'WARRIOR' ? (s.talentRanks ?? {}) : {}
-      ).maxResource
       || !Number.isFinite(s.respawnTimer) || s.respawnTimer < 0 || s.respawnTimer > 5
       || !Number.isFinite(s.shield) || s.shield < 0 || s.shield > 100000
       || !Array.isArray(s.projectiles) || s.projectiles.length > 80
@@ -3261,6 +3258,10 @@ export class GameSimulation {
       || !Array.isArray(s.groundLoot) || s.groundLoot.length > 100
       || !s.groundLoot.every(loot => !!loot && typeof loot.id === 'string'
         && canOccupy(loot, 0, layout.obstacles) && isItem(loot.item))
+      || s.resource > applyTalentStats(
+        deriveStats(s.classId, s.equipment, s.level),
+        s.classId === 'WARRIOR' ? (s.talentRanks ?? {}) : {}
+      ).maxResource
     ) return false;
 
     this.world = layout;
