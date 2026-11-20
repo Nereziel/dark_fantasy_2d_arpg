@@ -872,5 +872,11 @@
         }
       }
     }
+  },
+  "skillModifiers": {
+    "enhanced": "Enhanced",
+    "radius": "Radius",
+    "pull": "Pull",
+    "bleeding": "Bleeding"
   }
 }

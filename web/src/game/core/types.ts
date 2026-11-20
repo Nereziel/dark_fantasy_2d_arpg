@@ -229,7 +229,8 @@ export type GameEvent =
   | { type: 'checkpointActivated'; id: RespawnCheckpointId }
   | { type: 'playerRespawn'; checkpointId: RespawnDestination['id'];
       fromZone: ZoneId; x: number; y: number }
-  | { type: 'warriorImpact'; id: WarriorAbilityId; x: number; y: number }
+  | { type: 'warriorImpact'; id: WarriorAbilityId; x: number; y: number;
+      radius?: number; modifierIds?: string[] }
   | { type: 'npcDialogue'; npcId: NpcId }
   | { type: 'townInteraction'; entryId: string; role: TownServiceRole }
   | { type: 'townServiceUsed'; entryId: string; goldSpent: number }

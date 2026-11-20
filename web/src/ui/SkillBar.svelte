@@ -5,6 +5,7 @@
   import { SKILLS, SKILL_SLOTS } from '../game/skills/skills';
   import { CLASSES } from '../game/data/classes';
   import { WARRIOR_ABILITIES, type WarriorAbilityId } from '../game/skills/warriorKit';
+  import { projectEquippedSkill } from '../game/skills/skillModifiers';
   const extraWarriorSkills = ['groundSlam', 'warCry', 'whirlwind', 'execute', 'basicAttack'] as const;
   const warriorShortcuts: Record<typeof extraWarriorSkills[number], string> = {
     groundSlam: '2', warCry: '3', whirlwind: '4', execute: '5', basicAttack: '6'
@@ -47,18 +48,32 @@
     {#if view.classId === 'WARRIOR'}
       {#each extraWarriorSkills as id (id)}
         {@const ability = WARRIOR_ABILITIES[id]}
+        {@const modified = projectEquippedSkill(
+          id, ability.radius ?? 0, view.talentRanks ?? {}, view.equipment
+        )}
         {@const remaining = view.warriorCooldowns?.[id] ?? 0}
         <button class="skill-button extra" class:cooldown={remaining > 0}
           disabled={view.paused || !view.player.alive || remaining > 0
             || view.warriorAction !== null && view.warriorAction !== undefined
             || view.resource + 0.001 < ability.rageCost}
           aria-label={$t('skills.' + id + '.name')}
-          title={$t('skills.' + id + '.desc') + ' · ' + ability.rageCost + ' ' + $t('resource.rage')}
+          title={$t('skills.' + id + '.desc') + ' · ' + ability.rageCost + ' ' + $t('resource.rage')
+            + (modified.modifierIds.length > 0
+              ? ' · ' + $t('skillModifiers.radius') + ': ' + Math.round(modified.radius)
+                + (modified.pullDistance > 0
+                  ? ' · ' + $t('skillModifiers.pull') + ': ' + modified.pullDistance : '')
+                + (modified.statuses.some(status => status.id === 'bleeding')
+                  ? ' · ' + $t('skillModifiers.bleeding') : '') : '')}
           onclick={() => castWarrior(id)}
         >
           <span class="skill-shortcut">{warriorShortcuts[id]}</span>
           <span class="skill-icon" aria-hidden="true">{id === 'warCry' ? '✦' : id === 'groundSlam' ? '✹' : id === 'whirlwind' ? '⟳' : id === 'execute' ? '⚔' : '✧'}</span>
           <span class="skill-title">{$t('skills.' + id + '.name')}</span>
+          {#if modified.modifierIds.length}
+            <span class="skill-modified" data-testid={'modified-' + id}>
+              {$t('skillModifiers.enhanced')}
+            </span>
+          {/if}
           <span class="skill-cost">{ability.rageCost === 0 ? '—' : ability.rageCost}</span>
           {#if remaining > 0}<span class="skill-cooldown">{Math.ceil(remaining)}s</span>{/if}
         </button>
@@ -104,6 +119,8 @@
   .skill-icon{font:1.8rem Georgia,serif;color:#e1bf81}
   .skill-title{font: .77rem Georgia,serif;color:#eee4d2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .skill-cost{position:absolute;right:8px;top:6px;color:#8ec9ef;font-size:.64rem}
+  .skill-modified{position:absolute;left:4px;bottom:3px;padding:1px 3px;
+    font-size:.51rem;color:#f5d08b;background:#5d3146b7;border:1px solid #b77b87}
   .skill-cooldown{position:absolute;inset:0;background:#090d14c9;display:grid;place-items:center;font-size:1.05rem;color:#f1cf9e}
   .active-effects{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:8px;pointer-events:none}
   .effect-chip{border:1px solid #475960;padding:4px 8px;background:#10151bdd;color:#a9cbbc;font-size:.66rem}
