@@ -119,6 +119,45 @@ describe('Prompt 09 — canonical status rules and periodic effects', () => {
     expect(last.statuses).toHaveLength(0);
   });
 
+  it('runs Mage burning in exactly one canonical periodic damage pipeline', () => {
+    const sim = new GameSimulation();
+    sim.command({ type: 'reset', classId: 'MAGE' });
+    const base = sim.snapshot();
+    const enemy = base.enemies[0]!.actor;
+    expect(sim.restore({
+      ...base, player: { ...base.player, x: enemy.x - 90, y: enemy.y },
+      enemies: base.enemies.map((unit, index) => ({
+        ...unit, cooldown: 6, intent: null,
+        ...(index === 0 ? {} : { actor: { ...unit.actor, health: 0, alive: false } })
+      }))
+    })).toBe(true);
+    sim.command({ type: 'cast', slot: 'rmb',
+      aim: { mode: 'GROUND_POSITION', position: { x: enemy.x, y: enemy.y } } });
+    expect(sim.snapshot().effects.enemy.filter(effect => effect.id === 'burning')).toHaveLength(1);
+    expect(sim.snapshot().statusEffects?.enemies[enemy.id]?.filter(s => s.id === 'burning')).toHaveLength(1);
+    sim.drainEvents();
+    advance(sim, 60);
+    const burns = sim.drainEvents().filter(event =>
+      event.type === 'damageResolved' && event.targetId === enemy.id && event.damageType === 'fire');
+    expect(burns).toHaveLength(1);
+  });
+
+  it('allows stationary Mage spells under root but still immobilizes movement', () => {
+    const sim = new GameSimulation();
+    sim.command({ type: 'reset', classId: 'MAGE' });
+    const original = sim.snapshot();
+    const active = applyStatus([], statusRule('rooted', 1, 3), 'enemy');
+    expect(sim.restore({
+      ...original, statusEffects: { player: active, enemies: {} }
+    })).toBe(true);
+    sim.command({ type: 'move', destination: { x: original.player.x + 150, y: original.player.y } });
+    advance(sim, 8);
+    expect(sim.snapshot().player.x).toBe(original.player.x);
+    sim.command({ type: 'cast', slot: 'slot1' });
+    expect(sim.snapshot().cooldowns.slot1).toBeGreaterThan(0);
+    expect(sim.snapshot().resource).toBeLessThan(original.resource);
+  });
+
   it('respects monster immunity tags and effect-specific immunity IDs', () => {
     expect(applyStatus([], statusRule('stunned'), 'hero',
       monsterStatusImmunities('crypt_lord'))).toHaveLength(0);
