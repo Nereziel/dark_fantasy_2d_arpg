@@ -945,5 +945,33 @@
       "healthRegen": "regenerace životů",
       "critChance": "šance na kritický zásah"
     }
+  },
+  "potions": {
+    "bar": "Lektvary",
+    "use": "Vypít",
+    "select": "Vybrat",
+    "refill": "Doplnit 1",
+    "refillTitle": "Doplňování lektvarů",
+    "visitVendor": "Navštívit lékárnici",
+    "healing": {
+      "name": "Léčivý lektvar",
+      "short": "HP",
+      "description": "Obnoví až 55 bodů zdraví."
+    },
+    "resource": {
+      "name": "Lektvar zdroje",
+      "short": "ZD",
+      "description": "Obnoví až 40 bodů třídního zdroje."
+    },
+    "resistance": {
+      "name": "Lektvar odolnosti",
+      "short": "ODL",
+      "description": "Zvýší elementární odolnost o 30 na 12 sekund."
+    },
+    "fury": {
+      "name": "Lektvar zuřivosti",
+      "short": "DMG",
+      "description": "Zvýší způsobené poškození o 20 % na 10 sekund."
+    }
   }
 }
