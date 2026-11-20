@@ -27,7 +27,7 @@ describe('Agent 18 — tiered affix generation (Prompt 14)', () => {
     expect(AFFIX_TIERS).toHaveLength(6);
     expect(AFFIX_TIERS.map(tier => tier.tier)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(AFFIX_TIERS.map(tier => tier.minItemLevel)).toEqual([1, 12, 24, 36, 52, 72]);
-    const supported = new Set([...AFFIX_PREFIXES, ...AFFIX_SUFFIXES].map(def => def.stat));
+    const supported = new Set<string>([...AFFIX_PREFIXES, ...AFFIX_SUFFIXES].map(def => def.stat));
     for (const stat of [
       'strength', 'dexterity', 'intelligence', 'vitality',
       'critChance', 'critDamage', 'attackSpeed', 'moveSpeed',
