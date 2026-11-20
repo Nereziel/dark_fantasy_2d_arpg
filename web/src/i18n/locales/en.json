@@ -95,7 +95,9 @@
     "swapPrompt": "Select destination slot",
     "requireLevel": "Required level",
     "twoHanded": "Two-handed",
-    "comparison": "Stat difference"
+    "comparison": "Stat difference",
+    "offHandEquip": "Equip offhand",
+    "legendaryPower": "Legendary power"
   },
   "stat": {
     "strength": "Strength",
