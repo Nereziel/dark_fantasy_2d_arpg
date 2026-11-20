@@ -6,6 +6,7 @@ import {
   type ProceduralDungeonResult
 } from './proceduralDungeon';
 import { ACTOR_RADIUS, canOccupy, findPath } from './navigation';
+import { buildCryptTheme, type CryptThemePlan } from './cryptTheme';
 
 /**
  * Keep legacy crypt encounter identities while moving the westernmost retainer
@@ -20,6 +21,7 @@ export const CRYPT_RUNTIME_BOSS_POSITIONS: readonly Readonly<{ x: number; y: num
 export interface DungeonRuntimeWorld {
   readonly dungeon: ProceduralDungeonResult;
   readonly layout: WorldLayout;
+  readonly theme: CryptThemePlan;
 }
 
 /**
@@ -52,5 +54,5 @@ export function buildCryptWorld(seed: number): DungeonRuntimeWorld {
         || findPath(layout.camp, position, ACTOR_RADIUS, layout.obstacles).length === 0)) {
     throw new RangeError('Crypt pathing or legacy portal invariant failed');
   }
-  return { dungeon, layout };
+  return { dungeon, layout, theme: buildCryptTheme(dungeon) };
 }
