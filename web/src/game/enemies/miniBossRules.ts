@@ -251,6 +251,7 @@ export function validateMiniBossState(value: unknown): value is MiniBossState {
     'summonsRequested', 'deathPlanned'
   ])) return false;
   const def = getMiniBossDefinition(value.bossId);
+  const cooldowns = value.cooldowns;
   if (!def || !validId(value.occurrenceId)
     || (def.id === 'morrow_gravebound' && value.occurrenceId !== 'morrow_gravebound')
     || (value.phase !== 1 && value.phase !== 2)
@@ -262,9 +263,9 @@ export function validateMiniBossState(value: unknown): value is MiniBossState {
     || !Number.isSafeInteger(value.summonsRequested)
     || (value.summonsRequested as number) < 0
     || (value.summonsRequested as number) > def.maxSummonRequests
-    || !plainRecord(value.cooldowns)
-    || !hasKeys(value.cooldowns, def.abilities.map(a => a.id))
-    || def.abilities.some(a => !finite(value.cooldowns[a.id], 0, MAX_TIMER))) return false;
+    || !plainRecord(cooldowns)
+    || !hasKeys(cooldowns, def.abilities.map(a => a.id))
+    || def.abilities.some(a => !finite(cooldowns[a.id], 0, MAX_TIMER))) return false;
 
   if (value.stage === 'intro') {
     return value.activeAbilityId === null && value.lockedPoint === null
