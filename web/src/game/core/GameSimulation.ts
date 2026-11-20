@@ -530,6 +530,7 @@ export class GameSimulation {
       this.pendingEnvironmentId=null;return;
     }
     this.pendingEnvironmentId=null;
+    this.movePath=[];
     this.environmentUsed.add(object.id);
     let gold=0;
     let itemId:string|null=null;
@@ -1039,7 +1040,6 @@ export class GameSimulation {
     this.paused = false;
     this.pendingPortal = false;
     this.pendingObject = null;
-    this.pendingEnvironmentId = null;
     this.pendingCryptPropId = null;
     this.pendingNpc = null;
     this.pendingTown = null;
@@ -1095,6 +1095,8 @@ export class GameSimulation {
   }
 
   command(command: GameCommand): void {
+    // A new click/action cancels any pending auto-approach.
+    if(command.type!=='interactEnvironment')this.pendingEnvironmentId=null;
     if (command.type === 'reset') {
       this.reset(isClassId(command.classId) ? command.classId : 'WARRIOR', command.seed ?? this.world.seed);
       return;
@@ -1136,7 +1138,6 @@ export class GameSimulation {
       this.pendingTown = null;
       this.pendingPortal = false;
       this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       this.pendingCryptPropId = null;
       this.pendingSkill = null;
       this.pendingAim = null;
@@ -1335,7 +1336,6 @@ export class GameSimulation {
       this.pendingNpc = null;
       this.pendingTown = null;
       this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       this.pendingCryptPropId = command.id;
       this.tryInteractCrypt();
       return;
@@ -1348,7 +1348,10 @@ export class GameSimulation {
       this.warriorAction=null;
       this.classAction=null;
       this.warriorPending=null;
-      this.movePath=[];
+      const route=distance(this.player,object.position)>object.reach
+        ? findPath(this.player,object.position,ACTOR_RADIUS,this.world.obstacles):[];
+      if(distance(this.player,object.position)>object.reach&&!route.length)return;
+      this.movePath=route;
       this.attackTarget=null;
       this.pickupTarget=null;
       this.pendingNpc=null;
@@ -1392,7 +1395,6 @@ export class GameSimulation {
       this.pendingNpc = null;
       this.pendingTown = null;
       this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       this.pendingPortal = true;
       if (distance(this.player, this.portalPosition) <= 78) this.changeZone();
       return;
@@ -1409,7 +1411,6 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       this.pendingPortal = false;
       this.pendingNpc = null;
       this.pendingTown = null;
@@ -1434,7 +1435,6 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       this.pendingPortal = false;
       if (nearNpc(this.player, command.npcId)) {
         if (command.npcId === WARDEN_ID) this.recordVesnaReport();
@@ -1483,7 +1483,6 @@ export class GameSimulation {
       this.pendingNpc = null;
       this.pendingTown = null;
       this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       this.pendingPortal = false;
     } else if (command.type === 'attack') {
       const selected = this.units.find(unit => unit.actor.id === command.targetId && unit.actor.alive);
@@ -1500,7 +1499,6 @@ export class GameSimulation {
       this.pendingNpc = null;
       this.pendingTown = null;
       this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       this.pendingPortal = false;
     } else if (command.type === 'pickup' && this.groundLoot.some(loot => loot.id === command.id)) {
       this.pickupTarget = command.id;
@@ -1511,7 +1509,6 @@ export class GameSimulation {
       this.pendingNpc = null;
       this.pendingTown = null;
       this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       this.pendingPortal = false;
     }
   }
@@ -1521,17 +1518,14 @@ export class GameSimulation {
     const object = getWorldObject(this.pendingObject, this.zone);
     if (!object || this.usedObjects.has(object.id)) {
       this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       return;
     }
     if (distance(this.player, object.position) > object.reach) return;
     if (object.kind === 'chest' && this.groundLoot.length >= 100) {
       this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       return;
     }
     this.pendingObject = null;
-    this.pendingEnvironmentId = null;
     this.usedObjects.add(object.id);
     if (this.zone === 'wilderness' && object.kind === 'chest') {
       this.recordWorldFact('chestOpened', object.id);
@@ -2103,7 +2097,6 @@ export class GameSimulation {
         this.pendingNpc = null;
         this.pendingTown = null;
         this.pendingObject = null;
-    this.pendingEnvironmentId = null;
         this.pendingPortal = false;
         return;
       }
@@ -2134,7 +2127,6 @@ export class GameSimulation {
     this.pendingNpc = null;
     this.pendingTown = null;
     this.pendingObject = null;
-    this.pendingEnvironmentId = null;
     this.pendingPortal = false;
     if (distance(this.player, this.enemy) > skill.range) {
       if (!this.holdPosition) this.pendingSkill = slot;
@@ -2470,7 +2462,6 @@ export class GameSimulation {
       this.pendingTown = null;
       this.pendingPortal = false;
       this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       this.pendingCryptPropId = null;
       this.movePath = [];
       this.attackTarget = null;
@@ -2824,7 +2815,6 @@ export class GameSimulation {
     this.healthRegenCarry = 0;
     this.usedObjects.clear();
     this.pendingObject = null;
-    this.pendingEnvironmentId = null;
     this.pendingCryptPropId = null;
     this.cryptArmedTraps.clear();
     this.miniBossStates.clear();
@@ -2989,11 +2979,14 @@ export class GameSimulation {
         this.environmentPlan,[...this.environmentUsed]);
       if(!object||this.zone!=='wilderness')this.pendingEnvironmentId=null;
       else if(distance(this.player,object.position)<=object.reach)this.tryInteractEnvironment();
-      else this.follow(this.player,object.position,speed,dt,Math.max(5,object.reach-10));
+      else {
+        const waypoint=this.movePath[0]??object.position;
+        if(distance(this.player,waypoint)<9)this.movePath.shift();
+        else this.follow(this.player,waypoint,speed,dt,0);
+      }
     } else if (this.pendingObject) {
       const object = getWorldObject(this.pendingObject, this.zone);
       if (!object) this.pendingObject = null;
-    this.pendingEnvironmentId = null;
       else if (distance(this.player, object.position) <= object.reach) this.tryInteractObject();
       else this.follow(this.player, object.position, speed, dt, object.reach - 10);
     } else if (this.warriorAction?.timeline.movementLocked
@@ -3862,7 +3855,6 @@ export class GameSimulation {
       Math.max(max, Number(p.id.replace('projectile-', '')) || 0), 0);
     this.usedObjects = new Set(s.usedInteractables);
     this.pendingObject = null;
-    this.pendingEnvironmentId = null;
     this.kills = s.kills;
     this.level = s.level;
     this.xp = s.xp;
@@ -3934,7 +3926,6 @@ export class GameSimulation {
     this.dungeonCleared = false;
     this.pendingPortal = false;
     this.pendingObject = null;
-    this.pendingEnvironmentId = null;
     this.usedObjects.clear();
     this.shield = 0;
     this.projectiles = [];
