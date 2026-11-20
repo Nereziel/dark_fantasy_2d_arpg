@@ -2,6 +2,7 @@
 export { deriveStats } from '../stats/deriveStats';
 import { ITEM_BASES, ITEM_RARITIES, WEAPON_TYPES, type WeaponType } from '../items/itemCatalog';
 import { rollAffixes, type AffixStat } from '../items/affixGeneration';
+import { isGemId } from '../gems/gemCatalog';
 export type { DerivedStats } from '../stats/deriveStats';
 
 export type EquipmentSlot = 'HELMET' | 'AMULET' | 'CHEST' | 'MAIN_HAND' | 'OFF_HAND' |
@@ -192,7 +193,7 @@ export function isItem(value: unknown): value is Item {
     && (v.sockets === undefined || (Array.isArray(v.sockets)
       && v.sockets.length <= (ITEM_BASES[v.templateId as keyof typeof ITEM_BASES]?.maxSockets ?? 0)
       && v.sockets.every((gem, index) => Object.hasOwn(v.sockets!, index)
-        && (gem === null || (typeof gem === 'string' && gem.length > 0 && gem.length <= 128)))))
+        && (gem === null || isGemId(gem)))))
     && (v.legendaryPower === undefined || v.legendaryPower === null
       || (v.legendaryPower.id === 'power.' + v.templateId
         && Number.isFinite(v.legendaryPower.magnitude)
