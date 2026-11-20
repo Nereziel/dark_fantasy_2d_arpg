@@ -19,6 +19,7 @@ import type { WorldObject, WorldObjectId } from '../world/interactables';
 import type { MapDiscoveryState } from '../world/mapDiscovery';
 import type { CryptInteractable } from '../world/cryptTheme';
 import type { MiniBossState, MiniBossId } from '../enemies/miniBossRules';
+import type { HollowKingState } from '../bosses/hollowKingPhases';
 import type { WorldFactLedger } from '../world/chunkStreaming';
 
 export interface Point { x: number; y: number }
@@ -151,6 +152,9 @@ export interface GameSnapshot {
   /** Session-only miniboss planner states; not written to character/world saves. */
   miniBossStates?: Record<string, MiniBossState>;
   miniBossDefeatedIds?: MiniBossId[];
+  /** Transient validated Hollow King phase state, never written to character/world saves. */
+  hollowKing?: HollowKingState | null;
+  hollowKingAddActorIds?: Record<string, string>;
   paused: boolean;
   status: GameStatus;
 }
@@ -195,6 +199,8 @@ export type GameEvent =
   | { type: 'cryptInteract'; id: string; capability: string; goldAwarded: number }
   | { type: 'cryptTrap'; id: string; damage: number; x: number; y: number }
   | { type: 'cryptTrapWindup'; id: string; x: number; y: number; radius: number }
+  | { type: 'hollowKingCue'; kind: string; x: number; y: number; radius: number;
+      phase: number; ability?: string }
   | { type: 'miniBossCue'; enemyId: string; bossId: MiniBossId; kind: string;
       abilityId?: string; x: number; y: number; radius: number; phase: number }
   | { type: 'defeat'; targetId: string; kills: number }
