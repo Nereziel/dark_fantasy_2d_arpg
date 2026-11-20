@@ -23,7 +23,7 @@ Realizuj **izolovaný, plně otestovaný doménový modul** Promptu 14. Je to p�
 ## Požadované rozhraní
 
 Navrhni a exportuj smysluplná typed API odpovídající:
-`AFFIX_PREFIXES, AFFIX_SUFFIXES, AFFX_TIERS, rollAffixes(input, rng), validateAffixCombination(affixes), formatItemNameSegments(baseId,affixes,locale)`.
+`AFFIX_PREFIXES, AFFIX_SUFFIXES, AFFIX_TIERS, rollAffixes(input, rng), validateAffixCombination(affixes), formatItemNameSegments(baseId,affixes,locale)`.
 
 Názvy lze zpřesnit, ale vždy v PR výslovně uveď finální funkce/typy, hraniční chování a způsob integrace. Bez simulace, Phaser/Svelte/UI a nových závislostí.
 
