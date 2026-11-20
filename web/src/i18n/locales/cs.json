@@ -775,5 +775,19 @@
     "brood_mother": "Matka roje",
     "corrupted_knight": "Zkažený rytíř"
   },
-  "miniBoss": { "phase": "Fáze" }
+  "miniBoss": { "phase": "Fáze" },
+  "boss": { "hollowKing": {
+      "name": "Dutý král",
+      "phase1": "I. fáze — Královská čepel",
+      "phase2": "II. fáze — Povstání mrtvých",
+      "phase3": "III. fáze — Koruna zkázy",
+      "ability": {
+        "royal_cleave": "Královský sek",
+        "grave_lunge": "Hrobový výpad",
+        "raise_dead": "Povolání mrtvých",
+        "grave_circle": "Kruh hrobů",
+        "rune_storm": "Runová bouře",
+        "kings_judgment": "Králův soud"
+      }
+    } }
 }
