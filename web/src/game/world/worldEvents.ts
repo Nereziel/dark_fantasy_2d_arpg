@@ -84,7 +84,7 @@ const REWARDS: Readonly<Record<WorldEventKind, {
   cursedShrine:{gold:30,xp:110,materials:{soul_fragment:1},itemBaseId:'helm'},
   eliteHunt:{gold:52,xp:120,materials:{steel:2},itemBaseId:'mace'},
   rescueEvent:{gold:45,xp:100,materials:{iron:2},itemBaseId:'dagger'},
-  ritualInterruption:{gold:36,xp:115,materials:{arcane_dust:2},itemBaseId:'staff'},
+  ritualInterruption:{gold:36,xp:115,materials:{arcane_dust:2},itemBaseId:'wand'},
   treasureAmbush:{gold:60,xp:90,materials:{steel:1},itemBaseId:'belt'}
 });
 const OFFSETS: readonly Readonly<Point>[] = [
