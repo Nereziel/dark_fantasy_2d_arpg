@@ -878,5 +878,27 @@
     "radius": "Radius",
     "pull": "Pull",
     "bleeding": "Bleeding"
+  },
+  "crafting": {
+    "title": "Crafting and Salvage",
+    "description": "Salvage gear into materials and modify items at the blacksmith. Socketing here creates an empty socket only; gems and runes come later.",
+    "materials": {
+      "iron": "Iron",
+      "steel": "Steel",
+      "arcane_dust": "Arcane Dust",
+      "soul_fragment": "Soul Fragment",
+      "demon_essence": "Demon Essence",
+      "ancient_crystal": "Ancient Crystal"
+    },
+    "actions": {
+      "salvage": "Salvage",
+      "upgrade": "Upgrade",
+      "reroll": "Reroll affix",
+      "enchant": "Enchant",
+      "socket": "Add socket"
+    },
+    "free": "Free",
+    "protected": "Locked and favorite items cannot be crafted or salvaged.",
+    "completed": "Blacksmith crafting completed."
   }
 }

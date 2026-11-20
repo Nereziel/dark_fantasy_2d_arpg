@@ -7,6 +7,7 @@
     SHOP_OFFERS, createShopItem, canTemper
   } from '../game/trade/commerce';
   import { quotePurchase, quoteSale, quoteTempering } from '../game/trade/economyRules';
+  import { MATERIAL_IDS, quoteCraft, type CraftKind } from '../game/crafting/craftingRules';
   import {
     MERCHANT_ID, BLACKSMITH_ID, type TradeNpcId
   } from '../game/world/npcs';
@@ -31,6 +32,22 @@
   function forgePrice(item: Item): number {
     const quote = quoteTempering(item);
     return quote.ok ? quote.price : 0;
+  }
+  function hasCraftBudget(kind: CraftKind,item: Item): boolean {
+    const quote=quoteCraft(kind,item);
+    return !!quote && view.gold>=quote.gold && MATERIAL_IDS.every(id=>
+      (view.materials?.[id]??0)>=(quote.materials[id]??0))
+      && !view.itemFlags?.[item.id]?.locked && !view.itemFlags?.[item.id]?.favorite;
+  }
+  function craftCost(kind: CraftKind,item: Item): string {
+    const quote=quoteCraft(kind,item);
+    if(!quote)return '';
+    return [...Object.entries(quote.materials).filter(([,count])=>count>0)
+      .map(([id,count])=>count+' '+$t('crafting.materials.'+id)),
+      ...(quote.gold?[money(quote.gold)+' '+$t('hud.gold')]:[])].join(', ');
+  }
+  function craft(kind: CraftKind,index: number,affixIndex?:number): void {
+    bridge.command({type:'craft',kind,index,...(affixIndex!==undefined?{affixIndex}:{})});
   }
 </script>
 
@@ -133,6 +150,63 @@
           {/if}
         </div>
       </section>
+      <section class="crafting-section">
+        <h3>{$t('crafting.title')}</h3>
+        <p class="trade-note">{$t('crafting.description')}</p>
+        <div class="materials-rows" data-testid="materials-wallet">
+          {#each MATERIAL_IDS as id (id)}
+            <div><span>{$t('crafting.materials.'+id)}</span>
+              <strong data-material={id}>{view.materials?.[id]??0}</strong></div>
+          {/each}
+        </div>
+        <div class="trade-list crafting-list">
+          {#each view.inventory as item,index (index)}
+            {#if item}
+              <div class="crafting-item" data-craft-id={item.id}>
+                <div class="crafting-head">
+                  <span style:color={RARITIES[item.rarity].color}>
+                    {item.icon} {$t('item.base.'+item.templateId)}
+                  </span>
+                  <small>{$t('item.rarity.'+item.rarity)} · +{item.upgrades}/3</small>
+                </div>
+                {#if view.itemFlags?.[item.id]?.locked || view.itemFlags?.[item.id]?.favorite}
+                  <p class="trade-note">{$t('crafting.protected')}</p>
+                {:else}
+                  <div class="craft-actions">
+                    {#each ['salvage','upgrade','enchant','socket'] as action (action)}
+                      {@const kind=action as CraftKind}
+                      {@const quote=quoteCraft(kind,item)}
+                      <button disabled={!hasCraftBudget(kind,item)}
+                        title={craftCost(kind,item)}
+                        onclick={()=>craft(kind,index)}>
+                        {$t('crafting.actions.'+kind)}
+                        {#if quote}<small>{craftCost(kind,item)||
+                          $t('crafting.free')}</small>{/if}
+                      </button>
+                    {/each}
+                  </div>
+                  {#if item.affixes.length}
+                    <div class="craft-actions">
+                      {#each item.affixes as affix,affixIndex (affixIndex)}
+                        <button disabled={!hasCraftBudget('reroll',item)}
+                          title={craftCost('reroll',item)}
+                          onclick={()=>craft('reroll',index,affixIndex)}>
+                          {$t('crafting.actions.reroll')}:
+                          {$t('item.affix.'+affix.id)}
+                          <small>{craftCost('reroll',item)}</small>
+                        </button>
+                      {/each}
+                    </div>
+                  {/if}
+                {/if}
+              </div>
+            {/if}
+          {/each}
+          {#if view.inventory.every(item=>item===null)}
+            <p class="trade-note">{$t('trade.noItems')}</p>
+          {/if}
+        </div>
+      </section>
     {/if}
     <footer class="trade-footer">
       <button class="secondary" onclick={close}>{$t('npc.leave')}</button>
@@ -162,6 +236,21 @@
   .trade-price{font-size:.7rem;white-space:nowrap;color:#d7ba85}
   .trade-item button{font-size:.69rem;padding:7px 9px;white-space:nowrap}
   .trade-note{font-size:.74rem;color:#adb9b9;line-height:1.6}
+  .crafting-section{margin-top:18px;padding-top:15px;border-top:1px solid #5d533e}
+  .materials-rows{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:10px 0}
+  .materials-rows>div{display:flex;gap:8px;justify-content:space-between;
+    padding:7px;background:#13202a;border:1px solid #44505b;font-size:.73rem}
+  .materials-rows strong{color:#edce92;font-variant-numeric:tabular-nums}
+  .crafting-list{max-height:42vh}
+  .crafting-item{border:1px solid #3a4955;background:#121b25;padding:10px}
+  .crafting-head{display:flex;justify-content:space-between;gap:8px;font-size:.8rem}
+  .crafting-head small{color:#aeb4b0}
+  .craft-actions{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+  .craft-actions button{display:flex;flex-direction:column;align-items:flex-start;
+    gap:4px;font-size:.73rem;background:#252d36;border:1px solid #75644e;
+    color:#e6d4b3;padding:7px 9px}
+  .craft-actions button small{font-size:.59rem;color:#c1a47a;text-align:left}
+  .craft-actions button:disabled{opacity:.4;cursor:not-allowed}
   .trade-footer{display:flex;justify-content:flex-end;margin-top:16px;border-top:1px solid #594d3e;padding-top:14px}
   .trade-footer button{font-size:.78rem;padding:9px 21px}
   @media(max-width:720px){.trade-window{padding:12px}.trade-columns{grid-template-columns:1fr;gap:13px}
