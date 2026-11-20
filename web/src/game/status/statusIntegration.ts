@@ -25,7 +25,8 @@ export function statusRule(
   return {
     id, duration: duration ?? def.duration,
     magnitude: potency,
-    stacking: def.stackMode === 'stack' ? 'add' : 'replace',
+    stacking: def.stackMode === 'stack' ? 'add'
+      : def.refreshMode === 'keepLonger' ? 'refresh' : 'replace',
     maxStacks: def.maxStacks,
     tickInterval: def.tickInterval ?? undefined,
     dispelCategory: def.dispelCategory,
