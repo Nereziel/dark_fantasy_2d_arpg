@@ -88,6 +88,7 @@ import {
 import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planService,
   selectVendorStock, type EconomyFailure } from '../trade/economyRules';
 import { townEntry, canInteractTownEntry, getTownManifest } from '../world/townManifest';
+import { activatedWaypoints, planWaypointTravel, waypointDefinition } from '../world/waypointTravel';
 import { STASH_SIZE, emptyStashTabs, planStashDeposit, planStashWithdraw,
   planStashMove, planStashSort, validateStashContents, validStashTab,
   type StashTabs } from '../inventory/stashRules';
@@ -371,7 +372,35 @@ export class GameSimulation {
       }];
     });
     const result = projectMap(this.mapDiscovery, this.mapWorld, this.player, hints, { mode });
-    return result.ok ? result.value : null;
+    if (!result.ok) return null;
+    // A historic respawn shrine is also a travel waypoint when actually activated.
+    // Derive this marker from the existing seed-scoped checkpoint fact; do not
+    // expand mapWorld.waypoints (that would invalidate legacy map fingerprints).
+    const shrine = this.activatedCheckpointIds.has('shrine.soul-shrine')
+      ? waypointDefinition('shrine.soul-shrine') : null;
+    const box = result.value.viewport;
+    if (!shrine || shrine.position.x < box.x || shrine.position.y < box.y
+      || shrine.position.x > box.x + box.width
+      || shrine.position.y > box.y + box.height) return result.value;
+    return { ...result.value, markers: [...result.value.markers, {
+      id: shrine.id, kind: 'waypoint', activated: true,
+      position: { ...shrine.position }, presentationKey: shrine.nameKey
+    }].sort((a,b) => a.id.localeCompare(b.id)) };
+  }
+
+  /** Town activation requires a real physical visit, never a map click. */
+  private activateTownWaypoint(): void {
+    if (!this.mapDiscovery || !this.mapWorld
+      || !canInteractTownEntry(this.player, 'waypoint_camp')) return;
+    this.observeExploration();
+    const already = this.mapDiscovery.activatedWaypointIds.includes('town.waypoint');
+    const result = activateMapWaypoint(this.mapDiscovery, 'town.waypoint', this.mapWorld);
+    if (!result.ok) return;
+    this.mapDiscovery = result.value;
+    if (!already) {
+      this.recordWorldFact('waypointActivated', 'waypoint_camp');
+      this.events.push({ type: 'waypointActivated', id: 'town.waypoint' });
+    }
   }
 
   /** Separate world-instance persistence; no seed or world facts in CharacterProgress v11. */
@@ -915,6 +944,41 @@ export class GameSimulation {
       this.paused = command.value;
       return;
     }
+    if (command.type === 'travelWaypoint') {
+      // A map/service modal pauses combat, not access to an actual waypoint.
+      // Both source proximity and destination clearance are simulation-owned.
+      const activated = activatedWaypoints(this.mapDiscovery?.activatedWaypointIds ?? [],
+        [...this.activatedCheckpointIds]);
+      const plan = planWaypointTravel({
+        world: this.world, zone: this.zone, player: this.player, activated
+      }, command.destinationId);
+      if (!plan) return;
+      this.player.x = plan.position.x;
+      this.player.y = plan.position.y;
+      this.movePath = [];
+      this.attackTarget = null;
+      this.selectedTargetId = null;
+      this.pickupTarget = null;
+      this.pendingNpc = null;
+      this.pendingTown = null;
+      this.pendingPortal = false;
+      this.pendingObject = null;
+      this.pendingCryptPropId = null;
+      this.pendingSkill = null;
+      this.pendingAim = null;
+      this.warriorPending = null;
+      this.warriorAction = null;
+      this.classAction = null;
+      this.holdPosition = false;
+      this.projectiles = [];
+      this.eliteQueue = [];
+      this.movementSpeed = 0;
+      this.accumulator = 0;
+      this.observeExploration(); // destination radius only; no fog reveal along teleport path
+      this.events.push({ type: 'waypointTravel', from: plan.from,
+        to: plan.to, x: plan.position.x, y: plan.position.y });
+      return;
+    }
     if (command.type === 'holdPosition') {
       if (!this.player.alive || (this.paused && command.value)) return;
       this.holdPosition = command.value;
@@ -1151,6 +1215,7 @@ export class GameSimulation {
       this.pendingNpc = null;
       this.pendingTown = null;
       if (canInteractTownEntry(this.player, entry.id)) {
+        if (entry.role === 'waypoint') this.activateTownWaypoint();
         this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
         this.pendingTown = null;
       } else {
@@ -1270,6 +1335,7 @@ export class GameSimulation {
         && !this.activatedCheckpointIds.has('shrine.soul-shrine')) {
         this.activatedCheckpointIds.add('shrine.soul-shrine');
         this.events.push({ type: 'checkpointActivated', id: 'shrine.soul-shrine' });
+        this.events.push({ type: 'waypointActivated', id: 'shrine.soul-shrine' });
       }
       this.shield = Math.max(this.shield, Math.round(this.player.maxHealth * 0.3));
     } else {
@@ -2672,13 +2738,7 @@ export class GameSimulation {
       if (!entry || this.zone !== 'wilderness') this.pendingTown = null;
       else if (canInteractTownEntry(this.player, entry.id)) {
         this.pendingTown = null;
-        if (entry.role === 'waypoint' && this.mapDiscovery && this.mapWorld) {
-          const discovered = activateMapWaypoint(this.mapDiscovery, 'town.waypoint', this.mapWorld);
-          if (discovered.ok) {
-            this.mapDiscovery = discovered.value;
-            this.recordWorldFact('waypointActivated', entry.id);
-          }
-        }
+        if (entry.role === 'waypoint') this.activateTownWaypoint();
         this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
       } else {
         this.follow(this.player, entry.position, speed, dt, Math.max(1, entry.interactionRange - 10));
