@@ -82,7 +82,7 @@ describe('deterministic legacy-style loot and inventory', () => {
     expect(record.format).toBe(10);
     expect(record.savedAt).toBe(1234);
     expect(Object.keys(record.character).sort()).toEqual([
-      'classId', 'equipment', 'gold', 'inventory', 'kills', 'level', 'quest', 'skillPoints', 'talentPoints', 'xp'
+      'classId', 'equipment', 'gold', 'inventory', 'kills', 'level', 'quest', 'stash', 'skillPoints', 'talentPoints', 'xp'
     ].sort());
     expect('enemies' in record.character).toBe(false);
     expect('effects' in record.character).toBe(false);
