@@ -1038,5 +1038,47 @@
       "ritualInterruption": "Přerušení rituálu",
       "treasureAmbush": "Přepadení u pokladu"
     }
+  },
+  "environment": {
+    "title": "Interakce s prostředím",
+    "click": "Klikni pro použití",
+    "locked": "Nejdřív aktivuj páku",
+    "objects": {
+      "chest": "Zapomenutá truhla",
+      "door": "Stará brána",
+      "lockedDoor": "Zapečetěné dveře",
+      "lever": "Rezavá páka",
+      "shrineDamage": "Svatyně zuřivosti",
+      "shrineArmor": "Svatyně kamene",
+      "shrineSpeed": "Svatyně větrů",
+      "shrineRegeneration": "Svatyně obnovy",
+      "shrineResource": "Svatyně soustředění",
+      "shrineLoot": "Svatyně štěstěny",
+      "trap": "Prokletá deska",
+      "barrel": "Rozbitný sud",
+      "crate": "Opuštěná bedna",
+      "hiddenWall": "Tajná stěna",
+      "lore": "Starobylá kronika"
+    },
+    "bonuses": {
+      "damage": "Poškození +25 %",
+      "armor": "Zbroj +30",
+      "speed": "Rychlost +20 %",
+      "regeneration": "Obnova zdraví",
+      "resource": "Obnova zdrojů",
+      "loot": "Šance na kořist +25"
+    },
+    "feedback": {
+      "chest": "Truhla byla otevřena.",
+      "door": "Brána byla otevřena.",
+      "lockedDoor": "Zapečetěné dveře byly otevřeny.",
+      "lever": "Aktivoval jsi starou páku.",
+      "shrine": "Obklopilo tě požehnání svatyně.",
+      "trap": "Spustil jsi skrytou past.",
+      "barrel": "Sud se roztříštil.",
+      "crate": "Bedna se rozbila.",
+      "hiddenWall": "Odhalil jsi skrytý průchod.",
+      "lore": "Přečetl jsi dávnou kroniku."
+    }
   }
 }

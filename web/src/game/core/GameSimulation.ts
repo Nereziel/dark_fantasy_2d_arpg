@@ -91,6 +91,10 @@ import { townEntry, canInteractTownEntry, getTownManifest } from '../world/townM
 import { activatedWaypoints, planWaypointTravel, waypointDefinition } from '../world/waypointTravel';
 import { planWorldEvents, projectWorldEventViews, worldEventReward,
   type WorldEventPlan, type WorldEventId } from '../world/worldEvents';
+import { planEnvironmentObjects, visibleEnvironmentObjects, planEnvironmentInteraction,
+  validEnvironmentUsedIds, validShrineBlessings, SHRINE_DURATION_SECONDS,
+  type EnvironmentObject, type EnvironmentObjectId, type ShrineBlessing,
+  type ShrineBonus } from '../world/environmentInteractions';
 import { STASH_SIZE, emptyStashTabs, planStashDeposit, planStashWithdraw,
   planStashMove, planStashSort, validateStashContents, validStashTab,
   type StashTabs } from '../inventory/stashRules';
@@ -246,6 +250,10 @@ export class GameSimulation {
   private quest: QuestProgress = freshQuest();
   private actILedger: QuestLedger = createActIQuestLedger(freshQuest())!;
   private storyFeatures: readonly WildernessFeature[] = [];
+  private environmentPlan: EnvironmentObject[] = [];
+  private environmentUsed = new Set<EnvironmentObjectId>();
+  private shrineBlessings: ShrineBlessing[] = [];
+  private pendingEnvironmentId: EnvironmentObjectId | null = null;
   private worldEventPlans: WorldEventPlan[] = [];
   private activeWorldEventId: WorldEventId | null = null;
   private cryptTheme: CryptThemePlan | null = null;
@@ -327,6 +335,8 @@ export class GameSimulation {
     this.mapWorld = input;
     this.mapDiscovery = initial.value;
     this.worldEventPlans = planWorldEvents(world.layout.seed,world.layout,world.features);
+    this.environmentPlan = planEnvironmentObjects(world.layout.seed,world.layout,world.features);
+    this.pendingEnvironmentId = null;
     this.activeWorldEventId = null;
   }
 
@@ -497,6 +507,65 @@ export class GameSimulation {
       gold:reward.gold,xp:reward.xp,x:plan.position.x,y:plan.position.y,itemId:grantedId});
   }
 
+  /** A stable contract shared by the central click resolver and simulation. */
+  private environmentView(): EnvironmentObject[] {
+    return this.zone==='wilderness'
+      ? visibleEnvironmentObjects(this.environmentPlan,[...this.environmentUsed]) : [];
+  }
+  private hasShrineBlessing(kind:ShrineBonus):boolean {
+    return this.shrineBlessings.some(b=>b.kind===kind&&b.remaining>0);
+  }
+  /** Commit one-shot world state before loot, buffs, hazards or XP. */
+  private tryInteractEnvironment():void {
+    const id=this.pendingEnvironmentId;
+    if(!id||this.zone!=='wilderness'||!this.player.alive){
+      this.pendingEnvironmentId=null;return;
+    }
+    const object=planEnvironmentInteraction(id,this.environmentPlan,[...this.environmentUsed]);
+    if(!object){this.pendingEnvironmentId=null;return;}
+    if(distance(this.player,object.position)>object.reach)return;
+    const lootId='env-loot-'+object.id;
+    if(object.kind==='chest'&&this.groundLoot.length>=100
+      &&this.inventory.every(slot=>slot!==null)){
+      this.pendingEnvironmentId=null;return;
+    }
+    this.pendingEnvironmentId=null;
+    this.movePath=[];
+    this.environmentUsed.add(object.id);
+    let gold=0;
+    let itemId:string|null=null;
+    if(object.kind==='shrine'&&object.shrineBonus) {
+      const kind=object.shrineBonus;
+      this.shrineBlessings=this.shrineBlessings.filter(b=>b.kind!==kind);
+      this.shrineBlessings.push({kind,remaining:SHRINE_DURATION_SECONDS});
+    } else if(object.kind==='chest') {
+      const id='env_'+this.world.seed+'_'+object.id.replaceAll('.','_');
+      const item=rollItemForBase('belt',id,this.level,'COMMON',
+        new SeededRng((this.world.seed^0x38e7cd0)>>>0));
+      if(item) {
+        const free=this.inventory.findIndex(slot=>slot===null);
+        if(free>=0){this.inventory[free]=item;itemId=item.id;}
+        else if(this.groundLoot.length<100) {
+          this.groundLoot.push({id:lootId,x:object.position.x,
+            y:object.position.y,item});
+          this.events.push({type:'loot',id:lootId});
+          itemId=item.id;
+        }
+      }
+      gold=18;
+    } else if(object.kind==='barrel')gold=7;
+    else if(object.kind==='crate')gold=11;
+    else if(object.kind==='hiddenWall')gold=22;
+    else if(object.kind==='trap'){
+      this.dealPlayerDamage(29+Math.min(70,this.level*2),'physical',object.id);
+    }
+    if(gold>0)this.gold=Math.min(Number.MAX_SAFE_INTEGER,this.gold+gold);
+    if(object.kind==='lore'||object.kind==='hiddenWall'||object.kind==='shrine')
+      this.awardExperience(rewardForActivity('exploration',this.level,this.level));
+    this.events.push({type:'environmentInteracted',id:object.id,
+      kind:object.kind,x:object.position.x,y:object.position.y,gold,itemId});
+  }
+
   /** Separate world-instance persistence; no seed or world facts in CharacterProgress v11. */
   worldProgress(): WorldSessionProgress | null {
     if (!this.mapDiscovery || !this.worldFacts) return null;
@@ -506,7 +575,8 @@ export class GameSimulation {
       cryptUsedPropIds: [...this.cryptUsedPropIds],
       cryptTriggeredTrapIds: [...this.cryptTriggeredTrapIds],
       miniBossDefeatedIds: [...this.defeatedMiniBossIds],
-      activatedCheckpointIds: [...this.activatedCheckpointIds]
+      activatedCheckpointIds: [...this.activatedCheckpointIds],
+      ...(this.environmentUsed.size ? {environmentUsedIds:[...this.environmentUsed]} : {})
     });
   }
 
@@ -526,7 +596,8 @@ export class GameSimulation {
       || new Set(triggered).size !== triggered.length
       || triggered.some(id => !allowedTraps.has(id))) return false;
     const checkpoints = progress.activatedCheckpointIds ?? [];
-    if (!validCheckpointIds(checkpoints)) return false;
+    if (!validCheckpointIds(checkpoints)
+      || !validEnvironmentUsedIds(progress.environmentUsedIds ?? []))return false;
     const defeated = progress.miniBossDefeatedIds ?? [];
     if (!Array.isArray(defeated) || defeated.length > MINI_BOSS_IDS.length
       || new Set(defeated).size !== defeated.length
@@ -537,6 +608,9 @@ export class GameSimulation {
     for (const id of defeated) this.miniBossStates.delete(id);
     this.mapDiscovery = structuredClone(progress.mapDiscovery);
     this.worldFacts = structuredClone(progress.worldFacts);
+    this.environmentUsed = new Set(progress.environmentUsedIds ?? []);
+    this.shrineBlessings = [];
+    this.pendingEnvironmentId = null;
     this.activeWorldEventId = null;
     this.units = this.units.filter(unit => !unit.actor.id.startsWith('world-event.'));
     this.activatedCheckpointIds.clear();
@@ -947,6 +1021,8 @@ export class GameSimulation {
       this.zone, this.player, [...this.activatedCheckpointIds], wilderness.layout
     );
     this.zone = 'wilderness';
+    this.shrineBlessings=[];
+    this.pendingEnvironmentId=null;
     this.activeWorldEventId = null;
     this.world = wilderness.layout;
     this.storyFeatures = wilderness.features;
@@ -1019,6 +1095,8 @@ export class GameSimulation {
   }
 
   command(command: GameCommand): void {
+    // A new click/action cancels any pending auto-approach.
+    if(command.type!=='interactEnvironment')this.pendingEnvironmentId=null;
     if (command.type === 'reset') {
       this.reset(isClassId(command.classId) ? command.classId : 'WARRIOR', command.seed ?? this.world.seed);
       return;
@@ -1260,6 +1338,31 @@ export class GameSimulation {
       this.pendingObject = null;
       this.pendingCryptPropId = command.id;
       this.tryInteractCrypt();
+      return;
+    }
+    if(command.type==='interactEnvironment') {
+      const object=this.zone==='wilderness'&&!this.paused
+        ? planEnvironmentInteraction(command.id,this.environmentPlan,[...this.environmentUsed])
+        : null;
+      if(!object)return;
+      this.warriorAction=null;
+      this.classAction=null;
+      this.warriorPending=null;
+      const route=distance(this.player,object.position)>object.reach
+        ? findPath(this.player,object.position,ACTOR_RADIUS,this.world.obstacles):[];
+      if(distance(this.player,object.position)>object.reach&&!route.length)return;
+      this.movePath=route;
+      this.attackTarget=null;
+      this.pickupTarget=null;
+      this.pendingNpc=null;
+      this.pendingTown=null;
+      this.pendingSkill=null;
+      this.pendingAim=null;
+      this.pendingPortal=false;
+      this.pendingObject=null;
+      this.pendingCryptPropId=null;
+      this.pendingEnvironmentId=object.id;
+      this.tryInteractEnvironment();
       return;
     }
     if (command.type === 'interactObject') {
@@ -1637,8 +1740,15 @@ export class GameSimulation {
   /** Single derived stat projection; talent effects never mutate equipment or DTOs. */
   private currentStats(equipment: Equipment = this.equipment, level = this.level) {
     const base = deriveStats(this.classId, equipment, level);
-    return this.classId === 'WARRIOR'
-      ? applyTalentStats(base, this.talentRanks) : base;
+    const stats=this.classId==='WARRIOR' ? applyTalentStats(base,this.talentRanks) : base;
+    if(!this.shrineBlessings.length)return stats;
+    return {...stats,
+      armor:stats.armor+(this.hasShrineBlessing('armor')?30+level*2:0),
+      moveSpeed:stats.moveSpeed+(this.hasShrineBlessing('speed')?20:0),
+      healthRegen:stats.healthRegen+(this.hasShrineBlessing('regeneration')?6:0),
+      resourceRegen:stats.resourceRegen+(this.hasShrineBlessing('resource')?8:0),
+      magicFind:stats.magicFind+(this.hasShrineBlessing('loot')?25:0)
+    };
   }
 
   /** Modal UI sends a request; only simulation checks/commits spent ranks. */
@@ -2062,6 +2172,7 @@ export class GameSimulation {
     const result = resolveTypedDamage({
       type, base, multiplier: multiplier
         * (sourceId === 'hero' && this.potions.buffs.fury > 0 ? POTIONS.fury.damageMultiplier : 1)
+        * (sourceId === 'hero' && this.hasShrineBlessing('damage') ? 1.25 : 1)
         * Math.max(0.1, 1 + (attackerStatus.damageDealt ?? 0))
         * Math.max(0.1, 1 + (defenderStatus.damageTaken ?? 0)), critChance,
       defenderArmor: 10 + this.level * 3, defenderLevel: this.level,
@@ -2367,6 +2478,8 @@ export class GameSimulation {
       this.cryptArmedTraps.clear();
       this.statusEffects = { player: [], enemies: {} };
       this.potions = { ...this.potions, buffs: { resistance: 0, fury: 0 } };
+      this.shrineBlessings=[];
+      this.pendingEnvironmentId=null;
       this.effects = emptyEffects();
       for (const unit of this.units) {
         unit.intent = null;
@@ -2683,6 +2796,8 @@ export class GameSimulation {
     const destination: ZoneId = this.zone === 'wilderness' ? 'crypt' : 'wilderness';
     const seed = this.world.seed;
     this.zone = destination;
+    this.shrineBlessings=[];
+    this.pendingEnvironmentId=null;
     this.activeWorldEventId = null;
     const wilderness = destination === 'wilderness' ? buildWilderness(seed) : null;
     const crypt = destination === 'crypt' ? buildCryptWorld(seed) : null;
@@ -2750,6 +2865,9 @@ export class GameSimulation {
   }
   private step(dt: number): void {
     this.respawnProtectionSeconds = Math.max(0, this.respawnProtectionSeconds - dt);
+    this.shrineBlessings=this.shrineBlessings
+      .map(b=>({...b,remaining:Math.max(0,b.remaining-dt)}))
+      .filter(b=>b.remaining>0);
     const definition = CLASSES[this.classId];
     const currentStats = this.currentStats();
     this.resource = advanceResource(this.resource, currentStats.resourceRegen,
@@ -2856,6 +2974,16 @@ export class GameSimulation {
       if (!prop) this.pendingCryptPropId = null;
       else if (distance(this.player, prop.position) <= prop.reach) this.tryInteractCrypt();
       else this.follow(this.player, prop.position, speed, dt, Math.max(6, prop.reach - 12));
+    } else if(this.pendingEnvironmentId) {
+      const object=planEnvironmentInteraction(this.pendingEnvironmentId,
+        this.environmentPlan,[...this.environmentUsed]);
+      if(!object||this.zone!=='wilderness')this.pendingEnvironmentId=null;
+      else if(distance(this.player,object.position)<=object.reach)this.tryInteractEnvironment();
+      else {
+        const waypoint=this.movePath[0]??object.position;
+        if(distance(this.player,waypoint)<9)this.movePath.shift();
+        else this.follow(this.player,waypoint,speed,dt,0);
+      }
     } else if (this.pendingObject) {
       const object = getWorldObject(this.pendingObject, this.zone);
       if (!object) this.pendingObject = null;
@@ -3327,7 +3455,7 @@ export class GameSimulation {
     const status = this.paused ? 'paused' : !this.player.alive ? 'dead'
       : this.attackTarget || this.pendingSkill || this.warriorAction || this.warriorPending
         || this.classAction ? 'combat'
-      : this.movePath.length || this.pickupTarget || this.pendingObject
+      : this.movePath.length || this.pickupTarget || this.pendingEnvironmentId || this.pendingObject
         || this.pendingNpc || this.pendingTown || this.pendingPortal ? 'moving' : 'ready';
     return {
       version: 5,
@@ -3348,7 +3476,12 @@ export class GameSimulation {
       projectiles: this.projectiles.map(p => ({ ...p, target: { ...p.target } })),
       usedInteractables: [...this.usedObjects],
       interactables: worldObjectsFor(this.zone).filter(o => !this.usedObjects.has(o.id)),
-      moveDestination: this.movePath.length ? { ...this.movePath[this.movePath.length - 1]! } : null,
+      environmentObjects:this.environmentView(),
+      environmentUsedIds:[...this.environmentUsed],
+      environmentBlessings:this.shrineBlessings.map(b=>({...b})),
+      moveDestination: this.pendingEnvironmentId
+        ? {...this.environmentPlan.find(o=>o.id===this.pendingEnvironmentId)!.position}
+        : this.movePath.length ? { ...this.movePath[this.movePath.length - 1]! } : null,
       holdPosition: this.holdPosition,
       evadeCooldown: this.evadeCooldown,
       kills: this.kills,
@@ -3465,6 +3598,11 @@ export class GameSimulation {
     };
     const eventPlans = restoredWilderness
       ? planWorldEvents(s.worldSeed,restoredWilderness.layout,restoredWilderness.features) : [];
+    const environmentPlan=restoredWilderness
+      ? planEnvironmentObjects(s.worldSeed,restoredWilderness.layout,restoredWilderness.features) : [];
+    const environmentUsed=s?.environmentUsedIds??[];
+    const projectedEnvironment=s?.zone==='wilderness'
+      ? visibleEnvironmentObjects(environmentPlan,environmentUsed) : [];
     const activeViews=Array.isArray(s?.worldEvents)
       ? s.worldEvents.filter(view=>view?.status==='active') : [];
     const activeEventPlan=activeViews.length===1
@@ -3513,6 +3651,10 @@ export class GameSimulation {
       || !validHollowAdds(s.hollowKingAddActorIds)
       || !validMiniStates(s.miniBossStates)
       || !validEventSnapshot()
+      || !validEnvironmentUsedIds(environmentUsed)
+      || !validShrineBlessings(s.environmentBlessings ?? [])
+      || (s.environmentObjects !== undefined &&
+        JSON.stringify(s.environmentObjects)!==JSON.stringify(projectedEnvironment))
       || (s.miniBossDefeatedIds !== undefined && (!Array.isArray(s.miniBossDefeatedIds)
         || s.miniBossDefeatedIds.length > MINI_BOSS_IDS.length
         || new Set(s.miniBossDefeatedIds).size !== s.miniBossDefeatedIds.length
@@ -3663,6 +3805,8 @@ export class GameSimulation {
     for (const id of s.cryptTriggeredTrapIds ?? []) this.cryptTriggeredTrapIds.add(id);
     this.storyFeatures = restoredWilderness!.features;
     this.initWorldSystems(restoredWilderness!);
+    this.environmentUsed=new Set(environmentUsed);
+    this.shrineBlessings=(s.environmentBlessings??[]).map(b=>({...b}));
     if (s.mapDiscovery) this.mapDiscovery = structuredClone(s.mapDiscovery);
     if (s.worldFacts) this.worldFacts = structuredClone(s.worldFacts);
     this.actILedger = createActIQuestLedger(s.questLedger ?? s.quest)!;
@@ -3768,6 +3912,9 @@ export class GameSimulation {
     this.miniBossStates.clear();
     this.defeatedMiniBossIds.clear();
     this.activatedCheckpointIds.clear();
+    this.environmentUsed.clear();
+    this.shrineBlessings=[];
+    this.pendingEnvironmentId=null;
     this.worldEventPlans = [];
     this.activeWorldEventId = null;
     this.respawnAt = null;

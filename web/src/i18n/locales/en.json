@@ -1038,5 +1038,47 @@
       "ritualInterruption": "Ritual Interruption",
       "treasureAmbush": "Treasure Ambush"
     }
+  },
+  "environment": {
+    "title": "Environmental Interactions",
+    "click": "Click to interact",
+    "locked": "Activate the lever",
+    "objects": {
+      "chest": "Forgotten Cache",
+      "door": "Old Gate",
+      "lockedDoor": "Sealed Door",
+      "lever": "Rusty Lever",
+      "shrineDamage": "Shrine of Fury",
+      "shrineArmor": "Shrine of Stone",
+      "shrineSpeed": "Shrine of Winds",
+      "shrineRegeneration": "Shrine of Renewal",
+      "shrineResource": "Shrine of Focus",
+      "shrineLoot": "Shrine of Fortune",
+      "trap": "Cursed Plate",
+      "barrel": "Broken Barrel",
+      "crate": "Abandoned Crate",
+      "hiddenWall": "Secret Wall",
+      "lore": "Ancient Chronicle"
+    },
+    "bonuses": {
+      "damage": "Damage +25%",
+      "armor": "Armor +30",
+      "speed": "Speed +20%",
+      "regeneration": "Health regeneration",
+      "resource": "Resource generation",
+      "loot": "Loot chance +25"
+    },
+    "feedback": {
+      "chest": "The cache has been opened.",
+      "door": "The gate has been opened.",
+      "lockedDoor": "The sealed door has been opened.",
+      "lever": "You activated the ancient lever.",
+      "shrine": "The shrine's blessing surrounds you.",
+      "trap": "You triggered a hidden trap.",
+      "barrel": "The barrel shattered.",
+      "crate": "The crate broke open.",
+      "hiddenWall": "A hidden passage has been revealed.",
+      "lore": "You read the old chronicle."
+    }
   }
 }

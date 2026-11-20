@@ -16,6 +16,7 @@ import type { CombatTimelineState } from '../animation/combatTimeline';
 import type { StatusInstance } from '../status/statusRuntime';
 import type { StatusId } from '../status/statusDefinitions';
 import type { WorldObject, WorldObjectId } from '../world/interactables';
+import type { EnvironmentObject, EnvironmentObjectId, EnvironmentKind, ShrineBlessing } from '../world/environmentInteractions';
 import type { MapDiscoveryState } from '../world/mapDiscovery';
 import type { CryptInteractable } from '../world/cryptTheme';
 import type { MiniBossState, MiniBossId } from '../enemies/miniBossRules';
@@ -45,6 +46,8 @@ export interface WorldSessionProgress {
   cryptTriggeredTrapIds?: string[];
   /** Seed-scoped one-shot miniboss victories, not enemy state snapshots. */
   miniBossDefeatedIds?: MiniBossId[];
+  /** Optional one-shot outdoor environmental interactions; never character data. */
+  environmentUsedIds?: EnvironmentObjectId[];
   /** Seed-scoped activated field shrines; town is always the safe fallback. */
   activatedCheckpointIds?: RespawnCheckpointId[];
 }
@@ -132,6 +135,11 @@ export interface GameSnapshot {
   projectiles: ProjectileSnapshot[];
   interactables: WorldObject[];
   usedInteractables: WorldObjectId[];
+  /** Separate seeded objects do not modify the existing world/map fingerprint. */
+  environmentObjects?: EnvironmentObject[];
+  environmentUsedIds?: EnvironmentObjectId[];
+  /** Timed blessings belong to simulation snapshots, not world/character saves. */
+  environmentBlessings?: ShrineBlessing[];
   moveDestination: Point | null;
   kills: number;
   level: number;
@@ -216,6 +224,7 @@ export type GameCommand =
   | { type: 'stashSort'; tab: number }
   | { type: 'usePortal' }
   | { type: 'interactObject'; id: WorldObjectId }
+  | { type: 'interactEnvironment'; id: EnvironmentObjectId }
   | { type: 'interactCrypt'; id: string }
   | { type: 'buyItem'; offerId: ShopOfferId }
   | { type: 'sellItem'; index: number }
@@ -245,6 +254,8 @@ export type GameEvent =
   | { type: 'projectileLaunch'; id: string; sourceId: string }
   | { type: 'projectileImpact'; id: string; hit: boolean }
   | { type: 'worldInteract'; id: WorldObjectId; kind: 'shrine' | 'chest' }
+  | { type: 'environmentInteracted'; id: EnvironmentObjectId; kind: EnvironmentKind;
+      x: number; y: number; gold: number; itemId: string | null }
   | { type: 'cryptInteract'; id: string; capability: string; goldAwarded: number }
   | { type: 'cryptTrap'; id: string; damage: number; x: number; y: number }
   | { type: 'cryptTrapWindup'; id: string; x: number; y: number; radius: number }

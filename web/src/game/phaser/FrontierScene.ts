@@ -10,6 +10,7 @@ import { RARITIES } from '../data/items';
 import { itemDisplayName } from '../items/itemName';
 import { SKILLS } from '../skills/skills';
 import type { GameEvent, ZoneId, Point } from '../core/types';
+import type { EnvironmentObjectId } from '../world/environmentInteractions';
 import {
   resolvePointerContext, contextToCommand, cursorForContext,
   type ContextTarget, type ResolvedPointerContext
@@ -290,6 +291,10 @@ export class FrontierScene extends Phaser.Scene {
         kind: 'INTERACTABLE' as const, id: prop.id,
         position: prop.position, hitRadius: prop.hitRadius
       })),
+      ...(state.environmentObjects ?? []).map(object => ({
+        kind: 'INTERACTABLE' as const, id: object.id,
+        position: object.position, hitRadius: object.hitRadius
+      })),
       ...state.interactables.map(object => ({
         kind: 'INTERACTABLE' as const, id: object.id,
         position: object.position, hitRadius: object.hitRadius
@@ -382,6 +387,11 @@ export class FrontierScene extends Phaser.Scene {
     // use a separate typed command until their original NPCs gain full roles.
     if (context.kind === 'NPC' && townEntry(context.id)?.capability !== 'existing') {
       this.bridge.command({ type: 'interactTown', entryId: context.id });
+      this.heldMovement.release();
+      return;
+    }
+    if(context.kind==='INTERACTABLE' && context.id.startsWith('env.')) {
+      this.bridge.command({type:'interactEnvironment',id:context.id as EnvironmentObjectId});
       this.heldMovement.release();
       return;
     }
@@ -490,6 +500,17 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private onGameEvent(event: GameEvent): void {
+    if(event.type==='environmentInteracted') {
+      const visual=this.obtainImpact(event.x,event.y,86);
+      const shrine=event.kind==='shrine';
+      const color=shrine?0x89d9bd:event.kind==='trap'?0xd96176:0xe4bb85;
+      visual.lineStyle(3,color,.95).strokeCircle(0,0,shrine?34:22);
+      visual.fillStyle(color,.10).fillCircle(0,0,shrine?34:22);
+      this.tweens.add({targets:visual,alpha:0,scaleX:shrine?2.3:1.7,
+        scaleY:shrine?2.3:1.7,duration:650,
+        onComplete:()=>this.releaseImpact(visual)});
+      return;
+    }
     if(event.type === 'worldEventStarted' || event.type === 'worldEventCompleted') {
       // Visual cue only: event eligibility, kills and rewards belong to simulation.
       const completed=event.type==='worldEventCompleted';
@@ -967,6 +988,37 @@ export class FrontierScene extends Phaser.Scene {
       if (this.hoveredId === prop.id) {
         this.interactableVisuals.lineStyle(3, 0xffd38d)
           .strokeCircle(x, y, prop.hitRadius + 5);
+      }
+    }
+    for(const object of state.environmentObjects??[]) {
+      const x=object.position.x,y=object.position.y;
+      const shrine=object.kind==='shrine',door=object.kind==='door'
+        ||object.kind==='lockedDoor'||object.kind==='hiddenWall';
+      const color=shrine?0x6a9e89:door?0x88746c:object.kind==='trap'?0x9e655e
+        :object.kind==='lore'?0x8a8eaa:0x986f47;
+      this.interactableVisuals.fillStyle(0x101a20,.72).fillEllipse(x,y+15,35,11);
+      this.interactableVisuals.fillStyle(color,.94);
+      if(door) {
+        this.interactableVisuals.fillRoundedRect(x-15,y-19,30,38,4);
+        this.interactableVisuals.lineStyle(3,0xc4ae88,.88)
+          .strokeRoundedRect(x-15,y-19,30,38,4);
+        this.interactableVisuals.fillStyle(0xf4d898).fillCircle(x+7,y+1,3);
+      } else if(shrine) {
+        this.interactableVisuals.fillTriangle(x-15,y+17,x+15,y+17,x,y-24);
+        this.interactableVisuals.lineStyle(2,0xb6e4b8).strokeCircle(x,y,21);
+      } else if(object.kind==='trap') {
+        this.interactableVisuals.fillTriangle(x-16,y+12,x+16,y+12,x,y-16);
+      } else {
+        this.interactableVisuals.fillRoundedRect(x-14,y-13,28,26,3);
+        this.interactableVisuals.lineStyle(2,0xebd3a0,.84)
+          .strokeRoundedRect(x-14,y-13,28,26,3);
+        if(object.kind==='lore') {
+          this.interactableVisuals.lineStyle(2,0xe1d7b6).lineBetween(x-8,y-4,x+8,y-4);
+          this.interactableVisuals.lineBetween(x-8,y+3,x+8,y+3);
+        }
+      }
+      if(this.hoveredId===object.id) {
+        this.interactableVisuals.lineStyle(3,0xffd38d).strokeCircle(x,y,object.hitRadius+5);
       }
     }
     for (const object of state.interactables) {
