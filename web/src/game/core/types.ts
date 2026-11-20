@@ -84,7 +84,7 @@ export interface GameSnapshot {
   cooldowns: Cooldowns;
   /** Runtime Warrior actions and status effects are never part of CharacterProgress. */
   warriorCooldowns?: Partial<Record<WarriorAbilityId, number>>;
-  warriorAction?: { id: WarriorAbilityId; targetId: string | null; timeline: CombatTimelineState; hitCount: number } | null;
+  warriorAction?: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null;
   statusEffects?: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> };
   effects: ActiveEffects;
   stats: DerivedStats;
