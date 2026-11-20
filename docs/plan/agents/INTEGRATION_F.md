@@ -1,6 +1,6 @@
 # INTEGRATION_F — Hlavní integrátor, Wave F (Prompty 23–25)
 
-**Status: připravený integrační runbook; není implementací ani spuštěním agentů.**
+**Status: historický integrační runbook po provedení CORE INTEGRATION (20. 11. 2026).** Checklisty níže jsou původní release gates a samy o sobě nedokazují plné acceptance. Skutečné PR/CI/SHAs jsou zaznamenány na konci.
 Repo: `Nereziel/dark_fantasy_2d_arpg`. Zadání/samostatné write-sety: [WAVE_F.md](WAVE_F.md), [28/TASK.md](28/TASK.md), [29/TASK.md](29/TASK.md), [30/TASK.md](30/TASK.md). Původní specifikace: `2d_arpg_implementation_prompts.md` Prompty 23, 24, 25.
 
 ## 0 — Dispatch gate / společný BASE_SHA
@@ -69,3 +69,21 @@ Před merge každého PR:
 ### Předávací protokol
 
 Agenti v draft PR předávají název/exportované signatury funkcí, invariants a předpoklady integrátora, seed/geometry test matrix, přesný seznam souborů, RED→GREEN, cílené a plné agentní testy, CI odkaz a chybějící propojení. Integrátor u každého gate vyplní PR URL, merged SHA, `main` verify SHA, Pages deploy SHA a zbývající acceptance; dokumentační změny plán nesmějí samy spouštět runtime merge.
+
+
+## Skutečný closeout, 20. 11. 2026 — co bylo provedeno
+
+| Gate | PR | HEAD CI | Main SHA | Stav |
+| --- | --- | --- | --- | --- |
+| Agent 28 chunk stream | [#48](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/48) | `44759908149` GREEN | `2b75ea7361029c8cb856b525d1ea6e51c51bd444` | merge, čistý 2-file diff |
+| Agent 29 map discovery | [#50](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/50) | `44760124239` GREEN | `80e39eeb78c181ad9065a83418ebb4802493b6f1` | merge, čistý 2-file diff |
+| Agent 30 procedural dungeon | [#49](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/49) | `44760239280` GREEN | `4a8cea2b910db33cb26203b1ecdc8c0b9101e625` | merge, čistý 2-file diff |
+| Streaming Phaser terrain | [#51](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/51) | [`44762737091`](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44762737091) GREEN | `670a2aaae1c6313429d768a4afd588deed315789` | runtime core merged |
+| Fog UI + world facts + separate save | [#52](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/52) | [`44764543032`](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44764543032) GREEN | `82f6acabe8c9797a60a93be458020baa702f6c75` | runtime core merged |
+| Modular crypt / room graphics | [#53](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/53) | [`44765971733`](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44765971733) GREEN | `b0a57e21e3ba2cedc88d1bb765c58f8165a36be9` | runtime core merged |
+
+**Poslední ověřený HEAD:** `bf2235dd4f8dcc2cf81ceb3e7cd910af8c0b8be0`; 64 úspěšných testovacích souborů / 607 unit testů, 14 Chromium Playwright, `svelte-check` 0 errors + warnings, production build a legacy reference PASS. Předchozí HEAD #53 měl jediný fail v historickém `Dungeon.test.ts` kvůli útoku z polohy 34px vlevo od třetího boss guardu, což zasahovalo nové zdi. Integrátor upravil boss guard spawn/leash směrem do arény, **nepovoloval kolize ani nezměnil test**, následný CI byl GREEN a teprve potom merge.
+
+**Zachovaná bezpečnostní hranice:** `SavedGame.format=11` stále ukládá pouze `CharacterProgress`. Samostatný `world:first-character` záznam (`format=1`) nese seed, fog a známé facts; nese žádné enemy state, loot ani dungeon snapshots. Při `Load` se pro validní world záznam zrekonstruuje stejné seed-world a obnoví world facts; při `New Game` vzniká nová session. Původní legacy migrace v8/v9/v10 zůstávají.
+
+**Zbývá uzavřít:** (1) skutečné unload/respawn resource rozpočty také pro offscreen enemy/AI, loot a interaktivní POI; (2) plný Playwright Akt I a krypta přes bossa bez debug zásahů; (3) důkaz memory/performance při dlouhém pohybu přes více chunků; (4) po merging doc closeout ověřit úspěšnou `main` verify + Pages deploy pro game runtime SHA `b0a57e21e3ba2cedc88d1bb765c58f8165a36be9`. Proto status **CORE INTEGRATED / full acceptance pending**, nikoli plně hotové všechny Prompty. Wave G/Prompty 26–28 až následně; waypoint fast travel až Prompt 36.
