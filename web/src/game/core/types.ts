@@ -161,6 +161,7 @@ export type GameEvent =
   | { type: 'npcDialogue'; npcId: NpcId }
   | { type: 'townInteraction'; entryId: string; role: TownServiceRole }
   | { type: 'townServiceUsed'; entryId: string; goldSpent: number }
+  | { type: 'tradeRejected'; reason: 'funds' | 'inventory' | 'protected' | 'invalid' }
   | { type: 'zoneChanged'; zone: ZoneId }
   | { type: 'dungeonCleared' }
   | { type: 'questUpdated'; status: QuestProgress['status']; defeated: number }
