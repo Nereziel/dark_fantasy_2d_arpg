@@ -66,7 +66,8 @@ export function monsterActions(type: EnemyType): readonly MonsterAction[] {
       statusMagnitude: ability.magnitude
     } : {}),
     ...(ability.kind === 'debuff' ? {
-      statusId: 'slowed' as const,
+      // Binding Hex roots the hero briefly; spider webs and frost magic supply slows.
+      statusId: ability.id === 'bindingHex' ? 'rooted' as const : 'slowed' as const,
       statusDuration: ability.duration,
       statusMagnitude: ability.magnitude
     } : {})
