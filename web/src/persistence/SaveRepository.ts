@@ -56,8 +56,9 @@ export function readSaveRecord(raw: unknown): CharacterProgress | null {
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as Partial<SavedGame>;
   if (record.characterId !== 'hero') return null;
-  if (record.format === 9) return validateCharacter(record.character);
-  if ((record.format as number) === 8) return migrateV8Character(record.character);
+  const format: unknown = (raw as { format?: unknown }).format;
+  if (format === 9) return validateCharacter(record.character);
+  if (format === 8) return migrateV8Character(record.character);
   return null;
 }
 
