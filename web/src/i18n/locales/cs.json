@@ -33,7 +33,8 @@
     "wave": "Vlna",
     "camp": "Tábor Stráž uhelného žáru",
     "autosave": "Automatické ukládání postavy",
-    "shield": "Štít"
+    "shield": "Štít",
+    "elite": "Elita"
   },
   "status": {
     "ready": "Připraven",
