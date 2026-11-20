@@ -111,6 +111,34 @@ describe('Prompt 30 — authoritative simulation and save integration', () => {
     expect(reset.stats.armor).toBe(before.stats.armor);
   });
 
+  it('applies Guardian shielding and Warlord War Cry buffs during real combat ticks', () => {
+    const guardian = leveled(25);
+    const g = guardian.snapshot();
+    const investedGuardian = {
+      'guardian.ironSkin': 1, 'guardian.shieldMastery': 1,
+      'guardian.stalwart': 1, 'guardian.bulwark': 1
+    };
+    expect(guardian.restore({ ...g, talentPoints: 1,
+      talentRanks: investedGuardian })).toBe(true);
+    guardian.command({type:'warriorAbility',id:'warCry'});
+    for (let i = 0; i < 55; i++) guardian.advance(16.667);
+    expect(guardian.snapshot().shield).toBeGreaterThan(0);
+
+    const warlord = leveled(25);
+    const w = warlord.snapshot();
+    expect(warlord.restore({ ...w, talentPoints: 1, talentRanks: {
+      'warlord.commandingCry':1, 'warlord.shockwave':1,
+      'warlord.warDrums':1, 'warlord.commander':1
+    } })).toBe(true);
+    warlord.command({type:'warriorAbility',id:'warCry'});
+    for (let i = 0; i < 55; i++) warlord.advance(16.667);
+    const active = warlord.snapshot();
+    const haste = active.statusEffects?.player.find(effect => effect.id === 'haste');
+    expect(haste).toBeDefined();
+    expect(haste!.remaining).toBeGreaterThan(8);
+    expect(active.resource).toBeGreaterThan(w.resource);
+  });
+
   it('stores talent ranks in v11 character-only save and blocks invalid or forged builds', () => {
     const sim=leveled(25);
     sim.command({type:'spendTalent',id:'berserker.battleFury'});
