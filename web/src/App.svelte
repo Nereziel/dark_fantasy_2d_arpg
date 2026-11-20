@@ -18,6 +18,7 @@
   import QuestJournal from './ui/QuestJournal.svelte';
   import NpcDialogue from './ui/NpcDialogue.svelte';
   import TradePanel from './ui/TradePanel.svelte';
+  import StashPanel from './ui/StashPanel.svelte';
   import DungeonPanel from './ui/DungeonPanel.svelte';
   import {
     MERCHANT_ID, BLACKSMITH_ID, type NpcId, type TradeNpcId
@@ -457,7 +458,9 @@
           <section class="pause-card town-service-card">
             <h2>{$t(townModal.nameKey)}</h2>
             <p>{$t(townModal.descriptionKey)}</p>
-            {#if townModal.role === 'healer'}
+            {#if townModal.role === 'stash'}
+              <StashPanel {view} {bridge} />
+            {:else if townModal.role === 'healer'}
               <button class="primary" disabled={view.gold < 15 || view.player.health >= view.player.maxHealth}
                 onclick={() => bridge.command({ type: 'useTownService', entryId: townModal!.id })}>
                 {$t('town.restoreHealth')} · 15 {$t('hud.gold')}
