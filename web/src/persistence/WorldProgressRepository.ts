@@ -28,7 +28,11 @@ export function readWorldRecord(raw: unknown): WorldSessionProgress | null {
     || !record.progress.worldFacts
     || record.progress.worldFacts.worldSeed !== record.progress.seed
     || !Array.isArray(record.progress.worldFacts.entries)
-    || record.progress.worldFacts.entries.length > 10000) return null;
+    || record.progress.worldFacts.entries.length > 10000
+    || ![record.progress.cryptUsedPropIds, record.progress.cryptTriggeredTrapIds]
+      .every(list => list === undefined || (Array.isArray(list) && list.length <= 128
+        && list.every(id => typeof id === 'string' && id.length <= 160)
+        && new Set(list).size === list.length))) return null;
   try {
     if (JSON.stringify(raw).length > MAX_RECORD_BYTES) return null;
     return structuredClone(record.progress);
