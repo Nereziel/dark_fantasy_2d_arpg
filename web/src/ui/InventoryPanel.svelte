@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { _ as t } from 'svelte-i18n';
+  import { _ as t, locale } from 'svelte-i18n';
   import type { GameSnapshot } from '../game/core/types';
   import type { GameBridge } from '../game/bridge/GameBridge';
   import { RARITIES } from '../game/data/items';
   import { WEAPON_TYPES } from '../game/items/itemCatalog';
+  import { itemDisplayName } from '../game/items/itemName';
   let { view, bridge, close }: {
     view: GameSnapshot;
     bridge: GameBridge;
@@ -45,7 +46,7 @@
               <div class="equipment-slot-name">{$t('item.slot.' + slot)}</div>
               {#if item}
                 <div class="equipment-name" style:color={RARITIES[item.rarity].color}>
-                  {item.icon} {$t('item.base.' + item.templateId)}
+                  {item.icon} {itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}
                 </div>
                 {#if item.upgrades > 0}
                   <div class="item-temper">{$t('trade.tempering')} +{item.upgrades}/3</div>
@@ -86,19 +87,19 @@
         <div class="bag-grid">
           {#each view.inventory as item, index (index)}
             <div class="bag-slot" class:pending-move={moveSource === index}
-              title={item ? $t('item.base.' + item.templateId) : $t('inventory.empty')}>
+              title={item ? itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId)) : $t('inventory.empty')}>
               {#if item && (rarityFilter === 'ALL' || item.rarity === rarityFilter)}
                 {@const delta = bridge.previewEquipment(index)}
                 <div class="item-card">
                   <div class="item-visual" style:color={RARITIES[item.rarity].color}>{item.icon}</div>
-                  <div class="item-title" style:color={RARITIES[item.rarity].color}>{$t('item.base.' + item.templateId)}</div>
+                  <div class="item-title" style:color={RARITIES[item.rarity].color}>{itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</div>
                   <div class="item-rarity">{$t('item.rarity.' + item.rarity)}</div>
                   {#if item.twoHanded}<div class="item-affix">{$t('inventory.twoHanded')}</div>{/if}
                   {#if (item.requiredLevel ?? 1) > 1}
                     <div class="item-affix">{$t('inventory.requireLevel')}: {item.requiredLevel}</div>
                   {/if}
                   {#if (item.sockets?.length ?? 0) > 0}<div class="item-affix">◯ × {item.sockets?.length}</div>{/if}
-                  {#if item.legendaryPower}<div class="item-affix">{item.legendaryPower.id}: {item.legendaryPower.magnitude}</div>{/if}
+                  {#if item.legendaryPower}<div class="item-affix">{$t('inventory.legendaryPower')}: +{Math.max(1, Math.floor(item.legendaryPower.magnitude * 0.15))} {$t('stat.damageMin')}</div>{/if}
                   {#if item.upgrades > 0}
                     <div class="item-temper">{$t('trade.tempering')} +{item.upgrades}/3</div>
                   {/if}
