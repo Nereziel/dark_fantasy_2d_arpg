@@ -596,7 +596,7 @@
         <CharacterSheet {view} close={closeCharacterSheet} />
       {:else if !view.player.alive}
         <div class="modal-shield" data-testid="death-overlay">
-          <section class="pause-card" role="dialog" aria-modal="true" aria-label={$t('respawn.title')}>
+          <div class="pause-card" role="dialog" aria-modal="true" aria-label={$t('respawn.title')}>
             <h2>{$t('respawn.title')}</h2>
             <p>{$t('respawn.description')}</p>
             <p class="respawn-destination">
@@ -606,7 +606,7 @@
             </p>
             <button class="primary" data-testid="respawn-button"
               onclick={respawn}>{$t('respawn.action')}</button>
-          </section>
+          </div>
         </div>
       {:else if view.paused}
         <div class="modal-shield">
