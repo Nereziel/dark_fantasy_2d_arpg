@@ -3047,9 +3047,15 @@ export class GameSimulation {
         ? { materials: { ...this.materials } } : {}),
       ...(Object.keys(this.gems).length
         ? { gems: { ...this.gems } } : {}),
-      potionCharges: { ...this.potions.charges },
-      potionSelected: this.potions.selected,
-      potionCooldown: this.potions.cooldown,
+      ...(this.potions.charges.healing !== POTIONS.healing.maxCharges
+        || this.potions.charges.resource !== POTIONS.resource.maxCharges
+        || this.potions.charges.resistance !== POTIONS.resistance.maxCharges
+        || this.potions.charges.fury !== POTIONS.fury.maxCharges
+          ? { potionCharges: { ...this.potions.charges } } : {}),
+      ...(this.potions.selected !== 'healing'
+        ? { potionSelected: this.potions.selected } : {}),
+      ...(this.potions.cooldown > 0
+        ? { potionCooldown: this.potions.cooldown } : {}),
       gold: this.gold,
       kills: this.kills,
       inventory: this.inventory.map(cloneItem),
