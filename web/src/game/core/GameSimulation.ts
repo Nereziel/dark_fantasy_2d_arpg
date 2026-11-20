@@ -1061,6 +1061,20 @@ export class GameSimulation {
       if (skill.kind === 'drain' && this.player.alive) {
         this.player.health = resolveHealing(this.player.health, this.player.maxHealth, Math.ceil(damage * 0.65)).health;
       }
+      // Existing class spells now expose the full canonical status vocabulary.
+      // These are one-shot impact hooks, never extra damage timers.
+      if (damage > 0 && unit.actor.alive) {
+        const extras: Readonly<Record<string, readonly StatusId[]>> = {
+          judgment: ['vulnerable'], boneSpear: ['cursed'],
+          poisonBlade: ['bleeding'], lifeDrain: ['cursed'], soulBurn: ['silenced']
+        };
+        for (const id of extras[skill.id] ?? []) {
+          this.applyCanonicalStatus('enemy', id, 'hero', undefined, undefined, unit);
+        }
+      }
+      if (skill.id === 'shadowDash' && damage > 0) {
+        this.applyCanonicalStatus('player', 'haste', 'hero', 0.15, 2.5);
+      }
       if (skill.effect && skill.duration && unit.actor.alive
         && ['stunned', 'poisoned', 'burning'].includes(skill.effect)) {
         const magnitude = skill.effect === 'stunned' ? 0
@@ -1076,11 +1090,17 @@ export class GameSimulation {
         if (target.actor.alive && skill.effect && skill.duration) {
           this.applyEffect('enemy',
             { id: skill.effect, remaining: skill.duration, magnitude: 0, tick: 0 }, target);
+          if (skill.id === 'frostNova' && distance(center, target.actor) <= 70) {
+            this.applyCanonicalStatus('enemy', 'frozen', 'hero', 1, 1.2, target);
+          }
         }
       }
     } else if ((skill.kind === 'aura' || skill.kind === 'summon') && skill.effect && skill.duration) {
       if (skill.id === 'consecration') {
-        this.shield = Math.max(this.shield, Math.round(this.player.maxHealth * 0.25));
+        const barrier = Math.round(this.player.maxHealth * 0.25);
+        this.applyCanonicalStatus('player', 'shielded', 'hero', barrier, skill.duration);
+        this.applyCanonicalStatus('player', 'regeneration', 'hero', 4, skill.duration);
+        this.applyCanonicalStatus('player', 'fortified', 'hero', 0.1, skill.duration);
       }
       this.applyEffect('player',
         { id: skill.effect, remaining: skill.duration, magnitude: skill.power, tick: 0 });
