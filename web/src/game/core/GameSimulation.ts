@@ -1125,7 +1125,7 @@ export class GameSimulation {
     if (buff && buff.statusId) {
       const base = statusRule(buff.statusId, buff.statusMagnitude, buff.statusDuration);
       const rule = buff.buffType === 'damageBonus'
-        ? { ...base, modifiers: { damageDealt: 1 } } : base;
+        ? { ...base, modifiers: { moveSpeed: 1, damageDealt: 1 } } : base;
       for (const ally of this.units) {
         if (!ally.actor.alive || distance(actor, ally.actor) > buff.range) continue;
         this.statusEffects.enemies[ally.actor.id] = applyStatus(
