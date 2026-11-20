@@ -106,7 +106,7 @@ describe('Prompt 31: authoritative Whirlwind transformation', () => {
       player: { ...snap.player, ...near },
       enemies: snap.enemies.map((unit,index) =>
         index === targetIndex ? { ...unit, cooldown: 10,
-          actor:{...unit.actor,health:unit.actor.maxHealth} } : unit)
+          actor:{...unit.actor,health:3500,maxHealth:3500} } : unit)
     };
     expect(sim.restore(edited)).toBe(true);
     const projected = projectEquippedSkill('whirlwind',
@@ -120,7 +120,7 @@ describe('Prompt 31: authoritative Whirlwind transformation', () => {
       type:'warriorImpact', id:'whirlwind', radius:projected.radius
     });
     expect(after.statusEffects?.enemies[target.id]?.some(e=>e.id==='bleeding')).toBe(true);
-    expect(after.enemies[targetIndex]!.actor.health).toBeLessThan(target.health);
+    expect(after.enemies[targetIndex]!.actor.health).toBeLessThan(3500);
     expect(Math.hypot(after.enemies[targetIndex]!.actor.x-near.x,
       after.enemies[targetIndex]!.actor.y-near.y))
       .toBeLessThan(Math.hypot(target.x-near.x,target.y-near.y));
