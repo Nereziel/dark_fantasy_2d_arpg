@@ -73,7 +73,8 @@ function finitePoint(point: unknown): point is Point {
 function safeWorld(layout: unknown): layout is WorldLayout {
   if (!layout || typeof layout !== 'object' || Array.isArray(layout)) return false;
   const value = layout as Partial<WorldLayout>;
-  return Number.isSafeInteger(value.seed) && value.seed! >= 0 && value.seed! <= 0xffffffff
+  return typeof value.seed === 'number' && Number.isSafeInteger(value.seed)
+    && value.seed >= 0 && value.seed <= 0xffffffff
     && finitePoint(value.camp) && value.camp.x === CAMP.x && value.camp.y === CAMP.y
     && Array.isArray(value.obstacles) && value.obstacles.length <= 4096
     && value.obstacles.every(obstacle => obstacle
