@@ -84,7 +84,9 @@ describe('Agent 23: compatibility with live merchant and blacksmith', () => {
 
 describe('Agent 23: immutable atomic transaction proposals', () => {
   it('plans exact purchase, sale and temper deltas without changing budgets or items', () => {
-    const item = Object.freeze({ ...belt(), affixes: Object.freeze([]) }) as Item;
+    const item = belt();
+    Object.freeze(item.affixes);
+    Object.freeze(item);
     const qBuy = quote();
     const qSale = quoteSale(item);
     const qTemper = quoteTempering(item);
