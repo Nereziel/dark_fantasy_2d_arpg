@@ -78,13 +78,21 @@ describe('Prompt 38 — authoritative click and persistence integration',()=>{
     expect(sim.snapshot().environmentUsedIds).toEqual([]);
     sim.command({type:'interactEnvironment',id:'env.lockedDoor'});
     expect(sim.snapshot().environmentUsedIds).toEqual([]);
-    // Click must queue movement rather than grant a remote reward.
+    // Approach from a valid nearby point, outside the interaction radius.
+    const layout=buildWilderness(42).layout;
+    const approach=[{x:lever.position.x+100,y:lever.position.y},
+      {x:lever.position.x-100,y:lever.position.y},
+      {x:lever.position.x,y:lever.position.y+100},
+      {x:lever.position.x,y:lever.position.y-100}].find(pos=>
+        canOccupy(pos,18,layout.obstacles)
+        &&findPath(pos,lever.position,18,layout.obstacles).length>0);
+    expect(approach).toBeDefined();
+    goto(sim,approach!);
     sim.command({type:'interactEnvironment',id:'env.lever'});
     expect(sim.snapshot().environmentUsedIds).toEqual([]);
     expect(sim.snapshot().moveDestination).toEqual(lever.position);
-    // Explicitly complete the last approach segment; the pending click stays authoritative.
-    goto(sim,lever.position);
-    sim.advance(50);
+    for(let i=0;i<80&&!sim.snapshot().environmentUsedIds?.includes('env.lever');i++)
+      sim.advance(100);
     expect(sim.snapshot().environmentUsedIds).toContain('env.lever');
     expect(sim.snapshot().environmentObjects?.some(o=>o.id==='env.hiddenWall')).toBe(true);
     interactAt(sim,'env.lockedDoor');
@@ -149,7 +157,7 @@ describe('Prompt 38 — authoritative click and persistence integration',()=>{
     sim.command({type:'interactEnvironment',id:'env.trap'});
     expect(sim.snapshot().player.health).toBe(before.player.health);
     goto(sim,trap.position);
-    sim.advance(50);
+    sim.command({type:'interactEnvironment',id:'env.trap'});
     expect(sim.snapshot().environmentUsedIds).toContain('env.trap');
     const after=sim.snapshot();
     sim.command({type:'interactEnvironment',id:'env.trap'});
