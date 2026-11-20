@@ -23,7 +23,8 @@ function defeat(sim: GameSimulation, index: number): void {
     })
   })).toBe(true);
   sim.command({ type: 'attack', targetId: unit.actor.id });
-  tick(sim, 5);
+  // Wait for the authoritative delayed attack impact.
+  tick(sim, 26);
   expect(sim.snapshot().enemies[index]!.actor.alive).toBe(false);
 }
 
