@@ -265,6 +265,30 @@ describe('Agent32 miniboss framework (pure action planner)', () => {
     expect(new Set(ids).size).toBe(4);
   });
 
+  it('suggests bounded spawn points separated from the hero and the caster', () => {
+    const id = 'brood_mother';
+    const params = inputFor(id);
+    const actionResult = advanceUntil(stateFor(id), params,
+      actions => actions.some(action => action.kind === 'summon'), 180);
+    const summon = actionResult.actions.find(action => action.kind === 'summon');
+    if (!summon || summon.kind !== 'summon' || !params.target) throw new Error('Missing summon');
+    const separation = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+      Math.hypot(a.x - b.x, a.y - b.y);
+    expect(separation(summon.point, params.target)).toBeGreaterThanOrEqual(54);
+    expect(separation(summon.point, params.position)).toBeGreaterThanOrEqual(54);
+    expect(separation(summon.point, params.arena.center)).toBeLessThanOrEqual(
+      params.arena.radius - 18);
+  });
+
+  it('anchors Captain banner support to its own position rather than the player', () => {
+    const id = 'bandit_captain';
+    const params = inputFor(id);
+    const actionResult = advanceUntil(stateFor(id), params,
+      actions => actions.some(action => action.kind === 'support'), 180);
+    const support = actionResult.actions.find(action => action.kind === 'support');
+    expect(support).toMatchObject({ kind: 'support', point: params.position });
+  });
+
   it('strictly rejects bogus HP, dt, radius, actor points and impossible alive flags', () => {
     const s = stateFor('bandit_captain');
     const valid = inputFor('bandit_captain');
