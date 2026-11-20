@@ -46,6 +46,11 @@ import {
 } from '../world/generator';
 import { buildWilderness, type WildernessRuntimeWorld } from '../world/wildernessRuntime';
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonRuntime';
+import { buildHollowKingRuntime } from '../bosses/hollowKingRuntime';
+import {
+  stepHollowKing, validateHollowKingState,
+  type HollowKingState, type HollowKingActionPlan, type HollowKingGeometry
+} from '../bosses/hollowKingPhases';
 import type { CryptThemePlan, CryptInteractable } from '../world/cryptTheme';
 import {
   createChunkIndex, createWorldFactLedger, applyWorldFact, makeWorldFact,
@@ -222,6 +227,9 @@ export class GameSimulation {
   private readonly cryptArmedTraps = new Map<string, number>();
   private readonly miniBossStates = new Map<string, MiniBossState>();
   private readonly defeatedMiniBossIds = new Set<MiniBossId>();
+  private hollowKing: HollowKingState | null = null;
+  private readonly hollowKingAddActors = new Map<string, string>();
+  private readonly hollowKingHazardDelays = new Map<string, number>();
   private pendingCryptPropId: string | null = null;
   private worldIndex: ChunkIndex | null = null;
   private worldFacts: WorldFactLedger | null = null;
@@ -561,6 +569,111 @@ export class GameSimulation {
         cooldown: 0.9, intent: null, effects: [], abilityCooldowns: {}
       });
       this.miniBossStates.set(placement.id, state);
+    }
+  }
+
+
+  /** An enemy attack is resolved only after Agent33 has finished its visual warning. */
+  private hollowKingHit(geometry: HollowKingGeometry): boolean {
+    if (!this.player.alive || this.zone !== 'crypt') return false;
+    const dx = this.player.x - geometry.position.x;
+    const dy = this.player.y - geometry.position.y;
+    if (Math.hypot(dx, dy) > geometry.radius + ACTOR_RADIUS * 0.3) return false;
+    if (geometry.shape === 'circle') return true;
+    const angle = Math.atan2(dy, dx);
+    const difference = Math.atan2(Math.sin(angle - geometry.angleRadians),
+      Math.cos(angle - geometry.angleRadians));
+    return Math.abs(difference) <= geometry.arcDegrees * Math.PI / 360;
+  }
+
+  private hollowKingAction(action: HollowKingActionPlan, phase: number): void {
+    const boss = this.units.find(unit => unit.actor.id === 'crypt_lord-4');
+    if (!boss) return;
+    if (action.type === 'hitWindow') {
+      if (this.hollowKingHit(action.geometry)) {
+        this.dealPlayerDamage(action.maxDamage, 'shadow', boss.actor.id);
+      }
+    } else if (action.type === 'spawnAdd') {
+      const add = action.add;
+      // The planner reserves the ID until the authoritative actor is retired.
+      if (this.units.length >= PACK_SIZE + 2
+        || !canOccupy(add.position, ACTOR_RADIUS, this.world.obstacles)) {
+        this.hollowKingAddActors.set(add.id, '');
+      } else {
+        const base = ENEMY_DEFINITIONS.skeleton;
+        const index = this.units.length;
+        const actorId = 'summon-' + this.wave + '-' + index;
+        this.units.push({
+          actor: { id: actorId, type: 'skeleton', x: add.position.x, y: add.position.y,
+            health: base.health, maxHealth: base.health, alive: true },
+          summoned: true, intent: null, cooldown: 0.8, effects: [], abilityCooldowns: {}
+        });
+        this.hollowKingAddActors.set(add.id, actorId);
+      }
+    }
+    if (action.type === 'intro' || action.type === 'phaseChanged'
+      || action.type === 'telegraph' || action.type === 'hitWindow'
+      || action.type === 'hazardStart' || action.type === 'hazardExpire'
+      || action.type === 'spawnAdd') {
+      const point = action.type === 'telegraph' ? action.warning.geometry.position
+        : action.type === 'hitWindow' ? action.geometry.position
+        : action.type === 'hazardStart' ? action.hazard.position
+        : action.type === 'spawnAdd' ? action.add.position : boss.actor;
+      const radius = action.type === 'telegraph' ? action.warning.geometry.radius
+        : action.type === 'hitWindow' ? action.geometry.radius
+        : action.type === 'hazardStart' ? action.hazard.radius : 72;
+      this.events.push({ type: 'hollowKingCue', kind: action.type,
+        x: point.x, y: point.y, radius, phase,
+        ...(action.type === 'telegraph' ? { ability: action.warning.ability }
+          : action.type === 'hitWindow' ? { ability: action.ability } : {}) });
+    }
+  }
+
+  /** Reusable pure phase machine; simulation alone owns actual damage and adds. */
+  private updateHollowKing(unit: EnemyUnit, dt: number): void {
+    if (!unit.actor.alive || !this.player.alive || this.zone !== 'crypt'
+      || this.dungeonStage !== 1) return;
+    if (!this.hollowKing) {
+      this.hollowKing = buildHollowKingRuntime(this.world.seed, unit.actor.maxHealth).initial;
+    }
+    const state = this.hollowKing;
+    const arena = state.arena;
+    // Outside the arena the king is dormant; the return portal is never locked.
+    if (this.player.x < arena.bounds.x + ACTOR_RADIUS
+      || this.player.y < arena.bounds.y + ACTOR_RADIUS
+      || this.player.x > arena.bounds.x + arena.bounds.width - ACTOR_RADIUS
+      || this.player.y > arena.bounds.y + arena.bounds.height - ACTOR_RADIUS) return;
+    const acknowledged: string[] = [];
+    for (const [id, actorId] of this.hollowKingAddActors) {
+      if (!state.addRequests.some(req => req.id === id)) {
+        this.hollowKingAddActors.delete(id);
+      } else if (!actorId || !this.units.some(other =>
+        other.actor.id === actorId && other.actor.alive)) {
+        acknowledged.push(id);
+      }
+    }
+    // Dead summoned bodies are not persistent entities and free add actor budget.
+    while (this.units.length > PACK_SIZE && this.units[this.units.length - 1]?.summoned
+      && !this.units[this.units.length - 1]!.actor.alive) this.units.pop();
+    const result = stepHollowKing(state, {
+      expectedRevision: state.revision, deltaSeconds: dt,
+      currentHealth: unit.actor.health, target: { x: this.player.x, y: this.player.y },
+      actorId: 'crypt_lord-4', resolvedAddIds: acknowledged
+    });
+    if (!result.ok) return;
+    this.hollowKing = result.state;
+    for (const id of acknowledged) this.hollowKingAddActors.delete(id);
+    for (const action of result.actions) this.hollowKingAction(action, result.state.phase);
+    for (const hazard of result.state.hazards) {
+      const remaining = Math.max(0, (this.hollowKingHazardDelays.get(hazard.id) ?? 0) - dt);
+      if (distance(this.player, hazard.position) <= hazard.radius && remaining === 0) {
+        this.dealPlayerDamage(7 + result.state.phase * 2, 'shadow', unit.actor.id);
+        this.hollowKingHazardDelays.set(hazard.id, 0.8);
+      } else this.hollowKingHazardDelays.set(hazard.id, remaining);
+    }
+    const active = new Set(result.state.hazards.map(h => h.id));
+    for (const id of this.hollowKingHazardDelays.keys()) {
+      if (!active.has(id)) this.hollowKingHazardDelays.delete(id);
     }
   }
 
@@ -2094,6 +2207,9 @@ export class GameSimulation {
     this.pendingCryptPropId = null;
     this.cryptArmedTraps.clear();
     this.miniBossStates.clear();
+    this.hollowKing = null;
+    this.hollowKingAddActors.clear();
+    this.hollowKingHazardDelays.clear();
     this.wave = 0;
     this.units = destination === 'crypt'
       ? createCryptPack(0, this.level, this.world.encounterPositions)
@@ -2187,6 +2303,12 @@ export class GameSimulation {
           this.wave = 1;
           this.units = createCryptPack(1, this.level, CRYPT_RUNTIME_BOSS_POSITIONS);
           this.seedElitePack();
+          const king = this.units.find(unit => unit.actor.id === 'crypt_lord-4');
+          if (king) {
+            this.hollowKing = buildHollowKingRuntime(this.world.seed, king.actor.maxHealth).initial;
+          }
+          this.hollowKingAddActors.clear();
+          this.hollowKingHazardDelays.clear();
           this.statusEffects.enemies = {};
           this.respawnTimer = 0;
           this.selectedTargetId = null;
@@ -2328,7 +2450,9 @@ export class GameSimulation {
     this.tickCryptTraps(dt);
     if (this.player.alive) {
       for (const unit of this.units) {
-        if (this.miniBossStates.has(unit.actor.id)) this.updateMiniBoss(unit, dt);
+        if (unit.actor.id === 'crypt_lord-4' && this.zone === 'crypt' && this.dungeonStage === 1) {
+          this.updateHollowKing(unit, dt);
+        } else if (this.miniBossStates.has(unit.actor.id)) this.updateMiniBoss(unit, dt);
         else this.updateEnemyAI(unit, dt);
         if (!this.player.alive) break;
       }
@@ -2477,6 +2601,21 @@ export class GameSimulation {
 
   private defeatEnemy(unit: EnemyUnit): void {
     unit.actor.alive = false;
+    if (unit.actor.id === 'crypt_lord-4' && this.hollowKing
+      && !this.hollowKing.deathEmitted) {
+      const state = this.hollowKing;
+      const result = stepHollowKing(state, {
+        expectedRevision: state.revision, deltaSeconds: 0, currentHealth: 0,
+        target: { ...state.arena.bossSpawn }, actorId: 'crypt_lord-4'
+      });
+      if (result.ok) {
+        this.hollowKing = result.state;
+        for (const action of result.actions) this.hollowKingAction(action, result.state.phase);
+      }
+      this.hollowKingAddActors.clear();
+      this.hollowKingHazardDelays.clear();
+      this.units.splice(PACK_SIZE);
+    }
     const mini = this.miniBossStates.get(unit.actor.id);
     if (mini && !this.defeatedMiniBossIds.has(mini.bossId)) {
       const result = stepMiniBoss(mini, {
@@ -2717,6 +2856,8 @@ export class GameSimulation {
       miniBossStates: Object.fromEntries([...this.miniBossStates]
         .map(([id, state]) => [id, structuredClone(state)])),
       miniBossDefeatedIds: [...this.defeatedMiniBossIds],
+      hollowKing: this.hollowKing ? structuredClone(this.hollowKing) : null,
+      hollowKingAddActorIds: Object.fromEntries(this.hollowKingAddActors),
       paused: this.paused,
       status
     };
@@ -2737,6 +2878,26 @@ export class GameSimulation {
     const cryptManifest = layout && (s.zone === 'crypt'
       || !!s.cryptUsedPropIds?.length || !!s.cryptTriggeredTrapIds?.length)
       ? buildCryptWorld(s.worldSeed).theme : null;
+    const validHollowKing = (state: unknown): boolean => {
+      if (state === undefined || state === null) return true;
+      if (!validateHollowKingState(state) || s.zone !== 'crypt'
+        || s.dungeonStage !== 1 || state.seed !== s.worldSeed) return false;
+      const unit = Array.isArray(s.enemies) ? s.enemies.find(enemy =>
+        enemy?.actor?.id === 'crypt_lord-4') : null;
+      return !!unit && unit.actor.type === 'crypt_lord'
+        && state.maxHealth === unit.actor.maxHealth;
+    };
+    const validHollowAdds = (value: unknown): boolean => {
+      if (value === undefined) return true;
+      if (!value || typeof value !== 'object' || Array.isArray(value)
+        || Object.keys(value).length > 3 || !validHollowKing(s.hollowKing)) return false;
+      const entries = Object.entries(value);
+      return entries.every(([requestId, actorId]) =>
+        typeof actorId === 'string' && (actorId === '' || (
+          Array.isArray(s.enemies) && s.enemies.some(enemy =>
+            enemy?.actor?.id === actorId && enemy.summoned === true)))
+        && s.hollowKing?.addRequests.some(add => add.id === requestId));
+    };
     const validMiniStates = (states: unknown): boolean => {
       if (states === undefined) return true;
       if (!states || typeof states !== 'object' || Array.isArray(states)) return false;
@@ -2757,6 +2918,8 @@ export class GameSimulation {
         || !validateMapDiscovery(s.mapDiscovery, restoredMapWorld)))
       || (s.worldFacts !== undefined && (!restoredIndex
         || !validateWorldFactLedger(restoredIndex, s.worldFacts)))
+      || !validHollowKing(s.hollowKing)
+      || !validHollowAdds(s.hollowKingAddActorIds)
       || !validMiniStates(s.miniBossStates)
       || (s.miniBossDefeatedIds !== undefined && (!Array.isArray(s.miniBossDefeatedIds)
         || s.miniBossDefeatedIds.length > MINI_BOSS_IDS.length
@@ -2913,6 +3076,11 @@ export class GameSimulation {
     this.groundLoot = s.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! }));
     this.player = { ...s.player };
     this.units = s.enemies.map(cloneUnit);
+    this.hollowKing = s.hollowKing ? structuredClone(s.hollowKing) : null;
+    this.hollowKingAddActors.clear();
+    for (const [id, actorId] of Object.entries(s.hollowKingAddActorIds ?? {}))
+      this.hollowKingAddActors.set(id, actorId);
+    this.hollowKingHazardDelays.clear();
     this.miniBossStates.clear();
     for (const [id, state] of Object.entries(s.miniBossStates ?? {})) {
       this.miniBossStates.set(id, structuredClone(state));
@@ -2981,6 +3149,9 @@ export class GameSimulation {
     this.pendingCryptPropId = null;
     this.miniBossStates.clear();
     this.defeatedMiniBossIds.clear();
+    this.hollowKing = null;
+    this.hollowKingAddActors.clear();
+    this.hollowKingHazardDelays.clear();
     this.dungeonStage = 0;
     this.dungeonCleared = false;
     this.pendingPortal = false;
