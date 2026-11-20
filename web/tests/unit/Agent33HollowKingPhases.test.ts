@@ -320,6 +320,35 @@ describe('Agent 33 — The Hollow King phase machine', () => {
     expect(state).toEqual(fresh());
   });
 
+  it('rejects forged warning IDs, cross-phase abilities and synthetic hazard/add IDs', () => {
+    const announced = success(fresh(), 500, 0).state;
+    expect(announced.mode).toBe('telegraph');
+    const warning = announced.warning!;
+    const forgedWarning = { ...announced, warning: { ...warning, id: 'unrelated-warning' } };
+    const wrongAbility = {
+      ...announced, activeAbility: 'rune_storm',
+      warning: { ...warning, ability: 'rune_storm',
+        localizationKey: 'boss.hollowKing.ability.rune_storm' }
+    };
+    const badHazard = { ...announced, hazards: [{
+      id: 'crypt/42/hollow-king/hazard/bad',
+      type: 'rune_storm', position: { x: 1600, y: 775 },
+      radius: 30, durationSeconds: 1.5, remainingSeconds: 1.4
+    }] };
+    const badAdd = { ...announced, addRequests: [{
+      id: 'crypt/42/hollow-king/add/fake', enemyType: 'skeleton',
+      position: { x: 1420, y: 615 }
+    }] };
+    for (const snapshot of [forgedWarning, wrongAbility, badHazard, badAdd]) {
+      expect(validateHollowKingState(snapshot)).toBe(false);
+      const result = stepHollowKing(snapshot as HollowKingState, {
+        expectedRevision: announced.revision, deltaSeconds: 0.1,
+        currentHealth: announced.health, target: TARGET
+      });
+      expect(result.ok).toBe(false);
+    }
+  });
+
   it('rejects corrupted state or excessive arrays without hanging and supports JSON replay', () => {
     const state = fresh(0xffffffff);
     const restored = JSON.parse(JSON.stringify(state)) as HollowKingState;
