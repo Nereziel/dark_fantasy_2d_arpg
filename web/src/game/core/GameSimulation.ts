@@ -267,7 +267,7 @@ export class GameSimulation {
         this.movePath = [];
         this.pickupTarget = null;
         this.pendingNpc = null;
-    this.pendingTown = null;
+        this.pendingTown = null;
         this.pendingPortal = false;
       }
       return;
@@ -296,7 +296,7 @@ export class GameSimulation {
       this.pendingAim = null;
       this.pickupTarget = null;
       this.pendingNpc = null;
-    this.pendingTown = null;
+      this.pendingTown = null;
       this.pendingPortal = false;
       return;
     }
@@ -333,6 +333,23 @@ export class GameSimulation {
       }
       return;
     }
+    if (command.type === 'useTownService') {
+      const entry = townEntry(command.entryId);
+      if (!entry || !this.player.alive || this.zone !== 'wilderness'
+        || !canInteractTownEntry(this.player, entry.id)) return;
+      const healer = entry.role === 'healer';
+      const restorer = entry.role === 'potionVendor';
+      if (!healer && !restorer) return;
+      const price = healer ? 15 : 12;
+      if (this.gold < price) return;
+      if (healer && this.player.health >= this.player.maxHealth) return;
+      if (restorer && this.resource >= deriveStats(this.classId, this.equipment, this.level).maxResource) return;
+      this.gold -= price;
+      if (healer) this.player.health = this.player.maxHealth;
+      if (restorer) this.resource = deriveStats(this.classId, this.equipment, this.level).maxResource;
+      this.events.push({ type: 'townServiceUsed', entryId: entry.id, goldSpent: price });
+      return;
+    }
     if (!this.player.alive || this.paused) return;
     if (command.type === 'swapInventory') { this.updateInventory(planSwap(this.inventoryState(), command.fromIndex, command.toIndex, this.inventoryRules())); return; }
     if (command.type === 'sortInventory') { this.updateInventory(sortInventory(this.inventoryState(), this.inventoryRules())); return; }
@@ -348,7 +365,7 @@ export class GameSimulation {
       this.attackTarget = null;
       this.pickupTarget = null;
       this.pendingNpc = null;
-    this.pendingTown = null;
+      this.pendingTown = null;
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingPortal = false;
@@ -366,7 +383,7 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
-    this.pendingTown = null;
+      this.pendingTown = null;
       this.pendingObject = null;
       this.pendingPortal = true;
       if (distance(this.player, this.portalPosition) <= 78) this.changeZone();
@@ -386,7 +403,7 @@ export class GameSimulation {
       this.pendingObject = null;
       this.pendingPortal = false;
       this.pendingNpc = null;
-    this.pendingTown = null;
+      this.pendingTown = null;
       if (canInteractTownEntry(this.player, entry.id)) {
         this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
         this.pendingTown = null;
@@ -395,24 +412,8 @@ export class GameSimulation {
       }
       return;
     }
-    if (command.type === 'useTownService') {
-      const entry = townEntry(command.entryId);
-      if (!entry || !this.player.alive || this.zone !== 'wilderness'
-        || !canInteractTownEntry(this.player, entry.id)) return;
-      const healer = entry.role === 'healer';
-      const restorer = entry.role === 'potionVendor';
-      if (!healer && !restorer) return;
-      const price = healer ? 15 : 12;
-      if (this.gold < price) return;
-      if (healer && this.player.health >= this.player.maxHealth) return;
-      if (restorer && this.resource >= deriveStats(this.classId, this.equipment, this.level).maxResource) return;
-      this.gold -= price;
-      if (healer) this.player.health = this.player.maxHealth;
-      if (restorer) this.resource = deriveStats(this.classId, this.equipment, this.level).maxResource;
-      this.events.push({ type: 'townServiceUsed', entryId: entry.id, goldSpent: price });
-      return;
-    }
     if (command.type === 'interactNpc') {
+      this.pendingTown = null;
       this.warriorAction = null;
       this.classAction = null;
       this.warriorPending = null;
@@ -468,7 +469,7 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
-    this.pendingTown = null;
+      this.pendingTown = null;
       this.pendingObject = null;
       this.pendingPortal = false;
     } else if (command.type === 'attack') {
@@ -484,7 +485,7 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
-    this.pendingTown = null;
+      this.pendingTown = null;
       this.pendingObject = null;
       this.pendingPortal = false;
     } else if (command.type === 'pickup' && this.groundLoot.some(loot => loot.id === command.id)) {
@@ -494,7 +495,7 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
-    this.pendingTown = null;
+      this.pendingTown = null;
       this.pendingObject = null;
       this.pendingPortal = false;
     }
@@ -930,7 +931,7 @@ export class GameSimulation {
         this.attackTarget = null;
         this.pickupTarget = null;
         this.pendingNpc = null;
-    this.pendingTown = null;
+        this.pendingTown = null;
         this.pendingObject = null;
         this.pendingPortal = false;
         return;
@@ -1283,7 +1284,7 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
-    this.pendingTown = null;
+      this.pendingTown = null;
       this.movePath = [];
       this.attackTarget = null;
       this.pickupTarget = null;
@@ -1732,7 +1733,7 @@ export class GameSimulation {
       if (nearNpc(this.player, this.pendingNpc)) {
         const id = this.pendingNpc;
         this.pendingNpc = null;
-    this.pendingTown = null;
+        this.pendingTown = null;
         this.events.push({ type: 'npcDialogue', npcId: id });
       } else {
         this.follow(this.player, NPC_POSITIONS[this.pendingNpc], speed, dt, NPC_INTERACT_RANGE - 10);
