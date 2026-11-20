@@ -1,6 +1,6 @@
 # INTEGRATION_G — Hlavní integrátor, Wave G (Prompty 26–28)
 
-**Status: připravený integrační runbook, NIKOLI dokončená implementace.** Původní zadání: `2d_arpg_implementation_prompts.md` Prompty **26 Corrupted Crypt, 27 Mini Boss Framework, 28 The Hollow King**. Worksets a testy [WAVE_G.md](WAVE_G.md), [31](31/TASK.md), [32](32/TASK.md), [33](33/TASK.md).
+**Status: integrační runbook s provedeným CORE INTEGRATION; plná acceptance zůstává otevřená.** Původní zadání: `2d_arpg_implementation_prompts.md` Prompty **26 Corrupted Crypt, 27 Mini Boss Framework, 28 The Hollow King**. Worksets a testy [WAVE_G.md](WAVE_G.md), [31](31/TASK.md), [32](32/TASK.md), [33](33/TASK.md).
 
 ## 0. Preconditions a baseline
 
@@ -62,3 +62,15 @@ Pro každý PR:
 ### Handoff formulář každého agenta (v textu draft PR)
 
 Uvést `BASE_SHA`, branch, přesně dva soubory, exported API+typy, deterministic seeds/edge matrix, RED→GREEN evidence, targeted+agent test výsledky, HEAD CI URL a přímé integrátorské volací instrukce; vždy popsat, co **NENÍ** napojeno a patří runtime PR. Nepoužívat dokumentační PR jako náhražku testované implementace.
+
+ 
+## Evidence-backed closeout — 20. listopadu 2026
+
+- **Baseline agentů:** společný `ed91d615c4e84d33c78832ceeb251d6e8434c605`, clean 2-file diffs a GREEN CI #56 (Agent 31), #57 (Agent 32), #58 (Agent 33), sloučeno v tomto pořadí.
+- **Prompt 26:** [#59](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/59) room props/visuals/lighting/phaser fallback a [#60](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/60) skutečné klikatelné prop/chest + odložené jednorázové pasti, bounded world facts. Zbývá sound/atlas a full secret-room interakce s loot do inventáře.
+- **Prompt 27:** [#61](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/61) připojeny všechny čtyři minibossové, hazard a summons budget, Morrow původní quest ID, CS/EN phase názvy, jednorázový reward, safe town, validované snapshot/world fakta.
+- **Prompt 28:** [#62](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/62) bezpečná boss aréna. [#63](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/63) třífázový Hollow King, skutečné kolizní hits po vizuálním varování, P2 summon skeletal adds, P3 zóny shadow hazardů, stálý UI bar a CS/EN. Zachována `crypt_lord-4`, `crypt_lord_slain`, `crypt_lord_fallen`, `dungeonCleared`, stávající `bossGuaranteedLoot` i character-only v11.
+- **Konečné runtime PR HEAD:** `407adea00fb69b86a420e88797b5f1bf64571b0c`, [Actions run `44787241680`](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44787241680) COMPLETE SUCCESS: **696/696 unit (72 test files), 14/14 Playwright Chromium**, typecheck 0 warnings/errors, build, legacy reference. **Herní runtime main SHA po #63:** `ab8aa0ca345ab71fa2aafd02885cfc207daaee88`. GitHub PR deploy=skipped; **samostatný Pages deployment na toto SHA dosud nebyl nezávisle prokázán**.
+- **Ověřené regrese během integrace:** první #61 typecheck vadné discriminated union `telegraph | impact`, následující unit test odhalil miniboss útok v safe CAMP; integrátor obojí opravil a teprve po GREEN merged. #63 test původně očekával `warning=null` po skoku HP do 3. fáze, ale pure planner generuje přímo nový phase-3 warning; opravena chybná assertion, všech 696 testů poté prošlo. Žádné původní testy nebyly vypnuty.
+- **Nedosahuje kompletní acceptance:** originální audio/sprite atlas assets nejsou dodány, truhly dávají základní gold namísto úplného dungeon treasure-item systému, secret-room reveal mechanika není dokončena, full no-debug browser průchod Aktu I a celé 3-fázové boss bitvy s návratem do města není automatizován, offscreen AI/loot resource budget + perf a volitelné wilderness POI zůstávají dluh Wave E/F. Balance tříd a skutečný post-merge Pages deploy pro runtime SHA také zbývá. **Prompty 26–28 označovat CORE INTEGRATED, ne COMPLETE.**
+- **Další postup:** samostatný hardening acceptance PR, poté Wave H: originální Prompt **29 — Death and Respawn** s novými nekolizními write-sety. Waypoint travel = Prompt 36.
