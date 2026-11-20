@@ -89,6 +89,8 @@ import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planS
   selectVendorStock, type EconomyFailure } from '../trade/economyRules';
 import { townEntry, canInteractTownEntry, getTownManifest } from '../world/townManifest';
 import { activatedWaypoints, planWaypointTravel, waypointDefinition } from '../world/waypointTravel';
+import { planWorldEvents, projectWorldEventViews, worldEventReward,
+  type WorldEventPlan, type WorldEventId } from '../world/worldEvents';
 import { STASH_SIZE, emptyStashTabs, planStashDeposit, planStashWithdraw,
   planStashMove, planStashSort, validateStashContents, validStashTab,
   type StashTabs } from '../inventory/stashRules';
@@ -244,6 +246,8 @@ export class GameSimulation {
   private quest: QuestProgress = freshQuest();
   private actILedger: QuestLedger = createActIQuestLedger(freshQuest())!;
   private storyFeatures: readonly WildernessFeature[] = [];
+  private worldEventPlans: WorldEventPlan[] = [];
+  private activeWorldEventId: WorldEventId | null = null;
   private cryptTheme: CryptThemePlan | null = null;
   private readonly cryptUsedPropIds = new Set<string>();
   private readonly cryptTriggeredTrapIds = new Set<string>();
@@ -322,6 +326,8 @@ export class GameSimulation {
     this.worldFacts = createWorldFactLedger(index, 'hero');
     this.mapWorld = input;
     this.mapDiscovery = initial.value;
+    this.worldEventPlans = planWorldEvents(world.layout.seed,world.layout,world.features);
+    this.activeWorldEventId = null;
   }
 
   /** World facts are idempotent historical observations, not a second reward executor. */
@@ -403,6 +409,94 @@ export class GameSimulation {
     }
   }
 
+  /** Only previously discovered event anchors may enter the UI projection. */
+  private eventViews(): ReturnType<typeof projectWorldEventViews> {
+    if (this.zone !== 'wilderness') return [];
+    const completed=(this.worldFacts?.entries??[])
+      .filter(fact=>fact.kind==='eventCompleted').map(fact=>fact.entityId);
+    return projectWorldEventViews(this.worldEventPlans,
+      this.mapDiscovery?.discoveredLandmarkIds??[],completed,this.activeWorldEventId,
+      this.units.map(unit=>({id:unit.actor.id,alive:unit.actor.alive})));
+  }
+
+  /** Simulation-only spawn at an optional seed-validated event marker. */
+  private activateNearbyWorldEvent():void {
+    if(this.zone!=='wilderness'||!this.player.alive||this.paused
+      ||this.activeWorldEventId||this.units.length!==PACK_SIZE)return;
+    for(const plan of this.worldEventPlans) {
+      if(this.worldFacts?.entries.some(fact=>
+        fact.kind==='eventCompleted'&&fact.entityId===plan.id)
+        ||!this.mapDiscovery?.discoveredLandmarkIds.includes(plan.id)
+        ||distance(this.player,plan.position)>plan.triggerRadius
+        ||!plan.enemySpawns.every(spawn=>
+          canOccupy(spawn.position,ACTOR_RADIUS,this.world.obstacles))
+        ||this.groundLoot.length>92)continue;
+      this.activeWorldEventId=plan.id;
+      for(const [index,spawn] of plan.enemySpawns.entries()) {
+        const definition=ENEMY_DEFINITIONS[spawn.type];
+        const health=definition.health+Math.max(0,this.level-1)*12;
+        this.units.push({
+          actor:{id:spawn.id,type:spawn.type,x:spawn.position.x,y:spawn.position.y,
+            health,maxHealth:health,alive:true},
+          intent:null,cooldown:0.65+index*0.25,effects:[],abilityCooldowns:{}
+        });
+      }
+      this.events.push({type:'worldEventStarted',id:plan.id,kind:plan.kind,
+        x:plan.position.x,y:plan.position.y});
+      return;
+    }
+  }
+
+  /**
+   * A complete event is a world fact before it is an award. Dead partial
+   * event guards never grant per-enemy gold, XP or drops, preventing reload
+   * farming. A generated event can never overwrite quest/portal geometry.
+   */
+  private finishWorldEventIfReady(actorId:string):void {
+    const plan=this.worldEventPlans.find(event=>event.id===this.activeWorldEventId);
+    if(!plan||!plan.enemySpawns.some(spawn=>spawn.id===actorId)
+      ||plan.enemySpawns.some(spawn=>this.units.some(unit=>
+        unit.actor.id===spawn.id && unit.actor.alive)))return;
+    const enemyIds=new Set(plan.enemySpawns.map(spawn=>spawn.id));
+    this.activeWorldEventId=null;
+    this.units=this.units.filter(unit=>!enemyIds.has(unit.actor.id));
+    for(const id of enemyIds)delete this.statusEffects.enemies[id];
+    if(!this.worldIndex||!this.worldFacts)return;
+    const fact=makeWorldFact(this.worldIndex,this.worldFacts.worldInstanceId,
+      'eventCompleted',plan.id);
+    const applied=applyWorldFact(this.worldIndex,this.worldFacts,fact);
+    if(!applied.changed)return;
+    this.worldFacts=applied.state;
+    this.kills+=plan.enemySpawns.length; // commit fight kills only with the one-shot fact
+    const reward=worldEventReward(plan.kind,this.level);
+    if(!reward)return;
+    this.gold=Math.min(Number.MAX_SAFE_INTEGER,this.gold+reward.gold);
+    for(const [id,quantity] of Object.entries(reward.materials)) {
+      const key=id as keyof Materials;
+      this.materials[key]=Math.min(1_000_000,(this.materials[key]??0)+quantity);
+    }
+    this.awardExperience(reward.xp);
+    const itemId='world-event-'+this.world.seed+'-'+plan.id.replaceAll('.','_')+'-reward';
+    const item=rollItemForBase(reward.itemBaseId,itemId,this.level,'UNCOMMON',
+      new SeededRng((this.world.seed ^ (plan.id==='wild.event.1' ? 0x9c13ab : 0x715de4))>>>0));
+    let grantedId:string|null=null;
+    const ownedIds=new Set([...this.inventory,...this.stash,...this.stashTabs.flat(),
+      ...Object.values(this.equipment),...this.groundLoot.map(loot=>loot.item)]
+      .filter((value):value is Item=>value!==null).map(value=>value.id));
+    if(item&&!ownedIds.has(itemId)) {
+      const free=this.inventory.findIndex(slot=>slot===null);
+      if(free>=0){this.inventory[free]=item;grantedId=item.id;}
+      else if(this.groundLoot.length<100
+        && canOccupy(plan.position,0,this.world.obstacles)){
+        this.groundLoot.push({id:itemId,x:plan.position.x,y:plan.position.y,item});
+        this.events.push({type:'loot',id:itemId});
+        grantedId=item.id;
+      }
+    }
+    this.events.push({type:'worldEventCompleted',id:plan.id,kind:plan.kind,
+      gold:reward.gold,xp:reward.xp,x:plan.position.x,y:plan.position.y,itemId:grantedId});
+  }
+
   /** Separate world-instance persistence; no seed or world facts in CharacterProgress v11. */
   worldProgress(): WorldSessionProgress | null {
     if (!this.mapDiscovery || !this.worldFacts) return null;
@@ -443,6 +537,8 @@ export class GameSimulation {
     for (const id of defeated) this.miniBossStates.delete(id);
     this.mapDiscovery = structuredClone(progress.mapDiscovery);
     this.worldFacts = structuredClone(progress.worldFacts);
+    this.activeWorldEventId = null;
+    this.units = this.units.filter(unit => !unit.actor.id.startsWith('world-event.'));
     this.activatedCheckpointIds.clear();
     for (const id of checkpoints) this.activatedCheckpointIds.add(id);
     if (this.activatedCheckpointIds.has('shrine.soul-shrine')) {
@@ -851,6 +947,7 @@ export class GameSimulation {
       this.zone, this.player, [...this.activatedCheckpointIds], wilderness.layout
     );
     this.zone = 'wilderness';
+    this.activeWorldEventId = null;
     this.world = wilderness.layout;
     this.storyFeatures = wilderness.features;
     this.cryptTheme = null;
@@ -2586,6 +2683,7 @@ export class GameSimulation {
     const destination: ZoneId = this.zone === 'wilderness' ? 'crypt' : 'wilderness';
     const seed = this.world.seed;
     this.zone = destination;
+    this.activeWorldEventId = null;
     const wilderness = destination === 'wilderness' ? buildWilderness(seed) : null;
     const crypt = destination === 'crypt' ? buildCryptWorld(seed) : null;
     this.world = wilderness?.layout ?? crypt!.layout;
@@ -2842,6 +2940,7 @@ export class GameSimulation {
 
     this.discoverStoryLocations();
     this.observeExploration();
+    this.activateNearbyWorldEvent();
     this.tickCryptTraps(dt);
     if (this.player.alive) {
       for (const unit of this.units) {
@@ -2995,7 +3094,12 @@ export class GameSimulation {
   }
 
   private defeatEnemy(unit: EnemyUnit): void {
+    if(!unit.actor.alive)return;
+    const eventEnemy=this.activeWorldEventId!==null
+      && this.worldEventPlans.some(plan=>plan.id===this.activeWorldEventId
+        && plan.enemySpawns.some(spawn=>spawn.id===unit.actor.id));
     unit.actor.alive = false;
+    unit.actor.health = 0;
     if (unit.actor.id === 'crypt_lord-4' && this.hollowKing
       && !this.hollowKing.deathEmitted) {
       const state = this.hollowKing;
@@ -3048,11 +3152,14 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
     }
-    this.kills++;
-    this.gold += 12 + this.level * 3;
-    this.awardExperience(Math.round(rewardForActivity('enemy', this.level, this.level)
-      * (unit.elite ? 1.75 : 1)));
-    if (this.zone === 'wilderness') {
+    if(!eventEnemy)this.kills++;
+    // Partial event kills yield no per-enemy gold, XP or loot.
+    if(!eventEnemy) {
+      this.gold += 12 + this.level * 3;
+      this.awardExperience(Math.round(rewardForActivity('enemy', this.level, this.level)
+        * (unit.elite ? 1.75 : 1)));
+    }
+    if (this.zone === 'wilderness' && !eventEnemy) {
       this.commitQuestTransition(
         advanceObjective(ACT_I_QUEST_CATALOG, this.actILedger,
           FIRST_QUEST_ID, 'enemy_defeated', 'enemy_' + this.kills), FIRST_QUEST_ID
@@ -3070,8 +3177,9 @@ export class GameSimulation {
       this.gold += 100;
       this.awardExperience(rewardForActivity('boss', this.level, this.level));
     }
-    this.dropEnemyLoot(unit);
+    if(!eventEnemy)this.dropEnemyLoot(unit);
     this.events.push({ type: 'defeat', targetId: unit.actor.id, kills: this.kills });
+    if(eventEnemy)this.finishWorldEventIfReady(unit.actor.id);
     if (this.aliveEnemies.length === 0) this.respawnTimer = this.zone === 'crypt' && this.dungeonStage === 1 ? 0 : 3.2;
   }
   /** The one runtime path for normal, elite and boss drops; rolls share catalog+affixes. */
@@ -3294,6 +3402,7 @@ export class GameSimulation {
         .map(([id, state]) => [id, structuredClone(state)])),
       miniBossDefeatedIds: [...this.defeatedMiniBossIds],
       activatedCheckpointIds: [...this.activatedCheckpointIds],
+      worldEvents: this.eventViews(),
       respawnAt: this.respawnAt ? structuredClone(this.respawnAt) : null,
       respawnProtectionSeconds: this.respawnProtectionSeconds,
       hollowKing: this.hollowKing ? structuredClone(this.hollowKing) : null,
@@ -3354,6 +3463,35 @@ export class GameSimulation {
         && Array.isArray(s.enemies) && s.enemies.some(unit => unit?.actor?.id === id
           && unit.actor.type === getMiniBossDefinition(id)?.enemyType));
     };
+    const eventPlans = restoredWilderness
+      ? planWorldEvents(s.worldSeed,restoredWilderness.layout,restoredWilderness.features) : [];
+    const activeViews=Array.isArray(s?.worldEvents)
+      ? s.worldEvents.filter(view=>view?.status==='active') : [];
+    const activeEventPlan=activeViews.length===1
+      ? eventPlans.find(plan=>plan.id===activeViews[0]?.id) : undefined;
+    const eventUnits=Array.isArray(s?.enemies)
+      ? s.enemies.filter(unit=>unit?.actor?.id?.startsWith('world-event.')) : [];
+    const validEventSnapshot=():boolean => {
+      if(s.worldEvents===undefined)return eventUnits.length===0;
+      if(!Array.isArray(s.worldEvents)||activeViews.length>1||!Array.isArray(s.enemies)
+        ||(activeViews.length>0&&!activeEventPlan)
+        ||((activeEventPlan===undefined)!==(eventUnits.length===0)))return false;
+      if(activeEventPlan && (s.zone!=='wilderness'
+        ||eventUnits.length!==activeEventPlan.enemySpawns.length
+        ||!eventUnits.some(unit=>unit.actor.alive)
+        ||eventUnits.some(unit=>!activeEventPlan.enemySpawns.some(spawn=>
+          spawn.id===unit.actor.id&&spawn.type===unit.actor.type))
+        ||s.worldFacts?.entries.some(fact=>
+          fact.kind==='eventCompleted'&&fact.entityId===activeEventPlan.id)))return false;
+      const completed=(s.worldFacts?.entries??[])
+        .filter(fact=>fact.kind==='eventCompleted').map(fact=>fact.entityId);
+      const expected=s.zone==='wilderness' ? projectWorldEventViews(
+        eventPlans,s.mapDiscovery?.discoveredLandmarkIds??[],completed,
+        activeEventPlan?.id??null,s.enemies.map(unit=>({
+          id:unit.actor.id,alive:unit.actor.alive
+        }))) : [];
+      return JSON.stringify(s.worldEvents)===JSON.stringify(expected);
+    };
     const validDungeonIds = (ids: unknown, known: readonly string[]): boolean =>
       ids === undefined || (Array.isArray(ids) && ids.length <= 128
         && ids.every(id => typeof id === 'string' && known.includes(id))
@@ -3374,6 +3512,7 @@ export class GameSimulation {
       || !validHollowKing(s.hollowKing)
       || !validHollowAdds(s.hollowKingAddActorIds)
       || !validMiniStates(s.miniBossStates)
+      || !validEventSnapshot()
       || (s.miniBossDefeatedIds !== undefined && (!Array.isArray(s.miniBossDefeatedIds)
         || s.miniBossDefeatedIds.length > MINI_BOSS_IDS.length
         || new Set(s.miniBossDefeatedIds).size !== s.miniBossDefeatedIds.length
@@ -3456,14 +3595,18 @@ export class GameSimulation {
             : unit.actor.type === (s.dungeonStage === 0
               ? (['skeleton', 'wolf', 'wraith'] as const)[index]
               : (['crypt_lord', 'skeleton', 'wraith'] as const)[index]))
-          : index >= PACK_SIZE ? (MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId)
+          : index >= PACK_SIZE ? (activeEventPlan?.enemySpawns.some(spawn=>
+              spawn.id===unit.actor.id&&spawn.type===unit.actor.type)
+              ? unit.summoned !== true
+              : MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId)
               ? unit.actor.type === getMiniBossDefinition(unit.actor.id)?.enemyType
                 && unit.summoned !== true
               : unit.summoned === true
                 && (unit.actor.type === 'skeleton' || unit.actor.type === 'spider'))
             : unit.actor.type === packTypesForWave(s.wave)[index])
         && validActor(unit.actor, index >= PACK_SIZE
-          ? (MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId) && s.zone === 'wilderness'
+          ? (activeEventPlan?.enemySpawns.some(spawn=>spawn.id===unit.actor.id)
+             || (MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId) && s.zone === 'wilderness')
               ? unit.actor.id : 'summon-' + s.wave + '-' + index)
           : unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && (unit.elite === undefined || (
@@ -3541,6 +3684,7 @@ export class GameSimulation {
     this.groundLoot = s.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! }));
     this.player = { ...s.player };
     this.units = s.enemies.map(cloneUnit);
+    this.activeWorldEventId = activeEventPlan?.id ?? null;
     this.activatedCheckpointIds.clear();
     for (const id of checkpointIds) this.activatedCheckpointIds.add(id);
     this.respawnAt = canonicalRespawn;
@@ -3624,6 +3768,8 @@ export class GameSimulation {
     this.miniBossStates.clear();
     this.defeatedMiniBossIds.clear();
     this.activatedCheckpointIds.clear();
+    this.worldEventPlans = [];
+    this.activeWorldEventId = null;
     this.respawnAt = null;
     this.respawnProtectionSeconds = 0;
     this.hollowKing = null;
