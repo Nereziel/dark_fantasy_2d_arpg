@@ -3461,6 +3461,35 @@ export class GameSimulation {
         && Array.isArray(s.enemies) && s.enemies.some(unit => unit?.actor?.id === id
           && unit.actor.type === getMiniBossDefinition(id)?.enemyType));
     };
+    const eventPlans = restoredWilderness
+      ? planWorldEvents(s.worldSeed,restoredWilderness.layout,restoredWilderness.features) : [];
+    const activeViews=Array.isArray(s?.worldEvents)
+      ? s.worldEvents.filter(view=>view?.status==='active') : [];
+    const activeEventPlan=activeViews.length===1
+      ? eventPlans.find(plan=>plan.id===activeViews[0]?.id) : undefined;
+    const eventUnits=Array.isArray(s?.enemies)
+      ? s.enemies.filter(unit=>unit?.actor?.id?.startsWith('world-event.')) : [];
+    const validEventSnapshot=():boolean => {
+      if(s.worldEvents===undefined)return eventUnits.length===0;
+      if(!Array.isArray(s.worldEvents)||activeViews.length>1||!Array.isArray(s.enemies)
+        ||(activeViews.length>0&&!activeEventPlan)
+        ||((activeEventPlan===undefined)!==(eventUnits.length===0)))return false;
+      if(activeEventPlan && (s.zone!=='wilderness'
+        ||eventUnits.length!==activeEventPlan.enemySpawns.length
+        ||!eventUnits.some(unit=>unit.actor.alive)
+        ||eventUnits.some(unit=>!activeEventPlan.enemySpawns.some(spawn=>
+          spawn.id===unit.actor.id&&spawn.type===unit.actor.type))
+        ||s.worldFacts?.entries.some(fact=>
+          fact.kind==='eventCompleted'&&fact.entityId===activeEventPlan.id)))return false;
+      const completed=(s.worldFacts?.entries??[])
+        .filter(fact=>fact.kind==='eventCompleted').map(fact=>fact.entityId);
+      const expected=s.zone==='wilderness' ? projectWorldEventViews(
+        eventPlans,s.mapDiscovery?.discoveredLandmarkIds??[],completed,
+        activeEventPlan?.id??null,s.enemies.map(unit=>({
+          id:unit.actor.id,alive:unit.actor.alive
+        }))) : [];
+      return JSON.stringify(s.worldEvents)===JSON.stringify(expected);
+    };
     const validDungeonIds = (ids: unknown, known: readonly string[]): boolean =>
       ids === undefined || (Array.isArray(ids) && ids.length <= 128
         && ids.every(id => typeof id === 'string' && known.includes(id))
@@ -3481,6 +3510,7 @@ export class GameSimulation {
       || !validHollowKing(s.hollowKing)
       || !validHollowAdds(s.hollowKingAddActorIds)
       || !validMiniStates(s.miniBossStates)
+      || !validEventSnapshot()
       || (s.miniBossDefeatedIds !== undefined && (!Array.isArray(s.miniBossDefeatedIds)
         || s.miniBossDefeatedIds.length > MINI_BOSS_IDS.length
         || new Set(s.miniBossDefeatedIds).size !== s.miniBossDefeatedIds.length
@@ -3563,14 +3593,18 @@ export class GameSimulation {
             : unit.actor.type === (s.dungeonStage === 0
               ? (['skeleton', 'wolf', 'wraith'] as const)[index]
               : (['crypt_lord', 'skeleton', 'wraith'] as const)[index]))
-          : index >= PACK_SIZE ? (MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId)
+          : index >= PACK_SIZE ? (activeEventPlan?.enemySpawns.some(spawn=>
+              spawn.id===unit.actor.id&&spawn.type===unit.actor.type)
+              ? unit.summoned !== true
+              : MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId)
               ? unit.actor.type === getMiniBossDefinition(unit.actor.id)?.enemyType
                 && unit.summoned !== true
               : unit.summoned === true
                 && (unit.actor.type === 'skeleton' || unit.actor.type === 'spider'))
             : unit.actor.type === packTypesForWave(s.wave)[index])
         && validActor(unit.actor, index >= PACK_SIZE
-          ? (MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId) && s.zone === 'wilderness'
+          ? (activeEventPlan?.enemySpawns.some(spawn=>spawn.id===unit.actor.id)
+             || (MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId) && s.zone === 'wilderness')
               ? unit.actor.id : 'summon-' + s.wave + '-' + index)
           : unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && (unit.elite === undefined || (
@@ -3648,6 +3682,7 @@ export class GameSimulation {
     this.groundLoot = s.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! }));
     this.player = { ...s.player };
     this.units = s.enemies.map(cloneUnit);
+    this.activeWorldEventId = activeEventPlan?.id ?? null;
     this.activatedCheckpointIds.clear();
     for (const id of checkpointIds) this.activatedCheckpointIds.add(id);
     this.respawnAt = canonicalRespawn;
