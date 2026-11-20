@@ -3,7 +3,8 @@ import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { CLASSES, CLASS_IDS, type ClassId } from '../../src/game/data/classes';
 import { SKILLS, type SkillSlot } from '../../src/game/skills/skills';
 import { classSkillTimeline, BASIC_ATTACK_TIMELINE } from '../../src/game/animation/classCombatTiming';
-import { PIXEL_ACTOR_LOOKS, PIXEL_ANIMATIONS, PIXEL_ANIMATION_FRAMES,
+import { startCombatTimeline, advanceCombatTimeline } from '../../src/game/animation/combatTimeline';
+import { PIXEL_ACTOR_LOOKS, PIXEL_ANIMATIONS, PIXEL_ANIMATION_FRAMES, pixelTimelineFrame,
   PIXEL_FRAME_WIDTH, PIXEL_FRAME_HEIGHT, pixelFrame, pixelAtlasKey } from '../../src/game/phaser/pixelSpriteAtlas';
 import { STATUS_IDS, STATUS_DEFINITIONS } from '../../src/game/status/statusDefinitions';
 import { statusVisuals, STATUS_VISUALS } from '../../src/game/status/statusVisuals';
@@ -108,6 +109,20 @@ describe('Prompt 08 — all original classes share authoritative fixed-hit timel
 });
 
 describe('Prompt 08/09/11 — original sprite atlas and complete status presentation',()=>{
+  it('synchronizes the sprite contact frame to damage rather than total action duration',()=>{
+    const initial = startCombatTimeline({
+      animation:'attack',windupTicks:23,recoveryTicks:40,movementLocked:true
+    }).state;
+    expect(pixelTimelineFrame(initial)).toBe(0);
+    expect(pixelTimelineFrame(advanceCombatTimeline(initial,11).state)).toBe(0);
+    expect(pixelTimelineFrame(advanceCombatTimeline(initial,12).state)).toBe(1);
+    const impact=advanceCombatTimeline(initial,23).state;
+    expect(impact.impactEmitted).toBe(true);
+    expect(pixelTimelineFrame(impact)).toBe(2);
+    expect(pixelTimelineFrame(advanceCombatTimeline(impact,1).state)).toBe(3);
+    expect(pixelTimelineFrame(advanceCombatTimeline(impact,100).state)).toBe(3);
+  });
+
   it('contains distinct original atlas looks for every hero and every spawnable monster',()=>{
     for(const cls of CLASS_IDS) {
       expect(PIXEL_ACTOR_LOOKS[cls]).toBeDefined();
