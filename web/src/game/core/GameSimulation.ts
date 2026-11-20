@@ -1735,6 +1735,125 @@ export class GameSimulation {
     }
   }
 
+  /** Seeded elites decorate canonical enemies; normal tutorial waves stay unchanged. */
+  private seedElitePack(): void {
+    const boss = this.zone === 'crypt' && this.dungeonStage === 1;
+    if (!boss && (this.zone !== 'wilderness' || this.wave < 2)) return;
+    const index = boss ? 0 : this.rng.index(PACK_SIZE);
+    const unit = this.units[index];
+    if (!unit) return;
+    const ids = rollEliteModifiers({ count: boss || this.wave >= 6 ? 2 : 1 }, this.rng);
+    if (!ids || !ids.length) return;
+    const base = ENEMY_DEFINITIONS[unit.actor.type];
+    const plan = applyEliteStats({ health: unit.actor.maxHealth,
+      baseDamage: base.baseDamage, speed: base.speed }, ids);
+    if (!plan) return;
+    unit.actor.health = plan.maxHealth;
+    unit.actor.maxHealth = plan.maxHealth;
+    unit.elite = {
+      modifiers: [...ids], visualTags: [...plan.visualTags], shield: plan.shield,
+      damageMultiplier: base.baseDamage > 0 ? plan.baseDamage / base.baseDamage : 1,
+      speedMultiplier: base.speed > 0 ? plan.speed / base.speed : 1,
+      elapsedSeconds: 0, deathTriggered: false
+    };
+  }
+
+  /** Execute elite effects using the same damage/status entry points as normal combat. */
+  private tickElites(dt: number): void {
+    const pending = this.eliteQueue;
+    this.eliteQueue = [];
+    for (const entry of pending) {
+      entry.remaining -= dt;
+      if (entry.remaining > 0) { this.eliteQueue.push(entry); continue; }
+      const source = this.units.find(unit => unit.actor.id === entry.sourceId);
+      if (!source) continue;
+      if (entry.kind === 'teleport') {
+        if (!source.actor.alive) continue;
+        const angle = this.rng.next() * 2 * Math.PI;
+        const target = { x: source.actor.x + Math.cos(angle) * entry.radius,
+          y: source.actor.y + Math.sin(angle) * entry.radius };
+        if (canOccupy(target, ACTOR_RADIUS, this.world.obstacles)) {
+          source.actor.x = target.x;
+          source.actor.y = target.y;
+        }
+      } else if (this.player.alive
+        && !(this.zone === 'wilderness' && distance(this.player, this.world.camp) <= CAMP_RADIUS)
+        && distance(this.player, entry.position) <= entry.radius) {
+        const base = ENEMY_DEFINITIONS[source.actor.type].baseDamage + this.level * 2;
+        this.dealPlayerDamage(base * entry.multiplier * (source.elite?.damageMultiplier ?? 1),
+          entry.damageType, entry.sourceId);
+      }
+    }
+
+    for (const unit of [...this.units]) {
+      if (!unit.actor.alive || !unit.elite) continue;
+      const start = unit.elite.elapsedSeconds;
+      const period = eliteOnPeriodicPlan(unit.elite.modifiers, {
+        actorId: unit.actor.id, position: { x: unit.actor.x, y: unit.actor.y },
+        elapsedSeconds: start, deltaSeconds: dt
+      });
+      unit.elite.elapsedSeconds = Math.min(86400, start + dt);
+      for (const action of period?.actions ?? []) this.dispatchEliteAction(unit, action);
+    }
+  }
+
+  private dispatchEliteAction(unit: EnemyUnit, action: ElitePlannedAction): void {
+    if (action.kind === 'telegraph') {
+      this.events.push({ type: 'eliteCue', enemyId: unit.actor.id,
+        effect: action.telegraphId, x: action.position.x, y: action.position.y,
+        radius: action.radius });
+    } else if (action.kind === 'status') {
+      if (action.targetId === unit.actor.id && action.statusId === 'regeneration') {
+        const heal = resolveHealing(unit.actor.health, unit.actor.maxHealth,
+          Math.max(1, Math.round(unit.actor.maxHealth * action.magnitude)));
+        unit.actor.health = heal.health;
+        if (heal.healed > 0) this.events.push({
+          type: 'enemyHeal', enemyId: unit.actor.id,
+          targetId: unit.actor.id, amount: heal.healed
+        });
+      } else if (action.targetId === this.player.id) {
+        this.applyCanonicalStatus('player', action.statusId, unit.actor.id,
+          action.magnitude, action.durationSeconds);
+      }
+    } else if (action.kind === 'damage') {
+      this.eliteQueue.push({
+        kind: 'pulse', remaining: action.delaySeconds, sourceId: unit.actor.id,
+        position: { ...action.position }, radius: action.radius,
+        multiplier: action.baseMultiplier, damageType: action.damageType
+      });
+    } else if (action.kind === 'hazard') {
+      for (let tick = action.tickIntervalSeconds; tick <= action.durationSeconds;
+        tick += action.tickIntervalSeconds) {
+        this.eliteQueue.push({
+          kind: 'pulse', remaining: tick, sourceId: unit.actor.id,
+          position: { ...action.position }, radius: action.radius,
+          multiplier: action.baseMultiplier, damageType: action.damageType
+        });
+      }
+    } else if (action.kind === 'teleport') {
+      this.eliteQueue.push({
+        kind: 'teleport', remaining: action.castSeconds, sourceId: unit.actor.id,
+        position: { x: unit.actor.x, y: unit.actor.y }, radius: action.maxDistance,
+        multiplier: 0, damageType: 'fire'
+      });
+    } else if (action.kind === 'summon') {
+      const active = this.units.filter(other => other.summoned && other.actor.alive).length;
+      if (active >= action.maxActive || this.units.length >= PACK_SIZE + 2) return;
+      const offsets = [{ x: 55, y: 22 }, { x: -55, y: -22 }, { x: 34, y: -48 }];
+      const offset = offsets[this.units.length - PACK_SIZE] ?? offsets[0]!;
+      const position = { x: unit.actor.x + offset.x, y: unit.actor.y + offset.y };
+      if (!canOccupy(position, ACTOR_RADIUS, this.world.obstacles)) return;
+      const base = ENEMY_DEFINITIONS.skeleton;
+      const health = base.health + Math.max(0, this.level - 1) * 12;
+      const id = 'summon-' + this.wave + '-' + this.units.length;
+      this.units.push({
+        actor: { id, type: 'skeleton', ...position,
+          health, maxHealth: health, alive: true },
+        summoned: true, intent: null, cooldown: 1, effects: []
+      });
+    }
+  }
+
   private awardExperience(amount: number): void {
     const award = awardProgression({ level: this.level, xp: this.xp }, amount);
     if (!award) return;
