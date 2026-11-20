@@ -2575,11 +2575,24 @@ export class GameSimulation {
     const restoredWilderness = layout ? buildWilderness(s.worldSeed) : null;
     const restoredIndex = restoredWilderness ? createChunkIndex(restoredWilderness) : null;
     const restoredMapWorld = restoredWilderness ? this.mapInput(restoredWilderness) : null;
+    const cryptManifest = layout ? buildCryptWorld(s.worldSeed).theme : null;
+    const validDungeonIds = (ids: unknown, known: readonly string[]): boolean =>
+      ids === undefined || (Array.isArray(ids) && ids.length <= 128
+        && ids.every(id => typeof id === 'string' && known.includes(id))
+        && new Set(ids).size === ids.length);
     if (!s || !layout || s.version !== 5 || !isClassId(s.classId)
       || (s.mapDiscovery !== undefined && (!restoredMapWorld
         || !validateMapDiscovery(s.mapDiscovery, restoredMapWorld)))
       || (s.worldFacts !== undefined && (!restoredIndex
         || !validateWorldFactLedger(restoredIndex, s.worldFacts)))
+      || !validDungeonIds(s.cryptUsedPropIds,
+        cryptManifest?.interactables.map(prop => prop.id) ?? [])
+      || !validDungeonIds(s.cryptTriggeredTrapIds,
+        cryptManifest?.traps.map(trap => trap.id) ?? [])
+      || (s.cryptInteractables !== undefined && (!Array.isArray(s.cryptInteractables)
+        || JSON.stringify(s.cryptInteractables) !== JSON.stringify(
+          s.zone === 'crypt' ? (cryptManifest?.interactables ?? []).filter(prop =>
+            prop.initiallyVisible && !(s.cryptUsedPropIds ?? []).includes(prop.id)) : [])))
       || (s.dungeonStage !== 0 && s.dungeonStage !== 1)
       || typeof s.dungeonCleared !== 'boolean'
       || (s.zone === 'wilderness' && (s.dungeonStage !== 0 || s.dungeonCleared))
