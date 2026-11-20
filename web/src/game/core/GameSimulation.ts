@@ -555,6 +555,22 @@ export class GameSimulation {
     this.updateInventory(planEquip(this.inventoryState(), index, selected, this.inventoryRules()));
   }
 
+  /** Pure, authoritative candidate projection for the equipment comparison panel. */
+  previewEquipment(index: number): { armor: number; damageMin: number;
+    damageMax: number; maxHealth: number } | null {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return null;
+    const candidate = planEquip(this.inventoryState(), index, undefined, this.inventoryRules());
+    if (!candidate.ok) return null;
+    const before = deriveStats(this.classId, this.equipment, this.level);
+    const after = deriveStats(this.classId, candidate.state.equipment as Equipment, this.level);
+    return {
+      armor: after.armor - before.armor,
+      damageMin: after.damageMin - before.damageMin,
+      damageMax: after.damageMax - before.damageMax,
+      maxHealth: after.maxHealth - before.maxHealth
+    };
+  }
+
   private unequip(slot: EquipmentSlot): void {
     this.updateInventory(planUnequip(this.inventoryState(), slot, this.inventoryRules()));
   }
