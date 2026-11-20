@@ -1469,7 +1469,14 @@ export class GameSimulation {
       if (WARRIOR_ABILITIES[pending.id].target === 'enemy' && !target) this.warriorPending = null;
       else if (target && distance(this.player, target.actor) > WARRIOR_ABILITIES[pending.id].range) {
         if (this.holdPosition || this.immobilized) this.warriorPending = null;
-        else this.follow(this.player, target.actor, speed, dt, WARRIOR_ABILITIES[pending.id].range - 4);
+        else {
+          const route = hasLineOfSight(this.player, target.actor, this.world.obstacles)
+            ? [] : findPath(this.player, target.actor, ACTOR_RADIUS, this.world.obstacles);
+          if (route.length > 0) this.follow(this.player, route[0]!, speed, dt,
+            route.length === 1 ? WARRIOR_ABILITIES[pending.id].range - 4 : 0);
+          else this.follow(this.player, target.actor, speed, dt,
+            WARRIOR_ABILITIES[pending.id].range - 4);
+        }
       } else this.requestWarriorAbility(pending.id, pending.targetId);
     } else if (this.pendingSkill && (focus.actor.alive || this.pendingAim !== null)) {
       const skill = SKILLS[this.classId][this.pendingSkill];
@@ -1493,7 +1500,13 @@ export class GameSimulation {
         if (!this.holdPosition) {
           const range = this.classId === 'WARRIOR'
             ? Math.min(60, definition.attackRange) : definition.attackRange;
-          this.follow(this.player, target.actor, speed, dt, range - 4);
+          const route = hasLineOfSight(this.player, target.actor, this.world.obstacles)
+            ? [] : findPath(this.player, target.actor, ACTOR_RADIUS, this.world.obstacles);
+          if (route.length > 0) {
+            this.follow(this.player, route[0]!, speed, dt, route.length === 1 ? range - 4 : 0);
+          } else {
+            this.follow(this.player, target.actor, speed, dt, range - 4);
+          }
         }
       } else if (!this.immobilized && this.attackTimer <= 0) {
         if (this.classId === 'WARRIOR') {
