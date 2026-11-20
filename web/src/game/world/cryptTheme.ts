@@ -4,6 +4,7 @@
  */
 import type { Point } from '../core/types';
 import type { EnemyType } from '../enemies/enemies';
+import type { StatusId } from '../status/statusDefinitions';
 import type { DungeonBounds, DungeonRoomType, ProceduralDungeonResult } from './proceduralDungeon';
 
 export const CRYPT_THEME_ID = 'corrupted_crypt' as const;
@@ -76,7 +77,7 @@ export interface CryptTrap {
   readonly damage: {
     readonly type: 'physical' | 'poison' | 'shadow';
     readonly maxBaseDamage: number;
-    readonly statusId?: 'poison' | 'corruption';
+    readonly statusId?: StatusId;
     readonly maxDurationSeconds?: number;
   };
   readonly hookId: string;
@@ -186,9 +187,9 @@ const TRAP_SPECS: Partial<Record<CryptPropKind, {
 }>> = {
   spikeMarker: { kind: 'spike', damage: { type: 'physical', maxBaseDamage: 19 } },
   poisonUrn: { kind: 'poison', damage: { type: 'poison', maxBaseDamage: 12,
-    statusId: 'poison', maxDurationSeconds: 3.5 } },
+    statusId: 'poisoned', maxDurationSeconds: 3.5 } },
   runicSeal: { kind: 'runic', damage: { type: 'shadow', maxBaseDamage: 24,
-    statusId: 'corruption', maxDurationSeconds: 2 } }
+    statusId: 'cursed', maxDurationSeconds: 2 } }
 };
 
 const distance = (a: Point, b: Point): number => Math.hypot(a.x - b.x, a.y - b.y);
