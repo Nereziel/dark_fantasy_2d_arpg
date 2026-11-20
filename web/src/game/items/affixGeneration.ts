@@ -433,7 +433,21 @@ const BASE_NAMES: Readonly<Record<string, BaseName>> = Object.freeze({
   greaves: { en: 'Greaves', cs: 'holenní chrániče', gender: 'plural' },
   belt: { en: 'Belt', cs: 'opasek', gender: 'masculine' },
   bloodstone: { en: 'Bloodstone', cs: 'krvavý kámen', gender: 'masculine' },
-  signet: { en: 'Signet', cs: 'pečetní prsten', gender: 'masculine' }
+  signet: { en: 'Signet', cs: 'pečetní prsten', gender: 'masculine' },
+  greatsword: { en: 'Greatsword', cs: 'velký meč', gender: 'masculine' },
+  axe: { en: 'Battle Axe', cs: 'sekera', gender: 'feminine' },
+  greataxe: { en: 'Greataxe', cs: 'obouruční sekera', gender: 'feminine' },
+  mace: { en: 'Mace', cs: 'palcát', gender: 'masculine' },
+  hammer: { en: 'Great Hammer', cs: 'kladivo', gender: 'neuter' },
+  dagger: { en: 'Dagger', cs: 'dýka', gender: 'feminine' },
+  spear: { en: 'Spear', cs: 'kopí', gender: 'neuter' },
+  bow: { en: 'Bow', cs: 'luk', gender: 'masculine' },
+  crossbow: { en: 'Crossbow', cs: 'kuše', gender: 'feminine' },
+  staff: { en: 'Arcane Staff', cs: 'hůl', gender: 'feminine' },
+  wand: { en: 'Wand', cs: 'hůlka', gender: 'feminine' },
+  spellbook: { en: 'Spellbook', cs: 'kniha kouzel', gender: 'feminine' },
+  relic: { en: 'Ancient Relic', cs: 'relikvie', gender: 'feminine' },
+  charm: { en: 'Protective Charm', cs: 'talisman', gender: 'masculine' }
 });
 for (const label of Object.values(BASE_NAMES)) Object.freeze(label);
 
