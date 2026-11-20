@@ -1,3 +1,9 @@
+# Agent coordination — Wave C (Agents 16–21, Prompts 12–17)
+
+**Aktuální zadání:** [WAVE_C.md](WAVE_C.md), [integrační pravidla](INTEGRATION_C.md) a [16](16/TASK.md), [17](17/TASK.md), [18](18/TASK.md), [19](19/TASK.md), [20](20/TASK.md), [21](21/TASK.md). Všech šest úkolů má vlastní exkluzivní 2-file write-set a prompt ke spuštění. **Připraveno, nikoli spuštěno; start až po ověření merge PR #21.**
+
+---
+
 # Parallel agent development — current Wave B (Agents 06–15)
 
 Ten independently assigned modules for Prompts 07–11: [exact write-sets and rules](WAVE_B.md), [integration plan](INTEGRATION_B.md), and individual task docs [06](06/TASK.md), [07](07/TASK.md), [08](08/TASK.md), [09](09/TASK.md), [10](10/TASK.md), [11](11/TASK.md), [12](12/TASK.md), [13](13/TASK.md), [14](14/TASK.md), [15](15/TASK.md). This is a **plan only**; no work started. The earlier Wave A plan remains below for reference.

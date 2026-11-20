@@ -1,0 +1,31 @@
+# Integrátor — Prompty 12–17, Wave C
+
+Tento dokument vlastní pouze integrátor. **Agenti 16–21 nesmějí měnit integraci, testovací fixtures, save ani UI.**
+
+## Dispatch gate
+- [ ] PR #21 pro Prompty 07–11 je merged, poslední CI main včetně Chromium + Pages GREEN.
+- [ ] Zaznamenat společný BASE_SHA main a ověřit všech 12 exkluzivních cest Wave C ještě neexistuje.
+- [ ] Požádat 6 agentů nezávisle přes plné `16/TASK.md` až `21/TASK.md`; každý vlastní branch/worktree z BASE_SHA.
+- [ ] U každého ověřit 2-file diff, žádné cizí importy, prokazatelné TDD RED→GREEN, validace hranic, seed determinism a check/test/build.
+- [ ] Všech šest PR musí zůstat draft; koordinátor je kontroluje a merguje postupně až po každém GREEN.
+
+## Integrační brány (každý gate vlastní PR + testy)
+### 12: Progres
+Pure XP curve + per-level stat growth; GameSimulation.awardExperience, HUD progress, skill/talent points a character-only persistence. **Nevytvářet nekompatibilní tichou migraci v8.** U každého stávajícího save recordu buď podporovaná migrace, nebo zdokumentované explicitní rozhodnutí uživatele.
+### 13: Item model
+Katalog dat a stabilní instance IDs; 14 weapon types, obouruční/offhand konflikt, rarity, sockety, legendární powers, CS/EN lokální názvy. Srovnat s legacy Item, bez ztráty stávající kořisti či temperu.
+### 14: Affixes
+Vazba na Item Catalog a seedový rollItem; affix pool/tier gating, česká slovosledná pravidla, rarity; testovat 1000 seeded generování.
+### 15: Inventář
+Autoritativní typed command vybavit/odložit/prohodit/vyhodit/třídit/uzamknout/filtrovat, synchronizace UI, deriveStats, item locks, validace rukou a inventáře; 2h směna atomická.
+### 16: Loot
+Kontextové tabulky normal/elite/boss, guaranteed boss + rand, rarity beacon, pickup auto-approach, inventory full; nový loot nesmí obejít SaveRepository.
+### 17: Elity
+Složené modifikátory, životy/útok, on-hit/status/death/summon/hazard, telegraph/UI, vyšší loot; stabilní spawn a kompatibilita wave/crypt ID.
+
+## Smoke suite + merge
+- [ ] Full `web/: npm ci && npm run check && npm run test && npm run build && npx playwright install chromium && npm run test:e2e`.
+- [ ] Root `node tests/site.test.mjs`.
+- [ ] XP / level-up save→reload, item equip/unequip/2h/offhand, seed→loot replay, elite affixes/loot, CS↔EN, mobile pointer focus, browser rendering and GitHub Pages prefix.
+- [ ] Rozlišit RED/AMBER/GREEN v `docs/IMPLEMENTATION_STATUS.md`; agent helper alone nesplňuje runtime acceptance.
+- [ ] Merge jen integrátorem; `main` zůstává release reference.
