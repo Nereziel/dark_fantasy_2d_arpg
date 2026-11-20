@@ -394,6 +394,9 @@ export class GameSimulation {
     this.worldFacts = structuredClone(progress.worldFacts);
     this.activatedCheckpointIds.clear();
     for (const id of checkpoints) this.activatedCheckpointIds.add(id);
+    if (this.activatedCheckpointIds.has('shrine.soul-shrine')) {
+      this.usedObjects.add('soul-shrine');
+    }
     this.cryptUsedPropIds.clear();
     this.cryptTriggeredTrapIds.clear();
     for (const id of used) this.cryptUsedPropIds.add(id);
@@ -3029,7 +3032,7 @@ export class GameSimulation {
         && s.hollowKing?.addRequests.some(add => add.id === requestId));
     };
     const checkpointIds = s?.activatedCheckpointIds ?? [];
-    const canonicalRespawn = layout && s && !s.player.alive
+    const canonicalRespawn = layout && s && s.player && s.player.alive === false
       && validCheckpointIds(checkpointIds)
       ? chooseRespawnDestination(s.zone, s.player, checkpointIds,
         restoredWilderness!.layout) : null;
