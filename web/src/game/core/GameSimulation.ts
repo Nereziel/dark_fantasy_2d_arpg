@@ -91,6 +91,10 @@ import { townEntry, canInteractTownEntry, getTownManifest } from '../world/townM
 import { activatedWaypoints, planWaypointTravel, waypointDefinition } from '../world/waypointTravel';
 import { planWorldEvents, projectWorldEventViews, worldEventReward,
   type WorldEventPlan, type WorldEventId } from '../world/worldEvents';
+import { planEnvironmentObjects, visibleEnvironmentObjects, planEnvironmentInteraction,
+  validEnvironmentUsedIds, validShrineBlessings, SHRINE_DURATION_SECONDS,
+  type EnvironmentObject, type EnvironmentObjectId, type ShrineBlessing,
+  type ShrineBonus } from '../world/environmentInteractions';
 import { STASH_SIZE, emptyStashTabs, planStashDeposit, planStashWithdraw,
   planStashMove, planStashSort, validateStashContents, validStashTab,
   type StashTabs } from '../inventory/stashRules';
@@ -246,6 +250,10 @@ export class GameSimulation {
   private quest: QuestProgress = freshQuest();
   private actILedger: QuestLedger = createActIQuestLedger(freshQuest())!;
   private storyFeatures: readonly WildernessFeature[] = [];
+  private environmentPlan: EnvironmentObject[] = [];
+  private environmentUsed = new Set<EnvironmentObjectId>();
+  private shrineBlessings: ShrineBlessing[] = [];
+  private pendingEnvironmentId: EnvironmentObjectId | null = null;
   private worldEventPlans: WorldEventPlan[] = [];
   private activeWorldEventId: WorldEventId | null = null;
   private cryptTheme: CryptThemePlan | null = null;
@@ -327,6 +335,8 @@ export class GameSimulation {
     this.mapWorld = input;
     this.mapDiscovery = initial.value;
     this.worldEventPlans = planWorldEvents(world.layout.seed,world.layout,world.features);
+    this.environmentPlan = planEnvironmentObjects(world.layout.seed,world.layout,world.features);
+    this.pendingEnvironmentId = null;
     this.activeWorldEventId = null;
   }
 
@@ -497,6 +507,64 @@ export class GameSimulation {
       gold:reward.gold,xp:reward.xp,x:plan.position.x,y:plan.position.y,itemId:grantedId});
   }
 
+  /** A stable contract shared by the central click resolver and simulation. */
+  private environmentView(): EnvironmentObject[] {
+    return this.zone==='wilderness'
+      ? visibleEnvironmentObjects(this.environmentPlan,[...this.environmentUsed]) : [];
+  }
+  private hasShrineBlessing(kind:ShrineBonus):boolean {
+    return this.shrineBlessings.some(b=>b.kind===kind&&b.remaining>0);
+  }
+  /** Commit one-shot world state before loot, buffs, hazards or XP. */
+  private tryInteractEnvironment():void {
+    const id=this.pendingEnvironmentId;
+    if(!id||this.zone!=='wilderness'||!this.player.alive){
+      this.pendingEnvironmentId=null;return;
+    }
+    const object=planEnvironmentInteraction(id,this.environmentPlan,[...this.environmentUsed]);
+    if(!object){this.pendingEnvironmentId=null;return;}
+    if(distance(this.player,object.position)>object.reach)return;
+    const lootId='env-loot-'+object.id;
+    if(object.kind==='chest'&&this.groundLoot.length>=100
+      &&this.inventory.every(slot=>slot!==null)){
+      this.pendingEnvironmentId=null;return;
+    }
+    this.pendingEnvironmentId=null;
+    this.environmentUsed.add(object.id);
+    let gold=0;
+    let itemId:string|null=null;
+    if(object.kind==='shrine'&&object.shrineBonus) {
+      const kind=object.shrineBonus;
+      this.shrineBlessings=this.shrineBlessings.filter(b=>b.kind!==kind);
+      this.shrineBlessings.push({kind,remaining:SHRINE_DURATION_SECONDS});
+    } else if(object.kind==='chest') {
+      const id='env_'+this.world.seed+'_'+object.id.replaceAll('.','_');
+      const item=rollItemForBase('belt',id,this.level,'COMMON',
+        new SeededRng((this.world.seed^0x38e7cd0)>>>0));
+      if(item) {
+        const free=this.inventory.findIndex(slot=>slot===null);
+        if(free>=0){this.inventory[free]=item;itemId=item.id;}
+        else if(this.groundLoot.length<100) {
+          this.groundLoot.push({id:lootId,x:object.position.x,
+            y:object.position.y,item});
+          this.events.push({type:'loot',id:lootId});
+          itemId=item.id;
+        }
+      }
+      gold=18;
+    } else if(object.kind==='barrel')gold=7;
+    else if(object.kind==='crate')gold=11;
+    else if(object.kind==='hiddenWall')gold=22;
+    else if(object.kind==='trap'){
+      this.dealPlayerDamage(29+Math.min(70,this.level*2),'physical',object.id);
+    }
+    if(gold>0)this.gold=Math.min(Number.MAX_SAFE_INTEGER,this.gold+gold);
+    if(object.kind==='lore'||object.kind==='hiddenWall'||object.kind==='shrine')
+      this.awardExperience(rewardForActivity('exploration',this.level,this.level));
+    this.events.push({type:'environmentInteracted',id:object.id,
+      kind:object.kind,x:object.position.x,y:object.position.y,gold,itemId});
+  }
+
   /** Separate world-instance persistence; no seed or world facts in CharacterProgress v11. */
   worldProgress(): WorldSessionProgress | null {
     if (!this.mapDiscovery || !this.worldFacts) return null;
@@ -506,7 +574,8 @@ export class GameSimulation {
       cryptUsedPropIds: [...this.cryptUsedPropIds],
       cryptTriggeredTrapIds: [...this.cryptTriggeredTrapIds],
       miniBossDefeatedIds: [...this.defeatedMiniBossIds],
-      activatedCheckpointIds: [...this.activatedCheckpointIds]
+      activatedCheckpointIds: [...this.activatedCheckpointIds],
+      ...(this.environmentUsed.size ? {environmentUsedIds:[...this.environmentUsed]} : {})
     });
   }
 
@@ -526,7 +595,8 @@ export class GameSimulation {
       || new Set(triggered).size !== triggered.length
       || triggered.some(id => !allowedTraps.has(id))) return false;
     const checkpoints = progress.activatedCheckpointIds ?? [];
-    if (!validCheckpointIds(checkpoints)) return false;
+    if (!validCheckpointIds(checkpoints)
+      || !validEnvironmentUsedIds(progress.environmentUsedIds ?? []))return false;
     const defeated = progress.miniBossDefeatedIds ?? [];
     if (!Array.isArray(defeated) || defeated.length > MINI_BOSS_IDS.length
       || new Set(defeated).size !== defeated.length
@@ -537,6 +607,9 @@ export class GameSimulation {
     for (const id of defeated) this.miniBossStates.delete(id);
     this.mapDiscovery = structuredClone(progress.mapDiscovery);
     this.worldFacts = structuredClone(progress.worldFacts);
+    this.environmentUsed = new Set(progress.environmentUsedIds ?? []);
+    this.shrineBlessings = [];
+    this.pendingEnvironmentId = null;
     this.activeWorldEventId = null;
     this.units = this.units.filter(unit => !unit.actor.id.startsWith('world-event.'));
     this.activatedCheckpointIds.clear();
