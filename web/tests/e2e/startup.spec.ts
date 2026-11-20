@@ -124,6 +124,10 @@ test('talks to Warden Vesna, accepts the quest and loads its persistent progress
   const dialog = page.getByRole('dialog', { name: 'Warden Vesna' });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Our last patrol vanished');
+  // Wave D: real branching dialogue is evaluated from current quest progress.
+  await dialog.getByRole('button', { name: 'Ask about the source of corruption' }).click();
+  await expect(dialog).toContainText('Dust and dark whispers');
+  await dialog.getByRole('button', { name: 'Back to the quest' }).click();
   await dialog.getByRole('button', { name: 'Accept quest' }).click();
   await expect(dialog).toContainText('0/3');
   await dialog.getByRole('button', { name: 'Leave' }).click();
