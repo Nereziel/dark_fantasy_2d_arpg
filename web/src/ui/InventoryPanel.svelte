@@ -87,6 +87,7 @@
             <div class="bag-slot" class:pending-move={moveSource === index}
               title={item ? $t('item.base.' + item.templateId) : $t('inventory.empty')}>
               {#if item && (rarityFilter === 'ALL' || item.rarity === rarityFilter)}
+                {@const delta = bridge.previewEquipment(index)}
                 <div class="item-card">
                   <div class="item-visual" style:color={RARITIES[item.rarity].color}>{item.icon}</div>
                   <div class="item-title" style:color={RARITIES[item.rarity].color}>{$t('item.base.' + item.templateId)}</div>
@@ -103,7 +104,6 @@
                   {#each item.affixes as affix (affix.id)}
                     <div class="item-affix">{$t('item.affix.' + affix.id)} +{affix.value} {$t('stat.' + affix.stat)}</div>
                   {/each}
-                  {@const delta = bridge.previewEquipment(index)}
                   {#if delta}
                     <div class="item-affix">{$t('inventory.comparison')}:
                       {$t('stat.armor')} {delta.armor >= 0 ? '+' : ''}{delta.armor},
