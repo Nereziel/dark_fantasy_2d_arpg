@@ -103,6 +103,54 @@ describe('Prompt 34 — authoritative simulation and character-only save v11', (
     expect(next.snapshot().potions?.cooldown).toBeGreaterThan(0);
   });
 
+  it('changes real elemental damage and outgoing damage, not only HUD indicators', () => {
+    type Probe = {
+      dealPlayerDamage: (base: number, type: 'fire', sourceId: string) => boolean;
+      resolveEnemyDamage: (base: number, unit: unknown, type: 'physical',
+        sourceId: string, multiplier?: number, critChance?: number) => number;
+      units: unknown[];
+    };
+    const probe = (sim: GameSimulation) => sim as unknown as Probe;
+    const normal = new GameSimulation(41);
+    const protectedHero = new GameSimulation(41);
+    protectedHero.command({ type: 'selectPotion', potionId: 'resistance' });
+    protectedHero.command({ type: 'usePotion' });
+    for (let i = 0; i < 3; i++) {
+      probe(normal).dealPlayerDamage(18, 'fire', 'unknown-source');
+      probe(protectedHero).dealPlayerDamage(18, 'fire', 'unknown-source');
+    }
+    expect(protectedHero.snapshot().player.health).toBeGreaterThan(normal.snapshot().player.health);
+    const attacker = new GameSimulation(47);
+    const empowered = new GameSimulation(47);
+    empowered.command({ type: 'selectPotion', potionId: 'fury' });
+    empowered.command({ type: 'usePotion' });
+    const regularDamage = probe(attacker).resolveEnemyDamage(
+      35, probe(attacker).units[0], 'physical', 'hero', 1, 0);
+    const buffDamage = probe(empowered).resolveEnemyDamage(
+      35, probe(empowered).units[0], 'physical', 'hero', 1, 0);
+    expect(buffDamage).toBeGreaterThan(regularDamage);
+  });
+
+  it('authorizes refills only by the actual reachable apothecary', () => {
+    const sim = new GameSimulation(9);
+    sim.command({ type: 'selectPotion', potionId: 'resistance' });
+    sim.command({ type: 'usePotion' });
+    expect(sim.snapshot().potions?.charges.resistance).toBe(0);
+    const gold = sim.snapshot().gold;
+    sim.command({ type: 'refillPotion', entryId: 'potion_vendor_lena', potionId: 'resistance' });
+    expect(sim.snapshot().potions?.charges.resistance).toBe(0);
+    const internal = sim as unknown as { player: { x: number; y: number } };
+    internal.player.x = 340;
+    internal.player.y = 568;
+    sim.command({ type: 'refillPotion', entryId: '__proto__', potionId: 'resistance' });
+    expect(sim.snapshot().gold).toBe(gold);
+    sim.command({ type: 'refillPotion', entryId: 'potion_vendor_lena', potionId: 'resistance' });
+    expect(sim.snapshot().potions?.charges.resistance).toBe(1);
+    expect(sim.snapshot().gold).toBe(gold - POTIONS.resistance.refillGold);
+    sim.command({ type: 'refillPotion', entryId: 'potion_vendor_lena', potionId: 'resistance' });
+    expect(sim.snapshot().gold).toBe(gold - POTIONS.resistance.refillGold);
+  });
+
   it('rejects forged snapshots and invalid character charge ledgers', () => {
     const sim = new GameSimulation();
     const baseline = sim.snapshot();
