@@ -144,8 +144,8 @@
 </div>
 
 <style>
-  .potion-row{display:flex;gap:5px;justify-content:center;align-items:center;pointer-events:auto;flex-wrap:wrap;margin-top:7px}
-  .potion-row button{background:#201e21ed;border:1px solid #77674d;color:#e8d8ba;min-height:32px;padding:5px 9px;font-size:.72rem}
+  .potion-row{display:flex;gap:5px;justify-content:center;align-items:center;pointer-events:none;flex-wrap:wrap;margin-top:7px}
+  .potion-row button{pointer-events:auto;background:#201e21ed;border:1px solid #77674d;color:#e8d8ba;min-height:32px;padding:5px 9px;font-size:.72rem}
   .potion-row button:disabled{opacity:.5;cursor:default}
   .potion-row .potion-select.chosen{border-color:#e3b76e;background:#39302a}
   .potion-key{color:#e7b477;border:1px solid #8b7251;padding:0 4px;margin-right:5px}
