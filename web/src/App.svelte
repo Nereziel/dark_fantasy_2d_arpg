@@ -7,6 +7,8 @@
   import { resolveKeyboardAction, rebindAction, type InputBinding, type InputAction } from './game/input/bindings';
   import { GAME_BINDINGS } from './game/input/gameBindings';
   import { loadGame, saveGame } from './persistence/SaveRepository';
+  import { loadWorldProgress, saveWorldProgress } from './persistence/WorldProgressRepository';
+  import type { WorldSessionProgress } from './game/core/types';
   import { CharacterAutosaver } from './persistence/CharacterAutosaver';
   import { CAMP, CAMP_RADIUS } from './game/world/generator';
   import GameViewport from './ui/GameViewport.svelte';
@@ -16,6 +18,7 @@
   import ControlsPanel from './ui/ControlsPanel.svelte';
   import SkillBar from './ui/SkillBar.svelte';
   import QuestJournal from './ui/QuestJournal.svelte';
+  import WorldMapCanvas from './ui/WorldMapCanvas.svelte';
   import NpcDialogue from './ui/NpcDialogue.svelte';
   import TradePanel from './ui/TradePanel.svelte';
   import StashPanel from './ui/StashPanel.svelte';
@@ -37,6 +40,10 @@
   let inventoryOpen = $state(false);
   let characterOpen = $state(false);
   let controlsOpen = $state(false);
+  let mapOpen = $state(false);
+  let miniProjection = $derived(view.zone === 'wilderness' ? bridge.mapProjection('minimap') : null);
+  let fullProjection = $derived(mapOpen && view.zone === 'wilderness'
+    ? bridge.mapProjection('world') : null);
   let controlBindings: InputBinding[] = $state(GAME_BINDINGS.map(binding => ({ ...binding })));
   const controlsStorage = 'aether-ruin-controls-v1';
 
@@ -68,6 +75,21 @@
   const autosaver = new CharacterAutosaver(saveGame, 1400, () => {
     messageKey = 'status.saveError';
   });
+  const worldAutosaver = new CharacterAutosaver<WorldSessionProgress>(saveWorldProgress, 1700, () => {
+    messageKey = 'status.saveError';
+  });
+
+  function openMap(): void {
+    if (!playing || mapOpen || view.zone !== 'wilderness' || !view.player.alive
+      || view.paused || inventoryOpen || characterOpen || controlsOpen || dialogueOpen
+      || tradeNpc !== null || townModal !== null) return;
+    bridge.command({ type: 'pause', value: true });
+    mapOpen = true;
+  }
+  function closeMap(): void {
+    mapOpen = false;
+    bridge.command({ type: 'pause', value: false });
+  }
 
   onMount(() => {
     try {
@@ -112,11 +134,18 @@
     });
     const unsubscribe = bridge.subscribe((latest) => {
       view = latest;
-      if (playing) autosaver.schedule(bridge.character());
+      if (playing) {
+        autosaver.schedule(bridge.character());
+        const world = bridge.worldProgress();
+        if (world) worldAutosaver.schedule(world);
+      }
     });
     // Browser lifecycle hooks are best-effort; the regular autosave debounce
     // is what protects character progression during normal play.
-    const flushOnExit = () => { void autosaver.flush().catch(() => {}); };
+    const flushOnExit = () => {
+      void autosaver.flush().catch(() => {});
+      void worldAutosaver.flush().catch(() => {});
+    };
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') flushOnExit();
     };
@@ -128,6 +157,7 @@
       window.removeEventListener('pagehide', flushOnExit);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       void autosaver.dispose().catch(() => {});
+      void worldAutosaver.dispose().catch(() => {});
     };
   });
 
@@ -137,11 +167,16 @@
     inventoryOpen = false;
     characterOpen = false;
     controlsOpen = false;
+    mapOpen = false;
     dialogueOpen = false;
     tradeNpc = null;
     townModal = null;
     playing = true;
     void autosaver.saveNow(bridge.character()).catch(() => {
+      messageKey = 'status.saveError';
+    });
+    const world = bridge.worldProgress();
+    if (world) void worldAutosaver.saveNow(world).catch(() => {
       messageKey = 'status.saveError';
     });
   }
@@ -151,6 +186,7 @@
   }
   function menu(): void {
     controlsOpen = false;
+    mapOpen = false;
     heldShiftKeys.clear();
     bridge.command({ type: 'holdPosition', value: false });
     tradeNpc = null;
@@ -160,10 +196,11 @@
     characterOpen = false;
     bridge.command({ type: 'pause', value: true });
     void autosaver.flush().catch(() => { messageKey = 'status.saveError'; });
+    void worldAutosaver.flush().catch(() => { messageKey = 'status.saveError'; });
     playing = false;
   }
   function togglePause(): void {
-    if (controlsOpen) return;
+    if (controlsOpen || mapOpen) return;
     if (!inventoryOpen && !characterOpen && !dialogueOpen && townModal === null && tradeNpc === null) bridge.command({ type: 'pause', value: !view.paused });
   }
 
@@ -208,6 +245,18 @@
     const target = event.target;
     const isTyping = target instanceof HTMLElement
       && !!target.closest('input, textarea, select, [contenteditable="true"]');
+    if (mapOpen) {
+      if (!isTyping && (event.code === 'Escape' || event.code === 'KeyM')) {
+        event.preventDefault();
+        closeMap();
+      }
+      return;
+    }
+    if (!isTyping && event.code === 'KeyM' && !event.repeat) {
+      event.preventDefault();
+      openMap();
+      return;
+    }
     const action = resolveKeyboardAction({
       code: event.code, repeat: event.repeat, isTyping, uiCaptured: false
     }, bridge.bindings());
@@ -279,7 +328,11 @@
   async function save(): Promise<void> {
     busy = true;
     try {
-      await autosaver.saveNow(bridge.character());
+      const world = bridge.worldProgress();
+      await Promise.all([
+        autosaver.saveNow(bridge.character()),
+        ...(world ? [worldAutosaver.saveNow(world)] : [])
+      ]);
       messageKey = 'status.saved';
     } catch {
       messageKey = 'status.saveError';
@@ -290,18 +343,22 @@
   async function load(): Promise<void> {
     busy = true;
     try {
-      await autosaver.flush();
-      const character = await loadGame();
-      if (character && bridge.restoreCharacter(character)) {
+      await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
+      const [character, world] = await Promise.all([loadGame(), loadWorldProgress()]);
+      if (character && bridge.restoreCharacter(character, world?.seed)) {
+        if (world) bridge.restoreWorldProgress(world);
         messageKey = 'status.loaded';
         inventoryOpen = false;
         characterOpen = false;
         controlsOpen = false;
+        mapOpen = false;
         dialogueOpen = false;
         tradeNpc = null;
         townModal = null;
         selectedClass = bridge.snapshot().classId;
         autosaver.prime(bridge.character());
+        const currentWorld = bridge.worldProgress();
+        if (currentWorld) worldAutosaver.prime(currentWorld);
         playing = true;
       } else {
         messageKey = 'status.emptySave';
@@ -367,6 +424,8 @@
               <option value={option.code}>{option.label}</option>
             {/each}
           </select>
+          <button class="small-button" disabled={view.zone !== 'wilderness' || view.paused}
+            onclick={openMap}>{$t('map.open')}</button>
           <button class="small-button" onclick={togglePause}>{view.paused ? $t('menu.resume') : $t('menu.paused')}</button>
           <button class="small-button" onclick={menu}>{$t('menu.back')}</button>
         </div>
@@ -382,6 +441,14 @@
         <div class="world-guide-sub">{$t('controls.hint')}</div>
       </div>
 
+      {#if miniProjection}
+        <div class="minimap-overlay" data-minimap="active">
+          <WorldMapCanvas projection={miniProjection} compact />
+          <button onclick={openMap} disabled={view.paused} aria-label={$t('map.open')}>
+            {$t('map.open')} · M
+          </button>
+        </div>
+      {/if}
       <QuestJournal {view} talk={talkToWarden} />
       {#if view.zone === 'wilderness' &&
         Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS + 40}
@@ -457,7 +524,16 @@
       {#if messageKey}
         <div class="toast" role="status">{$t(messageKey)}</div>
       {/if}
-      {#if townModal}
+      {#if mapOpen && fullProjection}
+        <div class="modal-shield" role="dialog" aria-modal="true" aria-label={$t('map.title')}>
+          <section class="pause-card world-map-card">
+            <h2>{$t('map.title')}</h2>
+            <p>{$t('map.legend')}</p>
+            <WorldMapCanvas projection={fullProjection} />
+            <button class="secondary" onclick={closeMap}>{$t('map.close')}</button>
+          </section>
+        </div>
+      {:else if townModal}
         <div class="modal-shield town-service-shield" role="dialog" aria-modal="true" aria-label={$t(townModal.nameKey)}>
           <section class="pause-card town-service-card">
             <h2>{$t(townModal.nameKey)}</h2>
@@ -513,3 +589,40 @@
     </main>
   {/if}
 </div>
+
+<style>
+  .minimap-overlay {
+    position: absolute;
+    z-index: 2;
+    right: 20px;
+    top: 88px;
+    width: min(18vw, 230px);
+    min-width: 155px;
+    padding: 6px;
+    background: #0a1019e8;
+    border: 1px solid #7d7056;
+    box-shadow: 0 10px 28px #0008;
+  }
+  .minimap-overlay button {
+    display: block;
+    width: 100%;
+    font-size: .75rem;
+    padding: 6px 8px;
+    margin-top: 5px;
+  }
+  .world-map-card {
+    width: min(94vw, 1050px);
+    max-width: none;
+    height: min(88vh, 740px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .world-map-card :global(.map-canvas) { flex: 1; }
+  .world-map-card h2 { margin: 0; }
+  .world-map-card p { margin: 0; color: #c5b698; font-size: .85rem; }
+  @media (max-width: 700px) {
+    .minimap-overlay { width: 145px; min-width: 0; right: 8px; top: 110px; }
+    .world-map-card { width: 96vw; height: 75vh; }
+  }
+</style>
