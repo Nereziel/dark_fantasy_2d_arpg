@@ -156,13 +156,16 @@ describe('Agent 33 — The Hollow King phase machine', () => {
       ['rune_storm', 'kings_judgment']
     ] as const;
     for (const phase of [1, 2, 3] as const) {
-      const produced = run(toPhase(phase, 1), 85).actions;
+      const starting = toPhase(phase, 1);
+      const produced = run(starting, 85).actions;
       const telegraphs = produced.filter(a => a.type === 'telegraph');
       const ids = telegraphs.map(a => a.warning.id);
       const abilities = new Set(telegraphs.map(a => a.warning.ability));
       for (const pattern of patterns[phase - 1]) expect(abilities.has(pattern)).toBe(true);
       expect(new Set(ids).size).toBe(ids.length);
-      expect(produced.filter(a => a.type === 'hitWindow').length).toBeLessThanOrEqual(telegraphs.length);
+      // P2/P3 transition tick may have emitted the first telegraph before this trace.
+      expect(produced.filter(a => a.type === 'hitWindow').length)
+        .toBeLessThanOrEqual(telegraphs.length + Number(starting.mode === 'telegraph'));
       expect(produced.length).toBeLessThan(85 * 5);
     }
   });
