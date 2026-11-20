@@ -88,7 +88,9 @@ import {
 import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planService,
   selectVendorStock, type EconomyFailure } from '../trade/economyRules';
 import { townEntry, canInteractTownEntry, getTownManifest } from '../world/townManifest';
-import { STASH_SIZE, planStashDeposit, planStashWithdraw, validateStashContents } from '../inventory/stashRules';
+import { STASH_SIZE, emptyStashTabs, planStashDeposit, planStashWithdraw,
+  planStashMove, planStashSort, validateStashContents, validStashTab,
+  type StashTabs } from '../inventory/stashRules';
 import {
   freshQuest, validQuest, FIRST_QUEST_ID, WARDEN_ID, type QuestProgress
 } from '../quests/firstQuest';
@@ -215,6 +217,7 @@ export class GameSimulation {
   private equipment: Equipment = createEquipment();
   private inventory: Array<Item | null> = Array(INVENTORY_SIZE).fill(null);
   private stash: Array<Item | null> = Array(STASH_SIZE).fill(null);
+  private stashTabs: StashTabs = emptyStashTabs();
   private itemFlags: Record<string, ItemFlags> = {};
   private rng = new SeededRng();
   private cooldowns: Cooldowns = emptyCooldowns();
@@ -1039,29 +1042,42 @@ export class GameSimulation {
       this.events.push({ type: 'townServiceUsed', entryId: entry.id, goldSpent: price });
       return;
     }
-    if (command.type === 'stashDeposit' || command.type === 'stashWithdraw') {
-      // Only a live player physically at the camp stash can transfer items.
-      // Its dialog deliberately pauses combat; access remains server-authoritative.
+    if (command.type === 'stashDeposit' || command.type === 'stashWithdraw'
+      || command.type === 'stashMove' || command.type === 'stashSort') {
+      // Authoritative proximity; a paused stash dialog can still transact.
       if (this.zone !== 'wilderness' || !this.player.alive
         || !canInteractTownEntry(this.player, 'stash_camp')) return;
       const state = {
         inventory: this.inventory, equipment: this.equipment, stash: this.stash,
-        flags: this.itemFlags
+        stashTabs: this.stashTabs, flags: this.itemFlags
       };
       const plan = command.type === 'stashDeposit'
-        ? planStashDeposit(state, command.index)
-        : planStashWithdraw(state, command.index);
+        ? planStashDeposit(state, command.index, command.tab ?? 0)
+        : command.type === 'stashWithdraw'
+          ? planStashWithdraw(state, command.index, command.tab ?? 0)
+          : command.type === 'stashMove'
+            ? planStashMove(state, command.fromTab, command.index, command.toTab)
+            : planStashSort(state, command.tab);
       if (!plan.ok) return;
-      const before = command.type === 'stashDeposit'
-        ? this.inventory[command.index] : this.stash[command.index];
-      if (!before) return;
+      const sourceTab = command.type === 'stashMove' ? command.fromTab
+        : command.type === 'stashWithdraw' ? (command.tab ?? 0) : 0;
+      const slots = validStashTab(sourceTab)
+        ? sourceTab === 0 ? this.stash : this.stashTabs[sourceTab - 1]
+        : [];
+      const before = command.type === 'stashDeposit' ? this.inventory[command.index]
+        : command.type === 'stashSort' ? null : slots[command.index];
       this.inventory = plan.state.inventory.map(cloneItem);
       this.stash = plan.state.stash.map(cloneItem);
+      const extra = plan.state.stashTabs ?? emptyStashTabs();
+      this.stashTabs = [extra[0]!.map(cloneItem), extra[1]!.map(cloneItem)];
       this.itemFlags = Object.fromEntries(Object.entries(plan.state.flags ?? {})
         .map(([id, flags]) => [id, { ...flags }]));
       this.events.push({
-        type: 'stashUpdated', direction: command.type === 'stashDeposit' ? 'deposit' : 'withdraw',
-        itemId: before.id
+        type: 'stashUpdated',
+        direction: command.type === 'stashDeposit' ? 'deposit'
+          : command.type === 'stashWithdraw' ? 'withdraw'
+            : command.type === 'stashMove' ? 'move' : 'sort',
+        itemId: before?.id ?? 'stash-tab-' + (command.type === 'stashSort' ? command.tab : sourceTab)
       });
       return;
     }
@@ -3061,6 +3077,8 @@ export class GameSimulation {
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
       stash: this.stash.map(cloneItem),
+      ...(this.stashTabs.some(tab => tab.some(item => item !== null))
+        ? { stashTabs: this.stashTabs.map(tab => tab.map(cloneItem)) as StashTabs } : {}),
       ...(Object.keys(this.itemFlags).length ? { itemFlags: Object.fromEntries(
         Object.entries(this.itemFlags).map(([id, flags]) => [id, { ...flags }])) } : {}),
       quest: { ...this.quest },
@@ -3099,6 +3117,7 @@ export class GameSimulation {
       inventory: progress.inventory,
       equipment: progress.equipment,
       stash: progress.stash === undefined ? Array(STASH_SIZE).fill(null) : progress.stash,
+      ...(progress.stashTabs !== undefined ? { stashTabs: progress.stashTabs } : {}),
       itemFlags: progress.itemFlags,
       quest: progress.quest,
       questLedger: progress.questLedger ?? createActIQuestLedger(progress.quest)!
@@ -3119,6 +3138,10 @@ export class GameSimulation {
     this.kills = progress.kills;
     this.inventory = progress.inventory.map(cloneItem);
     this.stash = (progress.stash === undefined ? Array(STASH_SIZE).fill(null) : progress.stash).map(cloneItem);
+    this.stashTabs = [
+      (progress.stashTabs?.[0] ?? Array(STASH_SIZE).fill(null)).map(cloneItem),
+      (progress.stashTabs?.[1] ?? Array(STASH_SIZE).fill(null)).map(cloneItem)
+    ];
     this.equipment = cloneEquipment(progress.equipment);
     this.itemFlags = { ...scratch.itemFlags };
     this.quest = { ...progress.quest };
@@ -3195,6 +3218,7 @@ export class GameSimulation {
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
       stash: this.stash.map(cloneItem),
+      stashTabs: this.stashTabs.map(tab => tab.map(cloneItem)) as StashTabs,
       ...(Object.keys(this.itemFlags).length ? { itemFlags: Object.fromEntries(
         Object.entries(this.itemFlags).map(([id, flags]) => [id, { ...flags }])) } : {}),
       groundLoot: this.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! })),
@@ -3415,6 +3439,7 @@ export class GameSimulation {
           || (s.equipment[key as EquipmentSlot] !== null && !isItem(s.equipment[key as EquipmentSlot])))
       || !validateStashContents({ inventory: s.inventory, equipment: s.equipment,
         stash: s.stash === undefined ? Array(STASH_SIZE).fill(null) : s.stash,
+        ...(s.stashTabs !== undefined ? { stashTabs: s.stashTabs } : {}),
         ...(s.itemFlags !== undefined ? { flags: s.itemFlags } : {}) })
       || !Array.isArray(s.groundLoot) || s.groundLoot.length > 100
       || !s.groundLoot.every(loot => !!loot && typeof loot.id === 'string'
@@ -3447,6 +3472,10 @@ export class GameSimulation {
     this.equipment = cloneEquipment(s.equipment);
     this.inventory = s.inventory.map(cloneItem);
     this.stash = (s.stash === undefined ? Array(STASH_SIZE).fill(null) : s.stash).map(cloneItem);
+    this.stashTabs = [
+      (s.stashTabs?.[0] ?? Array(STASH_SIZE).fill(null)).map(cloneItem),
+      (s.stashTabs?.[1] ?? Array(STASH_SIZE).fill(null)).map(cloneItem)
+    ];
     this.itemFlags = Object.fromEntries(Object.entries(s.itemFlags ?? {})
       .map(([id, flags]) => [id, { ...flags }]));
     this.groundLoot = s.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! }));
@@ -3558,6 +3587,7 @@ export class GameSimulation {
     this.equipment = createEquipment();
     this.inventory = Array(INVENTORY_SIZE).fill(null);
     this.stash = Array(STASH_SIZE).fill(null);
+    this.stashTabs = emptyStashTabs();
     this.itemFlags = {};
     this.rng = new SeededRng(seed === 0 ? 0x49ac127b : ((seed ^ 0x49ac127b) >>> 0));
     this.cooldowns = emptyCooldowns();
