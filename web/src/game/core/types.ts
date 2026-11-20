@@ -6,6 +6,7 @@ import type { ActiveEffects, Cooldowns, SkillSlot } from '../skills/skills';
 import type { EnemySnapshot, EnemyIntent, EnemyUnit } from '../enemies/enemies';
 import type { QuestProgress } from '../quests/firstQuest';
 import type { NpcId } from '../world/npcs';
+import type { TownServiceRole } from '../world/townManifest';
 import type { ShopOfferId } from '../trade/commerce';
 import type { DamageType } from '../combat/typedDamage';
 import type { SkillAim } from '../input/skillAiming';
@@ -124,6 +125,8 @@ export type GameCommand =
   | { type: 'cast'; slot: SkillSlot; targetId?: string; aim?: SkillAim }
   | { type: 'warriorAbility'; id: WarriorAbilityId; targetId?: string }
   | { type: 'interactNpc'; npcId: NpcId }
+  | { type: 'interactTown'; entryId: string }
+  | { type: 'useTownService'; entryId: string }
   | { type: 'usePortal' }
   | { type: 'interactObject'; id: WorldObjectId }
   | { type: 'buyItem'; offerId: ShopOfferId }
@@ -156,6 +159,8 @@ export type GameEvent =
   | { type: 'playerDeath' }
   | { type: 'warriorImpact'; id: WarriorAbilityId; x: number; y: number }
   | { type: 'npcDialogue'; npcId: NpcId }
+  | { type: 'townInteraction'; entryId: string; role: TownServiceRole }
+  | { type: 'townServiceUsed'; entryId: string; goldSpent: number }
   | { type: 'zoneChanged'; zone: ZoneId }
   | { type: 'dungeonCleared' }
   | { type: 'questUpdated'; status: QuestProgress['status']; defeated: number }
