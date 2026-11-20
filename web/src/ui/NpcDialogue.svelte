@@ -76,9 +76,6 @@
             onclick={() => choose(option.id)}>{$t(option.textKey)}</button>
         {/each}
       {/if}
-      <button class="secondary" onclick={() => nodeId = nodeId === 'vesna.act1.hub' ? 'vesna.root' : 'vesna.act1.hub'}>
-        {$t(nodeId === 'vesna.act1.hub' ? 'dialogue.vesna.actI.back' : 'dialogue.vesna.actI.open')}
-      </button>
       <button class="secondary" onclick={close}>{$t('npc.leave')}</button>
     </div>
   </div>
