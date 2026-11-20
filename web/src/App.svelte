@@ -474,7 +474,8 @@
             aria-pressed={unit.actor.id === view.selectedTargetId}
             onclick={() => bridge.command({ type: 'attack', targetId: unit.actor.id })}
           >
-            <span>{unit.elite ? $t('hud.elite') + ' · ' : ''}{$t(view.miniBossStates?.[unit.actor.id]
+            <span>{unit.elite ? $t('hud.elite') + ' · ' : ''}{$t(unit.actor.id === 'crypt_lord-4' && view.zone === 'crypt'
+              ? 'boss.hollowKing.name' : view.miniBossStates?.[unit.actor.id]
               ? 'miniBossNames.' + unit.actor.id
               : unit.actor.id === 'morrow_gravebound'
                 ? 'enemies.morrow_gravebound.name' : 'enemies.' + unit.actor.type + '.name')}
@@ -507,7 +508,8 @@
         </div>
         <div class="status-panel">
           <div class="status-label">{$t('hud.enemy')}</div>
-          <div class="status-value enemy-name">{$t(view.miniBossStates?.[view.enemy.id]
+          <div class="status-value enemy-name">{$t(view.enemy.id === 'crypt_lord-4' && view.zone === 'crypt'
+            ? 'boss.hollowKing.name' : view.miniBossStates?.[view.enemy.id]
             ? 'miniBossNames.' + view.enemy.id
             : view.enemy.id === 'morrow_gravebound'
               ? 'enemies.morrow_gravebound.name' : 'enemies.' + view.enemy.type + '.name')}</div>
