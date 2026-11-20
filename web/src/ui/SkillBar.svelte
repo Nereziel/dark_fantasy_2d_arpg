@@ -4,6 +4,7 @@
   import type { GameSnapshot } from '../game/core/types';
   import { SKILLS, SKILL_SLOTS } from '../game/skills/skills';
   import { CLASSES } from '../game/data/classes';
+  import { POTION_IDS } from '../game/consumables/potionRules';
   import { WARRIOR_ABILITIES, type WarriorAbilityId } from '../game/skills/warriorKit';
   import { projectEquippedSkill } from '../game/skills/skillModifiers';
   const extraWarriorSkills = ['groundSlam', 'warCry', 'whirlwind', 'execute', 'basicAttack'] as const;
@@ -36,7 +37,7 @@
         title={$t('skills.' + skill.id + '.desc') + ' · ' + skill.cost + ' ' + $t('resource.' + CLASSES[view.classId].resourceId)}
         onclick={() => cast(slot)}
       >
-        <span class="skill-shortcut">{slot === 'rmb' ? 'Q / RMB' : '1'}</span>
+        <span class="skill-shortcut">{slot === 'rmb' ? 'RMB' : '1'}</span>
         <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
         <span class="skill-title">{$t('skills.' + skill.id + '.name')}</span>
         <span class="skill-cost">{skill.cost === 0 ? '—' : skill.cost}</span>
@@ -80,6 +81,42 @@
       {/each}
     {/if}
   </div>
+  <div class="potion-row" aria-label={$t('potions.bar')}>
+    <button class="potion-use" data-testid="use-potion"
+      disabled={!view.potions || !view.player.alive || view.paused
+        || view.potions.cooldown > 0 || view.potions.charges[view.potions.selected] <= 0
+        || view.potions.selected === 'healing' && view.player.health >= view.player.maxHealth
+        || view.potions.selected === 'resource' && view.resource >= view.stats.maxResource}
+      aria-label={$t('potions.use') + ' ' + $t('potions.' + (view.potions?.selected ?? 'healing') + '.name')}
+      onclick={() => bridge.command({ type: 'usePotion' })}>
+      <span class="potion-key">Q</span>
+      <span>{$t('potions.' + (view.potions?.selected ?? 'healing') + '.name')}</span>
+      <strong>{view.potions?.charges[view.potions?.selected ?? 'healing'] ?? 0}</strong>
+      {#if (view.potions?.cooldown ?? 0) > 0}
+        <span class="potion-timer">{(view.potions?.cooldown ?? 0).toFixed(1)}s</span>
+      {/if}
+    </button>
+    {#each POTION_IDS as potionId}
+      <button class="potion-select" class:chosen={view.potions?.selected === potionId}
+        data-potion-id={potionId} aria-pressed={view.potions?.selected === potionId}
+        disabled={!view.player.alive || view.paused}
+        aria-label={$t('potions.select') + ' ' + $t('potions.' + potionId + '.name')}
+        title={$t('potions.' + potionId + '.description')}
+        onclick={() => bridge.command({ type: 'selectPotion', potionId })}>
+        {$t('potions.' + potionId + '.short')} {view.potions?.charges[potionId] ?? 0}
+      </button>
+    {/each}
+  </div>
+  {#if (view.potions?.buffs.resistance ?? 0) > 0 || (view.potions?.buffs.fury ?? 0) > 0}
+    <div class="active-effects" aria-label={$t('combat.effects')}>
+      {#if (view.potions?.buffs.resistance ?? 0) > 0}
+        <span class="effect-chip beneficial">{$t('potions.resistance.name')} {Math.ceil(view.potions?.buffs.resistance ?? 0)}s</span>
+      {/if}
+      {#if (view.potions?.buffs.fury ?? 0) > 0}
+        <span class="effect-chip beneficial">{$t('potions.fury.name')} {Math.ceil(view.potions?.buffs.fury ?? 0)}s</span>
+      {/if}
+    </div>
+  {/if}
   {#if view.statusEffects?.player?.length}
     <div class="active-effects" aria-label={$t('combat.effects')}>
       {#each view.statusEffects.player as status (status.id)}
@@ -107,6 +144,13 @@
 </div>
 
 <style>
+  .potion-row{display:flex;gap:5px;justify-content:center;align-items:center;pointer-events:none;flex-wrap:wrap;margin-top:7px}
+  .potion-row button{pointer-events:auto;background:#201e21ed;border:1px solid #77674d;color:#e8d8ba;min-height:32px;padding:5px 9px;font-size:.72rem}
+  .potion-row button:disabled{opacity:.5;cursor:default}
+  .potion-row .potion-select.chosen{border-color:#e3b76e;background:#39302a}
+  .potion-key{color:#e7b477;border:1px solid #8b7251;padding:0 4px;margin-right:5px}
+  .potion-use strong{margin-left:8px}
+  .potion-timer{margin-left:8px;color:#e7a6a6}
   .skill-ui{position:absolute;z-index:3;left:50%;bottom:144px;transform:translateX(-50%);pointer-events:none;width:min(930px,96vw)}
   .skill-toolbar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;pointer-events:none}
   .skill-button{pointer-events:auto;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:170px;min-height:83px;padding:9px 8px;border:1px solid #88704e;background:linear-gradient(#222b36eb,#10141be9);box-shadow:0 10px 25px #000c}

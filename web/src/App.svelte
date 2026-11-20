@@ -30,6 +30,7 @@
   import { WARDEN_ID } from './game/quests/firstQuest';
   import { townEntry, type TownEntry } from './game/world/townManifest';
   import { CLASSES, type ClassId } from './game/data/classes';
+  import { POTION_IDS, POTIONS } from './game/consumables/potionRules';
   import { xpRequiredForLevel } from './game/progression/progressionRules';
 
   const bridge = new GameBridge();
@@ -326,7 +327,10 @@
     if (dialogueOpen || tradeNpc !== null || inventoryOpen || characterOpen || talentsOpen
       || view.paused || !view.player.alive) return;
 
-    if (action === 'HOLD_POSITION') {
+    if (action === 'POTION') {
+      event.preventDefault();
+      bridge.command({ type: 'usePotion' });
+    } else if (action === 'HOLD_POSITION') {
       event.preventDefault();
       heldShiftKeys.add(event.code);
       bridge.command({ type: 'holdPosition', value: true });
@@ -499,6 +503,10 @@
           <button disabled={!view.player.alive || view.paused}
             onclick={() => interact(BLACKSMITH_ID)}>{$t('trade.visitSmith')}</button>
           <button disabled={!view.player.alive || view.paused}
+            onclick={() => bridge.command({ type: 'interactTown', entryId: 'potion_vendor_lena' })}>
+            {$t('potions.visitVendor')}
+          </button>
+          <button disabled={!view.player.alive || view.paused}
             onclick={() => bridge.command({ type: 'interactTown', entryId: 'stash_camp' })}>
             {$t('town.stashAccess')}
           </button>
@@ -604,6 +612,19 @@
                 onclick={() => bridge.command({ type: 'useTownService', entryId: townModal!.id })}>
                 {$t('town.restoreResource')} · 12 {$t('hud.gold')}
               </button>
+              <div class="potion-shop" aria-label={$t('potions.refillTitle')}>
+                <h3>{$t('potions.refillTitle')}</h3>
+                {#each POTION_IDS as potionId}
+                  <div class="potion-shop-row" data-potion-refill={potionId}>
+                    <span>{$t('potions.' + potionId + '.name')}: {view.potions?.charges[potionId] ?? 0}/{POTIONS[potionId].maxCharges}</span>
+                    <button disabled={!view.player.alive || view.gold < POTIONS[potionId].refillGold
+                      || (view.potions?.charges[potionId] ?? 0) >= POTIONS[potionId].maxCharges}
+                      onclick={() => bridge.command({ type: 'refillPotion', entryId: townModal!.id, potionId })}>
+                      {$t('potions.refill')} · {POTIONS[potionId].refillGold} {$t('hud.gold')}
+                    </button>
+                  </div>
+                {/each}
+              </div>
             {:else if townModal.capability === 'planned'}
               <p>{$t('town.futureService')}</p>
             {/if}
@@ -689,4 +710,8 @@
     .minimap-overlay { width: 145px; min-width: 0; right: 8px; top: 110px; }
     .world-map-card { width: 96vw; height: 75vh; }
   }
+  .potion-shop{margin:12px 0;border-top:1px solid #6b5541;padding:10px 0}
+  .potion-shop h3{font-size:.9rem;margin:5px 0 10px}
+  .potion-shop-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;padding:5px 0;border-bottom:1px solid #413b35}
+  .potion-shop-row button{padding:6px 10px}
 </style>

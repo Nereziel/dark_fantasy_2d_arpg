@@ -88,7 +88,7 @@
       },
       "potion_vendor_lena": {
         "name": "Apothecary Lena",
-        "description": "Replenishes your combat resource for 12 gold. Carryable potions will arrive later."
+        "description": "Restores your combat resource for 12 gold and sells one-charge refills for your potions."
       },
       "healer_iva": {
         "name": "Healer Iva",
@@ -944,6 +944,34 @@
       "maxResource": "max. resource",
       "healthRegen": "health regeneration",
       "critChance": "critical chance"
+    }
+  },
+  "potions": {
+    "bar": "Potions",
+    "use": "Drink",
+    "select": "Select",
+    "refill": "Refill 1",
+    "refillTitle": "Potion refills",
+    "visitVendor": "Visit apothecary",
+    "healing": {
+      "name": "Healing Potion",
+      "short": "HP",
+      "description": "Restore up to 55 health."
+    },
+    "resource": {
+      "name": "Resource Potion",
+      "short": "RP",
+      "description": "Restore up to 40 class resource."
+    },
+    "resistance": {
+      "name": "Resistance Potion",
+      "short": "RES",
+      "description": "Gain 30 elemental resistance for 12 seconds."
+    },
+    "fury": {
+      "name": "Fury Potion",
+      "short": "DMG",
+      "description": "Deal 20% more damage for 10 seconds."
     }
   }
 }

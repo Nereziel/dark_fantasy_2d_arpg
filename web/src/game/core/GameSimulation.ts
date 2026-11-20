@@ -81,6 +81,10 @@ import {
 import {
   planGemAction, isValidGemWallet, type GemWallet, type GemAction
 } from '../gems/gemRules';
+import {
+  POTIONS, freshPotions, isPotionState, planPotionUse, planPotionRefill,
+  selectPotion, advancePotions, type PotionState
+} from '../consumables/potionRules';
 import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planService,
   selectVendorStock, type EconomyFailure } from '../trade/economyRules';
 import { townEntry, canInteractTownEntry, getTownManifest } from '../world/townManifest';
@@ -280,6 +284,7 @@ export class GameSimulation {
   private gold = 75;
   private materials: Materials = {};
   private gems: GemWallet = {};
+  private potions: PotionState = freshPotions();
   private resource = CLASSES.WARRIOR.resourceInitial;
   private attackTimer = 0;
   private holdPosition = false;
@@ -851,6 +856,7 @@ export class GameSimulation {
     this.classAction = null;
     this.effects = emptyEffects();
     this.statusEffects = { player: [], enemies: {} };
+    this.potions = { ...this.potions, buffs: { resistance: 0, fury: 0 } };
     this.shield = 0;
     this.projectiles = [];
     this.nextProjectileId = 0;
@@ -918,6 +924,27 @@ export class GameSimulation {
       }
       return;
     }
+    if (command.type === 'selectPotion') {
+      const selected = selectPotion(this.potions, command.potionId);
+      if (selected && !this.paused) this.potions = selected;
+      return;
+    }
+    if (command.type === 'usePotion') {
+      const plan = planPotionUse(this.potions, this.potions.selected, {
+        health: this.player.health, maxHealth: this.player.maxHealth,
+        resource: this.resource, maxResource: this.currentStats().maxResource,
+        alive: this.player.alive, paused: this.paused
+      });
+      if (!plan) return;
+      const healthRestored = plan.health - this.player.health;
+      const resourceRestored = plan.resource - this.resource;
+      this.potions = plan.state;
+      this.player.health = plan.health;
+      this.resource = plan.resource;
+      this.events.push({ type: 'potionUsed', potionId: plan.potionId,
+        healthRestored, resourceRestored, x: this.player.x, y: this.player.y });
+      return;
+    }
     if (command.type === 'evade') {
       if (!this.player.alive || this.paused || this.evadeCooldown > 0 || this.immobilized) return;
       const nearest = this.aliveEnemies
@@ -979,6 +1006,19 @@ export class GameSimulation {
         ? acceptQuest(ACT_I_QUEST_CATALOG, this.actILedger, id)
         : turnInQuest(ACT_I_QUEST_CATALOG, this.actILedger, id);
       this.commitQuestTransition(result, id);
+      return;
+    }
+    if (command.type === 'refillPotion') {
+      const entry = townEntry(command.entryId);
+      if (!entry || entry.id !== 'potion_vendor_lena' || entry.role !== 'potionVendor'
+        || this.zone !== 'wilderness'
+        || !canInteractTownEntry(this.player, entry.id)) return;
+      const plan = planPotionRefill(this.potions, command.potionId, this.gold);
+      if (!plan) return;
+      this.potions = plan.state;
+      this.gold = plan.gold;
+      this.events.push({ type: 'potionRefilled',
+        potionId: plan.potionId, goldSpent: plan.goldSpent });
       return;
     }
     if (command.type === 'useTownService') {
@@ -1842,6 +1882,7 @@ export class GameSimulation {
     const attackerStatus = getStatusModifiers(this.statusEffects.player);
     const result = resolveTypedDamage({
       type, base, multiplier: multiplier
+        * (sourceId === 'hero' && this.potions.buffs.fury > 0 ? POTIONS.fury.damageMultiplier : 1)
         * Math.max(0.1, 1 + (attackerStatus.damageDealt ?? 0))
         * Math.max(0.1, 1 + (defenderStatus.damageTaken ?? 0)), critChance,
       defenderArmor: 10 + this.level * 3, defenderLevel: this.level,
@@ -1885,8 +1926,10 @@ export class GameSimulation {
       base: base * Math.max(0.1, 1 + (attackerStatus.damageDealt ?? 0))
         * Math.max(0.1, 1 + (defenderStatus.damageTaken ?? 0)),
       defenderArmor: stats.armor, defenderLevel: this.level,
-      resistancePercent: Math.min(95, resistance +
-        100 * Math.min(0.8, getStatusModifiers(this.statusEffects.player).damageReduction ?? 0)),
+      resistancePercent: Math.min(95, resistance
+        + (type !== 'physical' && this.potions.buffs.resistance > 0
+          ? POTIONS.resistance.resistanceBonus : 0)
+        + 100 * Math.min(0.8, getStatusModifiers(this.statusEffects.player).damageReduction ?? 0)),
       dodgeChance: stats.dodgeChance,
       blockChance: stats.blockChance, shield: this.shield
     }, this.rng);
@@ -2144,6 +2187,7 @@ export class GameSimulation {
       this.eliteQueue = [];
       this.cryptArmedTraps.clear();
       this.statusEffects = { player: [], enemies: {} };
+      this.potions = { ...this.potions, buffs: { resistance: 0, fury: 0 } };
       this.effects = emptyEffects();
       for (const unit of this.units) {
         unit.intent = null;
@@ -2532,6 +2576,7 @@ export class GameSimulation {
       currentStats.maxResource, dt);
     this.attackTimer = Math.max(0, this.attackTimer - dt);
     this.evadeCooldown = Math.max(0, this.evadeCooldown - dt);
+    this.potions = advancePotions(this.potions, dt)!;
     for (const slot of ['rmb', 'slot1'] as const) {
       this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
     }
@@ -3002,6 +3047,15 @@ export class GameSimulation {
         ? { materials: { ...this.materials } } : {}),
       ...(Object.keys(this.gems).length
         ? { gems: { ...this.gems } } : {}),
+      ...(this.potions.charges.healing !== POTIONS.healing.maxCharges
+        || this.potions.charges.resource !== POTIONS.resource.maxCharges
+        || this.potions.charges.resistance !== POTIONS.resistance.maxCharges
+        || this.potions.charges.fury !== POTIONS.fury.maxCharges
+          ? { potionCharges: { ...this.potions.charges } } : {}),
+      ...(this.potions.selected !== 'healing'
+        ? { potionSelected: this.potions.selected } : {}),
+      ...(this.potions.cooldown > 0
+        ? { potionCooldown: this.potions.cooldown } : {}),
       gold: this.gold,
       kills: this.kills,
       inventory: this.inventory.map(cloneItem),
@@ -3034,6 +3088,12 @@ export class GameSimulation {
       talentRanks: progress.talentRanks ?? {},
       materials: progress.materials ?? {},
       gems: progress.gems ?? {},
+      potions: {
+        selected: progress.potionSelected ?? 'healing',
+        charges: { ...(progress.potionCharges ?? freshPotions().charges) },
+        cooldown: progress.potionCooldown ?? 0,
+        buffs: { resistance: 0, fury: 0 }
+      },
       gold: progress.gold,
       kills: progress.kills,
       inventory: progress.inventory,
@@ -3053,6 +3113,8 @@ export class GameSimulation {
     this.talentRanks = { ...scratch.talentRanks };
     this.materials = { ...scratch.materials };
     this.gems = { ...scratch.gems };
+    this.potions = { ...scratch.potions, charges: { ...scratch.potions.charges },
+      buffs: { resistance: 0, fury: 0 } };
     this.gold = progress.gold;
     this.kills = progress.kills;
     this.inventory = progress.inventory.map(cloneItem);
@@ -3106,6 +3168,8 @@ export class GameSimulation {
       talentRanks: { ...this.talentRanks },
       materials: { ...this.materials },
       gems: { ...this.gems },
+      potions: { ...this.potions, charges: { ...this.potions.charges },
+        buffs: { ...this.potions.buffs } },
       gold: this.gold,
       resource: this.resource,
       rngState: this.rng.state,
@@ -3257,6 +3321,7 @@ export class GameSimulation {
         s.talentPoints ?? Math.floor(s.level / 5), s.talentRanks ?? {})
       || !validateMaterials(s.materials ?? {})
       || !isValidGemWallet(s.gems ?? {})
+      || (s.potions !== undefined && !isPotionState(s.potions))
       || !Number.isSafeInteger(s.gold) || s.gold < 0
       || !validQuest(s.quest)
       || !createActIQuestLedger(s.questLedger ?? s.quest)
@@ -3421,6 +3486,8 @@ export class GameSimulation {
     this.talentRanks = { ...(s.talentRanks ?? {}) };
     this.materials = { ...(s.materials ?? {}) };
     this.gems = { ...(s.gems ?? {}) };
+    this.potions = s.potions ? { ...s.potions, charges: { ...s.potions.charges },
+      buffs: { ...s.potions.buffs } } : freshPotions();
     this.gold = s.gold;
     this.resource = s.resource;
     this.rng = new SeededRng(s.rngState);
@@ -3523,6 +3590,7 @@ export class GameSimulation {
     this.talentRanks = {};
     this.materials = {};
     this.gems = {};
+    this.potions = freshPotions();
     this.gold = 75;
     this.resource = CLASSES[classId].resourceInitial;
     this.paused = false;

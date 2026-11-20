@@ -498,6 +498,20 @@ export class FrontierScene extends Phaser.Scene {
       this.cameras.main.flash(420, 120, 190, 155);
       return;
     }
+    if (event.type === 'potionUsed') {
+      // Rendering only: simulation already validated and applied the consumption.
+      const tint = event.potionId === 'healing' ? 0x83d4a6
+        : event.potionId === 'resource' ? 0x8dbfec
+        : event.potionId === 'resistance' ? 0xc7b3e4 : 0xe8a46c;
+      const ring = this.obtainImpact(event.x, event.y, 88);
+      ring.lineStyle(4, tint, 0.95).strokeCircle(0, 0, 22);
+      ring.fillStyle(tint, 0.15).fillCircle(0, 0, 20);
+      this.tweens.add({
+        targets: ring, alpha: 0, scaleX: 2.6, scaleY: 2.6, duration: 550,
+        onComplete: () => this.releaseImpact(ring)
+      });
+      return;
+    }
     if (event.type === 'hollowKingCue') {
       const ring = this.obtainImpact(event.x, event.y, 88);
       const tint = event.kind === 'phaseChanged' ? 0xb59ae9
