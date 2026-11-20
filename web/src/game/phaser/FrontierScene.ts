@@ -490,6 +490,21 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private onGameEvent(event: GameEvent): void {
+    if(event.type === 'worldEventStarted' || event.type === 'worldEventCompleted') {
+      // Visual cue only: event eligibility, kills and rewards belong to simulation.
+      const completed=event.type==='worldEventCompleted';
+      const color=completed?0xd8b975:0xb37fc9;
+      const cue=this.obtainImpact(event.x,event.y,88);
+      cue.lineStyle(4,color,0.9).strokeCircle(0,0,completed?48:65);
+      cue.lineStyle(2,color,0.58).strokeCircle(0,0,completed?70:87);
+      this.tweens.add({
+        targets:cue,alpha:0,scaleX:completed?2.2:1.6,scaleY:completed?2.2:1.6,
+        duration:completed?850:650,onComplete:()=>this.releaseImpact(cue)
+      });
+      this.cameras.main.flash(completed?240:130,
+        completed?150:105,completed?115:70,completed?70:155);
+      return;
+    }
     if (event.type === 'waypointTravel') {
       // The simulation already relocated the hero. Phaser owns presentation only.
       this.heldMovement.release();
