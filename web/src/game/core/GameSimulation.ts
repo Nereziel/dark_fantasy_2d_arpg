@@ -426,6 +426,7 @@ export class GameSimulation {
     for(const plan of this.worldEventPlans) {
       if(this.worldFacts?.entries.some(fact=>
         fact.kind==='eventCompleted'&&fact.entityId===plan.id)
+        ||!this.mapDiscovery?.discoveredLandmarkIds.includes(plan.id)
         ||distance(this.player,plan.position)>plan.triggerRadius
         ||!plan.enemySpawns.every(spawn=>
           canOccupy(spawn.position,ACTOR_RADIUS,this.world.obstacles))
