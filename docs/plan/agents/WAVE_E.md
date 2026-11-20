@@ -1,6 +1,6 @@
 # Wave E — Akt I a procedurální divočina (Prompty 21–22)
 
-**Stav:** PLÁN, agenti dosud nespouštěni; izolované moduly neznamenají dokončené Prompty 21/22. **Maximálně 3 souběžní agenti: 25, 26, 27.**
+**Stav:** AGENTNÍ MODULY + RUNTIME CORE INTEGROVÁNY (20. 11. 2026). Kompletní průchod Act I bez debug nástrojů v browser E2E ještě nebyl prokázán; volitelné POI treasure/event zatím převážně vizuální. Podrobnosti viz závěrečný záznam níže. **Maximálně 3 souběžní agenti: 25, 26, 27.**
 
 **Výchozí stav:** Wave D runtime je dokončena (PR #30–#38), hra používá character-only save v10 s migrací v8/v9, funkční město / ekonomiku / quest engine. [Původní Prompty 21 a 22](../../../2d_arpg_implementation_prompts.md) určují výslednou funkčnost. **Waypoint fast travel patří výlučně Promptu 36** — v této vlně se nezapíná, neimplementuje ani netestuje jako hotová funkce.
 
@@ -38,3 +38,11 @@
 **Agent done** = přesně dvě cesty, ověřené pure API, nulové změny sdíleného runtime, RED→GREEN, check/test/build, draft PR s handoffem. **Prompt 21/22 done** = hráč reálně projde celou linií v prohlížeči bez debug commandů, včetně značek, podmínek a jednorázových odměn, s perzistencí quest stavu; u Prompta 22 je seedově deterministická a průchodná generovaná divočina, viditelné renderovací vrstvy, dosažitelné dungeon/town/quest landmarky. V obou jazycích + E2E + CI + Pages na finálním SHA. Do té doby status `planned/isolated/in integration`.
 
 **Integrátorský runbook:** [INTEGRATION_E.md](INTEGRATION_E.md).
+
+## Záznam provedení — integrátor, 20. 11. 2026
+
+- Agent 25 / Prompt 21 [#42](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/42), Agent 26 / Prompt 22 terrain [#41](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/41), Agent 27 / Prompt 22 POIs [#43](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/43): všechny tři agentní PR prošly individuální zelenou CI, přesnými dvousouborovými diffy a merge **25 → 26 → 27**.
+- Runtime [#44](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/44): deterministická společná generator pipeline a vykreslování s validovanými features; GREEN CI [#44737499897](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44737499897); merge `dba79d089ea85b444dcb2b70bf36bf64601ee4cc`.
+- Runtime [#45](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/45): quest ledger, generované markery a story events, Morrow mini-boss, branching dialog, quest journal, CS/EN, character-only v11 s v8/v9/v10 migracemi a no-double-claim. **CI [#44740992933](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44740992933) GREEN**: 547/547 Vitest, 13/13 Chromium, 0 typecheck error/warning, build + legacy site test PASS. Merge `5763b1d84d4037512ca448871b83c8b9312686dd`.
+- **Zbývá k plné acceptance:** skutečný kompletní browser E2E Act I přes všechny kroky bez synteticky vytvářených snapshotů; vyzkoušet a případně doplnit gameplay generovaných optional POI treasures/events (ty nyní mají serializovaný, renderovaný manifest). Verifikovat post-merge `main` quality a Pages pro přesný publikovaný SHA. Označení `core integrated / full acceptance pending` se nesmí zaměnit za `100% Prompt DONE`.
+- Waypoint fast travel **nebyl implementován**; vyhrazen Promptu 36.
