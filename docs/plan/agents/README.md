@@ -3,7 +3,7 @@
 Vlna D měla **3 agenty** (22–24), každý samostatný doménový modul a jednotkový test. **Žádný z těchto úkolů znovu nespouštěj.** Agenti předali izolované PR [#30](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/30), [#32](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/32) a [#31](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/31); integrátor je sloučil v pořadí 18→19→20 a napojil runtime přes [#33](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/33), [#34](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/34), [#35](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/35).
 
 - [WAVE_D.md](WAVE_D.md) je historické zadání; [INTEGRATION_D.md](INTEGRATION_D.md) obsahuje integrační závěrečný záznam.
-- Prompty **19 a 20 mají funkční jádro**, Prompt **18 je částečný** (trvalé město s NPC a léčitelem, dosud neexistuje skutečná perzistentní úschovna; waypoint má datovou identitu, ale fast travel náleží Promptu 36).
+- Prompty **18–20 mají integrované funkční jádro**: město s NPC, léčitelem a **perzistentní osobní úschovnou** (closeout [#37](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/37), character-only v10 s migrací v8/v9), ekonomiku a dialog/quest registry. Waypoint rychlé cestování není hotové a patří Promptu 36.
 - Následující obsahové Prompty **21–22** plánovat teprve po výslovném zadání; nevytvářet kolidující paralelní změny bez nového write-set plánu.
 
 ---

@@ -42,11 +42,11 @@ Převod pokračuje **v pořadí 63 promptů** ze souboru `2d_arpg_implementation
 
 ## Vlna D — město, ekonomika a questy
 
-Vlna D proběhla se **třemi izolovanými agenty** (22, 23, 24). Jejich moduly (#30, #32, #31) byly sloučeny, načež je integrátor postupně propojil s hrou pomocí [PR #33 — město](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/33), [PR #34 — ekonomika](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/34) a [PR #35 — dialogy/questy](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/35). Ověřeno **488/488 unit testů, 12/12 Chromium E2E, build a typy**.
+Vlna D proběhla se **třemi izolovanými agenty** (22, 23, 24). Jejich moduly (#30, #32, #31) byly sloučeny, načež je integrátor postupně propojil s hrou pomocí [PR #33 — město](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/33), [PR #34 — ekonomika](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/34) a [PR #35 — dialogy/questy](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/35). Ověřeno **488/488 unit testů, 12/12 Chromium E2E, build a typy** pro integraci #35. Navazující [PR #37](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/37) doplnil trvalou úschovnu. Finální herní commit `c2dd29d` prošel **495/495 Vitest, 13/13 Chromium Playwright, typy a produkční build**; [GitHub Pages deployment](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44729571089) je úspěšný.
 
-V táboře přibyly vykreslené a interaktivní postavy, léčitel (15 zlatých) a obnova bojového zdroje (12 zlatých), obojí hlídá simulace. Obchodník a kovář používají jednotnou cenovou a transakční logiku. Rozhovor se strážkyní Vesnou nyní nabízí větvené volby; první quest používá sdílené questové jádro a odměnu lze získat jen jednou. Překlady fungují v **CS/EN**, uložení postavy zůstává ve formátu **v9**.
+V táboře přibyly vykreslené a interaktivní postavy, léčitel (15 zlatých) a obnova bojového zdroje (12 zlatých), obojí hlídá simulace. Obchodník a kovář používají jednotnou cenovou a transakční logiku. Rozhovor se strážkyní Vesnou nyní nabízí větvené volby; první quest používá sdílené questové jádro a odměnu lze získat jen jednou. Překlady fungují v **CS/EN**. Osobní **24slotová úschovna** bezpečně přesouvá předměty mezi batohem a truhlou; s postavou se ukládá ve formátu **v10** (migrace v8/v9).
 
-**Omezení:** skutečná perzistentní osobní úschovna stále chybí (**Prompt 18 partial**); waypoint je zatím připraven pro budoucí rychlé cestování. Nová dějová linie a procedurální divočina náleží Promptům **21–22**. Podrobnosti a pravdivé acceptance označení: [stav implementace](docs/IMPLEMENTATION_STATUS.md) a [integrace D](docs/plan/agents/INTEGRATION_D.md).
+**Omezení:** waypoint má zatím jen připravené rozhraní; rychlé cestování náleží Promptu 36. Základ města s perzistentní úschovnou je nyní **core complete**. Nová dějová linie a procedurální divočina náleží Promptům **21–22**. Podrobnosti a pravdivé acceptance označení: [stav implementace](docs/IMPLEMENTATION_STATUS.md) a [integrace D](docs/plan/agents/INTEGRATION_D.md).
 
 ## Wave C — XP, vybavení, loot a elity
 
@@ -56,7 +56,7 @@ V táboře přibyly vykreslené a interaktivní postavy, léčitel (15 zlatých)
 - Předměty generují seedované prefixy, suffixy a tiery. Náhodnost se neprovádí znovu při uložení, načtení ani přepnutí CS/EN. Kořist zohledňuje oblast, druh nepřítele, level a normal/elite/boss; boss zaručeně dává epickou odměnu.
 - Ve vyšších vlnách se objevují elity se štítem, aurami, regenerací, teleportací, vyvoláváním pomocníků a efekty po smrti. Elementální zásahy procházejí centrálním soubojovým systémem, Phaser pouze vykresluje.
 
-Postavy jsou ukládány jako **character-only v9**; z v8 se migruje inventář, vybavení, XP i postup. Combat, svět, jednotliví nepřátelé a kořist na zemi zůstávají dočasnými daty.
+Postavy se ukládají jako **character-only v10**, včetně osobní úschovny; z v8 a v9 se migruje inventář, vybavení, XP i postup. Combat, svět, jednotliví nepřátelé a kořist na zemi zůstávají dočasnými daty.
 
 ## Současná architektura
 
@@ -74,7 +74,7 @@ Postavy jsou ukládány jako **character-only v9**; z v8 se migruje inventář, 
 | `web/src/game/bridge` | Typovaný most mezi simulací a Svelte |
 | `web/src/ui` | Svelte komponenty pro výběr třídy, inventář, dialogy NPC, obchod, kováře, deník úkolů a HUD |
 | `web/src/i18n` | Překlady `cs` a `en` přes svelte-i18n |
-| `web/src/persistence` | Automatické i ruční ukládání trvalých dat postavy (v9, explicitní migrace v8), bez ukládání pozice nebo bojového stavu |
+| `web/src/persistence` | Automatické i ruční ukládání trvalých dat postavy (v10, explicitní migrace v8/v9), bez ukládání pozice nebo bojového stavu |
 | `web/tests` | Vitest a Playwright |
 
 Z původní hry zůstaly v kořeni `dark_fantasy_2d_arpg_engine.html`, `visuals.js`, `visuals.css` a `index.html` jako **referenční implementace**. Na Pages se již nepoužívají; nedochází tedy k nechtěnému mísení starého a nového enginu.
@@ -100,4 +100,4 @@ Vlastní kód a originální herní assety se licencují jako GPL-3.0-only; exte
 
 Kompletní posloupnost 63 implementačních kroků: [`2d_arpg_implementation_prompts.md`](./2d_arpg_implementation_prompts.md).
 
-Současná verze je **v rané fázi převodu**. Ukládání nyní funguje po vzoru Diabla: do IndexedDB se zapisují jen **trvalá data hrdiny** (povolání, úroveň, XP, zlato, statistika porážek, inventář, výbava včetně kovářských vylepšení a stav úkolu). Po opětovném načtení se postava objeví s plným zdravím v **bezpečném táboře**. Vznikne nová divočina s jiným seedem a nepřátelé, předměty na zemi, stavové efekty i cooldowny začínají znovu. Rozmístění části ruin a překážek se obměňuje; plnohodnotné biomy, další města a rozsáhlé dungeony zatím chybějí. **Postava se automaticky ukládá při změně trvalého postupu**, při spuštění nové postavy a při odchodu do menu; ruční tlačítko „Uložit“ zůstává dostupné. Uložené **postavy ve formátu v8 se automaticky migrují na v9** včetně všech jejich předmětů a kovářských vylepšení. Historické snapshoty světa a formáty starší než v8 nadále nejsou podporovány.
+Současná verze je **v rané fázi převodu**. Ukládání nyní funguje po vzoru Diabla: do IndexedDB se zapisují jen **trvalá data hrdiny** (povolání, úroveň, XP, zlato, statistika porážek, inventář, osobní úschovna, výbava včetně kovářských vylepšení a stav úkolu). Po opětovném načtení se postava objeví s plným zdravím v **bezpečném táboře**. Vznikne nová divočina s jiným seedem a nepřátelé, předměty na zemi, stavové efekty i cooldowny začínají znovu. Rozmístění části ruin a překážek se obměňuje; plnohodnotné biomy, další města a rozsáhlé dungeony zatím chybějí. **Postava se automaticky ukládá při změně trvalého postupu**, při spuštění nové postavy a při odchodu do menu; ruční tlačítko „Uložit“ zůstává dostupné. Uložené **postavy ve formátu v8 a v9 se automaticky migrují na v10** včetně všech jejich předmětů a kovářských vylepšení; starším postavám vznikne prázdná úschovna. Historické snapshoty světa a formáty starší než v8 nadále nejsou podporovány.
