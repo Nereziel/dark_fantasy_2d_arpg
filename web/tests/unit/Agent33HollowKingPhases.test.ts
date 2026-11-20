@@ -220,6 +220,25 @@ describe('Agent 33 — The Hollow King phase machine', () => {
     }
   });
 
+  it('keeps warning and hazard action IDs globally unique across HP phase transitions', () => {
+    const first = run(fresh(14), 40);
+    const secondEntry = success(first.state, 340, 0);
+    const second = run(secondEntry.state, 50);
+    const thirdEntry = success(second.state, 170, 0);
+    const third = run(thirdEntry.state, 70);
+    const actions = [
+      ...first.actions, ...secondEntry.actions,
+      ...second.actions, ...thirdEntry.actions, ...third.actions
+    ];
+    const warningIds = actions.filter(a => a.type === 'telegraph').map(a => a.warning.id);
+    const hazardIds = actions.filter(a => a.type === 'hazardStart').map(a => a.hazard.id);
+    const addIds = actions.filter(a => a.type === 'spawnAdd').map(a => a.add.id);
+    expect(warningIds.length).toBeGreaterThan(10);
+    expect(new Set(warningIds).size).toBe(warningIds.length);
+    expect(new Set(hazardIds).size).toBe(hazardIds.length);
+    expect(new Set(addIds).size).toBe(addIds.length);
+  });
+
   it('does not alias caller-owned arena, state or action collections', () => {
     const arena = structuredClone(ARENA) as unknown as { bounds: { x: number; y: number; width: number; height: number }; bossSpawn: { x: number; y: number }; safePoint: { x: number; y: number }; escapePoint: { x: number; y: number }; exitPosition: { x: number; y: number }; walls: { x: number; y: number; width: number; height: number }[] };
     const start = createHollowKingState('crypt/77/hollow-king', 77, arena, 500);
