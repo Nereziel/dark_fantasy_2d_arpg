@@ -436,7 +436,17 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private onGameEvent(event: GameEvent): void {
-    if (event.type === 'cast') {
+    if (event.type === 'eliteCue') {
+      const visual = this.obtainImpact(event.x, event.y, 86);
+      const tint = event.effect === 'fireAura' || event.effect === 'deathExplosion'
+        ? 0xed7745 : event.effect === 'hazardousGround' ? 0x83b368 : 0x90bde8;
+      visual.lineStyle(4, tint, 0.92).strokeCircle(0, 0, event.radius);
+      visual.fillStyle(tint, 0.10).fillCircle(0, 0, event.radius);
+      this.tweens.add({
+        targets: visual, alpha: 0, scaleX: 1.09, scaleY: 1.09, duration: 550,
+        onComplete: () => this.releaseImpact(visual)
+      });
+    } else if (event.type === 'cast') {
       const definition = Object.values(SKILLS)
         .flatMap(kit => Object.values(kit))
         .find(skill => skill.id === event.skillId);
