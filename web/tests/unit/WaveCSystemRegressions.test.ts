@@ -94,7 +94,7 @@ describe('Wave C integration edge regressions', () => {
     expect(restored.character().itemFlags?.[great.id]).toEqual({ favorite: true, locked: true });
     expect(ownedIds(restored.snapshot())).toEqual(ownedIds(sim.snapshot()));
     const detached = restored.character();
-    detached.itemFlags![great.id]!.favorite = false;
+    (detached.itemFlags![great.id]! as { favorite: boolean }).favorite = false;
     expect(restored.character().itemFlags![great.id]!.favorite).toBe(true);
   });
 
