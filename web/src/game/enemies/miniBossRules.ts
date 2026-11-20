@@ -317,6 +317,25 @@ function suitableTarget(input: MiniBossStepInput): MiniBossTarget | null {
     ? target : null;
 }
 
+/** Deterministic summon *suggestion* with clearance from both actors and arena edge.
+ * World obstacles/other actors must still be checked by the authoritative spawner.
+ */
+function summonPoint(input: MiniBossStepInput): MiniBossPoint | null {
+  const dirs: readonly (readonly [number, number])[] = [
+    [-1, 0], [0, -1], [0, 1], [1, 0],
+    [-1, -1], [-1, 1], [1, -1], [1, 1]
+  ];
+  for (const [dx, dy] of dirs) {
+    const candidate = { x: input.position.x + dx * 76, y: input.position.y + dy * 76 };
+    if (candidate.x < ACTOR_RADIUS || candidate.x > WORLD_WIDTH - ACTOR_RADIUS
+      || candidate.y < ACTOR_RADIUS || candidate.y > WORLD_HEIGHT - ACTOR_RADIUS
+      || distance(candidate, input.arena.center) > input.arena.radius - ACTOR_RADIUS
+      || (input.target && distance(candidate, input.target) < 54)) continue;
+    return candidate;
+  }
+  return null;
+}
+
 /**
  * Exactly one bounded transition per call (max 3 action plans); timer excess
  * is deliberately not carried across stages. All geometry is a suggestion:
@@ -406,7 +425,12 @@ export function stepMiniBoss(state: MiniBossState, input: MiniBossStepInput): Mi
       const ability = def.abilities[abilityIndex];
       if (cooldowns[ability.id]! > 0 || toTarget > ability.range
         || (ability.effect === 'summon' && next.summonsRequested >= def.maxSummonRequests)) continue;
-      const point = copyPoint({ x: target.x, y: target.y });
+      // Banner support is centered on the caster. Adds appear away from the
+      // hero and caster; if the arena has no safe suggestion, skip summoning.
+      const suggestedPoint = ability.effect === 'support' ? input.position
+        : ability.effect === 'summon' ? summonPoint(input) : target;
+      if (suggestedPoint === null) continue;
+      const point = copyPoint(suggestedPoint);
       actions.push({
         kind: 'telegraph', bossId: state.bossId, abilityId: ability.id,
         effect: ability.effect, point, shape: ability.shape, radius: ability.radius,
