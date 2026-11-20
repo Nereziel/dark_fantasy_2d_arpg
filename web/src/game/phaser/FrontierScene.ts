@@ -36,6 +36,9 @@ export class FrontierScene extends Phaser.Scene {
   private hero!: Phaser.GameObjects.Graphics;
   private wardenMarker!: Phaser.GameObjects.Text;
   private readonly enemyGraphics = new Map<string, Phaser.GameObjects.Graphics>();
+  private readonly impactPool: Phaser.GameObjects.Graphics[] = [];
+  private readonly enemyHitUntil = new Map<string, number>();
+  private heroHitUntil = 0;
   private readonly campDecor: Array<Phaser.GameObjects.Graphics | Phaser.GameObjects.Text> = [];
   private healthBar!: Phaser.GameObjects.Graphics;
   private groundItems!: Phaser.GameObjects.Graphics;
@@ -141,6 +144,9 @@ export class FrontierScene extends Phaser.Scene {
       unsubscribeEvents();
       for (const actor of this.enemyGraphics.values()) actor.destroy();
       this.enemyGraphics.clear();
+      for (const graphic of this.impactPool) graphic.destroy();
+      this.impactPool.length = 0;
+      this.enemyHitUntil.clear();
     });
   }
 
@@ -307,16 +313,65 @@ export class FrontierScene extends Phaser.Scene {
     g.lineStyle(3, 0xda9870, 0.7).strokeEllipse(0, 0, 76, 82);
   }
 
+  /** Reuse short-lived combat graphics instead of allocating per impact. */
+  private obtainImpact(x: number, y: number, depth = 85): Phaser.GameObjects.Graphics {
+    const graphic = this.impactPool.pop() ?? this.add.graphics();
+    graphic.clear().setVisible(true).setAlpha(1).setScale(1)
+      .setPosition(x, y).setDepth(depth);
+    return graphic;
+  }
+
+  private releaseImpact(graphic: Phaser.GameObjects.Graphics): void {
+    graphic.clear().setVisible(false);
+    if (this.impactPool.length < 64) this.impactPool.push(graphic);
+    else graphic.destroy();
+  }
+
+  private showDeathFeedback(actorId: string, position: Point): void {
+    const cues = planCombatVfx({ type: 'death', position, actorId });
+    for (const cue of cues) {
+      if (cue.type !== 'deathHook' && cue.type !== 'particles') continue;
+      const graphic = this.obtainImpact(position.x, position.y, 87);
+      graphic.lineStyle(3, 0x9f7a96, 0.9).strokeCircle(0, 0, 23);
+      if (cue.type === 'particles') {
+        for (let n = 0; n < cue.count; n++) {
+          const rad = n * 2 * Math.PI / cue.count;
+          const radius = 10 + n % 4 * 7;
+          graphic.fillStyle(0xc8a6ba, 0.8)
+            .fillCircle(Math.cos(rad) * radius, Math.sin(rad) * radius, 2);
+        }
+      }
+      this.tweens.add({
+        targets: graphic, alpha: 0, scaleX: 2.1, scaleY: 2.1,
+        duration: cue.durationMs, onComplete: () => this.releaseImpact(graphic)
+      });
+    }
+  }
+
   private onGameEvent(event: GameEvent): void {
     if (event.type === 'cast') {
       const definition = Object.values(SKILLS)
         .flatMap(kit => Object.values(kit))
         .find(skill => skill.id === event.skillId);
-      const ring = this.add.graphics().setPosition(event.x, event.y).setDepth(85);
+      const ring = this.obtainImpact(event.x, event.y, 85);
       ring.lineStyle(4, definition?.color ?? 0xffddaa, 0.95).strokeCircle(0, 0, 18);
       this.tweens.add({
         targets: ring, alpha: 0, scaleX: 3.3, scaleY: 3.3, duration: 470,
-        onComplete: () => ring.destroy()
+        onComplete: () => this.releaseImpact(ring)
+      });
+    } else if (event.type === 'defeat' || event.type === 'playerDeath') {
+      const state = this.bridge.snapshot();
+      const actor = event.type === 'playerDeath' ? state.player
+        : state.enemies.find(unit => unit.actor.id === event.targetId)?.actor;
+      if (actor) this.showDeathFeedback(actor.id, { x: actor.x, y: actor.y });
+    } else if (event.type === 'enemyBuff') {
+      const actor = this.bridge.snapshot().enemies.find(u => u.actor.id === event.enemyId)?.actor;
+      if (!actor) return;
+      const ring = this.obtainImpact(actor.x, actor.y, 85);
+      ring.lineStyle(3, 0xb4ca98, 0.92).strokeCircle(0, 0, 27);
+      this.tweens.add({
+        targets: ring, alpha: 0, scaleX: 1.5, scaleY: 1.5, duration: 580,
+        onComplete: () => this.releaseImpact(ring)
       });
     } else if (event.type === 'enemyHeal') {
       const target = this.bridge.snapshot().enemies.find(u => u.actor.id === event.targetId)?.actor;
@@ -330,17 +385,23 @@ export class FrontierScene extends Phaser.Scene {
         onComplete: () => label.destroy()
       });
     } else if (event.type === 'warriorImpact') {
-      const ring = this.add.graphics().setPosition(event.x, event.y).setDepth(86);
+      const ring = this.obtainImpact(event.x, event.y, 86);
       ring.lineStyle(5, 0xf4ce80, 0.95).strokeCircle(0, 0, 35);
       this.tweens.add({
         targets: ring, alpha: 0, scaleX: 2.3, scaleY: 2.3, duration: 280,
-        onComplete: () => ring.destroy()
+        onComplete: () => this.releaseImpact(ring)
       });
     } else if (event.type === 'damageResolved') {
       const state = this.bridge.snapshot();
       const actor = event.targetId === 'hero' ? state.player
         : state.enemies.find(unit => unit.actor.id === event.targetId)?.actor;
       if (!actor) return;
+      if (event.damage > 0) {
+        if (event.targetId === 'hero') this.heroHitUntil = this.time.now + 140;
+        else this.enemyHitUntil.set(event.targetId, this.time.now + 140);
+      }
+      const source = event.sourceId === 'hero' ? state.player
+        : state.enemies.find(u => u.actor.id === event.sourceId)?.actor;
       const cues = planCombatVfx({
         type: 'impact', position: { x: actor.x, y: actor.y },
         damage: event.damage, absorbed: event.absorbed,
@@ -349,7 +410,10 @@ export class FrontierScene extends Phaser.Scene {
           && ENEMY_DEFINITIONS[u.actor.type].attack === 'bolt')
           || (event.sourceId === 'hero' && event.damageType !== 'physical')
           ? 'projectile' : 'melee',
-        critical: event.critical, strong: event.critical || event.damage >= 45
+        critical: event.critical, strong: event.critical || event.damage >= 45,
+        ...(source ? { direction: {
+          x: actor.x - source.x, y: actor.y - source.y
+        } } : {})
       });
       for (const cue of cues) {
         if (cue.type === 'screenShake') {
@@ -367,15 +431,32 @@ export class FrontierScene extends Phaser.Scene {
             targets: label, y: label.y - 32, alpha: 0, duration: cue.durationMs,
             onComplete: () => label.destroy()
           });
-        } else if (cue.type === 'impactFlash' || cue.type === 'particles' || cue.type === 'weaponTrail') {
-          const flash = this.add.graphics().setPosition(cue.position.x, cue.position.y).setDepth(84);
+        } else if (cue.type === 'impactFlash' || cue.type === 'particles'
+          || cue.type === 'weaponTrail' || cue.type === 'knockbackCue') {
+          const flash = this.obtainImpact(cue.position.x, cue.position.y, 84);
           const color = cue.type === 'impactFlash' && cue.tone === 'critical' ? 0xffedaa
             : cue.type === 'impactFlash' && cue.tone === 'blocked' ? 0x9fbde5 : 0xf1b88b;
-          flash.lineStyle(cue.type === 'weaponTrail' ? 2 : 3, color, 0.85)
-            .strokeCircle(0, 0, cue.type === 'particles' ? 17 : 12);
+          if (cue.type === 'knockbackCue') {
+            flash.lineStyle(4, 0xffce9e, 0.8)
+              .lineBetween(0, 0, cue.direction.x * cue.distance, cue.direction.y * cue.distance);
+          } else if (cue.type === 'particles') {
+            const count = Math.min(32, cue.count);
+            for (let n = 0; n < count; n++) {
+              const rad = n * 2 * Math.PI / count;
+              const radius = 10 + n % 5 * 4;
+              flash.fillStyle(color, 0.7)
+                .fillCircle(Math.cos(rad) * radius, Math.sin(rad) * radius, 2.2);
+            }
+          } else if (cue.type === 'weaponTrail') {
+            flash.lineStyle(3, color, 0.9)
+              .lineBetween(-20, 13, 20, -13);
+          } else {
+            flash.lineStyle(4, color, 0.9).strokeCircle(0, 0, 13);
+          }
           this.tweens.add({
             targets: flash, alpha: 0, scaleX: 2.2, scaleY: 2.2,
-            duration: cue.durationMs, onComplete: () => flash.destroy()
+            duration: cue.durationMs,
+            onComplete: () => this.releaseImpact(flash)
           });
         }
       }
@@ -406,7 +487,8 @@ export class FrontierScene extends Phaser.Scene {
     this.hero.setScale(animation === 'running' ? 1 + oscillation * 0.045
       : animation === 'attacking' ? 1 + oscillation * 0.025
       : animation === 'evading' ? 0.9 : 1);
-    this.hero.setAlpha(animation === 'stunned' ? 0.72 : 1);
+    this.hero.setAlpha(this.time.now < this.heroHitUntil ? 0.45
+      : animation === 'stunned' ? 0.72 : 1);
     this.wardenMarker.setText(state.quest.status === 'ready' ? '?'
       : state.quest.status === 'available' ? '!' : '·');
     this.wardenMarker.setVisible(state.zone === 'wilderness' && state.quest.status !== 'completed');
@@ -430,6 +512,7 @@ export class FrontierScene extends Phaser.Scene {
         : Math.sin(this.time.now * (actor.type === 'wolf' ? 0.015 : 0.008) + actor.y) * 1.5;
       sprite.setPosition(actor.x, actor.y + bob);
       sprite.setVisible(actor.alive);
+      sprite.setAlpha(this.time.now < (this.enemyHitUntil.get(actor.id) ?? 0) ? 0.45 : 1);
     }
 
     this.healthBar.clear();
