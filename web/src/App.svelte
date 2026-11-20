@@ -20,6 +20,7 @@
   import SkillBar from './ui/SkillBar.svelte';
   import QuestJournal from './ui/QuestJournal.svelte';
   import WorldMapCanvas from './ui/WorldMapCanvas.svelte';
+  import WaypointPanel from './ui/WaypointPanel.svelte';
   import NpcDialogue from './ui/NpcDialogue.svelte';
   import TradePanel from './ui/TradePanel.svelte';
   import StashPanel from './ui/StashPanel.svelte';
@@ -112,6 +113,13 @@
     const unsubscribeEvents = bridge.onEvent((event) => {
       if (event.type === 'dungeonCleared' && playing) messageKey = 'dungeon.clearedToast';
       if (event.type === 'checkpointActivated' && playing) messageKey = 'respawn.checkpointActivated';
+      if (event.type === 'waypointActivated' && playing && event.id === 'town.waypoint')
+        messageKey = 'waypoints.activated';
+      if (event.type === 'waypointTravel' && playing) {
+        messageKey = 'waypoints.arrived';
+        if (mapOpen) closeMap();
+        else if (townModal !== null) closeDialogue();
+      }
       if (event.type === 'worldInteract' && playing && event.id !== 'soul-shrine') {
         messageKey = event.kind === 'shrine' ? 'worldObjects.shrine' : 'worldObjects.chest';
       }
@@ -510,6 +518,10 @@
             onclick={() => bridge.command({ type: 'interactTown', entryId: 'stash_camp' })}>
             {$t('town.stashAccess')}
           </button>
+          <button disabled={!view.player.alive || view.paused}
+            onclick={() => bridge.command({ type: 'interactTown', entryId: 'waypoint_camp' })}>
+            {$t('waypoints.open')}
+          </button>
         </div>
       {/if}
       <DungeonPanel {view} {bridge} />
@@ -592,6 +604,7 @@
             <h2>{$t('map.title')}</h2>
             <p>{$t('map.legend')}</p>
             <WorldMapCanvas projection={fullProjection} />
+            <WaypointPanel {view} {bridge} />
             <button class="secondary" onclick={closeMap}>{$t('map.close')}</button>
           </section>
         </div>
@@ -602,6 +615,8 @@
             <p>{$t(townModal.descriptionKey)}</p>
             {#if townModal.role === 'stash'}
               <StashPanel {view} {bridge} />
+            {:else if townModal.role === 'waypoint'}
+              <WaypointPanel {view} {bridge} />
             {:else if townModal.role === 'healer'}
               <button class="primary" disabled={view.gold < 15 || view.player.health >= view.player.maxHealth}
                 onclick={() => bridge.command({ type: 'useTownService', entryId: townModal!.id })}>
