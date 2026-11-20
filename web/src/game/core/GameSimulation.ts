@@ -5,6 +5,7 @@ import { applyOrRefreshEffect } from '../status/effectStack';
 import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../skills/warriorKit';
 import { canActivateWarriorSkill, spendAndStartCooldown, advanceWarriorCooldowns, applyWarriorRageDelta, type WarriorActivationRequest } from '../skills/warriorEconomy';
 import { startCombatTimeline, advanceCombatTimeline, cancelCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
+import { classSkillTimeline, BASIC_ATTACK_TIMELINE } from '../animation/classCombatTiming';
 import { STATUS_DEFINITIONS, type StatusId } from '../status/statusDefinitions';
 import { applyStatus, advanceStatuses, dispelStatuses, getStatusModifiers, type StatusInstance } from '../status/statusRuntime';
 import { isLegacyStatus, mergedLegacyEffects, monsterStatusImmunities, statusRule } from '../status/statusIntegration';
@@ -97,6 +98,20 @@ function validWaveBState(s: GameSnapshot): boolean {
       || typeof state.movementLocked !== 'boolean'
       || typeof state.impactEmitted !== 'boolean') return false;
   }
+  if (s.classAction) {
+    const action = s.classAction;
+    const timeline = action.timeline;
+    if (!timeline || !['basic', 'skill'].includes(action.kind)
+      || (action.kind === 'basic' ? action.slot !== null : !isSkillSlot(action.slot))
+      || typeof action.targetId !== 'string' && action.targetId !== null
+      || !Number.isSafeInteger(timeline.elapsedTicks) || timeline.elapsedTicks < 0
+      || !Number.isSafeInteger(timeline.windupTicks) || timeline.windupTicks < 1
+      || !Number.isSafeInteger(timeline.recoveryTicks) || timeline.recoveryTicks < 0
+      || timeline.totalTicks === null || !Number.isSafeInteger(timeline.totalTicks)
+      || timeline.totalTicks < timeline.elapsedTicks || timeline.totalTicks > 300
+      || typeof timeline.impactEmitted !== 'boolean'
+      || typeof timeline.movementLocked !== 'boolean') return false;
+  }
   if (s.statusEffects === undefined) return true;
   const valid = (values: unknown) => Array.isArray(values) && values.length <= 16
     && values.every(e => e && typeof e.id === 'string' && Object.hasOwn(STATUS_DEFINITIONS, e.id)
@@ -118,6 +133,10 @@ export class GameSimulation {
   private warriorCooldowns: Partial<Record<WarriorAbilityId, number>> = {};
   private warriorPending: { id: WarriorAbilityId; targetId: string | null } | null = null;
   private warriorAction: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null = null;
+  private classAction: {
+    kind: 'basic' | 'skill'; slot: SkillSlot | null; targetId: string | null;
+    aim?: SkillAim; timeline: CombatTimelineState;
+  } | null = null;
   private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
   private effects: ActiveEffects = emptyEffects();
   private world: WorldLayout = generateWorld(0);
@@ -223,6 +242,8 @@ export class GameSimulation {
       this.evadeCooldown = 2.5;
       this.warriorPending = null;
       this.warriorAction = null;
+    this.classAction = null;
+      this.classAction = null;
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
@@ -268,6 +289,8 @@ export class GameSimulation {
     if (!this.player.alive || this.paused) return;
     if (command.type === 'interactObject') {
       this.warriorAction = null;
+    this.classAction = null;
+      this.classAction = null;
       this.warriorPending = null;
       const object = getWorldObject(command.id, this.zone);
       if (!object || this.usedObjects.has(object.id)) return;
@@ -284,6 +307,8 @@ export class GameSimulation {
     }
     if (command.type === 'usePortal') {
       this.warriorAction = null;
+    this.classAction = null;
+      this.classAction = null;
       this.warriorPending = null;
       this.movePath = [];
       this.attackTarget = null;
@@ -298,6 +323,8 @@ export class GameSimulation {
     }
     if (command.type === 'interactNpc') {
       this.warriorAction = null;
+    this.classAction = null;
+      this.classAction = null;
       this.warriorPending = null;
       if (this.zone !== 'wilderness' || !isNpcId(command.npcId)) return;
       this.movePath = [];
@@ -342,6 +369,8 @@ export class GameSimulation {
       if (!target) return;
       this.warriorPending = null;
       this.warriorAction = null;
+    this.classAction = null;
+      this.classAction = null;
       const route = findPath(this.player, target, ACTOR_RADIUS, this.world.obstacles);
       if (!route.length) return;
       this.movePath = route;
@@ -358,6 +387,8 @@ export class GameSimulation {
       this.selectedTargetId = selected.actor.id;
       this.warriorPending = null;
       this.warriorAction = null;
+    this.classAction = null;
+      this.classAction = null;
       this.attackTarget = selected.actor.id;
       this.movePath = [];
       this.pickupTarget = null;
@@ -688,6 +719,8 @@ export class GameSimulation {
       || this.statusEffects.player.some(e => e.id === 'stunned' || e.id === 'frozen')) {
       cancelCombatTimeline(action.timeline);
       this.warriorAction = null;
+    this.classAction = null;
+      this.classAction = null;
       return;
     }
     const result = advanceCombatTimeline(action.timeline, 1);
@@ -711,7 +744,7 @@ export class GameSimulation {
   }
 
   private requestCast(slot: SkillSlot, aim?: SkillAim): void {
-    if (this.warriorAction) return;
+    if (this.warriorAction || this.classAction) return;
     const skill = SKILLS[this.classId][slot];
     if (this.classId === 'WARRIOR') {
       const targetId = aim?.mode === 'TARGET_ENTITY' ? aim.targetId
@@ -937,23 +970,67 @@ export class GameSimulation {
     if (unit.actor.health === 0) this.defeatEnemy(unit);
     return dealt;
   }
+  /** Authoritative cast commitment. Damage/periodic effects start at impact, not input. */
   private performCast(slot: SkillSlot, aim?: SkillAim): void {
-    if (this.warriorAction) return;
+    if (this.warriorAction || this.classAction) return;
     const skill = SKILLS[this.classId][slot];
     const unit = this.focusedUnit;
     if (this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
     const aimed = aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA' || aim?.mode === 'DIRECTION';
     if (skill.target === 'enemy' && !aimed
       && (!unit.actor.alive || distance(this.player, unit.actor) > skill.range + 0.5)) return;
+    const targetId = skill.target === 'enemy' ? unit.actor.id : null;
     this.resource = Math.max(0, this.resource - skill.cost);
     this.cooldowns[slot] = skill.cooldown;
-    if (this.classId === 'WARRIOR') this.warriorCooldowns[skill.id as WarriorAbilityId] = skill.cooldown;
     this.pendingSkill = null;
     this.pendingAim = null;
     const point = (aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA')
       ? aim.position : skill.target === 'enemy' ? unit.actor : this.player;
+    this.classAction = {
+      kind: 'skill', slot, targetId,
+      ...(aim ? { aim: structuredClone(aim) } : {}),
+      timeline: startCombatTimeline(classSkillTimeline(skill)).state
+    };
     this.events.push({ type: 'cast', skillId: skill.id, x: point.x, y: point.y });
+  }
 
+  /** A single fixed-step resolver for every non-Warrior attack and ability. */
+  private tickClassTimeline(): void {
+    const action = this.classAction;
+    if (!action) return;
+    if (!this.player.alive || this.statusEffects.player.some(s =>
+      s.id === 'stunned' || s.id === 'frozen')) {
+      cancelCombatTimeline(action.timeline);
+      this.classAction = null;
+      return;
+    }
+    const result = advanceCombatTimeline(action.timeline, 1);
+    action.timeline = result.state;
+    for (const event of result.events) {
+      if (event.type !== 'impact') continue;
+      if (action.kind === 'basic') {
+        const target = this.units.find(unit =>
+          unit.actor.id === action.targetId && unit.actor.alive);
+        if (target && distance(this.player, target.actor) <= CLASSES[this.classId].attackRange + 10) {
+          this.applyDamage(1, target);
+          if (this.classId === 'NECROMANCER' || this.classId === 'WARLOCK') {
+            this.resource = Math.min(CLASSES[this.classId].resourceMax, this.resource + 8);
+          }
+        }
+      } else if (action.slot) {
+        this.resolveClassCast(action.slot, action.aim, action.targetId);
+      }
+    }
+    if (action.timeline.phase === 'complete' || action.timeline.phase === 'cancelled') {
+      this.classAction = null;
+    }
+  }
+
+  /** Previously instantaneous skill effects, now executed exclusively at the hit frame. */
+  private resolveClassCast(slot: SkillSlot, aim?: SkillAim, targetId?: string | null): void {
+    const skill = SKILLS[this.classId][slot];
+    const unit = (targetId
+      ? this.units.find(unit => unit.actor.id === targetId) : null) ?? this.focusedUnit;
     if (skill.kind === 'dash' && aim?.mode === 'DIRECTION') {
       const length = Math.hypot(aim.direction.x, aim.direction.y);
       const dx = aim.direction.x / length, dy = aim.direction.y / length;
@@ -1019,6 +1096,8 @@ export class GameSimulation {
       this.player.alive = false;
       this.warriorPending = null;
       this.warriorAction = null;
+    this.classAction = null;
+      this.classAction = null;
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingNpc = null;
@@ -1358,6 +1437,7 @@ export class GameSimulation {
     this.warriorCooldowns = {};
     this.warriorPending = null;
     this.warriorAction = null;
+    this.classAction = null;
     this.statusEffects = { player: [], enemies: {} };
     this.attackTimer = 0;
     this.accumulator = 0;
@@ -1400,6 +1480,7 @@ export class GameSimulation {
     this.tickCanonicalStatuses(dt);
     this.syncLegacyStatuses();
     this.tickWarriorTimeline();
+    this.tickClassTimeline();
     if (this.player.alive) {
       const regen = regenerateHealth(
         this.player.health, this.player.maxHealth,
@@ -1461,7 +1542,8 @@ export class GameSimulation {
       if (!object) this.pendingObject = null;
       else if (distance(this.player, object.position) <= object.reach) this.tryInteractObject();
       else this.follow(this.player, object.position, speed, dt, object.reach - 10);
-    } else if (this.warriorAction?.timeline.movementLocked) {
+    } else if (this.warriorAction?.timeline.movementLocked
+      || this.classAction?.timeline.movementLocked) {
       this.movementSpeed = 0;
     } else if (this.warriorPending) {
       const pending = this.warriorPending;
@@ -1515,13 +1597,15 @@ export class GameSimulation {
           if (this.warriorAction?.id === 'basicAttack') {
             this.attackTarget = target.actor.id;
           }
-        } else {
+        } else if (!this.classAction) {
           const stats = deriveStats(this.classId, this.equipment);
           this.attackTimer = 0.68 / stats.attackSpeed;
-          this.applyDamage(1, target);
-          if (['NECROMANCER', 'WARLOCK'].includes(this.classId)) {
-            this.resource = Math.min(definition.resourceMax, this.resource + 8);
-          }
+          this.classAction = {
+            kind: 'basic', slot: null, targetId: target.actor.id,
+            timeline: startCombatTimeline(BASIC_ATTACK_TIMELINE).state
+          };
+          this.events.push({ type: 'cast', skillId: 'basicAttack',
+            x: target.actor.x, y: target.actor.y });
         }
       }
     } else if (this.pickupTarget) {
@@ -1657,7 +1741,8 @@ export class GameSimulation {
   snapshot(): GameSnapshot {
     const focus = this.focusedUnit;
     const status = this.paused ? 'paused' : !this.player.alive ? 'dead'
-      : this.attackTarget || this.pendingSkill || this.warriorAction || this.warriorPending ? 'combat'
+      : this.attackTarget || this.pendingSkill || this.warriorAction || this.warriorPending
+        || this.classAction ? 'combat'
       : this.movePath.length || this.pickupTarget || this.pendingObject
         || this.pendingNpc || this.pendingPortal ? 'moving' : 'ready';
     return {
@@ -1692,6 +1777,10 @@ export class GameSimulation {
       warriorCooldowns: { ...this.warriorCooldowns },
       warriorAction: this.warriorAction ? {
         ...this.warriorAction, timeline: { ...this.warriorAction.timeline }
+      } : null,
+      classAction: this.classAction ? {
+        ...this.classAction, timeline: { ...this.classAction.timeline },
+        ...(this.classAction.aim ? { aim: structuredClone(this.classAction.aim) } : {})
       } : null,
       statusEffects: {
         player: this.statusEffects.player.map(s => ({ ...s, modifiers: { ...s.modifiers }, immunityTags: [...s.immunityTags] })),
@@ -1838,6 +1927,10 @@ export class GameSimulation {
     this.warriorAction = s.warriorAction ? {
       ...s.warriorAction, timeline: { ...s.warriorAction.timeline }
     } : null;
+    this.classAction = s.classAction ? {
+      ...s.classAction, timeline: { ...s.classAction.timeline },
+      ...(s.classAction.aim ? { aim: structuredClone(s.classAction.aim) } : {})
+    } : null;
     this.warriorPending = null;
     this.statusEffects = {
       player: (s.statusEffects?.player ?? []).map(e => ({ ...e })),
@@ -1882,6 +1975,7 @@ export class GameSimulation {
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
     this.warriorAction = null;
+    this.classAction = null;
     this.warriorPending = null;
     this.statusEffects = { player: [], enemies: {} };
     this.effects = emptyEffects();
