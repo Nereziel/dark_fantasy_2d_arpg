@@ -957,9 +957,11 @@ export class GameSimulation {
         * Math.max(0.1, 1 + (attackerStatus.damageDealt ?? 0))
         * Math.max(0.1, 1 + (defenderStatus.damageTaken ?? 0)), critChance,
       defenderArmor: 10 + this.level * 3, defenderLevel: this.level,
+      shield: unit.elite?.shield ?? 0,
       resistancePercent: Math.min(95, this.enemyResistance(unit, type) +
         100 * Math.min(0.8, getStatusModifiers(this.statusEffects.enemies[unit.actor.id] ?? []).damageReduction ?? 0))
     }, this.rng);
+    if (unit.elite) unit.elite.shield = result.shieldRemaining;
     this.publishDamage(sourceId, unit.actor.id, type, result);
     return this.hitEnemy(result.damage, unit);
   }
@@ -1072,10 +1074,7 @@ export class GameSimulation {
 
   private hitEnemy(damage: number, unit: EnemyUnit): number {
     if (!unit.actor.alive || damage <= 0) return 0;
-    const raw = Math.max(0, Math.round(damage));
-    const absorbed = unit.elite ? Math.min(raw, unit.elite.shield) : 0;
-    if (unit.elite) unit.elite.shield -= absorbed;
-    const dealt = Math.min(unit.actor.health, raw - absorbed);
+    const dealt = Math.min(unit.actor.health, Math.max(0, Math.round(damage)));
     if (dealt === 0) return 0;
     unit.actor.health -= dealt;
     this.events.push({ type: 'hit', targetId: unit.actor.id, damage: dealt });
