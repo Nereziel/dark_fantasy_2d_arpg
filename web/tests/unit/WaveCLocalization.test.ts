@@ -5,6 +5,7 @@ import { ITEM_BASES, ITEM_RARITIES } from '../../src/game/items/itemCatalog';
 import { AFFIX_PREFIXES, AFFIX_SUFFIXES } from '../../src/game/items/affixGeneration';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { rollItemForBase, SeededRng } from '../../src/game/data/items';
+import { itemDisplayName } from '../../src/game/items/itemName';
 
 describe('Wave C bilingual names and immutable loot instances', () => {
   it('provides every catalog base, affix and rarity key in Czech and English', () => {
@@ -49,4 +50,16 @@ describe('Wave C bilingual names and immutable loot instances', () => {
     }
     expect(sim.character().inventory[0]?.affixes).toEqual(item.affixes);
   });
+  it('inflects Czech feminine adjectives and refreshes names without changing rolls', () => {
+    const base = rollItemForBase('hauberk', 'locale-case', 72, 'RARE', new SeededRng(77))!;
+    const item = { ...base, affixes: [
+      { id: 'mighty', kind: 'prefix' as const, stat: 'strength' as const,
+        tier: 1 as const, value: 3 }
+    ] };
+    const source = JSON.stringify(item);
+    expect(itemDisplayName(item, 'cs', cs.item.base.hauberk)).toBe('Mocná kroužková zbroj');
+    expect(itemDisplayName(item, 'en', en.item.base.hauberk)).toBe('Mighty Hauberk');
+    expect(JSON.stringify(item)).toBe(source);
+  });
+
 });
