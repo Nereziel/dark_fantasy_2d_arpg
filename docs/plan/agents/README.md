@@ -1,16 +1,14 @@
-# Koordinace agentů — Wave F připravena (agenti 28–30, Prompty 23–25)
+# Koordinace agentů — Wave F: herní jádro integrováno (28–30)
 
-**Aktuální zadání:** [WAVE_F.md](WAVE_F.md), [INTEGRATION_F.md](INTEGRATION_F.md) a konkrétní [Agent 28](28/TASK.md), [Agent 29](29/TASK.md), [Agent 30](30/TASK.md). Max. **3 paralelní agenti** na přesně vyhrazených, nepřekrývajících se dvousouborových write-setech. Všichni začínají ze **stejného 40znakového BASE_SHA určeného až integrátorem při dispatchi**, po merge plánovacího PR do aktuálního `main`.
+**Aktuální stav 20. 11. 2026:** Wave F (Prompty 23–25) má sloučené izolované agentní moduly **#48 / #50 / #49**, následně runtime **[#51](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/51)** (wilderness chunks), **[#52](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/52)** (mapa, fog, world-scoped persistence) a **[#53](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/53)** (procedurální krypta). Všechny PR prošly GREEN CI před merge; poslední #53 zahrnovalo 607/607 unit + 14/14 Chromium. **Agenty 28–30 znovu nespouštěj.**
 
-| Agent | Originální prompt | Pouze produkční soubor a unikátní test |
-| --- | --- | --- |
-| **28** | **23 — World Chunking and Streaming** | `web/src/game/world/chunkStreaming.ts` + `web/tests/unit/Agent28ChunkStreaming.test.ts` |
-| **29** | **24 — Map, Minimap, Fog of War** | `web/src/game/world/mapDiscovery.ts` + `web/tests/unit/Agent29MapDiscovery.test.ts` |
-| **30** | **25 — Procedural Dungeon Generator** | `web/src/game/world/proceduralDungeon.ts` + `web/tests/unit/Agent30ProceduralDungeon.test.ts` |
+| Historický agent | Prompt | Výhradní modul | Stav |
+| --- | --- | --- | --- |
+| 28 | 23 — World Chunking | `world/chunkStreaming.ts` | [#48](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/48) merged |
+| 29 | 24 — Map/Minimap/Fog | `world/mapDiscovery.ts` | [#50](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/50) merged |
+| 30 | 25 — Procedural Dungeon | `world/proceduralDungeon.ts` | [#49](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/49) merged |
 
-**Dispatch:** až po ověření společného HEAD; pro každý nový worktree použít `bash scripts/agent-bootstrap.sh`, pak RED→GREEN a `bash scripts/verify.sh targeted ...` → `bash scripts/verify.sh agent` podle [WORKFLOW_CACHE.md](WORKFLOW_CACHE.md). Žádný agent nesmí měnit `GameSimulation`, `FrontierScene`, Svelte UI, save v11, i18n ani moduly dalších agentů. Výstup pouze **draft PR**, bez merge; následný integrátor slučuje **28 → 29 → 30** a teprve potom propojuje streaming/mapu/dungeon v samostatných runtime PR. **Příprava Wave F neznamená její implementaci.**
-
-**Waypoint fast travel = až Prompt 36.** Aktuální **character-only save v11** se nemění agentními PR; budoucí perzistenci mapových/world faktů integrátor explicitně odliší od seedově dočasného stavu a bude verzovat bez ztráty v8/v9/v10/v11.
+**Source of truth:** [WAVE_F.md](WAVE_F.md), [INTEGRATION_F.md](INTEGRATION_F.md) obsahují výsledek včetně přesných SHAs, CI a zbývajících acceptance. Důležité: character-only save **v11** trvá, samostatná perzistence world facts/fog je seed-scoped; žádné fast travel před Promptem 36. Zbývá měření offscreen AI/entity unload + browser průchod celým novým dungeonem bez fixture a poslední kontrola Pages/main. Číselně další Prompty 26–28; nejprve rozhodnout o stavu acceptance tohoto closeoutu.
 
 ---
 
