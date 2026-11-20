@@ -40,7 +40,7 @@ import {
   type WorldLayout
 } from '../world/generator';
 import { buildWilderness, type WildernessRuntimeWorld } from '../world/wildernessRuntime';
-import { buildCryptWorld } from '../world/dungeonRuntime';
+import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonRuntime';
 import {
   createChunkIndex, createWorldFactLedger, applyWorldFact, makeWorldFact,
   validateWorldFactLedger, type ChunkIndex, type WorldFactLedger, type WorldFactKind
@@ -1611,7 +1611,7 @@ export class GameSimulation {
     if (!profile || !actor.alive || !this.player.alive) return;
     const index = this.units.indexOf(unit);
     const spawn = this.zone === 'crypt' && this.dungeonStage === 1 && index < PACK_SIZE
-      ? CRYPT_BOSS_POSITIONS[index]
+      ? CRYPT_RUNTIME_BOSS_POSITIONS[index]
       : this.world.encounterPositions[index] ?? (unit.summoned ? actor : undefined);
     if (!spawn) return;
     const origin = { x: spawn.x, y: spawn.y + (this.wave % 2) * 25 };
@@ -1960,7 +1960,7 @@ export class GameSimulation {
         if (this.respawnTimer <= 0) {
           this.dungeonStage = 1;
           this.wave = 1;
-          this.units = createCryptPack(1, this.level, CRYPT_BOSS_POSITIONS);
+          this.units = createCryptPack(1, this.level, CRYPT_RUNTIME_BOSS_POSITIONS);
           this.seedElitePack();
           this.statusEffects.enemies = {};
           this.respawnTimer = 0;
