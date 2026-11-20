@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { get } from 'svelte/store';
 import { _ as translate } from 'svelte-i18n';
 import { planCombatVfx } from './combatVfxPlan';
+import { statusVisuals } from '../status/statusVisuals';
+import type { StatusInstance } from '../status/statusRuntime';
 import type { GameBridge } from '../bridge/GameBridge';
 import { CLASSES } from '../data/classes';
 import { RARITIES } from '../data/items';
@@ -14,6 +16,10 @@ import {
 import { resolvePointerAction } from '../input/bindings';
 import { HeldPointerMovement } from '../input/heldMovement';
 import { playerAnimation } from '../entities/playerAnimation';
+import {
+  PIXEL_ANIMATIONS, PIXEL_ANIMATION_FRAMES, PIXEL_FRAME_HEIGHT, PIXEL_FRAME_WIDTH,
+  pixelAtlasKey, pixelFrame, pixelTimelineFrame, renderPixelAtlas, type PixelActor, type PixelAnimation
+} from './pixelSpriteAtlas';
 import { ACTOR_RADIUS, canOccupy, type Obstacle } from '../world/navigation';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
 import {
@@ -34,11 +40,18 @@ const HEIGHT = 1400;
 export class FrontierScene extends Phaser.Scene {
   private readonly bridge: GameBridge;
   private hero!: Phaser.GameObjects.Graphics;
+  private heroSprite!: Phaser.GameObjects.Sprite;
+  private readonly enemySprites = new Map<string, Phaser.GameObjects.Sprite>();
+  private readonly enemyPositions = new Map<string, Point>();
+  private readonly enemyDeadUntil = new Map<string, number>();
+  private heroDeadUntil = 0;
   private wardenMarker!: Phaser.GameObjects.Text;
   private readonly enemyGraphics = new Map<string, Phaser.GameObjects.Graphics>();
   private readonly impactPool: Phaser.GameObjects.Graphics[] = [];
   private readonly enemyHitUntil = new Map<string, number>();
+  private readonly enemyBlockUntil = new Map<string, number>();
   private heroHitUntil = 0;
+  private heroBlockUntil = 0;
   private readonly campDecor: Array<Phaser.GameObjects.Graphics | Phaser.GameObjects.Text> = [];
   private healthBar!: Phaser.GameObjects.Graphics;
   private groundItems!: Phaser.GameObjects.Graphics;
@@ -114,7 +127,11 @@ export class FrontierScene extends Phaser.Scene {
     this.hero.fillStyle(CLASSES[this.bridge.snapshot().classId].color).fillTriangle(-14, 8, 14, 8, 0, -26);
     this.hero.fillStyle(0xd7c3a0).fillCircle(0, -13, 5);
     this.hero.lineStyle(4, 0xb7a77a).lineBetween(14, 5, 25, -22);
-    this.hero.setDepth(50);
+    this.hero.setDepth(50).setVisible(false); // camera-follow anchor (gameplay lives in simulation)
+    const heroKey = this.ensurePixelAtlas(entry.classId);
+    this.heroSprite = this.add.sprite(entry.player.x, entry.player.y, heroKey,
+      pixelFrame('idle', 0)).setOrigin(0.5, 0.9).setDepth(52);
+    this.heroSprite.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
 
     this.healthBar = this.add.graphics().setDepth(60);
     this.groundItems = this.add.graphics().setDepth(44);
@@ -144,10 +161,76 @@ export class FrontierScene extends Phaser.Scene {
       unsubscribeEvents();
       for (const actor of this.enemyGraphics.values()) actor.destroy();
       this.enemyGraphics.clear();
+      for (const actor of this.enemySprites.values()) actor.destroy();
+      this.enemySprites.clear();
+      this.enemyPositions.clear();
+      this.enemyDeadUntil.clear();
+      this.heroSprite.destroy();
       for (const graphic of this.impactPool) graphic.destroy();
       this.impactPool.length = 0;
       this.enemyHitUntil.clear();
+      this.enemyBlockUntil.clear();
     });
+  }
+
+  /** One-time Canvas2D-generated sprite atlases, shared by all actors of a type. */
+  private ensurePixelAtlas(actor: PixelActor): string {
+    const key = pixelAtlasKey(actor);
+    if (this.textures.exists(key)) return key;
+    const texture = this.textures.addCanvas(key, renderPixelAtlas(actor));
+    if (!texture) throw new Error('Unable to register original pixel atlas: ' + key);
+    PIXEL_ANIMATIONS.forEach((animation, row) => {
+      for (let frame = 0; frame < PIXEL_ANIMATION_FRAMES; frame++) {
+        texture.add(pixelFrame(animation, frame), 0,
+          frame * PIXEL_FRAME_WIDTH, row * PIXEL_FRAME_HEIGHT,
+          PIXEL_FRAME_WIDTH, PIXEL_FRAME_HEIGHT);
+      }
+    });
+    return key;
+  }
+
+  private pixelPose(animation: ReturnType<typeof playerAnimation>): PixelAnimation {
+    if (animation === 'running') return 'run';
+    if (animation === 'attacking') return 'attack';
+    if (animation === 'casting') return 'cast';
+    if (animation === 'channeling') return 'channel';
+    if (animation === 'evading') return 'dodge';
+    if (animation === 'stunned') return 'hit';
+    if (animation === 'dead') return 'death';
+    return 'idle';
+  }
+
+  private timedFrame(elapsed: number, total: number): number {
+    return Math.max(0, Math.min(3, Math.floor(4 * elapsed / Math.max(1, total))));
+  }
+
+  /** Entire status catalog is represented with consistent passive combat glyphs. */
+  private drawStatuses(x:number,y:number,statuses:readonly StatusInstance[]):void {
+    const visuals = statusVisuals(statuses);
+    for(let i=0;i<visuals.length;i++) {
+      const visual = visuals[i]!;
+      const radius = 24 + Math.min(i,8)*3;
+      const pulse = 0.72 + 0.18*Math.sin(this.time.now*0.005+i*1.7);
+      this.statusVisuals.lineStyle(2,visual.color,pulse)
+        .strokeCircle(x,y,radius);
+      if (visual.glyph === 'shield') {
+        this.statusVisuals.lineStyle(3,visual.color,pulse)
+          .strokeTriangle(x-8,y-22,x+8,y-22,x,y-10);
+      } else if (visual.glyph === 'root') {
+        this.statusVisuals.lineStyle(3,visual.color,pulse)
+          .lineBetween(x-16,y+18,x-7,y+28).lineBetween(x+16,y+18,x+7,y+28);
+      } else if(visual.glyph === 'cross') {
+        this.statusVisuals.lineStyle(3,visual.color,pulse)
+          .lineBetween(x-11,y-30,x+11,y-12)
+          .lineBetween(x-11,y-12,x+11,y-30);
+      } else if(visual.glyph === 'rune') {
+        this.statusVisuals.lineStyle(2,visual.color,pulse)
+          .strokeTriangle(x-11,y-35,x+11,y-35,x,y-16);
+      } else if(visual.glyph === 'spark') {
+        this.statusVisuals.fillStyle(visual.color,pulse)
+          .fillCircle(x+16,y-22,4).fillCircle(x-14,y-28,3);
+      }
+    }
   }
 
   private uiCapturesPointer(): boolean {
@@ -363,7 +446,11 @@ export class FrontierScene extends Phaser.Scene {
       const state = this.bridge.snapshot();
       const actor = event.type === 'playerDeath' ? state.player
         : state.enemies.find(unit => unit.actor.id === event.targetId)?.actor;
-      if (actor) this.showDeathFeedback(actor.id, { x: actor.x, y: actor.y });
+      if (actor) {
+        this.showDeathFeedback(actor.id, { x: actor.x, y: actor.y });
+        if (event.type === 'playerDeath') this.heroDeadUntil = this.time.now + 650;
+        else this.enemyDeadUntil.set(actor.id, this.time.now + 650);
+      }
     } else if (event.type === 'enemyBuff') {
       const actor = this.bridge.snapshot().enemies.find(u => u.actor.id === event.enemyId)?.actor;
       if (!actor) return;
@@ -399,6 +486,9 @@ export class FrontierScene extends Phaser.Scene {
       if (event.damage > 0) {
         if (event.targetId === 'hero') this.heroHitUntil = this.time.now + 140;
         else this.enemyHitUntil.set(event.targetId, this.time.now + 140);
+      } else if (event.blocked) {
+        if (event.targetId === 'hero') this.heroBlockUntil = this.time.now + 190;
+        else this.enemyBlockUntil.set(event.targetId, this.time.now + 190);
       }
       const source = event.sourceId === 'hero' ? state.player
         : state.enemies.find(u => u.actor.id === event.sourceId)?.actor;
@@ -482,6 +572,10 @@ export class FrontierScene extends Phaser.Scene {
     }
     for (const actor of this.campDecor) actor.setVisible(state.zone === 'wilderness');
     this.hero.setPosition(state.player.x, state.player.y);
+    if (this.heroSprite.texture.key !== pixelAtlasKey(state.classId)) {
+      this.heroSprite.setTexture(this.ensurePixelAtlas(state.classId), pixelFrame('idle', 0));
+    }
+    this.heroSprite.setPosition(state.player.x, state.player.y);
     const animation = playerAnimation(state);
     const oscillation = Math.sin(this.time.now * 0.015);
     this.hero.setScale(animation === 'running' ? 1 + oscillation * 0.045
@@ -494,13 +588,29 @@ export class FrontierScene extends Phaser.Scene {
     this.wardenMarker.setText(state.quest.status === 'ready' ? '?'
       : state.quest.status === 'available' ? '!' : '·');
     this.wardenMarker.setVisible(state.zone === 'wilderness' && state.quest.status !== 'completed');
-    this.hero.setVisible(state.player.alive);
+    this.hero.setVisible(false);
+    const visualPose = this.time.now < this.heroBlockUntil ? 'block'
+      : this.time.now < this.heroHitUntil ? 'hit' : this.pixelPose(animation);
+    const castTicks = state.warriorAction?.timeline ?? state.classAction?.timeline;
+    const heroFrame = castTicks && (visualPose === 'attack' || visualPose === 'cast'
+      || visualPose === 'channel')
+      ? pixelTimelineFrame(castTicks)
+      : Math.floor(this.time.now / (visualPose === 'run' ? 95 : 150)) % PIXEL_ANIMATION_FRAMES;
+    this.heroSprite.setFrame(pixelFrame(visualPose, heroFrame));
+    this.heroSprite.setVisible(state.player.alive || this.time.now < this.heroDeadUntil);
+    this.heroSprite.setAlpha(this.time.now < this.heroHitUntil ? 0.6 : 1);
+    this.heroSprite.setScale(animation === 'evading' ? 0.92 : 1);
     const ids = new Set(state.enemies.map(unit => unit.actor.id));
     for (const [id, sprite] of this.enemyGraphics) {
       if (!ids.has(id)) {
         sprite.destroy();
         this.enemyGraphics.delete(id);
+        this.enemySprites.get(id)?.destroy();
+        this.enemySprites.delete(id);
+        this.enemyPositions.delete(id);
+        this.enemyDeadUntil.delete(id);
         this.enemyHitUntil.delete(id);
+        this.enemyBlockUntil.delete(id);
       }
     }
     for (const { actor } of state.enemies) {
@@ -509,20 +619,44 @@ export class FrontierScene extends Phaser.Scene {
         sprite = this.add.graphics().setDepth(48);
         this.drawEnemy(actor.type, sprite);
         this.enemyGraphics.set(actor.id, sprite);
+        const art = this.add.sprite(actor.x, actor.y, this.ensurePixelAtlas(actor.type),
+          pixelFrame('idle', 0)).setOrigin(0.5, 0.9).setDepth(49);
+        art.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+        this.enemySprites.set(actor.id, art);
       }
       const bob = actor.type === 'wraith'
         ? Math.sin(this.time.now * 0.0045 + actor.x) * 4
         : Math.sin(this.time.now * (actor.type === 'wolf' ? 0.015 : 0.008) + actor.y) * 1.5;
-      sprite.setPosition(actor.x, actor.y + bob);
-      sprite.setVisible(actor.alive);
-      sprite.setAlpha(this.time.now < (this.enemyHitUntil.get(actor.id) ?? 0) ? 0.45 : 1);
+      sprite.setPosition(actor.x, actor.y + bob).setVisible(false);
+      const art = this.enemySprites.get(actor.id);
+      if (art) {
+        const last = this.enemyPositions.get(actor.id);
+        const moving = !!last && Math.hypot(actor.x-last.x, actor.y-last.y) > 0.3;
+        const underHit = this.time.now < (this.enemyHitUntil.get(actor.id) ?? 0);
+        const pose: PixelAnimation = !actor.alive ? 'death'
+          : this.time.now < (this.enemyBlockUntil.get(actor.id) ?? 0) ? 'block'
+          : underHit ? 'hit' : state.enemies.find(u => u.actor.id === actor.id)?.intent
+            ? ENEMY_DEFINITIONS[actor.type].attack === 'bolt' ? 'cast' : 'attack'
+            : moving ? 'run' : 'idle';
+        const intent = state.enemies.find(u => u.actor.id === actor.id)?.intent;
+        const progress = intent && (pose === 'attack' || pose === 'cast')
+          ? this.timedFrame(intent.total-intent.remaining, intent.total)
+          : Math.floor(this.time.now / (pose === 'run' ? 110 : 170)) % PIXEL_ANIMATION_FRAMES;
+        const frame = !actor.alive
+          ? this.timedFrame(650 - Math.max(0,(this.enemyDeadUntil.get(actor.id) ?? 0)-this.time.now),650)
+          : progress;
+        art.setPosition(actor.x,actor.y+bob).setFrame(pixelFrame(pose,frame))
+          .setVisible(actor.alive || this.time.now < (this.enemyDeadUntil.get(actor.id) ?? 0))
+          .setAlpha(underHit ? 0.55 : 1);
+      }
+      this.enemyPositions.set(actor.id, { x: actor.x, y: actor.y });
     }
 
     this.healthBar.clear();
     this.telegraph.clear();
     this.statusVisuals.clear();
     if (animation === 'channeling' || animation === 'casting') {
-      const progress = state.warriorAction?.timeline.elapsedTicks ?? 0;
+      const progress = (state.warriorAction?.timeline ?? state.classAction?.timeline)?.elapsedTicks ?? 0;
       this.statusVisuals.lineStyle(2, animation === 'channeling' ? 0xe5b56a : 0xc8ceee, 0.65)
         .strokeCircle(state.player.x, state.player.y, 27 + Math.sin(progress * 0.12) * 4);
     }
@@ -537,7 +671,7 @@ export class FrontierScene extends Phaser.Scene {
         .strokeCircle(portal.x, portal.y, 66);
     }
     for (const unit of state.enemies) {
-      const { actor, intent, effects } = unit;
+      const { actor, intent } = unit;
       if (!actor.alive) continue;
       if (intent) {
         const progress = Math.max(0, 1 - intent.remaining / intent.total);
@@ -548,26 +682,7 @@ export class FrontierScene extends Phaser.Scene {
         this.telegraph.fillStyle(0xffd3a7, 0.55 + progress * 0.4)
           .fillCircle(intent.x, intent.y, 4);
       }
-      const canonicalEffects = state.statusEffects?.enemies?.[actor.id] ?? [];
-      if (canonicalEffects.some(effect => effect.id === 'fortified')) {
-        this.statusVisuals.lineStyle(3, 0x9ac7ee, 0.9).strokeCircle(actor.x, actor.y, 33);
-      }
-      if (canonicalEffects.some(effect => effect.id === 'poisoned')) {
-        this.statusVisuals.fillStyle(0x73d478, 0.24).fillCircle(actor.x, actor.y, 31);
-      }
-      if (effects.some(effect => effect.id === 'stunned')) {
-        this.statusVisuals.lineStyle(4, 0xf6cc73, 0.95)
-          .strokeCircle(actor.x, actor.y, 30);
-      } else if (effects.some(effect => effect.id === 'chilled')) {
-        this.statusVisuals.lineStyle(4, 0x89d8ff, 0.8)
-          .strokeCircle(actor.x, actor.y, 28);
-      }
-      if (effects.some(effect => effect.id === 'burning')) {
-        this.statusVisuals.fillStyle(0xff7041, 0.22).fillCircle(actor.x, actor.y, 31);
-      }
-      if (effects.some(effect => effect.id === 'poisoned')) {
-        this.statusVisuals.fillStyle(0x73d478, 0.24).fillCircle(actor.x, actor.y, 31);
-      }
+      this.drawStatuses(actor.x,actor.y,state.statusEffects?.enemies?.[actor.id] ?? []);
       this.healthBar.fillStyle(0x080a10, 0.9)
         .fillRect(actor.x - 26, actor.y - 45, 52, 8);
       this.healthBar.fillStyle(0xa3494c)
@@ -610,7 +725,10 @@ export class FrontierScene extends Phaser.Scene {
     }
     this.projectileVisuals.clear();
     for (const missile of state.projectiles) {
-      const color = missile.type === 'shadow' ? 0xa78bcd : 0xe8a25f;
+      const color = missile.type === 'shadow' ? 0xa78bcd
+        : missile.type === 'frost' ? 0x7fd6f4
+        : missile.type === 'poison' ? 0x80d48a
+        : missile.type === 'holy' ? 0xf2d887 : 0xe8a25f;
       this.projectileVisuals.fillStyle(color, 0.25).fillCircle(missile.x, missile.y, 14);
       this.projectileVisuals.fillStyle(color, 0.95).fillCircle(missile.x, missile.y, 6);
     }
@@ -621,7 +739,8 @@ export class FrontierScene extends Phaser.Scene {
       this.debugMarkers.lineStyle(1, 0x76d9af, 0.65)
         .lineBetween(state.player.x, state.player.y, p.x, p.y);
     }
-    if (state.shield > 0) {
+    this.drawStatuses(state.player.x,state.player.y,state.statusEffects?.player ?? []);
+    if (state.shield > 0 && !(state.statusEffects?.player.some(s=>s.id==='shielded'))) {
       this.statusVisuals.lineStyle(3, 0x8dc6f6, 0.65)
         .strokeCircle(state.player.x, state.player.y, 27);
     }

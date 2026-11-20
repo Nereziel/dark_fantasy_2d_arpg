@@ -9,7 +9,7 @@ export function playerAnimation(state: GameSnapshot): HeroAnimation {
     || state.statusEffects?.player.some(effect =>
       effect.id === 'stunned' || effect.id === 'frozen')) return 'stunned';
   if (state.evadeCooldown > 2.1) return 'evading';
-  const action = state.warriorAction?.timeline;
+  const action = state.warriorAction?.timeline ?? state.classAction?.timeline;
   if (action && action.phase !== 'complete' && action.phase !== 'cancelled') {
     if (action.animation === 'channel') return 'channeling';
     if (action.animation === 'cast') return 'casting';

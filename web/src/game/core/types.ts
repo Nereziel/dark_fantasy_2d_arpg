@@ -90,6 +90,14 @@ export interface GameSnapshot {
   /** Runtime Warrior actions and status effects are never part of CharacterProgress. */
   warriorCooldowns?: Partial<Record<WarriorAbilityId, number>>;
   warriorAction?: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null;
+  /** Transient hit-frame state of the other five classes, never persisted. */
+  classAction?: {
+    kind: 'basic' | 'skill';
+    slot: SkillSlot | null;
+    targetId: string | null;
+    aim?: SkillAim;
+    timeline: CombatTimelineState;
+  } | null;
   statusEffects?: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> };
   effects: ActiveEffects;
   stats: DerivedStats;

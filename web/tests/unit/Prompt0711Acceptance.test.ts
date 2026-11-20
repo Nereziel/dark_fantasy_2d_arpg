@@ -133,6 +133,7 @@ describe('Prompt 09 — canonical status rules and periodic effects', () => {
     })).toBe(true);
     sim.command({ type: 'cast', slot: 'rmb',
       aim: { mode: 'GROUND_POSITION', position: { x: enemy.x, y: enemy.y } } });
+    advance(sim, 20); // Fireball applies its DoT only on the cast hit frame.
     expect(sim.snapshot().effects.enemy.filter(effect => effect.id === 'burning')).toHaveLength(1);
     expect(sim.snapshot().statusEffects?.enemies[enemy.id]?.filter(s => s.id === 'burning')).toHaveLength(1);
     sim.drainEvents();
