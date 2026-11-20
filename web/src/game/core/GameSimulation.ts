@@ -53,6 +53,10 @@ import {
 } from '../bosses/hollowKingPhases';
 import type { CryptThemePlan, CryptInteractable } from '../world/cryptTheme';
 import {
+  chooseRespawnDestination, validCheckpointIds, RESPAWN_PROTECTION_SECONDS,
+  type RespawnCheckpointId, type RespawnDestination
+} from './deathRespawn';
+import {
   createChunkIndex, createWorldFactLedger, applyWorldFact, makeWorldFact,
   validateWorldFactLedger, type ChunkIndex, type WorldFactLedger, type WorldFactKind
 } from '../world/chunkStreaming';
@@ -227,6 +231,9 @@ export class GameSimulation {
   private readonly cryptArmedTraps = new Map<string, number>();
   private readonly miniBossStates = new Map<string, MiniBossState>();
   private readonly defeatedMiniBossIds = new Set<MiniBossId>();
+  private readonly activatedCheckpointIds = new Set<RespawnCheckpointId>();
+  private respawnAt: RespawnDestination | null = null;
+  private respawnProtectionSeconds = 0;
   private hollowKing: HollowKingState | null = null;
   private readonly hollowKingAddActors = new Map<string, string>();
   private readonly hollowKingHazardDelays = new Map<string, number>();
@@ -353,7 +360,8 @@ export class GameSimulation {
       mapDiscovery: this.mapDiscovery, worldFacts: this.worldFacts,
       cryptUsedPropIds: [...this.cryptUsedPropIds],
       cryptTriggeredTrapIds: [...this.cryptTriggeredTrapIds],
-      miniBossDefeatedIds: [...this.defeatedMiniBossIds]
+      miniBossDefeatedIds: [...this.defeatedMiniBossIds],
+      activatedCheckpointIds: [...this.activatedCheckpointIds]
     });
   }
 
@@ -372,6 +380,8 @@ export class GameSimulation {
       || !Array.isArray(triggered) || triggered.length > 128
       || new Set(triggered).size !== triggered.length
       || triggered.some(id => !allowedTraps.has(id))) return false;
+    const checkpoints = progress.activatedCheckpointIds ?? [];
+    if (!validCheckpointIds(checkpoints)) return false;
     const defeated = progress.miniBossDefeatedIds ?? [];
     if (!Array.isArray(defeated) || defeated.length > MINI_BOSS_IDS.length
       || new Set(defeated).size !== defeated.length
@@ -382,6 +392,8 @@ export class GameSimulation {
     for (const id of defeated) this.miniBossStates.delete(id);
     this.mapDiscovery = structuredClone(progress.mapDiscovery);
     this.worldFacts = structuredClone(progress.worldFacts);
+    this.activatedCheckpointIds.clear();
+    for (const id of checkpoints) this.activatedCheckpointIds.add(id);
     this.cryptUsedPropIds.clear();
     this.cryptTriggeredTrapIds.clear();
     for (const id of used) this.cryptUsedPropIds.add(id);
@@ -774,11 +786,97 @@ export class GameSimulation {
     if (miniState) this.miniBossStates.set('morrow_gravebound', miniState);
   }
 
+
+  /** The only recovery path from death: keep character/world facts, reset combat. */
+  private respawnPlayer(): void {
+    if (this.player.alive) return;
+    const fromZone = this.zone;
+    const seed = this.world.seed;
+    const wilderness = buildWilderness(seed);
+    const checkpoint = this.respawnAt ?? chooseRespawnDestination(
+      this.zone, this.player, [...this.activatedCheckpointIds], wilderness.layout
+    );
+    this.zone = 'wilderness';
+    this.world = wilderness.layout;
+    this.storyFeatures = wilderness.features;
+    this.cryptTheme = null;
+    this.player = spawnPlayer(this.classId, this.equipment, checkpoint.position);
+    this.refreshHealthLimit();
+    this.player.health = this.player.maxHealth;
+    this.resource = deriveStats(this.classId, this.equipment, this.level).maxResource;
+    this.dungeonStage = 0;
+    this.dungeonCleared = false;
+    this.wave = 0;
+    this.respawnTimer = 0;
+    this.units = createPack(0, this.level, this.world.encounterPositions);
+    this.selectedTargetId = null;
+    this.paused = false;
+    this.pendingPortal = false;
+    this.pendingObject = null;
+    this.pendingCryptPropId = null;
+    this.pendingNpc = null;
+    this.pendingTown = null;
+    this.pendingSkill = null;
+    this.pendingAim = null;
+    this.movePath = [];
+    this.attackTarget = null;
+    this.pickupTarget = null;
+    this.holdPosition = false;
+    this.movementSpeed = 0;
+    this.healthRegenCarry = 0;
+    this.attackTimer = 0;
+    this.accumulator = 0;
+    this.evadeCooldown = 0;
+    this.cooldowns = emptyCooldowns();
+    this.warriorCooldowns = {};
+    this.warriorPending = null;
+    this.warriorAction = null;
+    this.classAction = null;
+    this.effects = emptyEffects();
+    this.statusEffects = { player: [], enemies: {} };
+    this.shield = 0;
+    this.projectiles = [];
+    this.nextProjectileId = 0;
+    this.eliteQueue = [];
+    this.cryptArmedTraps.clear();
+    this.hollowKing = null;
+    this.hollowKingAddActors.clear();
+    this.hollowKingHazardDelays.clear();
+    this.miniBossStates.clear();
+    // Preserve permanent loot and world facts, not temporary enemy/ground loot.
+    this.groundLoot = [];
+    this.usedObjects.clear();
+    if (this.activatedCheckpointIds.has('shrine.soul-shrine')) {
+      this.usedObjects.add('soul-shrine');
+    }
+    for (const fact of this.worldFacts?.entries ?? []) {
+      if (fact.kind === 'chestOpened'
+        && getWorldObject(fact.entityId as WorldObjectId, 'wilderness')) {
+        this.usedObjects.add(fact.entityId as WorldObjectId);
+      }
+    }
+    this.respawnAt = null;
+    this.respawnProtectionSeconds = RESPAWN_PROTECTION_SECONDS;
+    this.spawnMorrow();
+    this.observeExploration();
+    if (fromZone !== 'wilderness') {
+      this.events.push({ type: 'zoneChanged', zone: 'wilderness' });
+    }
+    this.events.push({ type: 'playerRespawn', checkpointId: checkpoint.id,
+      fromZone, x: checkpoint.position.x, y: checkpoint.position.y });
+  }
+
   command(command: GameCommand): void {
     if (command.type === 'reset') {
       this.reset(isClassId(command.classId) ? command.classId : 'WARRIOR', command.seed ?? this.world.seed);
       return;
     }
+    if (command.type === 'respawn') {
+      if (!this.player.alive) this.respawnPlayer();
+      return;
+    }
+    // No inventory, trade, teleport, ability or world interaction on a corpse.
+    if (!this.player.alive) return;
     if (command.type === 'pause') {
       this.paused = command.value;
       return;
@@ -1078,6 +1176,11 @@ export class GameSimulation {
       this.recordWorldFact('chestOpened', object.id);
     }
     if (object.kind === 'shrine') {
+      if (object.id === 'soul-shrine'
+        && !this.activatedCheckpointIds.has('shrine.soul-shrine')) {
+        this.activatedCheckpointIds.add('shrine.soul-shrine');
+        this.events.push({ type: 'checkpointActivated', id: 'shrine.soul-shrine' });
+      }
       this.shield = Math.max(this.shield, Math.round(this.player.maxHealth * 0.3));
     } else {
       const item = rollItem(this.kills + 101, this.level, this.rng);
@@ -1620,7 +1723,7 @@ export class GameSimulation {
   }
 
   private dealPlayerDamage(base: number, type: DamageType, sourceId: string): boolean {
-    if (!this.player.alive) return false;
+    if (!this.player.alive || this.respawnProtectionSeconds > 0) return false;
     const stats = deriveStats(this.classId, this.equipment, this.level);
     const resistance = type === 'fire' ? stats.fireResist
       : type === 'frost' ? stats.frostResist
@@ -1693,14 +1796,14 @@ export class GameSimulation {
         && distance(this.player, shot.target) <= shot.radius && this.player.alive;
       const hit = impact && (shot.base <= 0
         || this.dealPlayerDamage(shot.base, shot.type, shot.sourceId));
-      if (hit && shot.statusId) {
+      if (hit && shot.statusId && this.player.alive) {
         this.applyCanonicalStatus('player', shot.statusId, shot.sourceId,
           shot.statusMagnitude, shot.statusDuration);
       }
       this.events.push({ type: 'projectileImpact', id: shot.id, hit: Boolean(hit) });
       this.events.push({ type: 'enemyAttack', enemyId: shot.sourceId, hit: Boolean(hit) });
     }
-    this.projectiles = remaining;
+    this.projectiles = this.player.alive ? remaining : [];
   }
 
   private skillDamageType(slot: SkillSlot): DamageType {
@@ -1866,6 +1969,10 @@ export class GameSimulation {
     this.events.push({ type: 'hit', targetId: this.player.id, damage: applied });
     if (this.player.health === 0) {
       this.player.alive = false;
+      this.respawnAt = chooseRespawnDestination(this.zone, this.player,
+        [...this.activatedCheckpointIds], buildWilderness(this.world.seed).layout);
+      this.respawnProtectionSeconds = 0;
+      this.paused = false;
       this.warriorPending = null;
       this.warriorAction = null;
       this.classAction = null;
@@ -1873,10 +1980,28 @@ export class GameSimulation {
       this.pendingAim = null;
       this.pendingNpc = null;
       this.pendingTown = null;
+      this.pendingPortal = false;
+      this.pendingObject = null;
+      this.pendingCryptPropId = null;
       this.movePath = [];
       this.attackTarget = null;
       this.pickupTarget = null;
-      for (const unit of this.units) unit.intent = null;
+      this.selectedTargetId = null;
+      this.holdPosition = false;
+      this.movementSpeed = 0;
+      this.healthRegenCarry = 0;
+      this.attackTimer = 0;
+      this.accumulator = 0;
+      this.shield = 0;
+      this.projectiles = [];
+      this.eliteQueue = [];
+      this.cryptArmedTraps.clear();
+      this.statusEffects = { player: [], enemies: {} };
+      this.effects = emptyEffects();
+      for (const unit of this.units) {
+        unit.intent = null;
+        unit.effects = [];
+      }
       this.events.push({ type: 'playerDeath' });
     }
   }
@@ -2246,12 +2371,14 @@ export class GameSimulation {
   advance(deltaMilliseconds: number): void {
     if (this.paused || !this.player.alive || !Number.isFinite(deltaMilliseconds)) return;
     this.accumulator += Math.min(MAX_FRAME_SECONDS, Math.max(0, deltaMilliseconds / 1000));
-    while (this.accumulator >= FIXED_STEP) {
-      this.step(FIXED_STEP);
+    while (this.accumulator >= FIXED_STEP && this.player.alive) {
       this.accumulator -= FIXED_STEP;
+      this.step(FIXED_STEP);
     }
+    if (!this.player.alive) this.accumulator = 0;
   }
   private step(dt: number): void {
+    this.respawnProtectionSeconds = Math.max(0, this.respawnProtectionSeconds - dt);
     const definition = CLASSES[this.classId];
     const currentStats = deriveStats(this.classId, this.equipment, this.level);
     this.resource = advanceResource(this.resource, currentStats.resourceRegen,
@@ -2856,6 +2983,9 @@ export class GameSimulation {
       miniBossStates: Object.fromEntries([...this.miniBossStates]
         .map(([id, state]) => [id, structuredClone(state)])),
       miniBossDefeatedIds: [...this.defeatedMiniBossIds],
+      activatedCheckpointIds: [...this.activatedCheckpointIds],
+      respawnAt: this.respawnAt ? structuredClone(this.respawnAt) : null,
+      respawnProtectionSeconds: this.respawnProtectionSeconds,
       hollowKing: this.hollowKing ? structuredClone(this.hollowKing) : null,
       hollowKingAddActorIds: Object.fromEntries(this.hollowKingAddActors),
       paused: this.paused,
@@ -2898,6 +3028,11 @@ export class GameSimulation {
             enemy?.actor?.id === actorId && enemy.summoned === true)))
         && s.hollowKing?.addRequests.some(add => add.id === requestId));
     };
+    const checkpointIds = s?.activatedCheckpointIds ?? [];
+    const canonicalRespawn = layout && s && !s.player.alive
+      && validCheckpointIds(checkpointIds)
+      ? chooseRespawnDestination(s.zone, s.player, checkpointIds,
+        restoredWilderness!.layout) : null;
     const validMiniStates = (states: unknown): boolean => {
       if (states === undefined) return true;
       if (!states || typeof states !== 'object' || Array.isArray(states)) return false;
@@ -2918,6 +3053,14 @@ export class GameSimulation {
         || !validateMapDiscovery(s.mapDiscovery, restoredMapWorld)))
       || (s.worldFacts !== undefined && (!restoredIndex
         || !validateWorldFactLedger(restoredIndex, s.worldFacts)))
+      || !validCheckpointIds(checkpointIds)
+      || (s.respawnAt !== undefined
+        && JSON.stringify(s.respawnAt) !== JSON.stringify(canonicalRespawn))
+      || (s.respawnProtectionSeconds !== undefined
+        && (!Number.isFinite(s.respawnProtectionSeconds)
+          || s.respawnProtectionSeconds < 0
+          || s.respawnProtectionSeconds > RESPAWN_PROTECTION_SECONDS
+          || (!s.player.alive && s.respawnProtectionSeconds !== 0)))
       || !validHollowKing(s.hollowKing)
       || !validHollowAdds(s.hollowKingAddActorIds)
       || !validMiniStates(s.miniBossStates)
@@ -3076,6 +3219,10 @@ export class GameSimulation {
     this.groundLoot = s.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! }));
     this.player = { ...s.player };
     this.units = s.enemies.map(cloneUnit);
+    this.activatedCheckpointIds.clear();
+    for (const id of checkpointIds) this.activatedCheckpointIds.add(id);
+    this.respawnAt = canonicalRespawn;
+    this.respawnProtectionSeconds = s.respawnProtectionSeconds ?? 0;
     this.hollowKing = s.hollowKing ? structuredClone(s.hollowKing) : null;
     this.hollowKingAddActors.clear();
     for (const [id, actorId] of Object.entries(s.hollowKingAddActorIds ?? {}))
@@ -3149,6 +3296,9 @@ export class GameSimulation {
     this.pendingCryptPropId = null;
     this.miniBossStates.clear();
     this.defeatedMiniBossIds.clear();
+    this.activatedCheckpointIds.clear();
+    this.respawnAt = null;
+    this.respawnProtectionSeconds = 0;
     this.hollowKing = null;
     this.hollowKingAddActors.clear();
     this.hollowKingHazardDelays.clear();
