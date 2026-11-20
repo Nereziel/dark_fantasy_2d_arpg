@@ -89,6 +89,8 @@ import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planS
   selectVendorStock, type EconomyFailure } from '../trade/economyRules';
 import { townEntry, canInteractTownEntry, getTownManifest } from '../world/townManifest';
 import { activatedWaypoints, planWaypointTravel, waypointDefinition } from '../world/waypointTravel';
+import { planWorldEvents, projectWorldEventViews, worldEventReward,
+  type WorldEventPlan, type WorldEventId } from '../world/worldEvents';
 import { STASH_SIZE, emptyStashTabs, planStashDeposit, planStashWithdraw,
   planStashMove, planStashSort, validateStashContents, validStashTab,
   type StashTabs } from '../inventory/stashRules';
@@ -244,6 +246,8 @@ export class GameSimulation {
   private quest: QuestProgress = freshQuest();
   private actILedger: QuestLedger = createActIQuestLedger(freshQuest())!;
   private storyFeatures: readonly WildernessFeature[] = [];
+  private worldEventPlans: WorldEventPlan[] = [];
+  private activeWorldEventId: WorldEventId | null = null;
   private cryptTheme: CryptThemePlan | null = null;
   private readonly cryptUsedPropIds = new Set<string>();
   private readonly cryptTriggeredTrapIds = new Set<string>();
@@ -322,6 +326,8 @@ export class GameSimulation {
     this.worldFacts = createWorldFactLedger(index, 'hero');
     this.mapWorld = input;
     this.mapDiscovery = initial.value;
+    this.worldEventPlans = planWorldEvents(world.layout.seed,world.layout,world.features);
+    this.activeWorldEventId = null;
   }
 
   /** World facts are idempotent historical observations, not a second reward executor. */
@@ -401,6 +407,92 @@ export class GameSimulation {
       this.recordWorldFact('waypointActivated', 'waypoint_camp');
       this.events.push({ type: 'waypointActivated', id: 'town.waypoint' });
     }
+  }
+
+  /** Only previously discovered event anchors may enter the UI projection. */
+  private eventViews(): ReturnType<typeof projectWorldEventViews> {
+    if (this.zone !== 'wilderness') return [];
+    const completed=(this.worldFacts?.entries??[])
+      .filter(fact=>fact.kind==='eventCompleted').map(fact=>fact.entityId);
+    return projectWorldEventViews(this.worldEventPlans,
+      this.mapDiscovery?.discoveredLandmarkIds??[],completed,this.activeWorldEventId,
+      this.units.map(unit=>({id:unit.actor.id,alive:unit.actor.alive})));
+  }
+
+  /** Simulation-only spawn at an optional seed-validated event marker. */
+  private activateNearbyWorldEvent():void {
+    if(this.zone!=='wilderness'||!this.player.alive||this.paused
+      ||this.activeWorldEventId||this.units.length!==PACK_SIZE)return;
+    for(const plan of this.worldEventPlans) {
+      if(this.worldFacts?.entries.some(fact=>
+        fact.kind==='eventCompleted'&&fact.entityId===plan.id)
+        ||distance(this.player,plan.position)>plan.triggerRadius
+        ||!plan.enemySpawns.every(spawn=>
+          canOccupy(spawn.position,ACTOR_RADIUS,this.world.obstacles))
+        ||this.groundLoot.length>92)continue;
+      this.activeWorldEventId=plan.id;
+      for(const [index,spawn] of plan.enemySpawns.entries()) {
+        const definition=ENEMY_DEFINITIONS[spawn.type];
+        const health=definition.health+Math.max(0,this.level-1)*12;
+        this.units.push({
+          actor:{id:spawn.id,type:spawn.type,x:spawn.position.x,y:spawn.position.y,
+            health,maxHealth:health,alive:true},
+          intent:null,cooldown:0.65+index*0.25,effects:[],abilityCooldowns:{}
+        });
+      }
+      this.events.push({type:'worldEventStarted',id:plan.id,kind:plan.kind,
+        x:plan.position.x,y:plan.position.y});
+      return;
+    }
+  }
+
+  /**
+   * A complete event is a world fact before it is an award. Dead partial
+   * event guards never grant per-enemy gold, XP or drops, preventing reload
+   * farming. A generated event can never overwrite quest/portal geometry.
+   */
+  private finishWorldEventIfReady(actorId:string):void {
+    const plan=this.worldEventPlans.find(event=>event.id===this.activeWorldEventId);
+    if(!plan||!plan.enemySpawns.some(spawn=>spawn.id===actorId)
+      ||plan.enemySpawns.some(spawn=>this.units.some(unit=>
+        unit.actor.id===spawn.id && unit.actor.alive)))return;
+    const enemyIds=new Set(plan.enemySpawns.map(spawn=>spawn.id));
+    this.activeWorldEventId=null;
+    this.units=this.units.filter(unit=>!enemyIds.has(unit.actor.id));
+    for(const id of enemyIds)delete this.statusEffects.enemies[id];
+    if(!this.worldIndex||!this.worldFacts)return;
+    const fact=makeWorldFact(this.worldIndex,this.worldFacts.worldInstanceId,
+      'eventCompleted',plan.id);
+    const applied=applyWorldFact(this.worldIndex,this.worldFacts,fact);
+    if(!applied.changed)return;
+    this.worldFacts=applied.state;
+    const reward=worldEventReward(plan.kind,this.level);
+    if(!reward)return;
+    this.gold=Math.min(Number.MAX_SAFE_INTEGER,this.gold+reward.gold);
+    for(const [id,quantity] of Object.entries(reward.materials)) {
+      const key=id as keyof Materials;
+      this.materials[key]=Math.min(1_000_000,(this.materials[key]??0)+quantity);
+    }
+    this.awardExperience(reward.xp);
+    const itemId='world-event-'+this.world.seed+'-'+plan.id.replaceAll('.','_')+'-reward';
+    const item=rollItemForBase(reward.itemBaseId,itemId,this.level,'UNCOMMON',
+      new SeededRng((this.world.seed ^ (plan.id==='wild.event.1' ? 0x9c13ab : 0x715de4))>>>0));
+    let grantedId:string|null=null;
+    const ownedIds=new Set([...this.inventory,...this.stash,...this.stashTabs.flat(),
+      ...Object.values(this.equipment),...this.groundLoot.map(loot=>loot.item)]
+      .filter((value):value is Item=>value!==null).map(value=>value.id));
+    if(item&&!ownedIds.has(itemId)) {
+      const free=this.inventory.findIndex(slot=>slot===null);
+      if(free>=0){this.inventory[free]=item;grantedId=item.id;}
+      else if(this.groundLoot.length<100
+        && canOccupy(plan.position,0,this.world.obstacles)){
+        this.groundLoot.push({id:itemId,x:plan.position.x,y:plan.position.y,item});
+        this.events.push({type:'loot',id:itemId});
+        grantedId=item.id;
+      }
+    }
+    this.events.push({type:'worldEventCompleted',id:plan.id,kind:plan.kind,
+      gold:reward.gold,xp:reward.xp,x:plan.position.x,y:plan.position.y,itemId:grantedId});
   }
 
   /** Separate world-instance persistence; no seed or world facts in CharacterProgress v11. */
