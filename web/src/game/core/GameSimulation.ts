@@ -50,7 +50,7 @@ import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planS
 import { townEntry, canInteractTownEntry } from '../world/townManifest';
 import { STASH_SIZE, planStashDeposit, planStashWithdraw, validateStashContents } from '../inventory/stashRules';
 import {
-  freshQuest, validQuest, FIRST_QUEST_ID, type QuestProgress
+  freshQuest, validQuest, FIRST_QUEST_ID, WARDEN_ID, type QuestProgress
 } from '../quests/firstQuest';
 import { acceptQuest, advanceObjective, turnInQuest, type QuestLedger, type QuestTransition } from '../quests/questDialogue';
 import { firstQuestFromLedger } from '../quests/starterQuestRegistry';
@@ -537,6 +537,7 @@ export class GameSimulation {
       this.pendingObject = null;
       this.pendingPortal = false;
       if (nearNpc(this.player, command.npcId)) {
+        if (command.npcId === WARDEN_ID) this.recordVesnaReport();
         this.events.push({ type: 'npcDialogue', npcId: command.npcId });
       } else {
         this.pendingNpc = command.npcId;
@@ -1735,7 +1736,9 @@ export class GameSimulation {
     const destination: ZoneId = this.zone === 'wilderness' ? 'crypt' : 'wilderness';
     const seed = this.world.seed;
     this.zone = destination;
-    this.world = destination === 'crypt' ? generateCrypt(seed) : buildWilderness(seed).layout;
+    const wilderness = destination === 'wilderness' ? buildWilderness(seed) : null;
+    this.world = wilderness?.layout ?? generateCrypt(seed);
+    this.storyFeatures = wilderness?.features ?? [];
     this.player.x = destination === 'crypt' ? CRYPT_EXIT.x : CAMP.x;
     this.player.y = destination === 'crypt' ? CRYPT_EXIT.y : CAMP.y;
     this.dungeonStage = 0;
@@ -1774,6 +1777,9 @@ export class GameSimulation {
     this.pendingTown = null;
     this.pendingPortal = false;
     this.selectedTargetId = null;
+    if (destination === 'crypt') {
+      this.storyEvent('crypt_descent', 'crypt_gate_entered', 'crypt_entry');
+    } else this.spawnMorrow();
     this.events.push({ type: 'zoneChanged', zone: destination });
   }
 
@@ -1820,7 +1826,9 @@ export class GameSimulation {
       if (this.zone === 'wilderness') {
         this.respawnTimer -= dt;
         if (this.respawnTimer <= 0) {
-          this.wave++;
+          this.wave = this.questStatus('blighted_pack') === 'active'
+            ? (this.wave < 3 ? 3 : this.wave + (4 - ((this.wave - 3) % 4)))
+            : this.wave + 1;
           this.units = createPack(this.wave, this.level, this.world.encounterPositions);
           this.seedElitePack();
           this.statusEffects.enemies = {};
@@ -1871,6 +1879,7 @@ export class GameSimulation {
         const id = this.pendingNpc;
         this.pendingNpc = null;
         this.pendingTown = null;
+        if (id === WARDEN_ID) this.recordVesnaReport();
         this.events.push({ type: 'npcDialogue', npcId: id });
       } else {
         this.follow(this.player, NPC_POSITIONS[this.pendingNpc], speed, dt, NPC_INTERACT_RANGE - 10);
@@ -1957,6 +1966,7 @@ export class GameSimulation {
       if (distance(this.player, point) <= 6) this.movePath.shift();
     }
 
+    this.discoverStoryLocations();
     if (this.player.alive) {
       for (const unit of this.units) {
         this.updateEnemyAI(unit, dt);
@@ -2128,17 +2138,20 @@ export class GameSimulation {
     this.gold += 12 + this.level * 3;
     this.awardExperience(Math.round(rewardForActivity('enemy', this.level, this.level)
       * (unit.elite ? 1.75 : 1)));
-    if (this.zone === 'wilderness' && this.quest.status === 'active') {
-      const ledger = firstQuestLedger(this.quest);
-      const transition = ledger && advanceObjective(STARTER_QUEST_CATALOG, ledger,
-        FIRST_QUEST_ID, 'enemy_defeated', 'enemy_' + this.kills);
-      const next = transition?.changed ? firstQuestFromLedger(transition.ledger) : null;
-      if (next) {
-        this.quest = next;
-        this.events.push({ type: 'questUpdated', status: next.status, defeated: next.defeated });
+    if (this.zone === 'wilderness') {
+      this.commitQuestTransition(
+        advanceObjective(ACT_I_QUEST_CATALOG, this.actILedger,
+          FIRST_QUEST_ID, 'enemy_defeated', 'enemy_' + this.kills), FIRST_QUEST_ID
+      );
+      if (unit.actor.type === 'corruptedBoar') {
+        this.storyEvent('blighted_pack', 'infected_beast_slain', 'boar_' + this.kills);
+      }
+      if (unit.actor.id === 'morrow_gravebound') {
+        this.storyEvent('morrow_gravebound', 'morrow_gravebound_slain', 'morrow_defeat');
       }
     }
     if (unit.actor.type === 'crypt_lord') {
+      if (this.zone === 'crypt') this.storyEvent('crypt_lord_fallen', 'crypt_lord_slain', 'crypt_lord_defeat');
       this.gold += 100;
       this.awardExperience(rewardForActivity('boss', this.level, this.level));
     }
