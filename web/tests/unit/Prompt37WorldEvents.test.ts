@@ -137,20 +137,27 @@ describe('Prompt 37 — real simulation, rewards and world saves', () => {
       .toHaveLength(1);
   });
   it('seed-scoped completion cannot be replayed by save/reload, while another event remains possible', () => {
-    const seed=21;
+    // Seed 42 provides a collision-clear optional arena; a different seed may
+    // legitimately defer its event while an existing mini-boss holds the actor budget.
+    const seed=42;
     const world=buildWilderness(seed);
     const plan=planWorldEvents(seed,world.layout,world.features)[0]!;
     const sim=new GameSimulation(seed);
     teleport(sim,plan.position);
     sim.advance(150);
+    expect(eventUnits(sim)).toHaveLength(plan.enemySpawns.length);
     clearEvent(sim);
     const worldProgress=sim.worldProgress()!;
+    expect(worldProgress.worldFacts.entries.filter(f=>f.kind==='eventCompleted'))
+      .toMatchObject([{entityId:plan.id}]);
     expect(worldProgress.version).toBe(1);
     expect(readWorldRecord(createWorldRecord(worldProgress))).toEqual(worldProgress);
     const savedCharacter=sim.character();
     const loaded=new GameSimulation(seed);
     expect(loaded.restoreCharacter(savedCharacter,seed)).toBe(true);
     expect(loaded.restoreWorldProgress(worldProgress)).toBe(true);
+    expect(loaded.worldProgress()?.worldFacts.entries.filter(f=>f.kind==='eventCompleted'))
+      .toMatchObject([{entityId:plan.id}]);
     teleport(loaded,plan.position);
     const gold=loaded.character().gold;
     const xp=loaded.character().xp;
