@@ -32,6 +32,11 @@ import {
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
 import { planEnemyBehavior } from '../enemies/behaviorPlanner';
+import {
+  MINI_BOSS_IDS, getMiniBossDefinition, createMiniBossState, validateMiniBossState,
+  stepMiniBoss, planMiniBossDefeat, type MiniBossId, type MiniBossState,
+  type MiniBossActionPlan
+} from '../enemies/miniBossRules';
 import { monsterActions, monsterAction, type MonsterAction } from '../enemies/monsterRuntime';
 import { getEnemyArchetype } from '../enemies/archetypeCatalog';
 import { ACTOR_RADIUS, canOccupy, findPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
@@ -215,6 +220,8 @@ export class GameSimulation {
   private readonly cryptUsedPropIds = new Set<string>();
   private readonly cryptTriggeredTrapIds = new Set<string>();
   private readonly cryptArmedTraps = new Map<string, number>();
+  private readonly miniBossStates = new Map<string, MiniBossState>();
+  private readonly defeatedMiniBossIds = new Set<MiniBossId>();
   private pendingCryptPropId: string | null = null;
   private worldIndex: ChunkIndex | null = null;
   private worldFacts: WorldFactLedger | null = null;
@@ -337,7 +344,8 @@ export class GameSimulation {
       version: 1 as const, seed: this.worldFacts.worldSeed,
       mapDiscovery: this.mapDiscovery, worldFacts: this.worldFacts,
       cryptUsedPropIds: [...this.cryptUsedPropIds],
-      cryptTriggeredTrapIds: [...this.cryptTriggeredTrapIds]
+      cryptTriggeredTrapIds: [...this.cryptTriggeredTrapIds],
+      miniBossDefeatedIds: [...this.defeatedMiniBossIds]
     });
   }
 
@@ -356,6 +364,12 @@ export class GameSimulation {
       || !Array.isArray(triggered) || triggered.length > 128
       || new Set(triggered).size !== triggered.length
       || triggered.some(id => !allowedTraps.has(id))) return false;
+    const defeated = progress.miniBossDefeatedIds ?? [];
+    if (!Array.isArray(defeated) || defeated.length > MINI_BOSS_IDS.length
+      || new Set(defeated).size !== defeated.length
+      || defeated.some(id => !MINI_BOSS_IDS.includes(id))) return false;
+    this.defeatedMiniBossIds.clear();
+    for (const id of defeated) this.defeatedMiniBossIds.add(id);
     this.mapDiscovery = structuredClone(progress.mapDiscovery);
     this.worldFacts = structuredClone(progress.worldFacts);
     this.cryptUsedPropIds.clear();
@@ -512,6 +526,118 @@ export class GameSimulation {
     }
   }
 
+
+  /** Distinct optional encounters use existing, seeded reachable wilderness features. */
+  private spawnOptionalMiniBosses(): void {
+    if (this.zone !== 'wilderness' || !this.player.alive) return;
+    const placements: readonly { id: MiniBossId; featureId: string }[] = [
+      { id: 'bandit_captain', featureId: 'wild.encounter.1' },
+      { id: 'brood_mother', featureId: 'wild.encounter.2' },
+      { id: 'corrupted_knight', featureId: 'wild.poi.1' }
+    ];
+    for (const placement of placements) {
+      const marker = this.storyFeatures.find(feature => feature.id === placement.featureId);
+      if (!marker || this.defeatedMiniBossIds.has(placement.id)) continue;
+      const unit = this.units.find(value => value.actor.id === placement.id);
+      if (unit) {
+        if (distance(this.player, unit.actor) > 650) {
+          // Evict unengaged offscreen unique AI without converting it into a kill.
+          this.units = this.units.filter(value => value !== unit);
+          this.miniBossStates.delete(placement.id);
+        }
+        continue;
+      }
+      if (distance(this.player, marker.position) > 320 || this.units.length >= PACK_SIZE + 2
+        || !canOccupy(marker.position, ACTOR_RADIUS, this.world.obstacles)) continue;
+      const def = getMiniBossDefinition(placement.id);
+      const state = createMiniBossState(placement.id, placement.id);
+      if (!def || !state) continue;
+      const maxHealth = Math.round(def.baseHealth + Math.max(0, this.level - 1) * 24);
+      this.units.push({
+        actor: { id: placement.id, type: def.enemyType, ...marker.position,
+          health: maxHealth, maxHealth, alive: true },
+        cooldown: 0.9, intent: null, effects: [], abilityCooldowns: {}
+      });
+      this.miniBossStates.set(placement.id, state);
+    }
+  }
+
+  private miniBossArena(id: MiniBossId, position: Point): { center: Point; radius: number } {
+    const featureId = id === 'morrow_gravebound' ? 'act1.grave_warden'
+      : id === 'bandit_captain' ? 'wild.encounter.1'
+        : id === 'brood_mother' ? 'wild.encounter.2' : 'wild.poi.1';
+    return { center: { ...(this.storyFeatures.find(feature => feature.id === featureId)?.position
+      ?? position) }, radius: 320 };
+  }
+
+  private miniBossHit(unit: EnemyUnit, action: Extract<MiniBossActionPlan, {kind:'impact'}>): boolean {
+    const player = this.player, boss = unit.actor;
+    if (!player.alive) return false;
+    const dist = distance(player, action.point);
+    if (action.shape === 'circle') return dist <= action.radius;
+    if (distance(player, boss) > action.range) return false;
+    const dx = action.point.x - boss.x, dy = action.point.y - boss.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 1) return false;
+    const px = player.x - boss.x, py = player.y - boss.y;
+    const along = (px * dx + py * dy) / length;
+    const side = Math.abs(px * dy - py * dx) / length;
+    return along >= 0 && along <= action.range
+      && side <= (action.shape === 'line' ? action.radius : Math.max(18, along * 0.58));
+  }
+
+  /** Only gameplay simulation executes Agent32 action plans, never the renderer. */
+  private updateMiniBoss(unit: EnemyUnit, dt: number): void {
+    const actor = unit.actor;
+    const state = this.miniBossStates.get(actor.id);
+    if (!state || !actor.alive || distance(this.player, actor) > 490) return;
+    if (this.statusEffects.enemies[actor.id]?.some(effect =>
+      effect.id === 'stunned' || effect.id === 'frozen')) return;
+    const result = stepMiniBoss(state, {
+      deltaSeconds: dt, health: actor.health, maxHealth: actor.maxHealth,
+      alive: true, position: { x: actor.x, y: actor.y },
+      target: this.player.alive ? { x: this.player.x, y: this.player.y,
+        id: 'hero', alive: true } : null,
+      arena: this.miniBossArena(state.bossId, actor)
+    });
+    if (!result) return;
+    this.miniBossStates.set(actor.id, result.state);
+    for (const action of result.actions) {
+      const point = 'point' in action ? action.point : actor;
+      const radius = 'radius' in action ? action.radius : 72;
+      this.events.push({ type: 'miniBossCue', enemyId: actor.id, bossId: state.bossId,
+        kind: action.kind, ...('abilityId' in action ? {abilityId: action.abilityId} : {}),
+        x: point.x, y: point.y, radius, phase: result.state.phase });
+      if (action.kind === 'impact') {
+        if (this.miniBossHit(unit, action)
+          && (action.effect === 'damage' || action.effect === 'control'
+            || action.effect === 'hazard' || action.effect === 'charge')) {
+          const type: DamageType = state.bossId === 'morrow_gravebound' ? 'shadow'
+            : state.bossId === 'brood_mother' ? 'poison' : 'physical';
+          this.dealPlayerDamage(12 + this.level * 2 + (result.state.phase === 2 ? 5 : 0),
+            type, actor.id);
+        }
+      } else if (action.kind === 'support') {
+        const hp = resolveHealing(actor.health, actor.maxHealth, 24);
+        actor.health = hp.health;
+      } else if (action.kind === 'summon') {
+        if (this.units.length >= PACK_SIZE + 2
+          || !canOccupy(action.point, ACTOR_RADIUS, this.world.obstacles)) continue;
+        const def = ENEMY_DEFINITIONS[action.enemyType];
+        const index = this.units.length;
+        this.units.push({
+          actor: { id: 'summon-' + this.wave + '-' + index, type: action.enemyType,
+            x: action.point.x, y: action.point.y,
+            health: def.health, maxHealth: def.health, alive: true },
+          summoned: true, intent: null, cooldown: 0.7, effects: [], abilityCooldowns: {}
+        });
+      } else if (action.kind === 'move') {
+        const path = findPath(actor, action.point, ACTOR_RADIUS, this.world.obstacles);
+        if (path.length) this.follow(actor, path[0]!, ENEMY_DEFINITIONS[actor.type].speed, dt, 65);
+      }
+    }
+  }
+
   /** A unique, combat-ready named foe uses existing wraith tactics and art. */
   private spawnMorrow(): void {
     if (this.zone !== 'wilderness' || this.questStatus('morrow_gravebound') !== 'active'
@@ -526,6 +652,8 @@ export class GameSimulation {
         health, maxHealth: health, alive: true },
       intent: null, cooldown: 0.85, effects: [], abilityCooldowns: {}
     });
+    const miniState = createMiniBossState('morrow_gravebound', 'morrow_gravebound');
+    if (miniState) this.miniBossStates.set('morrow_gravebound', miniState);
   }
 
   command(command: GameCommand): void {
@@ -1960,6 +2088,7 @@ export class GameSimulation {
     this.pendingObject = null;
     this.pendingCryptPropId = null;
     this.cryptArmedTraps.clear();
+    this.miniBossStates.clear();
     this.wave = 0;
     this.units = destination === 'crypt'
       ? createCryptPack(0, this.level, this.world.encounterPositions)
@@ -2032,6 +2161,7 @@ export class GameSimulation {
     }
     this.tickProjectiles(dt);
     this.tickElites(dt);
+    this.spawnOptionalMiniBosses();
     if (this.aliveEnemies.length === 0 && !this.dungeonCleared) {
       if (this.zone === 'wilderness') {
         this.respawnTimer -= dt;
@@ -2193,7 +2323,8 @@ export class GameSimulation {
     this.tickCryptTraps(dt);
     if (this.player.alive) {
       for (const unit of this.units) {
-        this.updateEnemyAI(unit, dt);
+        if (this.miniBossStates.has(unit.actor.id)) this.updateMiniBoss(unit, dt);
+        else this.updateEnemyAI(unit, dt);
         if (!this.player.alive) break;
       }
     }
@@ -2341,6 +2472,26 @@ export class GameSimulation {
 
   private defeatEnemy(unit: EnemyUnit): void {
     unit.actor.alive = false;
+    const mini = this.miniBossStates.get(unit.actor.id);
+    if (mini && !this.defeatedMiniBossIds.has(mini.bossId)) {
+      const result = stepMiniBoss(mini, {
+        deltaSeconds: 0, health: 0, maxHealth: unit.actor.maxHealth,
+        alive: false, position: { x: unit.actor.x, y: unit.actor.y }, target: null,
+        arena: this.miniBossArena(mini.bossId, unit.actor)
+      });
+      const proposal = result && planMiniBossDefeat(result.state, {
+        processedOccurrenceIds: [...this.defeatedMiniBossIds]
+      });
+      if (proposal?.proposal) {
+        this.miniBossStates.set(unit.actor.id, proposal.state);
+        this.defeatedMiniBossIds.add(mini.bossId);
+        this.gold += 45;
+        this.awardExperience(rewardForActivity('boss', this.level, this.level));
+        this.events.push({ type: 'miniBossCue', enemyId: unit.actor.id,
+          bossId: mini.bossId, kind: 'death', x: unit.actor.x, y: unit.actor.y,
+          radius: 76, phase: result!.state.phase });
+      }
+    }
     if (unit.elite && !unit.elite.deathTriggered) {
       const plan = eliteOnDeathPlan(unit.elite.modifiers, {
         actorId: unit.actor.id, position: { x: unit.actor.x, y: unit.actor.y },
@@ -2386,7 +2537,7 @@ export class GameSimulation {
   }
   /** The one runtime path for normal, elite and boss drops; rolls share catalog+affixes. */
   private dropEnemyLoot(unit: EnemyUnit): void {
-    const boss = unit.actor.type === 'crypt_lord';
+    const boss = unit.actor.type === 'crypt_lord' || this.defeatedMiniBossIds.has(unit.actor.id as MiniBossId);
     const context: LootContext = {
       playerLevel: this.level, monsterLevel: this.level, enemyType: unit.actor.type,
       zone: this.zone, isBoss: boss, difficulty: 'normal',
@@ -2558,6 +2709,9 @@ export class GameSimulation {
       cryptInteractables: this.cryptInteractables(),
       cryptUsedPropIds: [...this.cryptUsedPropIds],
       cryptTriggeredTrapIds: [...this.cryptTriggeredTrapIds],
+      miniBossStates: Object.fromEntries([...this.miniBossStates]
+        .map(([id, state]) => [id, structuredClone(state)])),
+      miniBossDefeatedIds: [...this.defeatedMiniBossIds],
       paused: this.paused,
       status
     };
@@ -2794,6 +2948,8 @@ export class GameSimulation {
     this.cryptTriggeredTrapIds.clear();
     this.cryptArmedTraps.clear();
     this.pendingCryptPropId = null;
+    this.miniBossStates.clear();
+    this.defeatedMiniBossIds.clear();
     this.dungeonStage = 0;
     this.dungeonCleared = false;
     this.pendingPortal = false;
