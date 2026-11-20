@@ -306,7 +306,6 @@ describe('Agent 31 — immutable outputs and forged dungeon rejection', () => {
       d => { d.seed = 43; },
       d => { d.width = WORLD_WIDTH + 40; },
       d => { d.height = WORLD_HEIGHT - 40; },
-      d => { d.validation.valid = false; },
       d => { d.validation.errors = ['fake']; },
       d => { d.validation.checkedPaths = 0; },
       d => { d.rooms[0].id = d.rooms[1].id; },
@@ -318,6 +317,9 @@ describe('Agent 31 — immutable outputs and forged dungeon rejection', () => {
       d => { d.bossGuardSpawns[0] = { x: 0, y: 0 }; },
       d => { d.rooms[0].props = [{ id: 'forged' }]; }
     ];
+    const invalidFlag = structuredClone(original);
+    invalidFlag.validation.valid = false;
+    expect(() => buildCryptTheme(invalidFlag)).toThrow(RangeError);
     for (const corrupt of corruptions) {
       const draft: any = structuredClone(original);
       corrupt(draft);
