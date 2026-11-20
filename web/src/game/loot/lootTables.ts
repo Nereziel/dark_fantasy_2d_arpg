@@ -9,11 +9,11 @@
  * combine a boss's curated guaranteed rewards and its random roll explicitly.
  */
 import type { RarityId } from '../data/items';
+import { ITEM_BASES, type CatalogTemplateId } from '../items/itemCatalog';
+import { validEnemyType, type EnemyType } from '../enemies/enemies';
 
 export type LootRarity = RarityId;
-export type LootItemBaseId =
-  | 'broadsword' | 'greatsword' | 'shield' | 'hauberk' | 'helm' | 'gauntlets'
-  | 'greaves' | 'belt' | 'bloodstone' | 'signet';
+export type LootItemBaseId = CatalogTemplateId;
 export type LootZone = 'wilderness' | 'crypt';
 export type LootDifficulty = 'normal' | 'veteran' | 'nightmare' | 'hell';
 export type LootTableId =
@@ -26,6 +26,8 @@ export interface LootContext {
   /** Integer within [1, 1000]. Invalid required values reject the roll. */
   monsterLevel: number;
   playerLevel: number;
+  /** Runtime enemy family/type influences weighted gear preference. */
+  enemyType?: EnemyType;
   /** Stable, case-sensitive modifier IDs, at most four distinct IDs counted. */
   eliteModifiers?: readonly string[];
   isBoss?: boolean;
@@ -95,6 +97,14 @@ export const LOOT_TABLES: Readonly<Record<LootTableId, readonly LootEntry[]>> =
     normal: frozenTable([
       { itemBaseId: 'broadsword', rarity: 'COMMON', weight: 390 },
       { itemBaseId: 'helm', rarity: 'COMMON', weight: 260 },
+      { itemBaseId: 'dagger', rarity: 'COMMON', weight: 105 },
+      { itemBaseId: 'axe', rarity: 'COMMON', weight: 105 },
+      { itemBaseId: 'mace', rarity: 'COMMON', weight: 85 },
+      { itemBaseId: 'wand', rarity: 'UNCOMMON', weight: 75 },
+      { itemBaseId: 'charm', rarity: 'UNCOMMON', weight: 45 },
+      { itemBaseId: 'spear', rarity: 'UNCOMMON', weight: 70, minMonsterLevel: 2 },
+      { itemBaseId: 'bow', rarity: 'UNCOMMON', weight: 70, minMonsterLevel: 2 },
+      { itemBaseId: 'staff', rarity: 'RARE', weight: 35, minMonsterLevel: 4 },
       { itemBaseId: 'shield', rarity: 'UNCOMMON', weight: 145 },
       { itemBaseId: 'greaves', rarity: 'UNCOMMON', weight: 115 },
       { itemBaseId: 'belt', rarity: 'RARE', weight: 70, minMonsterLevel: 4 },
@@ -107,6 +117,11 @@ export const LOOT_TABLES: Readonly<Record<LootTableId, readonly LootEntry[]>> =
       { itemBaseId: 'greaves', rarity: 'UNCOMMON', weight: 155 },
       { itemBaseId: 'broadsword', rarity: 'RARE', weight: 215, minMonsterLevel: 4 },
       { itemBaseId: 'hauberk', rarity: 'RARE', weight: 135, minMonsterLevel: 4 },
+      { itemBaseId: 'greataxe', rarity: 'RARE', weight: 60, minMonsterLevel: 8 },
+      { itemBaseId: 'greatsword', rarity: 'RARE', weight: 60, minMonsterLevel: 8 },
+      { itemBaseId: 'crossbow', rarity: 'RARE', weight: 55, minMonsterLevel: 5 },
+      { itemBaseId: 'spellbook', rarity: 'RARE', weight: 50, minMonsterLevel: 3 },
+      { itemBaseId: 'relic', rarity: 'EPIC', weight: 20, minMonsterLevel: 10 },
       { itemBaseId: 'gauntlets', rarity: 'EPIC', weight: 140, minMonsterLevel: 12, minPlayerLevel: 6 },
       { itemBaseId: 'bloodstone', rarity: 'LEGENDARY', weight: 30, minMonsterLevel: 25, minPlayerLevel: 15 },
       { itemBaseId: 'greatsword', rarity: 'MYTHIC', weight: 2, minMonsterLevel: 60, minPlayerLevel: 60 }
@@ -118,6 +133,8 @@ export const LOOT_TABLES: Readonly<Record<LootTableId, readonly LootEntry[]>> =
       { itemBaseId: 'broadsword', rarity: 'RARE', weight: 150, minMonsterLevel: 4 },
       { itemBaseId: 'gauntlets', rarity: 'EPIC', weight: 255, minMonsterLevel: 12, minPlayerLevel: 6 },
       { itemBaseId: 'bloodstone', rarity: 'EPIC', weight: 145, minMonsterLevel: 12, minPlayerLevel: 6 },
+      { itemBaseId: 'hammer', rarity: 'EPIC', weight: 30, minMonsterLevel: 8 },
+      { itemBaseId: 'relic', rarity: 'LEGENDARY', weight: 20, minMonsterLevel: 10 },
       { itemBaseId: 'signet', rarity: 'LEGENDARY', weight: 180, minMonsterLevel: 25, minPlayerLevel: 15 },
       { itemBaseId: 'greatsword', rarity: 'MYTHIC', weight: 12, minMonsterLevel: 60, minPlayerLevel: 60 }
     ]),
@@ -153,6 +170,7 @@ export const LOOT_TABLES: Readonly<Record<LootTableId, readonly LootEntry[]>> =
 interface NormalizedContext {
   monsterLevel: number;
   playerLevel: number;
+  enemyType?: EnemyType;
   eliteModifierCount: number;
   isBoss: boolean;
   zone: LootZone;
@@ -175,7 +193,8 @@ function validLevel(level: unknown): level is number {
  */
 function normalizeContext(input: Readonly<LootContext>): NormalizedContext | null {
   if (!input || typeof input !== 'object') return null;
-  if (!validLevel(input.monsterLevel) || !validLevel(input.playerLevel)) return null;
+  if (!validLevel(input.monsterLevel) || !validLevel(input.playerLevel)
+    || (input.enemyType !== undefined && !validEnemyType(input.enemyType))) return null;
   if (!ZONES.includes(input.zone) || !ownKey(DIFFICULTY_INDEX, input.difficulty)) return null;
   if (input.isBoss !== undefined && typeof input.isBoss !== 'boolean') return null;
   if (input.lootTableId !== undefined && !ownKey(LOOT_TABLES, input.lootTableId)) return null;
@@ -193,6 +212,7 @@ function normalizeContext(input: Readonly<LootContext>): NormalizedContext | nul
   return {
     monsterLevel: input.monsterLevel,
     playerLevel: input.playerLevel,
+    ...(input.enemyType !== undefined ? { enemyType: input.enemyType } : {}),
     eliteModifierCount: Math.min(MAX_ELITE_MODIFIERS, new Set(modifiers).size),
     isBoss: input.isBoss ?? false,
     zone: input.zone,
@@ -206,6 +226,7 @@ function normalizeContext(input: Readonly<LootContext>): NormalizedContext | nul
 function eligible(entry: LootEntry, context: NormalizedContext): boolean {
   return context.monsterLevel >= (entry.minMonsterLevel ?? 1)
     && context.playerLevel >= (entry.minPlayerLevel ?? 1)
+    && context.monsterLevel >= ITEM_BASES[entry.itemBaseId].requiredLevel
     && DIFFICULTY_INDEX[context.difficulty] >= DIFFICULTY_INDEX[entry.minDifficulty ?? 'normal'];
 }
 
@@ -227,7 +248,21 @@ function effectiveWeight(entry: LootEntry, context: NormalizedContext): number {
   const magicBonus = context.magicFind / 100 * rankBonus * 0.22;
   const difficultyBonus = DIFFICULTY_INDEX[context.difficulty] * rankBonus * 0.10;
   const eliteBonus = context.eliteModifierCount * Math.max(0, rankBonus - 1) * 0.12;
-  return Math.min(MAX_WEIGHT, entry.weight * (1 + magicBonus + difficultyBonus + eliteBonus));
+  // Only the numeric weights vary by species: loot IDs and RNG draw order stay stable.
+  const type = context.enemyType ?? '';
+  const base = ITEM_BASES[entry.itemBaseId];
+  const beast = type === 'wolf' || type === 'spider' || type === 'corruptedBoar';
+  const undead = type === 'wraith' || type === 'crypt_lord' || type.startsWith('skeleton')
+    || type === 'zombie' || type === 'ghoul';
+  const bandit = type.startsWith('bandit');
+  const cultist = type.startsWith('cult') || type === 'fanatic';
+  const speciesBonus = beast && (entry.itemBaseId === 'dagger' || entry.itemBaseId === 'bow')
+      ? 1.8 : undead && base.category === 'armor'
+      ? 1.4 : bandit && base.category === 'weapon'
+      ? 1.5 : cultist && ['staff', 'wand', 'spellbook', 'relic'].includes(entry.itemBaseId)
+      ? 1.7 : 1;
+  return Math.min(MAX_WEIGHT, entry.weight * speciesBonus
+    * (1 + magicBonus + difficultyBonus + eliteBonus));
 }
 
 /**
