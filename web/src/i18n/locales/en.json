@@ -544,5 +544,19 @@
     "experience": "Experience",
     "skillPoints": "Skill points",
     "talentPoints": "Talent points"
+  },
+  "eliteModifier": {
+    "extraHealth": "Extra health",
+    "increasedDamage": "Increased damage",
+    "fast": "Fast",
+    "fireAura": "Fire aura",
+    "frostAttacks": "Frost attacks",
+    "poisonAttacks": "Poison attacks",
+    "teleporting": "Teleporting",
+    "shielded": "Shielded",
+    "regenerating": "Regenerating",
+    "summoner": "Summoner",
+    "explodesOnDeath": "Explodes on death",
+    "hazardousGround": "Hazardous ground"
   }
 }
