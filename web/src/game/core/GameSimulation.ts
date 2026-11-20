@@ -7,6 +7,8 @@ import {
 } from '../inventory/equipmentRules';
 import { ITEM_BASES, WEAPON_TYPES } from '../items/itemCatalog';
 import { rollLootTable, bossGuaranteedLoot, type LootContext, type LootRoll } from '../loot/lootTables';
+import { rollEliteModifiers, applyEliteStats, eliteOnHitPlan, eliteOnPeriodicPlan,
+  eliteOnDeathPlan, validateEliteSet, type ElitePlannedAction } from '../enemies/eliteModifiers';
 import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
 import { applyOrRefreshEffect } from '../status/effectStack';
 import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../skills/warriorKit';
@@ -72,7 +74,10 @@ function cloneUnit(unit: EnemyUnit): EnemyUnit {
     intent: unit.intent ? { ...unit.intent } : null,
     cooldown: unit.cooldown,
     effects: unit.effects.map(effect => ({ ...effect })),
-    ...(unit.abilityCooldowns ? { abilityCooldowns: { ...unit.abilityCooldowns } } : {})
+    ...(unit.abilityCooldowns ? { abilityCooldowns: { ...unit.abilityCooldowns } } : {}),
+    ...(unit.summoned ? { summoned: true } : {}),
+    ...(unit.elite ? { elite: { ...unit.elite, modifiers: [...unit.elite.modifiers],
+      visualTags: [...unit.elite.visualTags] } } : {})
   };
 }
 function validTransientAim(value: unknown): value is SkillAim {
@@ -170,6 +175,9 @@ export class GameSimulation {
     aim?: SkillAim; timeline: CombatTimelineState;
   } | null = null;
   private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
+  private eliteQueue: Array<{ remaining: number; sourceId: string;
+    kind: 'pulse' | 'teleport'; position: Point; radius: number;
+    multiplier: number; damageType: 'fire' | 'poison' }> = [];
   private effects: ActiveEffects = emptyEffects();
   private world: WorldLayout = generateWorld(0);
   private zone: ZoneId = 'wilderness';
@@ -900,7 +908,7 @@ export class GameSimulation {
     if (unit.actor.type === 'wraith' && type === 'shadow') return 35;
     if (unit.actor.type === 'wolf' && type === 'poison') return 30;
     if (unit.actor.type === 'crypt_lord' && type === 'shadow') return 20;
-    return 0;
+    return unit.elite ? 12 : 0;
   }
 
   private publishDamage(sourceId: string, targetId: string,
@@ -965,6 +973,16 @@ export class GameSimulation {
     this.shield = result.shieldRemaining;
     this.publishDamage(sourceId, this.player.id, type, result);
     if (result.damage > 0) this.hitPlayer(result.damage);
+    const elite = this.units.find(unit => unit.actor.id === sourceId)?.elite;
+    if (elite) {
+      for (const action of eliteOnHitPlan(elite.modifiers, {
+        sourceId, targetId: this.player.id, hit: result.damage > 0,
+        critical: result.critical, damage: result.damage
+      }) ?? []) {
+        if (action.kind === 'status' && this.player.alive) this.applyCanonicalStatus(
+          'player', action.statusId, sourceId, action.magnitude, action.durationSeconds);
+      }
+    }
     return result.damage > 0;
   }
 
@@ -1027,7 +1045,10 @@ export class GameSimulation {
 
   private hitEnemy(damage: number, unit: EnemyUnit): number {
     if (!unit.actor.alive || damage <= 0) return 0;
-    const dealt = Math.min(unit.actor.health, Math.max(0, Math.round(damage)));
+    const raw = Math.max(0, Math.round(damage));
+    const absorbed = unit.elite ? Math.min(raw, unit.elite.shield) : 0;
+    if (unit.elite) unit.elite.shield -= absorbed;
+    const dealt = Math.min(unit.actor.health, raw - absorbed);
     if (dealt === 0) return 0;
     unit.actor.health -= dealt;
     this.events.push({ type: 'hit', targetId: unit.actor.id, damage: dealt });
@@ -1253,7 +1274,7 @@ export class GameSimulation {
     const profile = getEnemyArchetype(enemyArchetype(actor.type));
     if (!profile || !actor.alive || !this.player.alive) return;
     const index = this.units.indexOf(unit);
-    const spawn = this.world.encounterPositions[index];
+    const spawn = this.world.encounterPositions[index] ?? (unit.summoned ? actor : undefined);
     if (!spawn) return;
     const origin = { x: spawn.x, y: spawn.y + (this.wave % 2) * 25 };
     const role = enemyArchetype(actor.type);
@@ -1385,7 +1406,7 @@ export class GameSimulation {
       if (!route.length) return;
       const point = route[0]!;
       const slowed = getStatusModifiers(this.statusEffects.enemies[actor.id] ?? []).moveSpeed ?? 0;
-      const pace = def.speed * profile.speedMultiplier * Math.max(0.25, 1 + slowed);
+      const pace = def.speed * profile.speedMultiplier * (unit.elite?.speedMultiplier ?? 1) * Math.max(0.25, 1 + slowed);
       const stop = decision.action === 'chase' && route.length === 1
         && distance(dest, this.player) < 0.01
         ? Math.max(0, def.preferredRange - 4) : 0;
@@ -1434,11 +1455,11 @@ export class GameSimulation {
       const action = intent.abilityId ? monsterAction(actor.type, intent.abilityId) : undefined;
       const baseDamage = action ? action.damage : def.baseDamage + this.level * 2;
       if (intent.pattern === 'bolt') {
-        this.fireBolt(unit, intent, intent.radius, baseDamage, action);
+        this.fireBolt(unit, intent, intent.radius, baseDamage * (unit.elite?.damageMultiplier ?? 1), action);
         return;
       }
       const hit = distance(this.player, intent) <= intent.radius
-        && (baseDamage <= 0 || this.dealPlayerDamage(baseDamage,
+        && (baseDamage <= 0 || this.dealPlayerDamage(baseDamage * (unit.elite?.damageMultiplier ?? 1),
           intent.pattern === 'leap' && !action ? 'poison' : 'physical', actor.id));
       if (hit && action?.statusId && this.player.alive) {
         this.applyCanonicalStatus('player', action.statusId, actor.id,
@@ -1457,7 +1478,7 @@ export class GameSimulation {
     const dist = distance(actor, this.player);
     if (dist > def.aggro) return;
     const slowed = unit.effects.some(effect => effect.id === 'chilled');
-    const speed = def.speed * (slowed ? 0.35 : 1);
+    const speed = def.speed * (unit.elite?.speedMultiplier ?? 1) * (slowed ? 0.35 : 1);
     if (dist > def.preferredRange + 10) {
       this.follow(actor, this.player, speed, dt, def.preferredRange);
     } else if (def.attack === 'bolt' && dist > 0 && dist < def.preferredRange - 23) {
@@ -1521,6 +1542,7 @@ export class GameSimulation {
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
+    this.eliteQueue = [];
     this.statusEffects = { player: [], enemies: {} };
     this.attackTimer = 0;
     this.accumulator = 0;
@@ -1573,12 +1595,14 @@ export class GameSimulation {
       this.healthRegenCarry = regen.carry;
     }
     this.tickProjectiles(dt);
+    this.tickElites(dt);
     if (this.aliveEnemies.length === 0 && !this.dungeonCleared) {
       if (this.zone === 'wilderness') {
         this.respawnTimer -= dt;
         if (this.respawnTimer <= 0) {
           this.wave++;
           this.units = createPack(this.wave, this.level, this.world.encounterPositions);
+          this.seedElitePack();
           this.statusEffects.enemies = {};
           this.respawnTimer = 0;
           this.selectedTargetId = null;
@@ -1589,6 +1613,7 @@ export class GameSimulation {
           this.dungeonStage = 1;
           this.wave = 1;
           this.units = createCryptPack(1, this.level, CRYPT_BOSS_POSITIONS);
+          this.seedElitePack();
           this.statusEffects.enemies = {};
           this.respawnTimer = 0;
           this.selectedTargetId = null;
@@ -1733,6 +1758,14 @@ export class GameSimulation {
 
   private defeatEnemy(unit: EnemyUnit): void {
     unit.actor.alive = false;
+    if (unit.elite && !unit.elite.deathTriggered) {
+      const plan = eliteOnDeathPlan(unit.elite.modifiers, {
+        actorId: unit.actor.id, position: { x: unit.actor.x, y: unit.actor.y },
+        alive: false, alreadyTriggered: false
+      });
+      unit.elite.deathTriggered = true;
+      for (const action of plan?.actions ?? []) this.dispatchEliteAction(unit, action);
+    }
     unit.intent = null;
     unit.effects = [];
     delete this.statusEffects.enemies[unit.actor.id];
@@ -1744,7 +1777,8 @@ export class GameSimulation {
     }
     this.kills++;
     this.gold += 12 + this.level * 3;
-    this.awardExperience(rewardForActivity('enemy', this.level, this.level));
+    this.awardExperience(Math.round(rewardForActivity('enemy', this.level, this.level)
+      * (unit.elite ? 1.75 : 1)));
     if (this.zone === 'wilderness' && this.quest.status === 'active') {
       const defeated = Math.min(QUEST_REQUIRED_KILLS, this.quest.defeated + 1);
       this.quest = {
@@ -1985,15 +2019,28 @@ export class GameSimulation {
       || !validWaveBState(s)
       || !s.effects || !Array.isArray(s.effects.player)
       || s.effects.player.length > 8 || !s.effects.player.every(isActiveEffect)
-      || !Array.isArray(s.enemies) || s.enemies.length !== PACK_SIZE
+      || !Array.isArray(s.enemies) || s.enemies.length < PACK_SIZE || s.enemies.length > PACK_SIZE + 2
       || !s.enemies.every((unit, index) =>
         !!unit && !!unit.actor && validEnemyType(unit.actor.type)
         && (s.zone === 'crypt'
-          ? unit.actor.type === (s.dungeonStage === 0
-            ? (['skeleton', 'wolf', 'wraith'] as const)[index]
-            : (['crypt_lord', 'skeleton', 'wraith'] as const)[index])
-          : unit.actor.type === packTypesForWave(s.wave)[index])
-        && validActor(unit.actor, unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
+          ? (index >= PACK_SIZE ? unit.summoned === true && unit.actor.type === 'skeleton'
+            : unit.actor.type === (s.dungeonStage === 0
+              ? (['skeleton', 'wolf', 'wraith'] as const)[index]
+              : (['crypt_lord', 'skeleton', 'wraith'] as const)[index]))
+          : index >= PACK_SIZE ? unit.summoned === true && unit.actor.type === 'skeleton'
+            : unit.actor.type === packTypesForWave(s.wave)[index])
+        && validActor(unit.actor, index >= PACK_SIZE
+          ? 'summon-' + s.wave + '-' + index
+          : unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
+        && (unit.elite === undefined || (
+          validateEliteSet(unit.elite.modifiers) && unit.elite.modifiers.length > 0
+          && Array.isArray(unit.elite.visualTags)
+          && unit.elite.visualTags.length <= 15
+          && Number.isFinite(unit.elite.shield) && unit.elite.shield >= 0 && unit.elite.shield <= 1000000
+          && Number.isFinite(unit.elite.damageMultiplier) && unit.elite.damageMultiplier >= 1 && unit.elite.damageMultiplier <= 8
+          && Number.isFinite(unit.elite.speedMultiplier) && unit.elite.speedMultiplier >= 1 && unit.elite.speedMultiplier <= 8
+          && Number.isFinite(unit.elite.elapsedSeconds) && unit.elite.elapsedSeconds >= 0 && unit.elite.elapsedSeconds <= 86400
+          && typeof unit.elite.deathTriggered === 'boolean'))
         && validIntent(unit.intent)
         && (unit.intent?.abilityId === undefined
           || monsterAction(unit.actor.type, unit.intent.abilityId) !== undefined)
@@ -2025,6 +2072,7 @@ export class GameSimulation {
     ) return false;
 
     this.world = layout;
+    this.eliteQueue = [];
     this.zone = s.zone;
     this.dungeonStage = s.dungeonStage;
     this.dungeonCleared = s.dungeonCleared;
@@ -2112,6 +2160,7 @@ export class GameSimulation {
     this.warriorAction = null;
     this.classAction = null;
     this.warriorPending = null;
+    this.eliteQueue = [];
     this.statusEffects = { player: [], enemies: {} };
     this.effects = emptyEffects();
     this.quest = freshQuest();
