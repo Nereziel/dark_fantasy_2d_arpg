@@ -23,6 +23,7 @@
     MERCHANT_ID, BLACKSMITH_ID, type NpcId, type TradeNpcId
   } from './game/world/npcs';
   import { WARDEN_ID } from './game/quests/firstQuest';
+  import { townEntry, type TownEntry } from './game/world/townManifest';
   import { CLASSES, type ClassId } from './game/data/classes';
   import { xpRequiredForLevel } from './game/progression/progressionRules';
 
@@ -55,12 +56,13 @@
   }
 
   function openControls(): void {
-    if (!playing || dialogueOpen || tradeNpc !== null || inventoryOpen || characterOpen) return;
+    if (!playing || dialogueOpen || tradeNpc !== null || townModal !== null || inventoryOpen || characterOpen) return;
     bridge.command({ type: 'pause', value: true });
     controlsOpen = true;
   }
   let dialogueOpen = $state(false);
   let tradeNpc: TradeNpcId | null = $state(null);
+  let townModal: TownEntry | null = $state(null);
   const heldShiftKeys = new Set<string>();
   const autosaver = new CharacterAutosaver(saveGame, 1400, () => {
     messageKey = 'status.saveError';
@@ -86,6 +88,14 @@
         messageKey = event.kind === 'shrine' ? 'worldObjects.shrine' : 'worldObjects.chest';
       }
       if (event.type === 'zoneChanged' && playing) messageKey = '';
+      if (event.type === 'townInteraction' && playing) {
+        townModal = townEntry(event.entryId);
+        tradeNpc = null;
+        dialogueOpen = false;
+        inventoryOpen = false;
+        bridge.command({ type: 'pause', value: true });
+      }
+      if (event.type === 'townServiceUsed' && playing) messageKey = 'town.serviceSuccess';
       if (event.type === 'npcDialogue' && playing) {
         inventoryOpen = false;
         if (event.npcId === WARDEN_ID) {
@@ -127,6 +137,7 @@
     controlsOpen = false;
     dialogueOpen = false;
     tradeNpc = null;
+    townModal = null;
     playing = true;
     void autosaver.saveNow(bridge.character()).catch(() => {
       messageKey = 'status.saveError';
@@ -141,6 +152,7 @@
     heldShiftKeys.clear();
     bridge.command({ type: 'holdPosition', value: false });
     tradeNpc = null;
+    townModal = null;
     dialogueOpen = false;
     inventoryOpen = false;
     characterOpen = false;
@@ -150,11 +162,11 @@
   }
   function togglePause(): void {
     if (controlsOpen) return;
-    if (!inventoryOpen && !characterOpen && !dialogueOpen && tradeNpc === null) bridge.command({ type: 'pause', value: !view.paused });
+    if (!inventoryOpen && !characterOpen && !dialogueOpen && townModal === null && tradeNpc === null) bridge.command({ type: 'pause', value: !view.paused });
   }
 
   function openInventory(): void {
-    if (dialogueOpen || tradeNpc !== null || inventoryOpen || characterOpen || view.paused || !view.player.alive) return;
+    if (dialogueOpen || tradeNpc !== null || townModal !== null || inventoryOpen || characterOpen || view.paused || !view.player.alive) return;
     inventoryOpen = true;
     bridge.command({ type: 'pause', value: true });
   }
@@ -163,7 +175,7 @@
     bridge.command({ type: 'pause', value: false });
   }
   function openCharacterSheet(): void {
-    if (dialogueOpen || tradeNpc !== null || inventoryOpen || characterOpen ||
+    if (dialogueOpen || tradeNpc !== null || townModal !== null || inventoryOpen || characterOpen ||
       view.paused || !view.player.alive) return;
     characterOpen = true;
     bridge.command({ type: 'pause', value: true });
@@ -173,7 +185,7 @@
     bridge.command({ type: 'pause', value: false });
   }
   function interact(npcId: NpcId): void {
-    if (inventoryOpen || characterOpen || dialogueOpen || tradeNpc !== null || view.paused) return;
+    if (inventoryOpen || characterOpen || dialogueOpen || townModal !== null || tradeNpc !== null || view.paused) return;
     bridge.command({ type: 'interactNpc', npcId });
   }
   function talkToWarden(): void { interact(WARDEN_ID); }
@@ -186,6 +198,7 @@
   function closeDialogue(): void {
     dialogueOpen = false;
     tradeNpc = null;
+    townModal = null;
     bridge.command({ type: 'pause', value: false });
   }
   function handleKeydown(event: KeyboardEvent): void {
@@ -284,6 +297,7 @@
         controlsOpen = false;
         dialogueOpen = false;
         tradeNpc = null;
+        townModal = null;
         selectedClass = bridge.snapshot().classId;
         autosaver.prime(bridge.character());
         playing = true;
@@ -437,7 +451,28 @@
       {#if messageKey}
         <div class="toast" role="status">{$t(messageKey)}</div>
       {/if}
-      {#if tradeNpc}
+      {#if townModal}
+        <div class="modal-shield town-service-shield" role="dialog" aria-modal="true" aria-label={$t(townModal.nameKey)}>
+          <section class="pause-card town-service-card">
+            <h2>{$t(townModal.nameKey)}</h2>
+            <p>{$t(townModal.descriptionKey)}</p>
+            {#if townModal.role === 'healer'}
+              <button class="primary" disabled={view.gold < 15 || view.player.health >= view.player.maxHealth}
+                onclick={() => bridge.command({ type: 'useTownService', entryId: townModal!.id })}>
+                {$t('town.restoreHealth')} · 15 {$t('hud.gold')}
+              </button>
+            {:else if townModal.role === 'potionVendor'}
+              <button class="primary" disabled={view.gold < 12 || view.resource >= view.stats.maxResource}
+                onclick={() => bridge.command({ type: 'useTownService', entryId: townModal!.id })}>
+                {$t('town.restoreResource')} · 12 {$t('hud.gold')}
+              </button>
+            {:else if townModal.capability === 'planned'}
+              <p>{$t('town.futureService')}</p>
+            {/if}
+            <button class="secondary" onclick={closeDialogue}>{$t('npc.leave')}</button>
+          </section>
+        </div>
+      {:else if tradeNpc}
         <TradePanel {view} {bridge} npc={tradeNpc} close={closeDialogue} />
       {:else if controlsOpen}
         <div class="modal-shield">

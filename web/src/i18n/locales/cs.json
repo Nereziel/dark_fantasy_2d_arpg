@@ -1,4 +1,52 @@
 {
+  "town": {
+    "serviceSuccess": "Služba byla provedena.",
+    "restoreHealth": "Vyléčit zranění",
+    "restoreResource": "Obnovit energii",
+    "futureService": "Tato služba zatím čeká na další rozšíření hry.",
+    "entry": {
+      "warden_vesna": {
+        "name": "Strážkyně Vesna",
+        "description": "Velitelka stráží přijímá hlášení o hrozbách za hradbami."
+      },
+      "merchant_bram": {
+        "name": "Obchodník Bram",
+        "description": "Prodává zbraně a výbavu pro výpravy do pustiny."
+      },
+      "smith_odan": {
+        "name": "Kovář Odan",
+        "description": "Za zlato trvale vylepšuje tvé vybavení."
+      },
+      "potion_vendor_lena": {
+        "name": "Léčivářka Lena",
+        "description": "Za 12 zlatých doplní sílu a bojový zdroj. Plnohodnotné lektvary přibudou později."
+      },
+      "healer_iva": {
+        "name": "Léčitelka Iva",
+        "description": "Za 15 zlatých ti zahojí všechna zranění."
+      },
+      "stash_camp": {
+        "name": "Táborová úschovna",
+        "description": "Připravovaná osobní truhla pro dlouhodobé ukládání předmětů."
+      },
+      "waypoint_camp": {
+        "name": "Táborový rozcestník",
+        "description": "Připravovaný cestovní bod pro budoucí rychlé přesuny."
+      },
+      "civilian_mira": {
+        "name": "Mira",
+        "description": "Místní obyvatelka, která hlídá oheň a zásoby."
+      },
+      "civilian_toma": {
+        "name": "Toma",
+        "description": "Unavený poutník, který se skrývá před nákazou."
+      },
+      "civilian_lio": {
+        "name": "Lio",
+        "description": "Mladý posel, který se učí rozeznávat cestovní značky."
+      }
+    }
+  },
   "menu": {
     "subtitle": "Temná země čeká",
     "start": "Vstoupit do světa",

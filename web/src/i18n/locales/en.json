@@ -1,4 +1,52 @@
 {
+  "town": {
+    "serviceSuccess": "Service completed.",
+    "restoreHealth": "Restore health",
+    "restoreResource": "Restore energy",
+    "futureService": "This service is reserved for a later game update.",
+    "entry": {
+      "warden_vesna": {
+        "name": "Warden Vesna",
+        "description": "The watch commander collects reports of dangers beyond the gate."
+      },
+      "merchant_bram": {
+        "name": "Merchant Bram",
+        "description": "Sells weapons and armor for journeys into the wastes."
+      },
+      "smith_odan": {
+        "name": "Blacksmith Odan",
+        "description": "Permanently upgrades your equipment for gold."
+      },
+      "potion_vendor_lena": {
+        "name": "Apothecary Lena",
+        "description": "Replenishes your combat resource for 12 gold. Carryable potions will arrive later."
+      },
+      "healer_iva": {
+        "name": "Healer Iva",
+        "description": "Heals all wounds for 15 gold."
+      },
+      "stash_camp": {
+        "name": "Camp Stash",
+        "description": "A future personal chest for storing equipment between adventures."
+      },
+      "waypoint_camp": {
+        "name": "Camp Waypoint",
+        "description": "A future travel marker for fast travel."
+      },
+      "civilian_mira": {
+        "name": "Mira",
+        "description": "A local resident tending the fire and supplies."
+      },
+      "civilian_toma": {
+        "name": "Toma",
+        "description": "A weary traveler sheltering from corruption."
+      },
+      "civilian_lio": {
+        "name": "Lio",
+        "description": "A young courier learning the old road signs."
+      }
+    }
+  },
   "menu": {
     "subtitle": "The dark frontier awaits",
     "start": "Enter the world",
