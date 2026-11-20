@@ -49,7 +49,9 @@ export class FrontierScene extends Phaser.Scene {
   private readonly enemyGraphics = new Map<string, Phaser.GameObjects.Graphics>();
   private readonly impactPool: Phaser.GameObjects.Graphics[] = [];
   private readonly enemyHitUntil = new Map<string, number>();
+  private readonly enemyBlockUntil = new Map<string, number>();
   private heroHitUntil = 0;
+  private heroBlockUntil = 0;
   private readonly campDecor: Array<Phaser.GameObjects.Graphics | Phaser.GameObjects.Text> = [];
   private healthBar!: Phaser.GameObjects.Graphics;
   private groundItems!: Phaser.GameObjects.Graphics;
@@ -167,6 +169,7 @@ export class FrontierScene extends Phaser.Scene {
       for (const graphic of this.impactPool) graphic.destroy();
       this.impactPool.length = 0;
       this.enemyHitUntil.clear();
+      this.enemyBlockUntil.clear();
     });
   }
 
@@ -483,6 +486,9 @@ export class FrontierScene extends Phaser.Scene {
       if (event.damage > 0) {
         if (event.targetId === 'hero') this.heroHitUntil = this.time.now + 140;
         else this.enemyHitUntil.set(event.targetId, this.time.now + 140);
+      } else if (event.blocked) {
+        if (event.targetId === 'hero') this.heroBlockUntil = this.time.now + 190;
+        else this.enemyBlockUntil.set(event.targetId, this.time.now + 190);
       }
       const source = event.sourceId === 'hero' ? state.player
         : state.enemies.find(u => u.actor.id === event.sourceId)?.actor;
@@ -583,7 +589,8 @@ export class FrontierScene extends Phaser.Scene {
       : state.quest.status === 'available' ? '!' : '·');
     this.wardenMarker.setVisible(state.zone === 'wilderness' && state.quest.status !== 'completed');
     this.hero.setVisible(false);
-    const visualPose = this.time.now < this.heroHitUntil ? 'hit' : this.pixelPose(animation);
+    const visualPose = this.time.now < this.heroBlockUntil ? 'block'
+      : this.time.now < this.heroHitUntil ? 'hit' : this.pixelPose(animation);
     const castTicks = state.warriorAction?.timeline ?? state.classAction?.timeline;
     const heroFrame = castTicks && (visualPose === 'attack' || visualPose === 'cast'
       || visualPose === 'channel')
@@ -603,6 +610,7 @@ export class FrontierScene extends Phaser.Scene {
         this.enemyPositions.delete(id);
         this.enemyDeadUntil.delete(id);
         this.enemyHitUntil.delete(id);
+        this.enemyBlockUntil.delete(id);
       }
     }
     for (const { actor } of state.enemies) {
@@ -626,6 +634,7 @@ export class FrontierScene extends Phaser.Scene {
         const moving = !!last && Math.hypot(actor.x-last.x, actor.y-last.y) > 0.3;
         const underHit = this.time.now < (this.enemyHitUntil.get(actor.id) ?? 0);
         const pose: PixelAnimation = !actor.alive ? 'death'
+          : this.time.now < (this.enemyBlockUntil.get(actor.id) ?? 0) ? 'block'
           : underHit ? 'hit' : state.enemies.find(u => u.actor.id === actor.id)?.intent
             ? ENEMY_DEFINITIONS[actor.type].attack === 'bolt' ? 'cast' : 'attack'
             : moving ? 'run' : 'idle';
