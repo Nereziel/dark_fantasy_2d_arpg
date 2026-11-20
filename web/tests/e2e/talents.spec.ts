@@ -11,6 +11,8 @@ test('spends, saves, reloads and refunds Warrior talent ranks through the UI', a
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
+  // Stop the running session/autosaver before modifying the v11 test fixture.
+  await page.reload();
 
   await page.evaluate(async () => {
     await new Promise<void>((resolve, reject) => {
@@ -46,7 +48,6 @@ test('spends, saves, reloads and refunds Warrior talent ranks through the UI', a
     });
   });
 
-  await page.reload();
   await page.getByRole('button', { name: 'Load' }).click();
   await expect(page.getByText('Warrior · Level 10')).toBeVisible();
   await page.getByRole('button', { name: /Talents/ }).click();
