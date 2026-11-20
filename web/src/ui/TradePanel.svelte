@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { _ as t } from 'svelte-i18n';
+  import { _ as t, locale } from 'svelte-i18n';
   import type { GameSnapshot } from '../game/core/types';
   import type { GameBridge } from '../game/bridge/GameBridge';
-  import { RARITIES } from '../game/data/items';
+  import { RARITIES, type Item } from '../game/data/items';
   import {
-    SHOP_OFFERS, createShopItem, sellPrice, temperCost, canTemper
+    SHOP_OFFERS, createShopItem, canTemper
   } from '../game/trade/commerce';
+  import { quotePurchase, quoteSale, quoteTempering } from '../game/trade/economyRules';
   import {
     MERCHANT_ID, BLACKSMITH_ID, type TradeNpcId
   } from '../game/world/npcs';
@@ -20,6 +21,17 @@
   } = $props();
 
   let emptyBag = $derived(view.inventory.every(item => item !== null));
+  function money(value: number): string {
+    return new Intl.NumberFormat($locale === 'cs' ? 'cs-CZ' : 'en-US').format(value);
+  }
+  function salePrice(item: Item): number {
+    const quote = quoteSale(item);
+    return quote.ok ? quote.price : 0;
+  }
+  function forgePrice(item: Item): number {
+    const quote = quoteTempering(item);
+    return quote.ok ? quote.price : 0;
+  }
 </script>
 
 <div class="trade-overlay">
@@ -33,7 +45,7 @@
       </div>
       <button class="trade-close" aria-label={$t('inventory.close')} onclick={close}>✕</button>
     </header>
-    <div class="trade-gold">{$t('hud.gold')}: <strong>{view.gold}</strong></div>
+    <div class="trade-gold">{$t('hud.gold')}: <strong>{money(view.gold)}</strong></div>
 
     {#if npc === MERCHANT_ID}
       <div class="trade-columns">
@@ -42,14 +54,15 @@
           <div class="trade-list">
             {#each SHOP_OFFERS as offer (offer.id)}
               {@const preview = createShopItem(offer, 'preview')}
+              {@const quote = quotePurchase(offer)}
               <div class="trade-item">
                 <span class="trade-icon">{preview.icon}</span>
                 <div class="trade-item-name">
                   <strong>{$t('item.base.' + offer.templateId)}</strong>
                   <small>{$t('item.slot.' + preview.slot)}</small>
                 </div>
-                <span class="trade-price">{offer.price} {$t('hud.gold')}</span>
-                <button disabled={view.gold < offer.price || emptyBag}
+                <span class="trade-price">{money(quote.ok ? quote.price : 0)} {$t('hud.gold')}</span>
+                <button disabled={!quote.ok || view.gold < (quote.ok ? quote.price : Infinity) || emptyBag}
                   aria-label={$t('trade.buy') + ' ' + $t('item.base.' + offer.templateId)}
                   onclick={() => bridge.command({ type: 'buyItem', offerId: offer.id })}>
                   {$t('trade.buy')}
@@ -70,8 +83,9 @@
                     <strong>{$t('item.base.' + item.templateId)}</strong>
                     <small>{$t('item.rarity.' + item.rarity)} · +{item.upgrades}</small>
                   </div>
-                  <span class="trade-price">{sellPrice(item)} {$t('hud.gold')}</span>
-                  <button aria-label={$t('trade.sell') + ' ' + $t('item.base.' + item.templateId)}
+                  <span class="trade-price">{money(salePrice(item))} {$t('hud.gold')}</span>
+                  <button disabled={salePrice(item) === 0 || !!view.itemFlags?.[item.id]?.locked || !!view.itemFlags?.[item.id]?.favorite}
+                    aria-label={$t('trade.sell') + ' ' + $t('item.base.' + item.templateId)}
                     onclick={() => bridge.command({ type: 'sellItem', index })}>
                     {$t('trade.sell')}
                   </button>
@@ -97,8 +111,8 @@
                   <strong>{$t('item.base.' + item.templateId)}</strong>
                   <small>{$t('item.slot.' + slot)} · {$t('trade.tempering')} {item.upgrades}/3</small>
                 </div>
-                <span class="trade-price">{temperCost(item)} {$t('hud.gold')}</span>
-                <button disabled={view.gold < temperCost(item)}
+                <span class="trade-price">{money(forgePrice(item))} {$t('hud.gold')}</span>
+                <button disabled={forgePrice(item) === 0 || view.gold < forgePrice(item)}
                   aria-label={$t('trade.temper') + ' ' + $t('item.base.' + item.templateId)}
                   onclick={() => bridge.command({ type: 'temperItem', slot: slot as keyof GameSnapshot['equipment'] })}>
                   {$t('trade.temper')}
