@@ -75,6 +75,9 @@ import {
   MERCHANT_ID, BLACKSMITH_ID, type NpcId
 } from '../world/npcs';
 import { getOffer, createShopItem, temperItem } from '../trade/commerce';
+import {
+  planCraft, validateMaterials, type Materials, type CraftRequest
+} from '../crafting/craftingRules';
 import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planService,
   selectVendorStock, type EconomyFailure } from '../trade/economyRules';
 import { townEntry, canInteractTownEntry, getTownManifest } from '../world/townManifest';
@@ -272,6 +275,7 @@ export class GameSimulation {
   private talentPoints = 0;
   private talentRanks: TalentRanks = {};
   private gold = 75;
+  private materials: Materials = {};
   private resource = CLASSES.WARRIOR.resourceInitial;
   private attackTimer = 0;
   private holdPosition = false;
@@ -954,6 +958,10 @@ export class GameSimulation {
       this.temperEquipment(command.slot);
       return;
     }
+    if (command.type === 'craft') {
+      this.craftInventory(command);
+      return;
+    }
     // Dialogue actions are gated by physical proximity and the ledger.
     if (command.type === 'questAccept' || command.type === 'questTurnIn') {
       if (this.zone !== 'wilderness' || !this.player.alive || !nearWarden(this.player)) return;
@@ -1266,6 +1274,27 @@ export class GameSimulation {
     this.gold = plan.goldAfter;
     delete this.itemFlags[item.id];
     this.inventory[index] = null;
+  }
+
+
+  /** Blacksmith is authoritative; open trade panels may pause the tick. */
+  private craftInventory(request: CraftRequest): void {
+    if (!this.shopAllowed(BLACKSMITH_ID)) return;
+    const planned = planCraft({
+      inventory: this.inventory, materials: this.materials,
+      gold: this.gold, flags: this.itemFlags
+    }, request);
+    if (!planned.ok) return;
+    // No external calls between plan and commit. The item identity of modified
+    // equipment never changes; only one owned bag slot and the wallet change.
+    this.inventory = planned.inventory.map(cloneItem);
+    this.materials = { ...planned.materials };
+    this.gold = planned.gold;
+    if (planned.kind === 'salvage') delete this.itemFlags[planned.itemId];
+    this.events.push({
+      type:'craftCompleted',kind:planned.kind,
+      itemId:planned.itemId,goldSpent:planned.goldSpent
+    });
   }
 
   private temperEquipment(slot: EquipmentSlot): void {
@@ -2938,6 +2967,8 @@ export class GameSimulation {
       talentPoints: this.talentPoints,
       ...(Object.keys(this.talentRanks).length
         ? { talentRanks: { ...this.talentRanks } } : {}),
+      ...(Object.keys(this.materials).length
+        ? { materials: { ...this.materials } } : {}),
       gold: this.gold,
       kills: this.kills,
       inventory: this.inventory.map(cloneItem),
@@ -2968,6 +2999,7 @@ export class GameSimulation {
       skillPoints: progress.skillPoints ?? Math.max(0, Math.min(MAX_LEVEL - 1, progress.level - 1)),
       talentPoints: progress.talentPoints ?? Math.floor(Math.min(MAX_LEVEL, progress.level) / 5),
       talentRanks: progress.talentRanks ?? {},
+      materials: progress.materials ?? {},
       gold: progress.gold,
       kills: progress.kills,
       inventory: progress.inventory,
@@ -2985,6 +3017,7 @@ export class GameSimulation {
     this.skillPoints = scratch.skillPoints;
     this.talentPoints = scratch.talentPoints;
     this.talentRanks = { ...scratch.talentRanks };
+    this.materials = { ...scratch.materials };
     this.gold = progress.gold;
     this.kills = progress.kills;
     this.inventory = progress.inventory.map(cloneItem);
@@ -3036,6 +3069,7 @@ export class GameSimulation {
       skillPoints: this.skillPoints,
       talentPoints: this.talentPoints,
       talentRanks: { ...this.talentRanks },
+      materials: { ...this.materials },
       gold: this.gold,
       resource: this.resource,
       rngState: this.rng.state,
@@ -3185,6 +3219,7 @@ export class GameSimulation {
         || s.skillPoints < 0 || s.skillPoints > s.level - 1))
       || !validateTalentBuild(s.classId, s.level,
         s.talentPoints ?? Math.floor(s.level / 5), s.talentRanks ?? {})
+      || !validateMaterials(s.materials ?? {})
       || !Number.isSafeInteger(s.gold) || s.gold < 0
       || !validQuest(s.quest)
       || !createActIQuestLedger(s.questLedger ?? s.quest)
@@ -3347,6 +3382,7 @@ export class GameSimulation {
     this.skillPoints = s.skillPoints ?? s.level - 1;
     this.talentPoints = s.talentPoints ?? Math.floor(s.level / 5);
     this.talentRanks = { ...(s.talentRanks ?? {}) };
+    this.materials = { ...(s.materials ?? {}) };
     this.gold = s.gold;
     this.resource = s.resource;
     this.rng = new SeededRng(s.rngState);
@@ -3447,6 +3483,7 @@ export class GameSimulation {
     this.skillPoints = 0;
     this.talentPoints = 0;
     this.talentRanks = {};
+    this.materials = {};
     this.gold = 75;
     this.resource = CLASSES[classId].resourceInitial;
     this.paused = false;
