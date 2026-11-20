@@ -27,7 +27,8 @@ function killUnit(sim: GameSimulation, index: number): void {
     }))
   })).toBe(true);
   sim.command({ type: 'attack', targetId: target.id });
-  step(sim, 7);
+  // New Warrior hit frame (~11 ticks) replaces immediate melee damage.
+  step(sim, 26);
   expect(sim.snapshot().enemies[index]!.actor.alive).toBe(false);
 }
 
