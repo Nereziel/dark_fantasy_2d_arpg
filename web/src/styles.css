@@ -53,6 +53,10 @@ h1 span,.brand-mark span{color:#b88b59}
 .hud-actions button{font-size:.75rem;padding:10px}
 .toast{top:95px;right:24px;color:#e3d1a1;background:#121820e8;border:1px solid #665d48;padding:11px 18px;font-size:.78rem;pointer-events:none}
 .modal-shield{inset:0;background:#06080dc7;display:grid;place-items:center}
+/* Town services can contain a scrollable stash: keep all modal controls above the skill bar. */
+.town-service-shield{z-index:50;padding:14px;overflow:auto}
+.town-service-shield .town-service-card{max-height:calc(100vh - 28px);overflow:auto;max-width:min(94vw,800px)}
+
 .pause-card{width:min(90vw,370px);padding:36px;background:#151c25;border:1px solid #9e8058;box-shadow:0 20px 50px #000;text-align:center;display:flex;flex-direction:column;gap:16px}
 .pause-card h2{font-family:Cinzel,Georgia,serif;color:#e6d6b4;margin:0 0 12px}
 .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}

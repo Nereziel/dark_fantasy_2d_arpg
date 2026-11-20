@@ -53,7 +53,7 @@ describe('Wave C progression runtime integration', () => {
     expect(migrated?.talentPoints).toBe(0);
     expect(migrated?.inventory[0]).toEqual(item);
     const reexport = createSaveRecord(migrated)!;
-    expect(reexport.format).toBe(9);
+    expect(reexport.format).toBe(10);
     expect(reexport.character.inventory[0]?.id).toBe(item.id);
     expect(JSON.stringify(reexport)).not.toContain('worldSeed');
   });

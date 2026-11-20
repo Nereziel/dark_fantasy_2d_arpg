@@ -40,6 +40,8 @@ export interface CharacterProgress {
   kills: number;
   inventory: Array<Item | null>;
   equipment: Equipment;
+  /** Persistent town stash (24 slots); absent only in legacy v8/v9 saves. */
+  stash?: Array<Item | null>;
   itemFlags?: Record<string, ItemFlags>;
   quest: QuestProgress;
 }
@@ -111,6 +113,8 @@ export interface GameSnapshot {
   stats: DerivedStats;
   inventory: Array<Item | null>;
   equipment: Equipment;
+  /** Character-owned stash, exposed for camp UI; older debug snapshots may omit it. */
+  stash?: Array<Item | null>;
   groundLoot: GroundItem[];
   itemFlags?: Record<string, ItemFlags>;
   quest: QuestProgress;
@@ -127,6 +131,8 @@ export type GameCommand =
   | { type: 'interactNpc'; npcId: NpcId }
   | { type: 'interactTown'; entryId: string }
   | { type: 'useTownService'; entryId: string }
+  | { type: 'stashDeposit'; index: number }
+  | { type: 'stashWithdraw'; index: number }
   | { type: 'usePortal' }
   | { type: 'interactObject'; id: WorldObjectId }
   | { type: 'buyItem'; offerId: ShopOfferId }
@@ -161,6 +167,7 @@ export type GameEvent =
   | { type: 'npcDialogue'; npcId: NpcId }
   | { type: 'townInteraction'; entryId: string; role: TownServiceRole }
   | { type: 'townServiceUsed'; entryId: string; goldSpent: number }
+  | { type: 'stashUpdated'; direction: 'deposit' | 'withdraw'; itemId: string }
   | { type: 'tradeRejected'; reason: 'funds' | 'inventory' | 'protected' | 'invalid' }
   | { type: 'zoneChanged'; zone: ZoneId }
   | { type: 'dungeonCleared' }

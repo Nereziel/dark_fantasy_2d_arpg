@@ -104,7 +104,7 @@ describe('camp merchant and blacksmith', () => {
     expect(canTemper(maxed.equipment.BELT!)).toBe(false);
 
     const save = createSaveRecord(sim.character());
-    expect(save?.format).toBe(9);
+    expect(save?.format).toBe(10);
     expect(JSON.stringify(save)).not.toContain('worldSeed');
     const next = new GameSimulation(3190);
     expect(next.restoreCharacter(readSaveRecord(save)!, 4188)).toBe(true);

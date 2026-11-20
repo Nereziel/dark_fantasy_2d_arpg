@@ -13,6 +13,13 @@
     "restoreHealth": "Restore health",
     "restoreResource": "Restore energy",
     "futureService": "This service is reserved for a later game update.",
+    "stashAccess": "Open stash",
+    "stashBag": "Backpack",
+    "stashStored": "Stash",
+    "stashDeposit": "Store",
+    "stashWithdraw": "Retrieve",
+    "stashEmpty": "Your stash is empty",
+    "stashProtected": "Locked and favorite items cannot be deposited. Stored items remain with your character across sessions.",
     "entry": {
       "warden_vesna": {
         "name": "Warden Vesna",
@@ -36,7 +43,7 @@
       },
       "stash_camp": {
         "name": "Camp Stash",
-        "description": "A future personal chest for storing equipment between adventures."
+        "description": "A personal chest with 24 slots. Stored equipment survives new world sessions."
       },
       "waypoint_camp": {
         "name": "Camp Waypoint",

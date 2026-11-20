@@ -47,6 +47,7 @@ import { getOffer, createShopItem, temperItem } from '../trade/commerce';
 import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planService,
   selectVendorStock, type EconomyFailure } from '../trade/economyRules';
 import { townEntry, canInteractTownEntry } from '../world/townManifest';
+import { STASH_SIZE, planStashDeposit, planStashWithdraw, validateStashContents } from '../inventory/stashRules';
 import {
   freshQuest, validQuest, FIRST_QUEST_ID, type QuestProgress
 } from '../quests/firstQuest';
@@ -170,6 +171,7 @@ export class GameSimulation {
   private classId: ClassId = 'WARRIOR';
   private equipment: Equipment = createEquipment();
   private inventory: Array<Item | null> = Array(INVENTORY_SIZE).fill(null);
+  private stash: Array<Item | null> = Array(STASH_SIZE).fill(null);
   private itemFlags: Record<string, ItemFlags> = {};
   private rng = new SeededRng();
   private cooldowns: Cooldowns = emptyCooldowns();
@@ -365,6 +367,32 @@ export class GameSimulation {
       if (healer) this.player.health = this.player.maxHealth;
       if (restorer) this.resource = deriveStats(this.classId, this.equipment, this.level).maxResource;
       this.events.push({ type: 'townServiceUsed', entryId: entry.id, goldSpent: price });
+      return;
+    }
+    if (command.type === 'stashDeposit' || command.type === 'stashWithdraw') {
+      // Only a live player physically at the camp stash can transfer items.
+      // Its dialog deliberately pauses combat; access remains server-authoritative.
+      if (this.zone !== 'wilderness' || !this.player.alive
+        || !canInteractTownEntry(this.player, 'stash_camp')) return;
+      const state = {
+        inventory: this.inventory, equipment: this.equipment, stash: this.stash,
+        flags: this.itemFlags
+      };
+      const plan = command.type === 'stashDeposit'
+        ? planStashDeposit(state, command.index)
+        : planStashWithdraw(state, command.index);
+      if (!plan.ok) return;
+      const before = command.type === 'stashDeposit'
+        ? this.inventory[command.index] : this.stash[command.index];
+      if (!before) return;
+      this.inventory = plan.state.inventory.map(cloneItem);
+      this.stash = plan.state.stash.map(cloneItem);
+      this.itemFlags = Object.fromEntries(Object.entries(plan.state.flags ?? {})
+        .map(([id, flags]) => [id, { ...flags }]));
+      this.events.push({
+        type: 'stashUpdated', direction: command.type === 'stashDeposit' ? 'deposit' : 'withdraw',
+        itemId: before.id
+      });
       return;
     }
     if (!this.player.alive || this.paused) return;
@@ -576,7 +604,7 @@ export class GameSimulation {
     if (!plan.ok) { this.rejectTrade(plan.reason); return; }
     if (index < 0) { this.rejectTrade('INVENTORY_FULL'); return; }
     const existing = new Set(
-      [...this.inventory, ...Object.values(this.equipment)]
+      [...this.inventory, ...this.stash, ...Object.values(this.equipment)]
         .filter((item): item is Item => item !== null)
         .map(item => item.id)
     );
@@ -2099,6 +2127,7 @@ export class GameSimulation {
       kills: this.kills,
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
+      stash: this.stash.map(cloneItem),
       ...(Object.keys(this.itemFlags).length ? { itemFlags: Object.fromEntries(
         Object.entries(this.itemFlags).map(([id, flags]) => [id, { ...flags }])) } : {}),
       quest: { ...this.quest }
@@ -2126,6 +2155,7 @@ export class GameSimulation {
       kills: progress.kills,
       inventory: progress.inventory,
       equipment: progress.equipment,
+      stash: progress.stash === undefined ? Array(STASH_SIZE).fill(null) : progress.stash,
       itemFlags: progress.itemFlags,
       quest: progress.quest
     };
@@ -2139,6 +2169,7 @@ export class GameSimulation {
     this.gold = progress.gold;
     this.kills = progress.kills;
     this.inventory = progress.inventory.map(cloneItem);
+    this.stash = (progress.stash === undefined ? Array(STASH_SIZE).fill(null) : progress.stash).map(cloneItem);
     this.equipment = cloneEquipment(progress.equipment);
     this.itemFlags = { ...scratch.itemFlags };
     this.quest = { ...progress.quest };
@@ -2207,6 +2238,7 @@ export class GameSimulation {
       stats: deriveStats(this.classId, this.equipment, this.level),
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
+      stash: this.stash.map(cloneItem),
       ...(Object.keys(this.itemFlags).length ? { itemFlags: Object.fromEntries(
         Object.entries(this.itemFlags).map(([id, flags]) => [id, { ...flags }])) } : {}),
       groundLoot: this.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! })),
@@ -2322,9 +2354,9 @@ export class GameSimulation {
       || !s.equipment || Object.keys(createEquipment()).some(
         key => !(key in s.equipment)
           || (s.equipment[key as EquipmentSlot] !== null && !isItem(s.equipment[key as EquipmentSlot])))
-      || !planSwap({ inventory: s.inventory, equipment: s.equipment, flags: s.itemFlags }, 0, 0, {
-        playerLevel: s.level
-      }).ok
+      || !validateStashContents({ inventory: s.inventory, equipment: s.equipment,
+        stash: s.stash === undefined ? Array(STASH_SIZE).fill(null) : s.stash,
+        ...(s.itemFlags !== undefined ? { flags: s.itemFlags } : {}) })
       || !Array.isArray(s.groundLoot) || s.groundLoot.length > 100
       || !s.groundLoot.every(loot => !!loot && typeof loot.id === 'string'
         && canOccupy(loot, 0, layout.obstacles) && isItem(loot.item))
@@ -2339,6 +2371,7 @@ export class GameSimulation {
     this.quest = { ...s.quest };
     this.equipment = cloneEquipment(s.equipment);
     this.inventory = s.inventory.map(cloneItem);
+    this.stash = (s.stash === undefined ? Array(STASH_SIZE).fill(null) : s.stash).map(cloneItem);
     this.itemFlags = Object.fromEntries(Object.entries(s.itemFlags ?? {})
       .map(([id, flags]) => [id, { ...flags }]));
     this.groundLoot = s.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! }));
@@ -2413,6 +2446,7 @@ export class GameSimulation {
     this.classId = classId;
     this.equipment = createEquipment();
     this.inventory = Array(INVENTORY_SIZE).fill(null);
+    this.stash = Array(STASH_SIZE).fill(null);
     this.itemFlags = {};
     this.rng = new SeededRng(seed === 0 ? 0x49ac127b : ((seed ^ 0x49ac127b) >>> 0));
     this.cooldowns = emptyCooldowns();
