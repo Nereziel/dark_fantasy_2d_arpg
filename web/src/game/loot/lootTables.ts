@@ -12,7 +12,7 @@ import type { RarityId } from '../data/items';
 
 export type LootRarity = RarityId;
 export type LootItemBaseId =
-  | 'broadsword' | 'shield' | 'hauberk' | 'helm' | 'gauntlets'
+  | 'broadsword' | 'greatsword' | 'shield' | 'hauberk' | 'helm' | 'gauntlets'
   | 'greaves' | 'belt' | 'bloodstone' | 'signet';
 export type LootZone = 'wilderness' | 'crypt';
 export type LootDifficulty = 'normal' | 'veteran' | 'nightmare' | 'hell';
@@ -108,7 +108,8 @@ export const LOOT_TABLES: Readonly<Record<LootTableId, readonly LootEntry[]>> =
       { itemBaseId: 'broadsword', rarity: 'RARE', weight: 215, minMonsterLevel: 4 },
       { itemBaseId: 'hauberk', rarity: 'RARE', weight: 135, minMonsterLevel: 4 },
       { itemBaseId: 'gauntlets', rarity: 'EPIC', weight: 140, minMonsterLevel: 12, minPlayerLevel: 6 },
-      { itemBaseId: 'bloodstone', rarity: 'LEGENDARY', weight: 30, minMonsterLevel: 25, minPlayerLevel: 15 }
+      { itemBaseId: 'bloodstone', rarity: 'LEGENDARY', weight: 30, minMonsterLevel: 25, minPlayerLevel: 15 },
+      { itemBaseId: 'greatsword', rarity: 'MYTHIC', weight: 2, minMonsterLevel: 60, minPlayerLevel: 60 }
     ]),
     boss: frozenTable([
       { itemBaseId: 'shield', rarity: 'COMMON', weight: 10 },
@@ -117,7 +118,8 @@ export const LOOT_TABLES: Readonly<Record<LootTableId, readonly LootEntry[]>> =
       { itemBaseId: 'broadsword', rarity: 'RARE', weight: 150, minMonsterLevel: 4 },
       { itemBaseId: 'gauntlets', rarity: 'EPIC', weight: 255, minMonsterLevel: 12, minPlayerLevel: 6 },
       { itemBaseId: 'bloodstone', rarity: 'EPIC', weight: 145, minMonsterLevel: 12, minPlayerLevel: 6 },
-      { itemBaseId: 'signet', rarity: 'LEGENDARY', weight: 180, minMonsterLevel: 25, minPlayerLevel: 15 }
+      { itemBaseId: 'signet', rarity: 'LEGENDARY', weight: 180, minMonsterLevel: 25, minPlayerLevel: 15 },
+      { itemBaseId: 'greatsword', rarity: 'MYTHIC', weight: 12, minMonsterLevel: 60, minPlayerLevel: 60 }
     ]),
     wilderness: frozenTable([
       { itemBaseId: 'greaves', rarity: 'COMMON', weight: 60 },
