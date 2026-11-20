@@ -261,7 +261,7 @@ describe('Agent 19: pure inventory and equipment plans', () => {
   it('projects pure base and derived differences with the existing stat derivation', () => {
     const before = createEquipment();
     const after = createEquipment();
-    const belt = makeItem('belt', 'belt');
+    const belt = makeItem('belt', 'belt', 'UNCOMMON');
     after.BELT = { ...belt, armor: 8, affixes: [{ id: 'vit', stat: 'vitality', value: 4 }] };
     const source = structuredClone(after);
     const compare = compareEquipment('WARRIOR', before, after);
@@ -281,7 +281,7 @@ describe('Agent 19: pure inventory and equipment plans', () => {
     const duplicate = state([dup], equipment);
     expect(planEquip(duplicate, 0)).toEqual({ ok: false, reason: 'DUPLICATE_ID' });
     const misplaced = createEquipment();
-    misplaced.OFF_HAND = makeItem('sword', 'broadsword');
+    misplaced.OFF_HAND = makeItem('mace', 'mace');
     expect(sortInventory(state([null], misplaced)))
       .toEqual({ ok: false, reason: 'INVALID_STATE' });
     expect(planSwap(null as unknown as InventoryState, 0, 0))

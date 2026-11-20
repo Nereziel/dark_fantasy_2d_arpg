@@ -11,14 +11,19 @@ import {
   type RarityId
 } from '../data/items';
 import { isClassId, type ClassId } from '../data/classes';
+import { ITEM_BASES, WEAPON_TYPES } from '../items/itemCatalog';
 
 const SLOTS = Object.keys(createEquipment()) as EquipmentSlot[];
 const RARITY_ORDER: readonly RarityId[] = [
-  'COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY'
+  'COMMON', 'UNCOMMON', 'RARE', 'EPIC', 'LEGENDARY', 'MYTHIC'
 ];
 const AFFIX_STATS = new Set([
   'armor', 'minDmg', 'maxDmg', 'blockChance', 'strength',
-  'dexterity', 'vitality', 'critChance', 'moveSpeed'
+  'dexterity', 'vitality', 'critChance', 'moveSpeed',
+  'intelligence', 'willpower', 'critDamage', 'attackSpeed', 'fireDamage',
+  'physicalDamage', 'poisonDamage', 'fireResistance', 'coldResistance',
+  'poisonResistance', 'maxHealth', 'resourceRegen', 'cooldownReduction',
+  'skillRank', 'summonDamage', 'resource'
 ]);
 const MAX_INVENTORY = 200;
 const MAX_LEVEL = 10000;
@@ -154,11 +159,17 @@ function ringSlot(slot: EquipmentSlot): boolean {
 }
 
 function compatibleSlot(item: Item, slot: EquipmentSlot): boolean {
-  return item.slot === slot || (ringSlot(item.slot) && ringSlot(slot));
+  if (item.slot === slot || (ringSlot(item.slot) && ringSlot(slot))) return true;
+  const base = ITEM_BASES[item.templateId as keyof typeof ITEM_BASES];
+  return slot === 'OFF_HAND' && item.slot === 'MAIN_HAND' && !!base?.weaponType
+    && WEAPON_TYPES[base.weaponType].canOffHand;
 }
 
 function isTwoHanded(item: Item | null, rules?: EquipmentRules): boolean {
-  return item !== null && (rules?.twoHandedItemIds?.includes(item.id) ?? false);
+  if (item === null) return false;
+  const base = ITEM_BASES[item.templateId as keyof typeof ITEM_BASES];
+  return (rules?.twoHandedItemIds?.includes(item.id) ?? false)
+    || (base?.weaponType ? WEAPON_TYPES[base.weaponType].twoHanded : false);
 }
 
 function validateState(input: InventoryState, rules?: EquipmentRules): InventoryError | null {

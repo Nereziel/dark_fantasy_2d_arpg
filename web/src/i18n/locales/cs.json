@@ -33,7 +33,8 @@
     "wave": "Vlna",
     "camp": "Tábor Stráž uhelného žáru",
     "autosave": "Automatické ukládání postavy",
-    "shield": "Štít"
+    "shield": "Štít",
+    "elite": "Elita"
   },
   "status": {
     "ready": "Připraven",
@@ -81,7 +82,22 @@
     "armor": "Zbroj",
     "block": "Blokování",
     "affixes": "Vlastnosti",
-    "full": "Inventář je plný"
+    "full": "Inventář je plný",
+    "sort": "Seřadit",
+    "filter": "Filtrovat",
+    "all": "Všechny",
+    "favorite": "Oblíbený",
+    "unfavorite": "Odebrat z oblíbených",
+    "lock": "Zamknout",
+    "unlock": "Odemknout",
+    "drop": "Položit",
+    "move": "Přesunout",
+    "swapPrompt": "Vyber cílovou pozici",
+    "requireLevel": "Vyžadovaná úroveň",
+    "twoHanded": "Obouruční",
+    "comparison": "Změna statistik",
+    "offHandEquip": "Nasadit do druhé ruky",
+    "legendaryPower": "Legendární vlastnost"
   },
   "stat": {
     "strength": "Síla",
@@ -100,7 +116,7 @@
     "maxHealth": "Maximální životy",
     "healthRegen": "Obnova životů / s",
     "maxResource": "Maximum zdroje",
-    "resourceRegen": "Obnova zdroje / s",
+    "resourceRegen": "Obnova zdrojů",
     "physicalResist": "Fyzická odolnost",
     "fireResist": "Odolnost proti ohni",
     "frostResist": "Odolnost proti mrazu",
@@ -114,7 +130,15 @@
     "cooldownReduction": "Zkrácení cooldownů",
     "lifeSteal": "Vysátí života",
     "magicFind": "Šance na magické předměty",
-    "goldFind": "Bonus nalezeného zlata"
+    "goldFind": "Bonus nalezeného zlata",
+    "summonDamage": "Poškození vyvolaných",
+    "skillRank": "Úroveň dovedností",
+    "fireDamage": "Ohnivé poškození",
+    "physicalDamage": "Fyzické poškození",
+    "poisonDamage": "Jedové poškození",
+    "fireResistance": "Odolnost proti ohni",
+    "coldResistance": "Odolnost proti chladu",
+    "poisonResistance": "Odolnost proti jedu"
   },
   "resource": {
     "rage": "Hněv",
@@ -156,7 +180,8 @@
       "UNCOMMON": "Neobyčejný",
       "RARE": "Vzácný",
       "EPIC": "Epický",
-      "LEGENDARY": "Legendární"
+      "LEGENDARY": "Legendární",
+      "MYTHIC": "Mýtický"
     },
     "base": {
       "broadsword": "Kalený široký meč",
@@ -167,7 +192,21 @@
       "greaves": "Plátové holenice",
       "belt": "Okovaný opasek",
       "bloodstone": "Prastarý krvavý kámen",
-      "signet": "Železný pečetní prsten"
+      "signet": "Železný pečetní prsten",
+      "greatsword": "Dvou­ruční meč",
+      "axe": "Bitevní sekera",
+      "greataxe": "Obouruční sekera",
+      "mace": "Válečný palcát",
+      "hammer": "Bitevní kladivo",
+      "dagger": "Dýka",
+      "spear": "Kopí",
+      "bow": "Luk",
+      "crossbow": "Kuše",
+      "staff": "Magická hůl",
+      "wand": "Čarovná hůlka",
+      "spellbook": "Kniha kouzel",
+      "relic": "Prastarý relikviář",
+      "charm": "Ochranný talisman"
     },
     "affix": {
       "stalwart": "Nezdolnost",
@@ -179,7 +218,37 @@
       "titan": "Titán",
       "warding": "Ochrana",
       "haste": "Spěch",
-      "bear": "Medvěd"
+      "bear": "Medvěd",
+      "mighty": "Mocný",
+      "nimble": "Hbitý",
+      "sage": "Mudrcův",
+      "vital": "Životodárný",
+      "keen": "Ostrý",
+      "swift": "Rychlý",
+      "fleet": "Lehký",
+      "scorching": "Spalující",
+      "brutal": "Drtivý",
+      "venomous": "Jedovatý",
+      "unyielding": "Nezdolný",
+      "channeling": "Proudící",
+      "arcane": "Arkánový",
+      "summoning": "Vyvolávačův",
+      "fox": "Lišky",
+      "owl": "Sovy",
+      "oak": "Dubu",
+      "precision": "Přesnosti",
+      "flames": "Plamenů",
+      "frost": "Mrazu",
+      "antidote": "Protijedu",
+      "celerity": "Svižnosti",
+      "fury": "Zuřivosti",
+      "renewal": "Obnovy",
+      "focus": "Soustředění",
+      "ember": "Žhavého uhlíku",
+      "venom": "Jedu",
+      "mastery": "Mistrovství",
+      "legion": "Legie",
+      "fortitude": "Odolnosti"
     },
     "slot": {
       "HELMET": "Přilba",
@@ -191,7 +260,9 @@
       "BELT": "Opasek",
       "BOOTS": "Boty",
       "RING_1": "Prsten I",
-      "RING_2": "Prsten II"
+      "RING_2": "Prsten II",
+      "RELIC": "Relikvie",
+      "CHARM": "Talisman"
     }
   },
   "combat": {
@@ -468,5 +539,24 @@
   "worldObjects": {
     "shrine": "Svatyně duší ti dala ochranný štít.",
     "chest": "Otevřel jsi truhlu."
+  },
+  "progression": {
+    "experience": "Zkušenosti",
+    "skillPoints": "Body dovedností",
+    "talentPoints": "Talentové body"
+  },
+  "eliteModifier": {
+    "extraHealth": "Zvýšené životy",
+    "increasedDamage": "Silnější útok",
+    "fast": "Rychlý",
+    "fireAura": "Ohnivá aura",
+    "frostAttacks": "Mrazivé útoky",
+    "poisonAttacks": "Jedové útoky",
+    "teleporting": "Teleportace",
+    "shielded": "Ochranný štít",
+    "regenerating": "Regenerace",
+    "summoner": "Vyvolávač",
+    "explodesOnDeath": "Výbuch po smrti",
+    "hazardousGround": "Nebezpečná zem"
   }
 }

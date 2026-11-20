@@ -1,6 +1,7 @@
 /** Renderer-independent state and command contracts. Language strings are never saved. */
 import type { ClassId } from '../data/classes';
 import type { Equipment, GroundItem, Item, DerivedStats, EquipmentSlot } from '../data/items';
+import type { ItemFlags } from '../inventory/equipmentRules';
 import type { ActiveEffects, Cooldowns, SkillSlot } from '../skills/skills';
 import type { EnemySnapshot, EnemyIntent, EnemyUnit } from '../enemies/enemies';
 import type { QuestProgress } from '../quests/firstQuest';
@@ -31,10 +32,14 @@ export interface CharacterProgress {
   classId: ClassId;
   level: number;
   xp: number;
+  /** Unspent points, reconstructible on migration from v8 characters. */
+  skillPoints?: number;
+  talentPoints?: number;
   gold: number;
   kills: number;
   inventory: Array<Item | null>;
   equipment: Equipment;
+  itemFlags?: Record<string, ItemFlags>;
   quest: QuestProgress;
 }
 
@@ -83,6 +88,8 @@ export interface GameSnapshot {
   kills: number;
   level: number;
   xp: number;
+  skillPoints?: number;
+  talentPoints?: number;
   gold: number;
   resource: number;
   rngState: number;
@@ -104,6 +111,7 @@ export interface GameSnapshot {
   inventory: Array<Item | null>;
   equipment: Equipment;
   groundLoot: GroundItem[];
+  itemFlags?: Record<string, ItemFlags>;
   quest: QuestProgress;
   paused: boolean;
   status: GameStatus;
@@ -124,8 +132,12 @@ export type GameCommand =
   | { type: 'questAccept' }
   | { type: 'questTurnIn' }
   | { type: 'pickup'; id: string }
-  | { type: 'equip'; index: number }
+  | { type: 'equip'; index: number; slot?: EquipmentSlot }
   | { type: 'unequip'; slot: EquipmentSlot }
+  | { type: 'swapInventory'; fromIndex: number; toIndex: number }
+  | { type: 'sortInventory' }
+  | { type: 'setItemFlag'; itemId: string; flag: 'locked' | 'favorite'; value: boolean }
+  | { type: 'dropInventory'; index: number }
   | { type: 'pause'; value: boolean }
   | { type: 'reset'; classId?: ClassId; seed?: number };
 
@@ -150,7 +162,8 @@ export type GameEvent =
   | { type: 'enemyWindup'; enemyId: string; pattern: 'bolt' | 'sweep' | 'leap' }
   | { type: 'enemyAttack'; enemyId: string; hit: boolean }
   | { type: 'enemyHeal'; enemyId: string; targetId: string; amount: number }
-  | { type: 'enemyBuff'; enemyId: string; abilityId: string };
+  | { type: 'enemyBuff'; enemyId: string; abilityId: string }
+  | { type: 'eliteCue'; enemyId: string; effect: string; x: number; y: number; radius: number };
 export interface GameStateReader {
   snapshot(): GameSnapshot;
   subscribe(listener: (state: GameSnapshot) => void): () => void;

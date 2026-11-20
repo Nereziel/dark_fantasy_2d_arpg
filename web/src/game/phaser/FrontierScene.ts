@@ -1,12 +1,13 @@
 import Phaser from 'phaser';
 import { get } from 'svelte/store';
-import { _ as translate } from 'svelte-i18n';
+import { _ as translate, locale } from 'svelte-i18n';
 import { planCombatVfx } from './combatVfxPlan';
 import { statusVisuals } from '../status/statusVisuals';
 import type { StatusInstance } from '../status/statusRuntime';
 import type { GameBridge } from '../bridge/GameBridge';
 import { CLASSES } from '../data/classes';
 import { RARITIES } from '../data/items';
+import { itemDisplayName } from '../items/itemName';
 import { SKILLS } from '../skills/skills';
 import type { GameEvent, ZoneId, Point } from '../core/types';
 import {
@@ -55,6 +56,7 @@ export class FrontierScene extends Phaser.Scene {
   private readonly campDecor: Array<Phaser.GameObjects.Graphics | Phaser.GameObjects.Text> = [];
   private healthBar!: Phaser.GameObjects.Graphics;
   private groundItems!: Phaser.GameObjects.Graphics;
+  private readonly groundLabels = new Map<string, Phaser.GameObjects.Text>();
   private statusVisuals!: Phaser.GameObjects.Graphics;
   private telegraph!: Phaser.GameObjects.Graphics;
   private terrain!: Phaser.GameObjects.Graphics;
@@ -168,6 +170,8 @@ export class FrontierScene extends Phaser.Scene {
       this.heroSprite.destroy();
       for (const graphic of this.impactPool) graphic.destroy();
       this.impactPool.length = 0;
+      for (const label of this.groundLabels.values()) label.destroy();
+      this.groundLabels.clear();
       this.enemyHitUntil.clear();
       this.enemyBlockUntil.clear();
     });
@@ -432,7 +436,17 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private onGameEvent(event: GameEvent): void {
-    if (event.type === 'cast') {
+    if (event.type === 'eliteCue') {
+      const visual = this.obtainImpact(event.x, event.y, 86);
+      const tint = event.effect === 'fireAura' || event.effect === 'deathExplosion'
+        ? 0xed7745 : event.effect === 'hazardousGround' ? 0x83b368 : 0x90bde8;
+      visual.lineStyle(4, tint, 0.92).strokeCircle(0, 0, event.radius);
+      visual.fillStyle(tint, 0.10).fillCircle(0, 0, event.radius);
+      this.tweens.add({
+        targets: visual, alpha: 0, scaleX: 1.09, scaleY: 1.09, duration: 550,
+        onComplete: () => this.releaseImpact(visual)
+      });
+    } else if (event.type === 'cast') {
       const definition = Object.values(SKILLS)
         .flatMap(kit => Object.values(kit))
         .find(skill => skill.id === event.skillId);
@@ -682,6 +696,18 @@ export class FrontierScene extends Phaser.Scene {
         this.telegraph.fillStyle(0xffd3a7, 0.55 + progress * 0.4)
           .fillCircle(intent.x, intent.y, 4);
       }
+      if (unit.elite) {
+        this.statusVisuals.lineStyle(3, 0xefbd67, 0.95)
+          .strokeEllipse(actor.x, actor.y + 6, 74, 56);
+        if (unit.elite.modifiers.includes('fireAura')) {
+          this.statusVisuals.lineStyle(2, 0xf07742, 0.45)
+            .strokeCircle(actor.x, actor.y, 105);
+        }
+        if (unit.elite.shield > 0) {
+          this.statusVisuals.lineStyle(3, 0x82c8fa, 0.72)
+            .strokeCircle(actor.x, actor.y, 35);
+        }
+      }
       this.drawStatuses(actor.x,actor.y,state.statusEffects?.enemies?.[actor.id] ?? []);
       this.healthBar.fillStyle(0x080a10, 0.9)
         .fillRect(actor.x - 26, actor.y - 45, 52, 8);
@@ -745,16 +771,38 @@ export class FrontierScene extends Phaser.Scene {
         .strokeCircle(state.player.x, state.player.y, 27);
     }
     this.groundItems.clear();
+    const activeDrops = new Set(state.groundLoot.map(drop => drop.id));
+    for (const [id, label] of this.groundLabels) {
+      if (activeDrops.has(id)) continue;
+      label.destroy();
+      this.groundLabels.delete(id);
+    }
+    const translateItem = get(translate);
+    const language = get(locale) ?? 'en';
     for (const drop of state.groundLoot) {
       const hex = RARITIES[drop.item.rarity].color.replace('#', '');
       const color = Number.parseInt(hex, 16);
       if (this.hoveredId === drop.id) {
         this.groundItems.lineStyle(3, 0xffdc8d).strokeCircle(drop.x, drop.y, 25);
       }
+      this.groundItems.lineStyle(4, color, 0.35)
+        .lineBetween(drop.x, drop.y - 10, drop.x, drop.y - 44);
       this.groundItems.fillStyle(color, 0.13).fillCircle(drop.x, drop.y, 21);
       this.groundItems.lineStyle(2, color, 0.95).strokeCircle(drop.x, drop.y, 17);
       this.groundItems.fillStyle(color).fillRect(drop.x - 7, drop.y - 7, 14, 14);
       this.groundItems.lineStyle(2, 0xece6d7, 0.5).strokeRect(drop.x - 7, drop.y - 7, 14, 14);
+      let label = this.groundLabels.get(drop.id);
+      if (!label) {
+        label = this.add.text(drop.x, drop.y - 58, '', {
+          fontFamily: 'Georgia, serif', fontSize: '12px', color: '#' + hex,
+          stroke: '#090c11', strokeThickness: 3, align: 'center'
+        }).setOrigin(0.5).setDepth(55);
+        this.groundLabels.set(drop.id, label);
+      }
+      label.setPosition(drop.x, drop.y - 58).setColor('#' + hex).setText(
+        itemDisplayName(drop.item, language,
+          translateItem('item.base.' + drop.item.templateId))
+      );
     }
 
   }

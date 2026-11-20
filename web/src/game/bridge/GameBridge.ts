@@ -1,4 +1,5 @@
 import { GameSimulation } from '../core/GameSimulation';
+import type { EquipmentSlot } from '../data/items';
 import { newSessionSeed } from '../world/generator';
 import { resolveSkillAim, type SkillAim } from '../input/skillAiming';
 import { GAME_BINDINGS } from '../input/gameBindings';
@@ -40,6 +41,9 @@ export class GameBridge implements GameStateReader {
 
   snapshot(): GameSnapshot { return this.simulation.snapshot(); }
   character(): CharacterProgress { return this.simulation.character(); }
+  previewEquipment(index: number, slot?: EquipmentSlot): ReturnType<GameSimulation['previewEquipment']> {
+    return this.simulation.previewEquipment(index, slot);
+  }
   restoreCharacter(progress: CharacterProgress): boolean {
     this.pointerWorld = null;
     this.pointerEnemy = null;

@@ -3,6 +3,7 @@ import type { ActiveEffect } from '../skills/skills';
 import { UNDEAD_BEAST_MONSTERS, getUndeadBeastMonster, type UndeadBeastMonsterId } from './families/undeadBeasts';
 import { BANDIT_CULTIST_MONSTERS, getBanditCultistMonster, type BanditCultistMonsterId } from './families/banditsCultists';
 import type { EnemyBehaviorId } from './behaviorPlanner';
+import type { EliteModifierId, EliteVisualTag } from './eliteModifiers';
 
 /** All enemy movement and attack decisions stay in the TypeScript simulation. */
 export type EnemyType = 'wraith' | 'crypt_lord' | UndeadBeastMonsterId | BanditCultistMonsterId;
@@ -117,8 +118,20 @@ export interface EnemyIntent extends Point {
   abilityId?: string;
 }
 
+export interface EliteRuntime {
+  modifiers: EliteModifierId[];
+  visualTags: EliteVisualTag[];
+  shield: number;
+  damageMultiplier: number;
+  speedMultiplier: number;
+  elapsedSeconds: number;
+  deathTriggered: boolean;
+}
+
 export interface EnemyUnit {
   actor: EnemySnapshot;
+  elite?: EliteRuntime;
+  summoned?: boolean;
   intent: EnemyIntent | null;
   cooldown: number;
   effects: ActiveEffect[];

@@ -1,5 +1,14 @@
 import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnapshot, Point, ProjectileSnapshot, ZoneId } from './types';
 import { spawnPlayer, updateHealthLimit, advanceResource, regenerateHealth } from '../entities/player';
+import { awardProgression, rewardForActivity, xpRequiredForLevel, MAX_LEVEL } from '../progression/progressionRules';
+import {
+  planEquip, planUnequip, planSwap, planDrop, sortInventory, favoriteOrLockItem,
+  type ItemFlags, type InventoryState, type EquipmentRules
+} from '../inventory/equipmentRules';
+import { ITEM_BASES, WEAPON_TYPES } from '../items/itemCatalog';
+import { rollLootTable, bossGuaranteedLoot, type LootContext, type LootRoll } from '../loot/lootTables';
+import { rollEliteModifiers, applyEliteStats, eliteOnHitPlan, eliteOnPeriodicPlan,
+  eliteOnDeathPlan, validateEliteSet, type ElitePlannedAction } from '../enemies/eliteModifiers';
 import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
 import { applyOrRefreshEffect } from '../status/effectStack';
 import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../skills/warriorKit';
@@ -40,7 +49,7 @@ import {
   WARDEN_ID, type QuestProgress
 } from '../quests/firstQuest';
 import {
-  SeededRng, createEquipment, deriveStats, isEquipmentSlot, isItem, rollItem,
+  SeededRng, createEquipment, deriveStats, isEquipmentSlot, isItem, rollItem, rollItemForBase,
   type Equipment, type EquipmentSlot, type GroundItem, type Item
 } from '../data/items';
 
@@ -54,7 +63,9 @@ function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 function cloneItem(item: Item | null): Item | null {
-  return item ? { ...item, affixes: item.affixes.map(a => ({ ...a })) } : null;
+  return item ? { ...item, affixes: item.affixes.map(a => ({ ...a })),
+    ...(item.sockets ? { sockets: [...item.sockets] } : {}),
+    ...(item.legendaryPower ? { legendaryPower: { ...item.legendaryPower } } : {}) } : null;
 }
 function cloneEquipment(equipment: Equipment): Equipment {
   return Object.fromEntries(Object.entries(equipment).map(([key, item]) => [key, cloneItem(item)])) as Equipment;
@@ -65,7 +76,10 @@ function cloneUnit(unit: EnemyUnit): EnemyUnit {
     intent: unit.intent ? { ...unit.intent } : null,
     cooldown: unit.cooldown,
     effects: unit.effects.map(effect => ({ ...effect })),
-    ...(unit.abilityCooldowns ? { abilityCooldowns: { ...unit.abilityCooldowns } } : {})
+    ...(unit.abilityCooldowns ? { abilityCooldowns: { ...unit.abilityCooldowns } } : {}),
+    ...(unit.summoned ? { summoned: true } : {}),
+    ...(unit.elite ? { elite: { ...unit.elite, modifiers: [...unit.elite.modifiers],
+      visualTags: [...unit.elite.visualTags] } } : {})
   };
 }
 function validTransientAim(value: unknown): value is SkillAim {
@@ -152,6 +166,7 @@ export class GameSimulation {
   private classId: ClassId = 'WARRIOR';
   private equipment: Equipment = createEquipment();
   private inventory: Array<Item | null> = Array(INVENTORY_SIZE).fill(null);
+  private itemFlags: Record<string, ItemFlags> = {};
   private rng = new SeededRng();
   private cooldowns: Cooldowns = emptyCooldowns();
   private warriorCooldowns: Partial<Record<WarriorAbilityId, number>> = {};
@@ -162,6 +177,9 @@ export class GameSimulation {
     aim?: SkillAim; timeline: CombatTimelineState;
   } | null = null;
   private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
+  private eliteQueue: Array<{ remaining: number; sourceId: string;
+    kind: 'pulse' | 'teleport'; position: Point; radius: number;
+    multiplier: number; damageType: 'fire' | 'poison' }> = [];
   private effects: ActiveEffects = emptyEffects();
   private world: WorldLayout = generateWorld(0);
   private zone: ZoneId = 'wilderness';
@@ -191,6 +209,8 @@ export class GameSimulation {
   private wave = 0;
   private level = 1;
   private xp = 0;
+  private skillPoints = 0;
+  private talentPoints = 0;
   private gold = 75;
   private resource = CLASSES.WARRIOR.resourceInitial;
   private attackTimer = 0;
@@ -276,7 +296,7 @@ export class GameSimulation {
       this.pendingPortal = false;
       return;
     }
-    if (command.type === 'equip') { this.equip(command.index); return; }
+    if (command.type === 'equip') { this.equip(command.index, command.slot); return; }
     if (command.type === 'unequip') { this.unequip(command.slot); return; }
     // Shop actions must be checked inside the authoritative simulation.
     // A shop panel pauses combat, but doesn't disable transactions.
@@ -304,12 +324,16 @@ export class GameSimulation {
       if (this.zone === 'wilderness' && this.player.alive && nearWarden(this.player) && this.quest.status === 'ready') {
         this.quest = { ...this.quest, status: 'completed' };
         this.gold += QUEST_REWARD_GOLD;
-        this.awardExperience(QUEST_REWARD_XP);
+        this.awardExperience(Math.max(QUEST_REWARD_XP, rewardForActivity('quest', this.level, this.level)));
         this.events.push({ type: 'questUpdated', status: this.quest.status, defeated: this.quest.defeated });
       }
       return;
     }
     if (!this.player.alive || this.paused) return;
+    if (command.type === 'swapInventory') { this.updateInventory(planSwap(this.inventoryState(), command.fromIndex, command.toIndex, this.inventoryRules())); return; }
+    if (command.type === 'sortInventory') { this.updateInventory(sortInventory(this.inventoryState(), this.inventoryRules())); return; }
+    if (command.type === 'setItemFlag') { this.updateInventory(favoriteOrLockItem(this.inventoryState(), command.itemId, command.flag, command.value, this.inventoryRules())); return; }
+    if (command.type === 'dropInventory') { this.dropInventory(command.index); return; }
     if (command.type === 'interactObject') {
       this.warriorAction = null;
       this.classAction = null;
@@ -435,6 +459,10 @@ export class GameSimulation {
       return;
     }
     if (distance(this.player, object.position) > object.reach) return;
+    if (object.kind === 'chest' && this.groundLoot.length >= 100) {
+      this.pendingObject = null;
+      return;
+    }
     this.pendingObject = null;
     this.usedObjects.add(object.id);
     if (object.kind === 'shrine') {
@@ -445,8 +473,10 @@ export class GameSimulation {
         id: 'cache-' + object.id, x: object.position.x, y: object.position.y,
         item: { ...item, id: 'cache-' + object.id + '-item' }
       });
-      if (this.groundLoot.length > 30) this.groundLoot.shift();
+      // Chests preserve item ownership; never evict another ground item due to overflow.
     }
+    this.awardExperience(rewardForActivity(object.kind === 'shrine' ? 'event' : 'exploration',
+      this.level, this.level));
     this.events.push({ type: 'worldInteract', id: object.id, kind: object.kind });
   }
 
@@ -475,8 +505,9 @@ export class GameSimulation {
     if (!this.shopAllowed(MERCHANT_ID)
       || !Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return;
     const item = this.inventory[index];
-    if (!item) return;
+    if (!item || this.itemFlags[item.id]?.locked || this.itemFlags[item.id]?.favorite) return;
     this.gold += sellPrice(item);
+    delete this.itemFlags[item.id];
     this.inventory[index] = null;
   }
 
@@ -493,28 +524,80 @@ export class GameSimulation {
     this.refreshHealthLimit();
   }
 
-  private equip(index: number): void {
-    if (!Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return;
+  private inventoryState(): InventoryState {
+    return { inventory: this.inventory, equipment: this.equipment, flags: this.itemFlags };
+  }
+
+  private inventoryRules(): EquipmentRules {
+    const items = [...this.inventory, ...Object.values(this.equipment)].filter(
+      (item): item is Item => item !== null
+    );
+    return {
+      playerLevel: this.level,
+      requiredLevelsById: Object.fromEntries(items.map(item => [
+        item.id, item.requiredLevel
+          ?? ITEM_BASES[item.templateId as keyof typeof ITEM_BASES]?.requiredLevel ?? 1
+      ])),
+      twoHandedItemIds: items.filter(item => item.twoHanded || (
+        !!ITEM_BASES[item.templateId as keyof typeof ITEM_BASES]?.weaponType
+        && WEAPON_TYPES[ITEM_BASES[item.templateId as keyof typeof ITEM_BASES].weaponType!].twoHanded
+      )).map(item => item.id)
+    };
+  }
+
+  private updateInventory(result: ReturnType<typeof planEquip>): void {
+    if (!result.ok) return;
+    this.inventory = result.state.inventory.map(cloneItem);
+    this.equipment = cloneEquipment(result.state.equipment as Equipment);
+    this.itemFlags = Object.fromEntries(Object.entries(result.state.flags ?? {})
+      .map(([id, flags]) => [id, { ...flags }]));
+    this.refreshHealthLimit();
+    const cap = deriveStats(this.classId, this.equipment, this.level).maxResource;
+    this.resource = Math.min(cap, this.resource);
+  }
+
+  private equip(index: number, targetSlot?: EquipmentSlot): void {
     const item = this.inventory[index];
     if (!item) return;
-    const slot: EquipmentSlot = item.slot === 'RING_1' &&
-      this.equipment.RING_1 && !this.equipment.RING_2 ? 'RING_2' : item.slot;
-    const replaced = this.equipment[slot];
-    this.equipment[slot] = item;
-    this.inventory[index] = replaced;
-    this.refreshHealthLimit();
+    const selected = targetSlot ?? (item.slot === 'RING_1' && this.equipment.RING_1 && !this.equipment.RING_2
+      ? 'RING_2' : undefined);
+    this.updateInventory(planEquip(this.inventoryState(), index, selected, this.inventoryRules()));
   }
+
+  /** Pure, authoritative candidate projection for the equipment comparison panel. */
+  previewEquipment(index: number, targetSlot?: EquipmentSlot): { armor: number; damageMin: number;
+    damageMax: number; maxHealth: number } | null {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return null;
+    const candidate = planEquip(this.inventoryState(), index, targetSlot, this.inventoryRules());
+    if (!candidate.ok) return null;
+    const before = deriveStats(this.classId, this.equipment, this.level);
+    const after = deriveStats(this.classId, candidate.state.equipment as Equipment, this.level);
+    return {
+      armor: after.armor - before.armor,
+      damageMin: after.damageMin - before.damageMin,
+      damageMax: after.damageMax - before.damageMax,
+      maxHealth: after.maxHealth - before.maxHealth
+    };
+  }
+
   private unequip(slot: EquipmentSlot): void {
-    if (!isEquipmentSlot(slot)) return;
-    const item = this.equipment[slot];
-    const index = this.inventory.findIndex(i => i === null);
-    if (!item || index < 0) return;
-    this.inventory[index] = item;
-    this.equipment[slot] = null;
-    this.refreshHealthLimit();
+    this.updateInventory(planUnequip(this.inventoryState(), slot, this.inventoryRules()));
   }
+
+  private dropInventory(index: number): void {
+    const result = planDrop(this.inventoryState(), index, this.inventoryRules());
+    if (!result.ok || this.groundLoot.length >= 100) return;
+    const prefix = 'discard-' + this.kills + '-' + this.rng.state + '-' + index;
+    let id = prefix;
+    let attempt = 1;
+    while (this.groundLoot.some(loot => loot.id === id)) id = prefix + '-' + attempt++;
+    this.updateInventory(result);
+    this.groundLoot.push({ id, item: result.dropped, x: this.player.x, y: this.player.y });
+    this.events.push({ type: 'loot', id });
+  }
+
   private refreshHealthLimit(): void {
-    const max = deriveStats(this.classId, this.equipment).maxHealth;
+    const max = deriveStats(this.classId, this.equipment, this.level).maxHealth;
     updateHealthLimit(this.player, max);
   }
 
@@ -537,7 +620,7 @@ export class GameSimulation {
         movementSkill: ability.tags.includes('MOVEMENT')
       },
       state: {
-        rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+        rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
         cooldowns: { ...this.warriorCooldowns,
           cleave: Math.max(this.warriorCooldowns.cleave ?? 0, this.cooldowns.rmb),
           charge: Math.max(this.warriorCooldowns.charge ?? 0, this.cooldowns.slot1) }
@@ -676,7 +759,7 @@ export class GameSimulation {
       this.applyCanonicalStatus('player', 'haste', 'hero', 0.2, 8);
       this.applyCanonicalStatus('player', 'fortified', 'hero', 0.2, 8);
       this.resource = applyWarriorRageDelta({
-        rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+        rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
         cooldowns: this.warriorCooldowns
       }, ability.rageGain).rage;
     } else {
@@ -714,7 +797,7 @@ export class GameSimulation {
         const dealt = this.applyDamage(power, unit, 'physical');
         if (dealt > 0 && ability.rageGain > 0) {
           this.resource = applyWarriorRageDelta({
-            rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+            rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
             cooldowns: this.warriorCooldowns
           }, ability.rageGain).rage;
         }
@@ -853,7 +936,7 @@ export class GameSimulation {
     if (unit.actor.type === 'wraith' && type === 'shadow') return 35;
     if (unit.actor.type === 'wolf' && type === 'poison') return 30;
     if (unit.actor.type === 'crypt_lord' && type === 'shadow') return 20;
-    return 0;
+    return unit.elite ? 12 : 0;
   }
 
   private publishDamage(sourceId: string, targetId: string,
@@ -875,16 +958,18 @@ export class GameSimulation {
         * Math.max(0.1, 1 + (attackerStatus.damageDealt ?? 0))
         * Math.max(0.1, 1 + (defenderStatus.damageTaken ?? 0)), critChance,
       defenderArmor: 10 + this.level * 3, defenderLevel: this.level,
+      shield: unit.elite?.shield ?? 0,
       resistancePercent: Math.min(95, this.enemyResistance(unit, type) +
         100 * Math.min(0.8, getStatusModifiers(this.statusEffects.enemies[unit.actor.id] ?? []).damageReduction ?? 0))
     }, this.rng);
+    if (unit.elite) unit.elite.shield = result.shieldRemaining;
     this.publishDamage(sourceId, unit.actor.id, type, result);
     return this.hitEnemy(result.damage, unit);
   }
 
   private applyDamage(power: number, unit = this.focusedUnit, type: DamageType = 'physical'): number {
     if (!unit.actor.alive) return 0;
-    const stats = deriveStats(this.classId, this.equipment);
+    const stats = deriveStats(this.classId, this.equipment, this.level);
     const rolled = stats.damageMin + this.rng.next() * (stats.damageMax - stats.damageMin);
     const primary = ['MAGE', 'NECROMANCER', 'WARLOCK'].includes(this.classId)
       ? stats.intelligence : stats.strength;
@@ -896,7 +981,7 @@ export class GameSimulation {
 
   private dealPlayerDamage(base: number, type: DamageType, sourceId: string): boolean {
     if (!this.player.alive) return false;
-    const stats = deriveStats(this.classId, this.equipment);
+    const stats = deriveStats(this.classId, this.equipment, this.level);
     const resistance = type === 'fire' ? stats.fireResist
       : type === 'frost' ? stats.frostResist
       : type === 'lightning' ? stats.lightningResist
@@ -918,6 +1003,16 @@ export class GameSimulation {
     this.shield = result.shieldRemaining;
     this.publishDamage(sourceId, this.player.id, type, result);
     if (result.damage > 0) this.hitPlayer(result.damage);
+    const elite = this.units.find(unit => unit.actor.id === sourceId)?.elite;
+    if (elite) {
+      for (const action of eliteOnHitPlan(elite.modifiers, {
+        sourceId, targetId: this.player.id, hit: result.damage > 0,
+        critical: result.critical, damage: result.damage
+      }) ?? []) {
+        if (action.kind === 'status' && this.player.alive) this.applyCanonicalStatus(
+          'player', action.statusId, sourceId, action.magnitude, action.durationSeconds);
+      }
+    }
     return result.damage > 0;
   }
 
@@ -1065,7 +1160,7 @@ export class GameSimulation {
         if (target.actor.alive && skill.duration) {
           this.applyEffect('enemy', {
             id: 'burning', remaining: skill.duration,
-            magnitude: Math.max(3, Math.round(2 + deriveStats(this.classId, this.equipment).intelligence * 0.25)),
+            magnitude: Math.max(3, Math.round(2 + deriveStats(this.classId, this.equipment, this.level).intelligence * 0.25)),
             tick: 0
           }, target);
         }
@@ -1095,7 +1190,7 @@ export class GameSimulation {
       if (skill.effect && skill.duration && unit.actor.alive
         && ['stunned', 'poisoned', 'burning'].includes(skill.effect)) {
         const magnitude = skill.effect === 'stunned' ? 0
-          : Math.max(3, Math.round(2 + deriveStats(this.classId, this.equipment).intelligence * 0.25));
+          : Math.max(3, Math.round(2 + deriveStats(this.classId, this.equipment, this.level).intelligence * 0.25));
         this.applyEffect('enemy',
           { id: skill.effect, remaining: skill.duration, magnitude, tick: 0 }, unit);
       }
@@ -1206,7 +1301,7 @@ export class GameSimulation {
     const profile = getEnemyArchetype(enemyArchetype(actor.type));
     if (!profile || !actor.alive || !this.player.alive) return;
     const index = this.units.indexOf(unit);
-    const spawn = this.world.encounterPositions[index];
+    const spawn = this.world.encounterPositions[index] ?? (unit.summoned ? actor : undefined);
     if (!spawn) return;
     const origin = { x: spawn.x, y: spawn.y + (this.wave % 2) * 25 };
     const role = enemyArchetype(actor.type);
@@ -1338,7 +1433,7 @@ export class GameSimulation {
       if (!route.length) return;
       const point = route[0]!;
       const slowed = getStatusModifiers(this.statusEffects.enemies[actor.id] ?? []).moveSpeed ?? 0;
-      const pace = def.speed * profile.speedMultiplier * Math.max(0.25, 1 + slowed);
+      const pace = def.speed * profile.speedMultiplier * (unit.elite?.speedMultiplier ?? 1) * Math.max(0.25, 1 + slowed);
       const stop = decision.action === 'chase' && route.length === 1
         && distance(dest, this.player) < 0.01
         ? Math.max(0, def.preferredRange - 4) : 0;
@@ -1387,11 +1482,11 @@ export class GameSimulation {
       const action = intent.abilityId ? monsterAction(actor.type, intent.abilityId) : undefined;
       const baseDamage = action ? action.damage : def.baseDamage + this.level * 2;
       if (intent.pattern === 'bolt') {
-        this.fireBolt(unit, intent, intent.radius, baseDamage, action);
+        this.fireBolt(unit, intent, intent.radius, baseDamage * (unit.elite?.damageMultiplier ?? 1), action);
         return;
       }
       const hit = distance(this.player, intent) <= intent.radius
-        && (baseDamage <= 0 || this.dealPlayerDamage(baseDamage,
+        && (baseDamage <= 0 || this.dealPlayerDamage(baseDamage * (unit.elite?.damageMultiplier ?? 1),
           intent.pattern === 'leap' && !action ? 'poison' : 'physical', actor.id));
       if (hit && action?.statusId && this.player.alive) {
         this.applyCanonicalStatus('player', action.statusId, actor.id,
@@ -1410,7 +1505,7 @@ export class GameSimulation {
     const dist = distance(actor, this.player);
     if (dist > def.aggro) return;
     const slowed = unit.effects.some(effect => effect.id === 'chilled');
-    const speed = def.speed * (slowed ? 0.35 : 1);
+    const speed = def.speed * (unit.elite?.speedMultiplier ?? 1) * (slowed ? 0.35 : 1);
     if (dist > def.preferredRange + 10) {
       this.follow(actor, this.player, speed, dt, def.preferredRange);
     } else if (def.attack === 'bolt' && dist > 0 && dist < def.preferredRange - 23) {
@@ -1474,6 +1569,7 @@ export class GameSimulation {
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
+    this.eliteQueue = [];
     this.statusEffects = { player: [], enemies: {} };
     this.attackTimer = 0;
     this.accumulator = 0;
@@ -1500,14 +1596,16 @@ export class GameSimulation {
   }
   private step(dt: number): void {
     const definition = CLASSES[this.classId];
-    this.resource = advanceResource(this.resource, definition.regenRate, definition.resourceMax, dt);
+    const currentStats = deriveStats(this.classId, this.equipment, this.level);
+    this.resource = advanceResource(this.resource, currentStats.resourceRegen,
+      currentStats.maxResource, dt);
     this.attackTimer = Math.max(0, this.attackTimer - dt);
     this.evadeCooldown = Math.max(0, this.evadeCooldown - dt);
     for (const slot of ['rmb', 'slot1'] as const) {
       this.cooldowns[slot] = Math.max(0, this.cooldowns[slot] - dt);
     }
     this.warriorCooldowns = { ...advanceWarriorCooldowns({
-      rage: this.resource, maxRage: CLASSES.WARRIOR.resourceMax,
+      rage: this.resource, maxRage: deriveStats('WARRIOR', this.equipment, this.level).maxResource,
       cooldowns: this.warriorCooldowns
     }, dt).cooldowns } as Partial<Record<WarriorAbilityId, number>>;
     this.warriorCooldowns.cleave = this.cooldowns.rmb;
@@ -1520,18 +1618,20 @@ export class GameSimulation {
     if (this.player.alive) {
       const regen = regenerateHealth(
         this.player.health, this.player.maxHealth,
-        deriveStats(this.classId, this.equipment).healthRegen, dt, this.healthRegenCarry
+        deriveStats(this.classId, this.equipment, this.level).healthRegen, dt, this.healthRegenCarry
       );
       this.player.health = regen.health;
       this.healthRegenCarry = regen.carry;
     }
     this.tickProjectiles(dt);
+    this.tickElites(dt);
     if (this.aliveEnemies.length === 0 && !this.dungeonCleared) {
       if (this.zone === 'wilderness') {
         this.respawnTimer -= dt;
         if (this.respawnTimer <= 0) {
           this.wave++;
           this.units = createPack(this.wave, this.level, this.world.encounterPositions);
+          this.seedElitePack();
           this.statusEffects.enemies = {};
           this.respawnTimer = 0;
           this.selectedTargetId = null;
@@ -1542,6 +1642,7 @@ export class GameSimulation {
           this.dungeonStage = 1;
           this.wave = 1;
           this.units = createCryptPack(1, this.level, CRYPT_BOSS_POSITIONS);
+          this.seedElitePack();
           this.statusEffects.enemies = {};
           this.respawnTimer = 0;
           this.selectedTargetId = null;
@@ -1550,13 +1651,13 @@ export class GameSimulation {
         this.dungeonCleared = true;
         this.respawnTimer = 0;
         this.gold += 200;
-        this.awardExperience(150);
+        this.awardExperience(rewardForActivity('dungeon', this.level, this.level));
         this.events.push({ type: 'dungeonCleared' });
       }
     }
 
     const haste = getStatusModifiers(this.statusEffects.player).moveSpeed ?? 0;
-    const speed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment).moveSpeed / 100)
+    const speed = PLAYER_SPEED * (deriveStats(this.classId, this.equipment, this.level).moveSpeed / 100)
       * Math.max(0.25, Math.min(1.6, 1 + haste));
     const focus = this.focusedUnit;
     if (this.pendingPortal) {
@@ -1634,7 +1735,7 @@ export class GameSimulation {
             this.attackTarget = target.actor.id;
           }
         } else if (!this.classAction) {
-          const stats = deriveStats(this.classId, this.equipment);
+          const stats = deriveStats(this.classId, this.equipment, this.level);
           this.attackTimer = 0.68 / stats.attackSpeed;
           this.classAction = {
             kind: 'basic', slot: null, targetId: target.actor.id,
@@ -1663,21 +1764,156 @@ export class GameSimulation {
     }
   }
 
+  /** Seeded elites decorate canonical enemies; normal tutorial waves stay unchanged. */
+  private seedElitePack(): void {
+    const boss = this.zone === 'crypt' && this.dungeonStage === 1;
+    if (!boss && (this.zone !== 'wilderness' || this.wave < 2)) return;
+    const index = boss ? 0 : this.rng.index(PACK_SIZE);
+    const unit = this.units[index];
+    if (!unit) return;
+    const ids = rollEliteModifiers({ count: boss || this.wave >= 6 ? 2 : 1 }, this.rng);
+    if (!ids || !ids.length) return;
+    const base = ENEMY_DEFINITIONS[unit.actor.type];
+    const plan = applyEliteStats({ health: unit.actor.maxHealth,
+      baseDamage: base.baseDamage, speed: base.speed }, ids);
+    if (!plan) return;
+    unit.actor.health = plan.maxHealth;
+    unit.actor.maxHealth = plan.maxHealth;
+    unit.elite = {
+      modifiers: [...ids], visualTags: [...plan.visualTags], shield: plan.shield,
+      damageMultiplier: base.baseDamage > 0 ? plan.baseDamage / base.baseDamage : 1,
+      speedMultiplier: base.speed > 0 ? plan.speed / base.speed : 1,
+      elapsedSeconds: 0, deathTriggered: false
+    };
+  }
+
+  /** Execute elite effects using the same damage/status entry points as normal combat. */
+  private tickElites(dt: number): void {
+    const pending = this.eliteQueue;
+    this.eliteQueue = [];
+    for (const entry of pending) {
+      entry.remaining -= dt;
+      if (entry.remaining > 0) { this.eliteQueue.push(entry); continue; }
+      const source = this.units.find(unit => unit.actor.id === entry.sourceId);
+      if (!source) continue;
+      if (entry.kind === 'teleport') {
+        if (!source.actor.alive) continue;
+        const angle = this.rng.next() * 2 * Math.PI;
+        const target = { x: source.actor.x + Math.cos(angle) * entry.radius,
+          y: source.actor.y + Math.sin(angle) * entry.radius };
+        if (canOccupy(target, ACTOR_RADIUS, this.world.obstacles)) {
+          source.actor.x = target.x;
+          source.actor.y = target.y;
+        }
+      } else if (this.player.alive
+        && !(this.zone === 'wilderness' && distance(this.player, this.world.camp) <= CAMP_RADIUS)
+        && distance(this.player, entry.position) <= entry.radius) {
+        const base = ENEMY_DEFINITIONS[source.actor.type].baseDamage + this.level * 2;
+        this.dealPlayerDamage(base * entry.multiplier * (source.elite?.damageMultiplier ?? 1),
+          entry.damageType, entry.sourceId);
+      }
+    }
+
+    for (const unit of [...this.units]) {
+      if (!unit.actor.alive || !unit.elite) continue;
+      const start = unit.elite.elapsedSeconds;
+      const period = eliteOnPeriodicPlan(unit.elite.modifiers, {
+        actorId: unit.actor.id, position: { x: unit.actor.x, y: unit.actor.y },
+        elapsedSeconds: start, deltaSeconds: dt
+      });
+      unit.elite.elapsedSeconds = Math.min(86400, start + dt);
+      for (const action of period?.actions ?? []) this.dispatchEliteAction(unit, action);
+    }
+  }
+
+  private dispatchEliteAction(unit: EnemyUnit, action: ElitePlannedAction): void {
+    if (action.kind === 'telegraph') {
+      this.events.push({ type: 'eliteCue', enemyId: unit.actor.id,
+        effect: action.telegraphId, x: action.position.x, y: action.position.y,
+        radius: action.radius });
+    } else if (action.kind === 'status') {
+      if (action.targetId === unit.actor.id && action.statusId === 'regeneration') {
+        const heal = resolveHealing(unit.actor.health, unit.actor.maxHealth,
+          Math.max(1, Math.round(unit.actor.maxHealth * action.magnitude)));
+        unit.actor.health = heal.health;
+        if (heal.healed > 0) this.events.push({
+          type: 'enemyHeal', enemyId: unit.actor.id,
+          targetId: unit.actor.id, amount: heal.healed
+        });
+      } else if (action.targetId === this.player.id) {
+        this.applyCanonicalStatus('player', action.statusId, unit.actor.id,
+          action.magnitude, action.durationSeconds);
+      }
+    } else if (action.kind === 'damage') {
+      this.eliteQueue.push({
+        kind: 'pulse', remaining: action.delaySeconds, sourceId: unit.actor.id,
+        position: { ...action.position }, radius: action.radius,
+        multiplier: action.baseMultiplier, damageType: action.damageType
+      });
+    } else if (action.kind === 'hazard') {
+      for (let tick = action.tickIntervalSeconds; tick <= action.durationSeconds;
+        tick += action.tickIntervalSeconds) {
+        this.eliteQueue.push({
+          kind: 'pulse', remaining: tick, sourceId: unit.actor.id,
+          position: { ...action.position }, radius: action.radius,
+          multiplier: action.baseMultiplier, damageType: action.damageType
+        });
+      }
+    } else if (action.kind === 'teleport') {
+      this.eliteQueue.push({
+        kind: 'teleport', remaining: action.castSeconds, sourceId: unit.actor.id,
+        position: { x: unit.actor.x, y: unit.actor.y }, radius: action.maxDistance,
+        multiplier: 0, damageType: 'fire'
+      });
+    } else if (action.kind === 'summon') {
+      const active = this.units.filter(other => other.summoned && other.actor.alive).length;
+      if (active >= action.maxActive || this.units.length >= PACK_SIZE + 2) return;
+      const offsets = [{ x: 55, y: 22 }, { x: -55, y: -22 }, { x: 34, y: -48 }];
+      const offset = offsets[this.units.length - PACK_SIZE] ?? offsets[0]!;
+      const position = { x: unit.actor.x + offset.x, y: unit.actor.y + offset.y };
+      if (!canOccupy(position, ACTOR_RADIUS, this.world.obstacles)) return;
+      const base = ENEMY_DEFINITIONS.skeleton;
+      const health = base.health + Math.max(0, this.level - 1) * 12;
+      const id = 'summon-' + this.wave + '-' + this.units.length;
+      this.units.push({
+        actor: { id, type: 'skeleton', ...position,
+          health, maxHealth: health, alive: true },
+        summoned: true, intent: null, cooldown: 1, effects: []
+      });
+    }
+  }
+
   private awardExperience(amount: number): void {
-    this.xp += amount;
-    while (this.xp >= this.level * 80) {
-      this.xp -= this.level * 80;
-      this.level++;
-      this.events.push({ type: 'levelUp', level: this.level });
+    const award = awardProgression({ level: this.level, xp: this.xp }, amount);
+    if (!award) return;
+    const prior = this.level;
+    this.level = award.state.level;
+    this.xp = award.state.xp;
+    this.skillPoints += award.skillPointsGained;
+    this.talentPoints += award.talentPointsGained;
+    // Every level increases derived attributes, HP and class resource capacity.
+    for (let level = prior + 1; level <= this.level; level++) {
+      const stats = deriveStats(this.classId, this.equipment, level);
+      updateHealthLimit(this.player, stats.maxHealth);
+      this.resource = Math.min(stats.maxResource, this.resource + 2);
       this.player.health = resolveHealing(
         this.player.health, this.player.maxHealth,
         Math.round(this.player.maxHealth * 0.25)
       ).health;
+      this.events.push({ type: 'levelUp', level });
     }
   }
 
   private defeatEnemy(unit: EnemyUnit): void {
     unit.actor.alive = false;
+    if (unit.elite && !unit.elite.deathTriggered) {
+      const plan = eliteOnDeathPlan(unit.elite.modifiers, {
+        actorId: unit.actor.id, position: { x: unit.actor.x, y: unit.actor.y },
+        alive: false, alreadyTriggered: false
+      });
+      unit.elite.deathTriggered = true;
+      for (const action of plan?.actions ?? []) this.dispatchEliteAction(unit, action);
+    }
     unit.intent = null;
     unit.effects = [];
     delete this.statusEffects.enemies[unit.actor.id];
@@ -1689,7 +1925,8 @@ export class GameSimulation {
     }
     this.kills++;
     this.gold += 12 + this.level * 3;
-    this.awardExperience(40 + this.level * 12);
+    this.awardExperience(Math.round(rewardForActivity('enemy', this.level, this.level)
+      * (unit.elite ? 1.75 : 1)));
     if (this.zone === 'wilderness' && this.quest.status === 'active') {
       const defeated = Math.min(QUEST_REQUIRED_KILLS, this.quest.defeated + 1);
       this.quest = {
@@ -1700,19 +1937,38 @@ export class GameSimulation {
     }
     if (unit.actor.type === 'crypt_lord') {
       this.gold += 100;
-      this.awardExperience(120);
+      this.awardExperience(rewardForActivity('boss', this.level, this.level));
     }
-    const rolled = rollItem(this.kills, this.level, this.rng);
-    const item = unit.actor.type === 'crypt_lord' && rolled.rarity === 'COMMON'
-      ? { ...rolled, rarity: 'RARE' as const } : rolled;
-    this.groundLoot.push({
-      id: 'drop-' + this.kills, x: unit.actor.x, y: unit.actor.y, item
-    });
-    if (this.groundLoot.length > 30) this.groundLoot.shift();
+    this.dropEnemyLoot(unit);
     this.events.push({ type: 'defeat', targetId: unit.actor.id, kills: this.kills });
-    this.events.push({ type: 'loot', id: 'drop-' + this.kills });
     if (this.aliveEnemies.length === 0) this.respawnTimer = this.zone === 'crypt' && this.dungeonStage === 1 ? 0 : 3.2;
   }
+  /** The one runtime path for normal, elite and boss drops; rolls share catalog+affixes. */
+  private dropEnemyLoot(unit: EnemyUnit): void {
+    const boss = unit.actor.type === 'crypt_lord';
+    const context: LootContext = {
+      playerLevel: this.level, monsterLevel: this.level, enemyType: unit.actor.type,
+      zone: this.zone, isBoss: boss, difficulty: 'normal',
+      eliteModifiers: unit.elite?.modifiers ?? [],
+      magicFind: deriveStats(this.classId, this.equipment, this.level).magicFind
+    };
+    const selected = rollLootTable(context, this.rng);
+    const rolls: LootRoll[] = [
+      ...bossGuaranteedLoot(context), ...(selected ? [selected] : [])
+    ];
+    for (const [index, roll] of rolls.entries()) {
+      if (this.groundLoot.length >= 100) break;
+      const id = 'drop-' + this.kills + '-' + index;
+      const item = rollItemForBase(
+        roll.itemBaseId, 'drop-' + this.kills + '-item-' + index,
+        roll.itemLevel, roll.rarity, this.rng
+      );
+      if (!item) continue;
+      this.groundLoot.push({ id, x: unit.actor.x + index * 16, y: unit.actor.y, item });
+      this.events.push({ type: 'loot', id });
+    }
+  }
+
   private collectLoot(loot: GroundItem): void {
     const index = this.inventory.findIndex(item => item === null);
     if (index < 0) { this.pickupTarget = null; return; }
@@ -1728,10 +1984,14 @@ export class GameSimulation {
       classId: this.classId,
       level: this.level,
       xp: this.xp,
+      skillPoints: this.skillPoints,
+      talentPoints: this.talentPoints,
       gold: this.gold,
       kills: this.kills,
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
+      ...(Object.keys(this.itemFlags).length ? { itemFlags: Object.fromEntries(
+        Object.entries(this.itemFlags).map(([id, flags]) => [id, { ...flags }])) } : {}),
       quest: { ...this.quest }
     };
   }
@@ -1751,10 +2011,13 @@ export class GameSimulation {
       ...baseline,
       level: progress.level,
       xp: progress.xp,
+      skillPoints: progress.skillPoints ?? Math.max(0, Math.min(MAX_LEVEL - 1, progress.level - 1)),
+      talentPoints: progress.talentPoints ?? Math.floor(Math.min(MAX_LEVEL, progress.level) / 5),
       gold: progress.gold,
       kills: progress.kills,
       inventory: progress.inventory,
       equipment: progress.equipment,
+      itemFlags: progress.itemFlags,
       quest: progress.quest
     };
     if (!scratch.restore(candidate)) return false;
@@ -1762,10 +2025,13 @@ export class GameSimulation {
     this.reset(progress.classId, seed);
     this.level = progress.level;
     this.xp = progress.xp;
+    this.skillPoints = scratch.skillPoints;
+    this.talentPoints = scratch.talentPoints;
     this.gold = progress.gold;
     this.kills = progress.kills;
     this.inventory = progress.inventory.map(cloneItem);
     this.equipment = cloneEquipment(progress.equipment);
+    this.itemFlags = { ...scratch.itemFlags };
     this.quest = { ...progress.quest };
     this.refreshHealthLimit();
     this.player.health = this.player.maxHealth;
@@ -1806,6 +2072,8 @@ export class GameSimulation {
       kills: this.kills,
       level: this.level,
       xp: this.xp,
+      skillPoints: this.skillPoints,
+      talentPoints: this.talentPoints,
       gold: this.gold,
       resource: this.resource,
       rngState: this.rng.state,
@@ -1827,9 +2095,11 @@ export class GameSimulation {
         player: this.effects.player.map(effect => ({ ...effect })),
         enemy: focus.effects.map(effect => ({ ...effect }))
       },
-      stats: deriveStats(this.classId, this.equipment),
+      stats: deriveStats(this.classId, this.equipment, this.level),
       inventory: this.inventory.map(cloneItem),
       equipment: cloneEquipment(this.equipment),
+      ...(Object.keys(this.itemFlags).length ? { itemFlags: Object.fromEntries(
+        Object.entries(this.itemFlags).map(([id, flags]) => [id, { ...flags }])) } : {}),
       groundLoot: this.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! })),
       quest: { ...this.quest },
       paused: this.paused,
@@ -1857,12 +2127,17 @@ export class GameSimulation {
       || !validActor(s.player, 'hero', layout.obstacles)
       || !Number.isSafeInteger(s.kills) || s.kills < 0
       || !Number.isSafeInteger(s.wave) || s.wave < 0 || s.wave > 1000000
-      || !Number.isSafeInteger(s.level) || s.level < 1 || s.level > 1000
-      || !Number.isSafeInteger(s.xp) || s.xp < 0 || s.xp >= s.level * 80
+      || !Number.isSafeInteger(s.level) || s.level < 1 || s.level > MAX_LEVEL
+      || !Number.isSafeInteger(s.xp) || s.xp < 0
+      || (s.level === MAX_LEVEL ? s.xp !== 0 : s.xp >= xpRequiredForLevel(s.level))
+      || (s.skillPoints !== undefined && (!Number.isSafeInteger(s.skillPoints)
+        || s.skillPoints < 0 || s.skillPoints > s.level - 1))
+      || (s.talentPoints !== undefined && (!Number.isSafeInteger(s.talentPoints)
+        || s.talentPoints < 0 || s.talentPoints > Math.floor(s.level / 5)))
       || !Number.isSafeInteger(s.gold) || s.gold < 0
       || !validQuest(s.quest)
       || !Number.isInteger(s.rngState) || s.rngState < 0 || s.rngState > 0xffffffff
-      || !Number.isFinite(s.resource) || s.resource < 0 || s.resource > CLASSES[s.classId].resourceMax
+      || !Number.isFinite(s.resource) || s.resource < 0 || s.resource > CLASSES[s.classId].resourceMax + (s.level - 1) * 2
       || !Number.isFinite(s.respawnTimer) || s.respawnTimer < 0 || s.respawnTimer > 5
       || !Number.isFinite(s.shield) || s.shield < 0 || s.shield > 100000
       || !Array.isArray(s.projectiles) || s.projectiles.length > 80
@@ -1894,15 +2169,28 @@ export class GameSimulation {
       || !validWaveBState(s)
       || !s.effects || !Array.isArray(s.effects.player)
       || s.effects.player.length > 8 || !s.effects.player.every(isActiveEffect)
-      || !Array.isArray(s.enemies) || s.enemies.length !== PACK_SIZE
+      || !Array.isArray(s.enemies) || s.enemies.length < PACK_SIZE || s.enemies.length > PACK_SIZE + 2
       || !s.enemies.every((unit, index) =>
         !!unit && !!unit.actor && validEnemyType(unit.actor.type)
         && (s.zone === 'crypt'
-          ? unit.actor.type === (s.dungeonStage === 0
-            ? (['skeleton', 'wolf', 'wraith'] as const)[index]
-            : (['crypt_lord', 'skeleton', 'wraith'] as const)[index])
-          : unit.actor.type === packTypesForWave(s.wave)[index])
-        && validActor(unit.actor, unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
+          ? (index >= PACK_SIZE ? unit.summoned === true && unit.actor.type === 'skeleton'
+            : unit.actor.type === (s.dungeonStage === 0
+              ? (['skeleton', 'wolf', 'wraith'] as const)[index]
+              : (['crypt_lord', 'skeleton', 'wraith'] as const)[index]))
+          : index >= PACK_SIZE ? unit.summoned === true && unit.actor.type === 'skeleton'
+            : unit.actor.type === packTypesForWave(s.wave)[index])
+        && validActor(unit.actor, index >= PACK_SIZE
+          ? 'summon-' + s.wave + '-' + index
+          : unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
+        && (unit.elite === undefined || (
+          validateEliteSet(unit.elite.modifiers) && unit.elite.modifiers.length > 0
+          && Array.isArray(unit.elite.visualTags)
+          && unit.elite.visualTags.length <= 15
+          && Number.isFinite(unit.elite.shield) && unit.elite.shield >= 0 && unit.elite.shield <= 1000000
+          && Number.isFinite(unit.elite.damageMultiplier) && unit.elite.damageMultiplier >= 1 && unit.elite.damageMultiplier <= 8
+          && Number.isFinite(unit.elite.speedMultiplier) && unit.elite.speedMultiplier >= 1 && unit.elite.speedMultiplier <= 8
+          && Number.isFinite(unit.elite.elapsedSeconds) && unit.elite.elapsedSeconds >= 0 && unit.elite.elapsedSeconds <= 86400
+          && typeof unit.elite.deathTriggered === 'boolean'))
         && validIntent(unit.intent)
         && (unit.intent?.abilityId === undefined
           || monsterAction(unit.actor.type, unit.intent.abilityId) !== undefined)
@@ -1925,12 +2213,16 @@ export class GameSimulation {
       || !s.equipment || Object.keys(createEquipment()).some(
         key => !(key in s.equipment)
           || (s.equipment[key as EquipmentSlot] !== null && !isItem(s.equipment[key as EquipmentSlot])))
-      || !Array.isArray(s.groundLoot) || s.groundLoot.length > 30
+      || !planSwap({ inventory: s.inventory, equipment: s.equipment, flags: s.itemFlags }, 0, 0, {
+        playerLevel: s.level
+      }).ok
+      || !Array.isArray(s.groundLoot) || s.groundLoot.length > 100
       || !s.groundLoot.every(loot => !!loot && typeof loot.id === 'string'
         && canOccupy(loot, 0, layout.obstacles) && isItem(loot.item))
     ) return false;
 
     this.world = layout;
+    this.eliteQueue = [];
     this.zone = s.zone;
     this.dungeonStage = s.dungeonStage;
     this.dungeonCleared = s.dungeonCleared;
@@ -1938,6 +2230,8 @@ export class GameSimulation {
     this.quest = { ...s.quest };
     this.equipment = cloneEquipment(s.equipment);
     this.inventory = s.inventory.map(cloneItem);
+    this.itemFlags = Object.fromEntries(Object.entries(s.itemFlags ?? {})
+      .map(([id, flags]) => [id, { ...flags }]));
     this.groundLoot = s.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! }));
     this.player = { ...s.player };
     this.units = s.enemies.map(cloneUnit);
@@ -1955,6 +2249,8 @@ export class GameSimulation {
     this.kills = s.kills;
     this.level = s.level;
     this.xp = s.xp;
+    this.skillPoints = s.skillPoints ?? s.level - 1;
+    this.talentPoints = s.talentPoints ?? Math.floor(s.level / 5);
     this.gold = s.gold;
     this.resource = s.resource;
     this.rng = new SeededRng(s.rngState);
@@ -2007,12 +2303,14 @@ export class GameSimulation {
     this.classId = classId;
     this.equipment = createEquipment();
     this.inventory = Array(INVENTORY_SIZE).fill(null);
+    this.itemFlags = {};
     this.rng = new SeededRng(seed === 0 ? 0x49ac127b : ((seed ^ 0x49ac127b) >>> 0));
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
     this.warriorAction = null;
     this.classAction = null;
     this.warriorPending = null;
+    this.eliteQueue = [];
     this.statusEffects = { player: [], enemies: {} };
     this.effects = emptyEffects();
     this.quest = freshQuest();
@@ -2030,6 +2328,8 @@ export class GameSimulation {
     this.wave = 0;
     this.level = 1;
     this.xp = 0;
+    this.skillPoints = 0;
+    this.talentPoints = 0;
     this.gold = 75;
     this.resource = CLASSES[classId].resourceInitial;
     this.paused = false;

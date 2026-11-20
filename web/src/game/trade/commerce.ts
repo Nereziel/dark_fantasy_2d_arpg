@@ -20,7 +20,7 @@ export const SHOP_OFFERS: readonly ShopOffer[] = [
 ];
 
 const RARITY_PRICE: Record<RarityId, number> = {
-  COMMON: 0, UNCOMMON: 8, RARE: 23, EPIC: 48, LEGENDARY: 95
+  COMMON: 0, UNCOMMON: 8, RARE: 23, EPIC: 48, LEGENDARY: 95, MYTHIC: 155
 };
 
 const SMITH_SLOTS: readonly EquipmentSlot[] = [

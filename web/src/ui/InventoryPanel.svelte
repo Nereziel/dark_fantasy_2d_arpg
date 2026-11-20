@@ -1,19 +1,32 @@
 <script lang="ts">
-  import { _ as t } from 'svelte-i18n';
+  import { _ as t, locale } from 'svelte-i18n';
   import type { GameSnapshot } from '../game/core/types';
   import type { GameBridge } from '../game/bridge/GameBridge';
   import { RARITIES } from '../game/data/items';
+  import { WEAPON_TYPES } from '../game/items/itemCatalog';
+  import { itemDisplayName } from '../game/items/itemName';
   let { view, bridge, close }: {
     view: GameSnapshot;
     bridge: GameBridge;
     close: () => void;
   } = $props();
 
-  function equip(index: number): void {
-    bridge.command({ type: 'equip', index });
+  function equip(index: number, slot?: keyof GameSnapshot['equipment']): void {
+    bridge.command({ type: 'equip', index, ...(slot ? { slot } : {}) });
   }
   function unequip(slot: keyof GameSnapshot['equipment']): void {
     bridge.command({ type: 'unequip', slot });
+  }
+  let rarityFilter = $state('ALL');
+  let moveSource = $state<number | null>(null);
+  function move(index: number): void {
+    if (moveSource === null) { moveSource = index; return; }
+    bridge.command({ type: 'swapInventory', fromIndex: moveSource, toIndex: index });
+    moveSource = null;
+  }
+  function flag(itemId: string, kind: 'locked' | 'favorite'): void {
+    const old = view.itemFlags?.[itemId]?.[kind] ?? false;
+    bridge.command({ type: 'setItemFlag', itemId, flag: kind, value: !old });
   }
 </script>
 
@@ -33,7 +46,7 @@
               <div class="equipment-slot-name">{$t('item.slot.' + slot)}</div>
               {#if item}
                 <div class="equipment-name" style:color={RARITIES[item.rarity].color}>
-                  {item.icon} {$t('item.base.' + item.templateId)}
+                  {item.icon} {itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}
                 </div>
                 {#if item.upgrades > 0}
                   <div class="item-temper">{$t('trade.tempering')} +{item.upgrades}/3</div>
@@ -59,24 +72,61 @@
 
       <div class="backpack-section">
         <div class="bag-heading"><h3>{$t('inventory.bag')}</h3><span>{view.inventory.filter(Boolean).length}/24</span></div>
+        <div class="bag-toolbar">
+          <button onclick={() => bridge.command({ type: 'sortInventory' })}>{$t('inventory.sort')}</button>
+          <label>{$t('inventory.filter')}
+            <select bind:value={rarityFilter} aria-label={$t('inventory.filter')}>
+              <option value="ALL">{$t('inventory.all')}</option>
+              {#each Object.keys(RARITIES) as rarity (rarity)}
+                <option value={rarity}>{$t('item.rarity.' + rarity)}</option>
+              {/each}
+            </select>
+          </label>
+          {#if moveSource !== null}<span role="status">{$t('inventory.swapPrompt')}</span>{/if}
+        </div>
         <div class="bag-grid">
           {#each view.inventory as item, index (index)}
-            <div class="bag-slot" title={item ? $t('item.base.' + item.templateId) : $t('inventory.empty')}>
-              {#if item}
+            <div class="bag-slot" class:pending-move={moveSource === index}
+              title={item ? itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId)) : $t('inventory.empty')}>
+              {#if item && (rarityFilter === 'ALL' || item.rarity === rarityFilter)}
+                {@const delta = bridge.previewEquipment(index)}
                 <div class="item-card">
                   <div class="item-visual" style:color={RARITIES[item.rarity].color}>{item.icon}</div>
-                  <div class="item-title" style:color={RARITIES[item.rarity].color}>{$t('item.base.' + item.templateId)}</div>
+                  <div class="item-title" style:color={RARITIES[item.rarity].color}>{itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</div>
                   <div class="item-rarity">{$t('item.rarity.' + item.rarity)}</div>
+                  {#if item.twoHanded}<div class="item-affix">{$t('inventory.twoHanded')}</div>{/if}
+                  {#if (item.requiredLevel ?? 1) > 1}
+                    <div class="item-affix">{$t('inventory.requireLevel')}: {item.requiredLevel}</div>
+                  {/if}
+                  {#if (item.sockets?.length ?? 0) > 0}<div class="item-affix">◯ × {item.sockets?.length}</div>{/if}
+                  {#if item.legendaryPower}<div class="item-affix">{$t('inventory.legendaryPower')}: +{Math.max(1, Math.floor(item.legendaryPower.magnitude * 0.15))} {$t('stat.damageMin')}</div>{/if}
                   {#if item.upgrades > 0}
                     <div class="item-temper">{$t('trade.tempering')} +{item.upgrades}/3</div>
                   {/if}
                   {#each item.affixes as affix (affix.id)}
                     <div class="item-affix">{$t('item.affix.' + affix.id)} +{affix.value} {$t('stat.' + affix.stat)}</div>
                   {/each}
+                  {#if delta}
+                    <div class="item-affix">{$t('inventory.comparison')}:
+                      {$t('stat.armor')} {delta.armor >= 0 ? '+' : ''}{delta.armor},
+                      {$t('stat.damageMin')} {delta.damageMin >= 0 ? '+' : ''}{delta.damageMin},
+                      {$t('stat.maxHealth')} {delta.maxHealth >= 0 ? '+' : ''}{delta.maxHealth}
+                    </div>
+                  {/if}
                   <button class="item-action" onclick={() => equip(index)}>{$t('inventory.equip')}</button>
+                  {#if item.weaponType && WEAPON_TYPES[item.weaponType].canOffHand}
+                    <button class="item-action" onclick={() => equip(index, 'OFF_HAND')}>{$t('inventory.offHandEquip')}</button>
+                  {/if}
+                  <div class="bag-actions">
+                    <button onclick={() => flag(item.id, 'favorite')}>{$t(view.itemFlags?.[item.id]?.favorite ? 'inventory.unfavorite' : 'inventory.favorite')}</button>
+                    <button onclick={() => flag(item.id, 'locked')}>{$t(view.itemFlags?.[item.id]?.locked ? 'inventory.unlock' : 'inventory.lock')}</button>
+                    <button onclick={() => move(index)}>{$t('inventory.move')}</button>
+                    <button onclick={() => bridge.command({ type: 'dropInventory', index })}>{$t('inventory.drop')}</button>
+                  </div>
                 </div>
               {:else}
-                <span class="empty-symbol" aria-hidden="true">◇</span>
+                {#if moveSource !== null}<button class="empty-symbol" onclick={() => move(index)} aria-label={$t('inventory.move')}>◇</button>
+                {:else}<span class="empty-symbol" aria-hidden="true">◇</span>{/if}
               {/if}
             </div>
           {/each}
@@ -107,7 +157,12 @@
   .bag-heading{display:flex;justify-content:space-between;color:#b3b2ae}
   .bag-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
   .bag-slot{border:1px solid #3a434c;min-height:100px;background:#0c131b;padding:7px}
-  .empty-symbol{display:grid;place-items:center;height:100%;color:#28353e}
+  .empty-symbol{display:grid;place-items:center;height:100%;color:#28353e;background:transparent;border:0;width:100%}
+  .pending-move{outline:2px solid #c99c67}
+  .bag-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 10px;font-size:.72rem}
+  .bag-toolbar select{background:#101823;color:#e0d5ba;border:1px solid #746448;margin-left:6px}
+  .bag-toolbar button,.bag-actions button{background:#1b2630;color:#e0d6be;border:1px solid #5c6470;padding:3px 5px;font-size:.65rem}
+  .bag-actions{display:flex;flex-wrap:wrap;gap:4px}
   .item-card{display:flex;flex-direction:column;gap:4px;min-height:90px}
   .item-visual{font-size:1.2rem}.item-title{font-size:.77rem}
   .item-rarity,.item-affix{font-size:.63rem;color:#adb5b8}

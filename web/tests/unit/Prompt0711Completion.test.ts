@@ -102,7 +102,7 @@ describe('Prompt 08 — all original classes share authoritative fixed-hit timel
     expect(sim.restore(structuredClone(temp))).toBe(true);
     expect(sim.snapshot()).toEqual(temp);
     const save=createSaveRecord(sim.character());
-    expect(save?.format).toBe(8);
+    expect(save?.format).toBe(9);
     expect(JSON.stringify(save)).not.toContain('classAction');
     expect(JSON.stringify(save)).not.toContain('warriorAction');
   });

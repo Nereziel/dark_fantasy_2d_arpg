@@ -33,7 +33,8 @@
     "wave": "Wave",
     "camp": "Emberwatch Camp",
     "autosave": "Character autosave enabled",
-    "shield": "Shield"
+    "shield": "Shield",
+    "elite": "Elite"
   },
   "status": {
     "ready": "Ready",
@@ -81,7 +82,22 @@
     "armor": "Armor",
     "block": "Block",
     "affixes": "Modifiers",
-    "full": "Inventory is full"
+    "full": "Inventory is full",
+    "sort": "Sort",
+    "filter": "Filter",
+    "all": "All",
+    "favorite": "Favorite",
+    "unfavorite": "Unfavorite",
+    "lock": "Lock",
+    "unlock": "Unlock",
+    "drop": "Drop",
+    "move": "Move",
+    "swapPrompt": "Select destination slot",
+    "requireLevel": "Required level",
+    "twoHanded": "Two-handed",
+    "comparison": "Stat difference",
+    "offHandEquip": "Equip offhand",
+    "legendaryPower": "Legendary power"
   },
   "stat": {
     "strength": "Strength",
@@ -100,7 +116,7 @@
     "maxHealth": "Maximum health",
     "healthRegen": "Health regeneration / s",
     "maxResource": "Maximum resource",
-    "resourceRegen": "Resource regeneration / s",
+    "resourceRegen": "Resource regeneration",
     "physicalResist": "Physical resistance",
     "fireResist": "Fire resistance",
     "frostResist": "Frost resistance",
@@ -114,7 +130,15 @@
     "cooldownReduction": "Cooldown reduction",
     "lifeSteal": "Life steal",
     "magicFind": "Magic find",
-    "goldFind": "Gold find"
+    "goldFind": "Gold find",
+    "summonDamage": "Summon damage",
+    "skillRank": "Skill rank",
+    "fireDamage": "Fire damage",
+    "physicalDamage": "Physical damage",
+    "poisonDamage": "Poison damage",
+    "fireResistance": "Fire resistance",
+    "coldResistance": "Cold resistance",
+    "poisonResistance": "Poison resistance"
   },
   "resource": {
     "rage": "Rage",
@@ -156,7 +180,8 @@
       "UNCOMMON": "Uncommon",
       "RARE": "Rare",
       "EPIC": "Epic",
-      "LEGENDARY": "Legendary"
+      "LEGENDARY": "Legendary",
+      "MYTHIC": "Mythic"
     },
     "base": {
       "broadsword": "Tempered Broadsword",
@@ -167,7 +192,21 @@
       "greaves": "Plated Greaves",
       "belt": "Studded War Belt",
       "bloodstone": "Ancient Bloodstone",
-      "signet": "Iron Signet Ring"
+      "signet": "Iron Signet Ring",
+      "greatsword": "Greatsword",
+      "axe": "Battle Axe",
+      "greataxe": "Greataxe",
+      "mace": "War Mace",
+      "hammer": "Great Hammer",
+      "dagger": "Dagger",
+      "spear": "Spear",
+      "bow": "Bow",
+      "crossbow": "Crossbow",
+      "staff": "Arcane Staff",
+      "wand": "Wand",
+      "spellbook": "Spellbook",
+      "relic": "Ancient Relic",
+      "charm": "Protective Charm"
     },
     "affix": {
       "stalwart": "Stalwart",
@@ -179,7 +218,37 @@
       "titan": "Titan",
       "warding": "Warding",
       "haste": "Haste",
-      "bear": "Bear"
+      "bear": "Bear",
+      "mighty": "Mighty",
+      "nimble": "Nimble",
+      "sage": "Sage",
+      "vital": "Vital",
+      "keen": "Keen",
+      "swift": "Swift",
+      "fleet": "Fleet",
+      "scorching": "Scorching",
+      "brutal": "Brutal",
+      "venomous": "Venomous",
+      "unyielding": "Unyielding",
+      "channeling": "Channeling",
+      "arcane": "Arcane",
+      "summoning": "Summoning",
+      "fox": "Fox",
+      "owl": "Owl",
+      "oak": "Oak",
+      "precision": "Precision",
+      "flames": "Flames",
+      "frost": "Frost",
+      "antidote": "Antidote",
+      "celerity": "Celerity",
+      "fury": "Fury",
+      "renewal": "Renewal",
+      "focus": "Focus",
+      "ember": "Ember",
+      "venom": "Venom",
+      "mastery": "Mastery",
+      "legion": "Legion",
+      "fortitude": "Fortitude"
     },
     "slot": {
       "HELMET": "Helmet",
@@ -191,7 +260,9 @@
       "BELT": "Belt",
       "BOOTS": "Boots",
       "RING_1": "Ring I",
-      "RING_2": "Ring II"
+      "RING_2": "Ring II",
+      "RELIC": "Relic",
+      "CHARM": "Charm"
     }
   },
   "combat": {
@@ -468,5 +539,24 @@
   "worldObjects": {
     "shrine": "The soul shrine grants a protective shield.",
     "chest": "You opened a field chest."
+  },
+  "progression": {
+    "experience": "Experience",
+    "skillPoints": "Skill points",
+    "talentPoints": "Talent points"
+  },
+  "eliteModifier": {
+    "extraHealth": "Extra health",
+    "increasedDamage": "Increased damage",
+    "fast": "Fast",
+    "fireAura": "Fire aura",
+    "frostAttacks": "Frost attacks",
+    "poisonAttacks": "Poison attacks",
+    "teleporting": "Teleporting",
+    "shielded": "Shielded",
+    "regenerating": "Regenerating",
+    "summoner": "Summoner",
+    "explodesOnDeath": "Explodes on death",
+    "hazardousGround": "Hazardous ground"
   }
 }

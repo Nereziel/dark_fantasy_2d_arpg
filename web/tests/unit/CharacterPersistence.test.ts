@@ -113,7 +113,7 @@ describe('Diablo-style character persistence', () => {
     };
     const record = createSaveRecord(raw)!;
     expect(Object.keys(record.character).sort()).toEqual([
-      'classId', 'equipment', 'gold', 'inventory', 'kills', 'level', 'quest', 'xp'
+      'classId', 'equipment', 'gold', 'inventory', 'kills', 'level', 'quest', 'skillPoints', 'talentPoints', 'xp'
     ].sort());
     expect(record.character).toEqual(sim.character());
   });

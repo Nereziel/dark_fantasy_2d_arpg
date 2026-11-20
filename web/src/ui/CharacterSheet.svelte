@@ -2,6 +2,7 @@
   import { _, locale } from 'svelte-i18n';
   import type { GameSnapshot } from '../game/core/types';
   import { CLASSES } from '../game/data/classes';
+  import { xpRequiredForLevel } from '../game/progression/progressionRules';
   import {
     PERCENT_STATS, STAT_GROUPS, type DerivedStatKey
   } from '../game/stats/deriveStats';
@@ -33,6 +34,11 @@
       <div>{$_('hud.health')}: <strong>{view.player.health} / {view.stats.maxHealth}</strong></div>
       <div>{$_('resource.' + CLASSES[view.classId].resourceId)}:
         <strong>{Math.round(view.resource)} / {view.stats.maxResource}</strong></div>
+    </div>
+    <div class="character-summary">
+      <div>{$_('progression.experience')}: <strong>{view.xp} / {xpRequiredForLevel(view.level) || 'MAX'}</strong></div>
+      <div>{$_('progression.skillPoints')}: <strong>{view.skillPoints ?? 0}</strong></div>
+      <div>{$_('progression.talentPoints')}: <strong>{view.talentPoints ?? 0}</strong></div>
     </div>
     <div class="character-groups">
       {#each STAT_GROUPS as group (group.id)}
