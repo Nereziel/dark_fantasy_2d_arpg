@@ -41,6 +41,7 @@ import {
 } from '../world/generator';
 import { buildWilderness, type WildernessRuntimeWorld } from '../world/wildernessRuntime';
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonRuntime';
+import type { CryptThemePlan, CryptInteractable } from '../world/cryptTheme';
 import {
   createChunkIndex, createWorldFactLedger, applyWorldFact, makeWorldFact,
   validateWorldFactLedger, type ChunkIndex, type WorldFactLedger, type WorldFactKind
@@ -210,6 +211,11 @@ export class GameSimulation {
   private quest: QuestProgress = freshQuest();
   private actILedger: QuestLedger = createActIQuestLedger(freshQuest())!;
   private storyFeatures: readonly WildernessFeature[] = [];
+  private cryptTheme: CryptThemePlan | null = null;
+  private readonly cryptUsedPropIds = new Set<string>();
+  private readonly cryptTriggeredTrapIds = new Set<string>();
+  private readonly cryptArmedTraps = new Map<string, number>();
+  private pendingCryptPropId: string | null = null;
   private worldIndex: ChunkIndex | null = null;
   private worldFacts: WorldFactLedger | null = null;
   private mapWorld: MapWorldInput | null = null;
@@ -329,7 +335,9 @@ export class GameSimulation {
     if (!this.mapDiscovery || !this.worldFacts) return null;
     return structuredClone({
       version: 1 as const, seed: this.worldFacts.worldSeed,
-      mapDiscovery: this.mapDiscovery, worldFacts: this.worldFacts
+      mapDiscovery: this.mapDiscovery, worldFacts: this.worldFacts,
+      cryptUsedPropIds: [...this.cryptUsedPropIds],
+      cryptTriggeredTrapIds: [...this.cryptTriggeredTrapIds]
     });
   }
 
@@ -338,8 +346,22 @@ export class GameSimulation {
       || progress.seed !== this.mapWorld.seed
       || !validateMapDiscovery(progress.mapDiscovery, this.mapWorld)
       || !validateWorldFactLedger(this.worldIndex, progress.worldFacts)) return false;
+    const theme = buildCryptWorld(progress.seed).theme;
+    const allowedProps = new Set(theme.interactables.map(prop => prop.id));
+    const allowedTraps = new Set(theme.traps.map(trap => trap.id));
+    const used = progress.cryptUsedPropIds ?? [];
+    const triggered = progress.cryptTriggeredTrapIds ?? [];
+    if (!Array.isArray(used) || used.length > 128
+      || new Set(used).size !== used.length || used.some(id => !allowedProps.has(id))
+      || !Array.isArray(triggered) || triggered.length > 128
+      || new Set(triggered).size !== triggered.length
+      || triggered.some(id => !allowedTraps.has(id))) return false;
     this.mapDiscovery = structuredClone(progress.mapDiscovery);
     this.worldFacts = structuredClone(progress.worldFacts);
+    this.cryptUsedPropIds.clear();
+    this.cryptTriggeredTrapIds.clear();
+    for (const id of used) this.cryptUsedPropIds.add(id);
+    for (const id of triggered) this.cryptTriggeredTrapIds.add(id);
     // Already-consumed seeded chest rewards cannot reappear after a reload.
     for (const fact of this.worldFacts.entries) {
       if (fact.kind === 'chestOpened' && getWorldObject(fact.entityId as WorldObjectId, 'wilderness')) {
@@ -347,6 +369,55 @@ export class GameSimulation {
       }
     }
     return true;
+  }
+
+
+  /** Actionable dungeon facts only; decorative theme props never grant loot. */
+  cryptInteractables(): CryptInteractable[] {
+    if (this.zone !== 'crypt' || !this.cryptTheme) return [];
+    return this.cryptTheme.interactables.filter(prop => prop.initiallyVisible
+      && !this.cryptUsedPropIds.has(prop.id))
+      .map(prop => structuredClone(prop));
+  }
+
+  private tryInteractCrypt(): void {
+    if (this.zone !== 'crypt' || !this.pendingCryptPropId || !this.player.alive) return;
+    const prop = this.cryptInteractables().find(candidate => candidate.id === this.pendingCryptPropId);
+    if (!prop) { this.pendingCryptPropId = null; return; }
+    if (distance(this.player, prop.position) > prop.reach) return;
+    this.pendingCryptPropId = null;
+    // Commit idempotency BEFORE emitting the event/reward. Rendering is a projection only.
+    if (this.cryptUsedPropIds.has(prop.id)) return;
+    this.cryptUsedPropIds.add(prop.id);
+    const goldAwarded = prop.capability === 'lootContainer' ? 35 + 3 * this.level
+      : prop.capability === 'breakable' ? 7 : 0;
+    this.gold += goldAwarded;
+    this.events.push({ type: 'cryptInteract', id: prop.id, capability: prop.capability,
+      goldAwarded });
+  }
+
+  /** One-shot world hazards give a visible warning and can be dodged before impact. */
+  private tickCryptTraps(dt: number): void {
+    if (this.zone !== 'crypt' || !this.cryptTheme || !this.player.alive) return;
+    for (const trap of this.cryptTheme.traps) {
+      if (this.cryptTriggeredTrapIds.has(trap.id)) continue;
+      const remaining = this.cryptArmedTraps.get(trap.id);
+      if (remaining === undefined) {
+        if (distance(this.player, trap.trigger.center) > trap.trigger.radius) continue;
+        this.cryptArmedTraps.set(trap.id, trap.telegraphSeconds);
+        this.events.push({ type: 'cryptTrapWindup', id: trap.id,
+          x: trap.trigger.center.x, y: trap.trigger.center.y, radius: trap.trigger.radius });
+        continue;
+      }
+      if (remaining > dt) { this.cryptArmedTraps.set(trap.id, remaining - dt); continue; }
+      this.cryptArmedTraps.delete(trap.id);
+      this.cryptTriggeredTrapIds.add(trap.id);
+      if (distance(this.player, trap.trigger.center) > trap.trigger.radius) continue;
+      const damage = trap.damage.maxBaseDamage;
+      this.dealPlayerDamage(damage, trap.damage.type, trap.id);
+      this.events.push({ type: 'cryptTrap', id: trap.id, damage,
+        x: trap.trigger.center.x, y: trap.trigger.center.y });
+    }
   }
 
   private get immobilized(): boolean {
@@ -581,6 +652,21 @@ export class GameSimulation {
     if (command.type === 'sortInventory') { this.updateInventory(sortInventory(this.inventoryState(), this.inventoryRules())); return; }
     if (command.type === 'setItemFlag') { this.updateInventory(favoriteOrLockItem(this.inventoryState(), command.itemId, command.flag, command.value, this.inventoryRules())); return; }
     if (command.type === 'dropInventory') { this.dropInventory(command.index); return; }
+    if (command.type === 'interactCrypt') {
+      if (this.zone !== 'crypt' || !this.player.alive || typeof command.id !== 'string'
+        || command.id.length > 160
+        || !this.cryptInteractables().some(prop => prop.id === command.id)) return;
+      this.movePath = [];
+      this.attackTarget = null;
+      this.pickupTarget = null;
+      this.pendingPortal = false;
+      this.pendingNpc = null;
+      this.pendingTown = null;
+      this.pendingObject = null;
+      this.pendingCryptPropId = command.id;
+      this.tryInteractCrypt();
+      return;
+    }
     if (command.type === 'interactObject') {
       this.warriorAction = null;
       this.classAction = null;
@@ -1857,7 +1943,9 @@ export class GameSimulation {
     const seed = this.world.seed;
     this.zone = destination;
     const wilderness = destination === 'wilderness' ? buildWilderness(seed) : null;
-    this.world = wilderness?.layout ?? buildCryptWorld(seed).layout;
+    const crypt = destination === 'crypt' ? buildCryptWorld(seed) : null;
+    this.world = wilderness?.layout ?? crypt!.layout;
+    this.cryptTheme = crypt?.theme ?? null;
     this.storyFeatures = wilderness?.features ?? [];
     this.player.x = destination === 'crypt' ? CRYPT_EXIT.x : CAMP.x;
     this.player.y = destination === 'crypt' ? CRYPT_EXIT.y : CAMP.y;
@@ -1870,6 +1958,8 @@ export class GameSimulation {
     this.healthRegenCarry = 0;
     this.usedObjects.clear();
     this.pendingObject = null;
+    this.pendingCryptPropId = null;
+    this.cryptArmedTraps.clear();
     this.wave = 0;
     this.units = destination === 'crypt'
       ? createCryptPack(0, this.level, this.world.encounterPositions)
@@ -2011,6 +2101,11 @@ export class GameSimulation {
       } else {
         this.follow(this.player, NPC_POSITIONS[this.pendingNpc], speed, dt, NPC_INTERACT_RANGE - 10);
       }
+    } else if (this.pendingCryptPropId) {
+      const prop = this.cryptInteractables().find(p => p.id === this.pendingCryptPropId);
+      if (!prop) this.pendingCryptPropId = null;
+      else if (distance(this.player, prop.position) <= prop.reach) this.tryInteractCrypt();
+      else this.follow(this.player, prop.position, speed, dt, Math.max(6, prop.reach - 12));
     } else if (this.pendingObject) {
       const object = getWorldObject(this.pendingObject, this.zone);
       if (!object) this.pendingObject = null;
@@ -2095,6 +2190,7 @@ export class GameSimulation {
 
     this.discoverStoryLocations();
     this.observeExploration();
+    this.tickCryptTraps(dt);
     if (this.player.alive) {
       for (const unit of this.units) {
         this.updateEnemyAI(unit, dt);
@@ -2459,6 +2555,9 @@ export class GameSimulation {
       actIIUnlocked: this.questStatus('vesnas_report') === 'completed',
       ...(this.mapDiscovery ? { mapDiscovery: structuredClone(this.mapDiscovery) } : {}),
       ...(this.worldFacts ? { worldFacts: structuredClone(this.worldFacts) } : {}),
+      cryptInteractables: this.cryptInteractables(),
+      cryptUsedPropIds: [...this.cryptUsedPropIds],
+      cryptTriggeredTrapIds: [...this.cryptTriggeredTrapIds],
       paused: this.paused,
       status
     };
@@ -2476,11 +2575,24 @@ export class GameSimulation {
     const restoredWilderness = layout ? buildWilderness(s.worldSeed) : null;
     const restoredIndex = restoredWilderness ? createChunkIndex(restoredWilderness) : null;
     const restoredMapWorld = restoredWilderness ? this.mapInput(restoredWilderness) : null;
+    const cryptManifest = layout ? buildCryptWorld(s.worldSeed).theme : null;
+    const validDungeonIds = (ids: unknown, known: readonly string[]): boolean =>
+      ids === undefined || (Array.isArray(ids) && ids.length <= 128
+        && ids.every(id => typeof id === 'string' && known.includes(id))
+        && new Set(ids).size === ids.length);
     if (!s || !layout || s.version !== 5 || !isClassId(s.classId)
       || (s.mapDiscovery !== undefined && (!restoredMapWorld
         || !validateMapDiscovery(s.mapDiscovery, restoredMapWorld)))
       || (s.worldFacts !== undefined && (!restoredIndex
         || !validateWorldFactLedger(restoredIndex, s.worldFacts)))
+      || !validDungeonIds(s.cryptUsedPropIds,
+        cryptManifest?.interactables.map(prop => prop.id) ?? [])
+      || !validDungeonIds(s.cryptTriggeredTrapIds,
+        cryptManifest?.traps.map(trap => trap.id) ?? [])
+      || (s.cryptInteractables !== undefined && (!Array.isArray(s.cryptInteractables)
+        || JSON.stringify(s.cryptInteractables) !== JSON.stringify(
+          s.zone === 'crypt' ? (cryptManifest?.interactables ?? []).filter(prop =>
+            prop.initiallyVisible && !(s.cryptUsedPropIds ?? []).includes(prop.id)) : [])))
       || (s.dungeonStage !== 0 && s.dungeonStage !== 1)
       || typeof s.dungeonCleared !== 'boolean'
       || (s.zone === 'wilderness' && (s.dungeonStage !== 0 || s.dungeonCleared))
@@ -2596,6 +2708,13 @@ export class GameSimulation {
     ) return false;
 
     this.world = layout;
+    this.cryptTheme = s.zone === 'crypt' ? buildCryptWorld(s.worldSeed).theme : null;
+    this.cryptArmedTraps.clear();
+    this.pendingCryptPropId = null;
+    this.cryptUsedPropIds.clear();
+    this.cryptTriggeredTrapIds.clear();
+    for (const id of s.cryptUsedPropIds ?? []) this.cryptUsedPropIds.add(id);
+    for (const id of s.cryptTriggeredTrapIds ?? []) this.cryptTriggeredTrapIds.add(id);
     this.storyFeatures = restoredWilderness!.features;
     this.initWorldSystems(restoredWilderness!);
     if (s.mapDiscovery) this.mapDiscovery = structuredClone(s.mapDiscovery);
@@ -2670,6 +2789,11 @@ export class GameSimulation {
 
   reset(classId: ClassId = 'WARRIOR', seed = this.world.seed): void {
     this.zone = 'wilderness';
+    this.cryptTheme = null;
+    this.cryptUsedPropIds.clear();
+    this.cryptTriggeredTrapIds.clear();
+    this.cryptArmedTraps.clear();
+    this.pendingCryptPropId = null;
     this.dungeonStage = 0;
     this.dungeonCleared = false;
     this.pendingPortal = false;
