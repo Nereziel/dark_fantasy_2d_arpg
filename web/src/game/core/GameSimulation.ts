@@ -12,6 +12,7 @@ import { rollEliteModifiers, applyEliteStats, eliteOnHitPlan, eliteOnPeriodicPla
 import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
 import { applyOrRefreshEffect } from '../status/effectStack';
 import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../skills/warriorKit';
+import { projectEquippedSkill, type SkillProjection } from '../skills/skillModifiers';
 import { canActivateWarriorSkill, spendAndStartCooldown, advanceWarriorCooldowns, applyWarriorRageDelta, type WarriorActivationRequest } from '../skills/warriorEconomy';
 import { startCombatTimeline, advanceCombatTimeline, cancelCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
 import { classSkillTimeline, BASIC_ATTACK_TIMELINE } from '../animation/classCombatTiming';
@@ -1545,10 +1546,28 @@ export class GameSimulation {
     }
   }
 
+
+  /** Composable on-hit operations; each status uses canonical stack/immunity rules. */
+  private executeWarriorModifierHit(unit: EnemyUnit, damage: number, plan: SkillProjection): void {
+    if (damage <= 0 || !unit.actor.alive) return;
+    if (plan.pullDistance > 0) {
+      const gap = distance(unit.actor, this.player);
+      const travel = Math.min(plan.pullDistance, Math.max(0, gap - ACTOR_RADIUS * 2 - 4));
+      if (travel > 0) {
+        moveActor(unit.actor, this.player, travel, ACTOR_RADIUS, this.world.obstacles);
+      }
+    }
+    for (const status of plan.statuses) {
+      this.applyCanonicalStatus('enemy', status.id, 'hero',
+        status.magnitude, status.duration, unit);
+    }
+  }
+
   private warriorImpact(id: WarriorAbilityId, targetId: string | null, aim?: SkillAim): void {
     const ability = WARRIOR_ABILITIES[id];
     const target = targetId ? this.units.find(u => u.actor.alive && u.actor.id === targetId) : null;
     const talents = projectTalentBonuses(this.talentRanks);
+    const modifiers = projectEquippedSkill(id, ability.radius ?? 0, this.talentRanks, this.equipment);
     if (id === 'warCry') {
       this.applyCanonicalStatus('player', 'haste', 'hero',
         0.2 + talents.warCryStrength, 8 + talents.warCryDuration);
@@ -1587,7 +1606,7 @@ export class GameSimulation {
             .sort((u, v) => distance(this.player, u.actor) - distance(this.player, v.actor))[0] ?? null
         : target;
       const victims = ability.radius !== undefined
-        ? [...this.aliveEnemies].filter(u => distance(this.player, u.actor) <= ability.radius! + 0.5)
+        ? [...this.aliveEnemies].filter(u => distance(this.player, u.actor) <= modifiers.radius + 0.5)
         : hitTarget && distance(this.player, hitTarget.actor) <= (id === 'charge' ? 82 : ability.range) + 0.5
           ? [hitTarget] : [];
       for (const unit of victims) {
@@ -1595,6 +1614,7 @@ export class GameSimulation {
           && unit.actor.health / unit.actor.maxHealth <= ability.condition.threshold
           ? ability.condition.bonusPower : ability.power;
         const dealt = this.applyDamage(power, unit, 'physical');
+        this.executeWarriorModifierHit(unit, dealt, modifiers);
         if (dealt > 0 && ability.rageGain + talents.rageGain > 0) {
           this.resource = applyWarriorRageDelta({
             rage: this.resource, maxRage: this.currentStats().maxResource,
@@ -1609,7 +1629,11 @@ export class GameSimulation {
         }
       }
     }
-    this.events.push({ type: 'warriorImpact', id, x: this.player.x, y: this.player.y });
+    this.events.push({
+      type: 'warriorImpact', id, x: this.player.x, y: this.player.y,
+      ...(modifiers.modifierIds.length
+        ? { radius: modifiers.radius, modifierIds: [...modifiers.modifierIds] } : {})
+    });
   }
 
   private tickWarriorTimeline(): void {
