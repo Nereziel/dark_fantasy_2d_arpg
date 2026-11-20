@@ -1,10 +1,22 @@
-# Agent coordination — Wave C (Agents 16–21, Prompts 12–17)
+# Koordinace agentů — aktuální vlna D (22–24, Prompty 18–20)
 
-**Aktuální zadání:** [WAVE_C.md](WAVE_C.md), [integrační pravidla](INTEGRATION_C.md) a [16](16/TASK.md), [17](17/TASK.md), [18](18/TASK.md), [19](19/TASK.md), [20](20/TASK.md), [21](21/TASK.md). Všech šest úkolů má vlastní exkluzivní 2-file write-set a prompt ke spuštění. **Připraveno, nikoli spuštěno; start až po ověření merge PR #21.**
+**Připraveno, nikoli spuštěno.** Jen **3 paralelní agenti** (i když limit je 5), aby vznikly maximálně tři malé nekolizní PR. Každý vlastní jen jeden nový TS modul a jeden vlastní Vitest test. Na stávající hru a save následně napojuje výhradně integrátor v malých, samostatně testovaných krocích.
+
+- Zadání: [WAVE_D.md](WAVE_D.md)
+- Integrační runbook: [INTEGRATION_D.md](INTEGRATION_D.md)
+- Přímé úkoly a kopírovatelné prompty: [Agent 22 — město](22/TASK.md), [Agent 23 — ekonomika](23/TASK.md), [Agent 24 — dialogy a questy](24/TASK.md)
+- **Start až po merge Wave D dokumentace do `main`, zaznamenání jednoho společného BASE_SHA a potvrzeném GREEN CI.** Žádný agent nesmí merge ani deploy; úkol končí draft PR.
+- **Nezahrnuje Prompty 21–22** (Act I quest chain, procedural wilderness); ty až v následující vlně po runtime integraci 18–20.
 
 ---
 
-# Parallel agent development — current Wave B (Agents 06–15)
+## Archiv: Wave C (agenti 16–21, Prompty 12–17)
+
+Wave C je skutečně **dokončená a sloučená**: agentní moduly #22/#27/#23/#26/#24/#25, runtime integration [PR #28](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/28), GREEN testy a deployment `main`. Historický plán [WAVE_C.md](WAVE_C.md) a [INTEGRATION_C.md](INTEGRATION_C.md) ponecháváme pro dohledání rozhodnutí.
+
+---
+
+## Archiv: Wave B (agenti 06–15)
 
 Ten independently assigned modules for Prompts 07–11: [exact write-sets and rules](WAVE_B.md), [integration plan](INTEGRATION_B.md), and individual task docs [06](06/TASK.md), [07](07/TASK.md), [08](08/TASK.md), [09](09/TASK.md), [10](10/TASK.md), [11](11/TASK.md), [12](12/TASK.md), [13](13/TASK.md), [14](14/TASK.md), [15](15/TASK.md). This is a **plan only**; no work started. The earlier Wave A plan remains below for reference.
 
