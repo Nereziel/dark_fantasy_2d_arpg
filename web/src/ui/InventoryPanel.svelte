@@ -3,14 +3,15 @@
   import type { GameSnapshot } from '../game/core/types';
   import type { GameBridge } from '../game/bridge/GameBridge';
   import { RARITIES } from '../game/data/items';
+  import { WEAPON_TYPES } from '../game/items/itemCatalog';
   let { view, bridge, close }: {
     view: GameSnapshot;
     bridge: GameBridge;
     close: () => void;
   } = $props();
 
-  function equip(index: number): void {
-    bridge.command({ type: 'equip', index });
+  function equip(index: number, slot?: keyof GameSnapshot['equipment']): void {
+    bridge.command({ type: 'equip', index, ...(slot ? { slot } : {}) });
   }
   function unequip(slot: keyof GameSnapshot['equipment']): void {
     bridge.command({ type: 'unequip', slot });
@@ -112,6 +113,9 @@
                     </div>
                   {/if}
                   <button class="item-action" onclick={() => equip(index)}>{$t('inventory.equip')}</button>
+                  {#if item.weaponType && WEAPON_TYPES[item.weaponType].canOffHand}
+                    <button class="item-action" onclick={() => equip(index, 'OFF_HAND')}>{$t('inventory.offHandEquip')}</button>
+                  {/if}
                   <div class="bag-actions">
                     <button onclick={() => flag(item.id, 'favorite')}>{$t(view.itemFlags?.[item.id]?.favorite ? 'inventory.unfavorite' : 'inventory.favorite')}</button>
                     <button onclick={() => flag(item.id, 'locked')}>{$t(view.itemFlags?.[item.id]?.locked ? 'inventory.unlock' : 'inventory.lock')}</button>
