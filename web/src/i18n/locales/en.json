@@ -111,7 +111,7 @@
     "moveSpeed": "Movement speed",
     "damageMin": "Minimum damage",
     "damageMax": "Maximum damage",
-    "maxHealth": "Health",
+    "maxHealth": "Maximum health",
     "healthRegen": "Health regeneration / s",
     "maxResource": "Maximum resource",
     "resourceRegen": "Resource regeneration",
