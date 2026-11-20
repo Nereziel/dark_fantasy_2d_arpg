@@ -856,6 +856,7 @@ export class GameSimulation {
     this.classAction = null;
     this.effects = emptyEffects();
     this.statusEffects = { player: [], enemies: {} };
+    this.potions = { ...this.potions, buffs: { resistance: 0, fury: 0 } };
     this.shield = 0;
     this.projectiles = [];
     this.nextProjectileId = 0;
@@ -2186,6 +2187,7 @@ export class GameSimulation {
       this.eliteQueue = [];
       this.cryptArmedTraps.clear();
       this.statusEffects = { player: [], enemies: {} };
+      this.potions = { ...this.potions, buffs: { resistance: 0, fury: 0 } };
       this.effects = emptyEffects();
       for (const unit of this.units) {
         unit.intent = null;
