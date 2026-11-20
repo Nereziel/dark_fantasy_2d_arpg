@@ -218,7 +218,7 @@ describe('Agent 33 — The Hollow King phase machine', () => {
   });
 
   it('does not alias caller-owned arena, state or action collections', () => {
-    const arena = structuredClone(ARENA);
+    const arena = structuredClone(ARENA) as unknown as { bounds: { x: number; y: number; width: number; height: number }; bossSpawn: { x: number; y: number }; safePoint: { x: number; y: number }; escapePoint: { x: number; y: number }; exitPosition: { x: number; y: number }; walls: { x: number; y: number; width: number; height: number }[] };
     const start = createHollowKingState('crypt/77/hollow-king', 77, arena, 500);
     const before = JSON.stringify(start);
     arena.bounds.x += 100;
