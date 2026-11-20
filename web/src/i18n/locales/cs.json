@@ -878,5 +878,27 @@
     "radius": "Dosah",
     "pull": "Přitažení",
     "bleeding": "Krvácení"
+  },
+  "crafting": {
+    "title": "Výroba a rozebrání",
+    "description": "U kováře rozebírej vybavení na suroviny a upravuj jeho vlastnosti. Socketování zde vytvoří pouze prázdný slot; runy a gemy přijdou později.",
+    "materials": {
+      "iron": "Železo",
+      "steel": "Ocel",
+      "arcane_dust": "Tajemný prach",
+      "soul_fragment": "Úlomek duše",
+      "demon_essence": "Démonická esence",
+      "ancient_crystal": "Prastarý krystal"
+    },
+    "actions": {
+      "salvage": "Rozebrat",
+      "upgrade": "Vylepšit",
+      "reroll": "Přehodit vlastnost",
+      "enchant": "Očarovat",
+      "socket": "Vytvořit socket"
+    },
+    "free": "Zdarma",
+    "protected": "Chráněný nebo oblíbený předmět nelze zpracovat.",
+    "completed": "Úprava u kováře dokončena."
   }
 }
