@@ -52,8 +52,10 @@ import { STASH_SIZE, planStashDeposit, planStashWithdraw, validateStashContents 
 import {
   freshQuest, validQuest, FIRST_QUEST_ID, type QuestProgress
 } from '../quests/firstQuest';
-import { acceptQuest, advanceObjective, turnInQuest } from '../quests/questDialogue';
-import { STARTER_QUEST_CATALOG, firstQuestLedger, firstQuestFromLedger } from '../quests/starterQuestRegistry';
+import { acceptQuest, advanceObjective, turnInQuest, type QuestLedger, type QuestTransition } from '../quests/questDialogue';
+import { firstQuestFromLedger } from '../quests/starterQuestRegistry';
+import { ACT_I_QUEST_CATALOG, ACT_I_MILESTONES, createActIQuestLedger, type ActIStoryQuestId } from '../quests/actIQuestChain';
+import type { WildernessFeature } from '../world/wildernessFeatures';
 import {
   SeededRng, createEquipment, deriveStats, isEquipmentSlot, isItem, rollItem, rollItemForBase,
   type Equipment, type EquipmentSlot, type GroundItem, type Item
@@ -196,6 +198,8 @@ export class GameSimulation {
   private units: EnemyUnit[] = createPack(0, 1);
   private selectedTargetId: string | null = null;
   private quest: QuestProgress = freshQuest();
+  private actILedger: QuestLedger = createActIQuestLedger(freshQuest())!;
+  private storyFeatures: readonly WildernessFeature[] = [];
   private pendingNpc: NpcId | null = null;
   private pendingTown: string | null = null;
   private pendingSkill: SkillSlot | null = null;
@@ -255,6 +259,87 @@ export class GameSimulation {
   }
   private get aliveEnemies(): EnemyUnit[] {
     return this.units.filter(unit => unit.actor.alive);
+  }
+
+  /** One quest ledger owns both the historic quest and Act I objectives. */
+  private questStatus(id: string) {
+    return this.actILedger.quests.find(entry => entry.questId === id)?.status;
+  }
+
+  private commitQuestTransition(transition: QuestTransition | null, questId: string): boolean {
+    if (!transition?.changed) return false;
+    const reward = transition.rewardPlan;
+    if (reward && this.gold > Number.MAX_SAFE_INTEGER - reward.gold) return false;
+    const previous = this.quest;
+    this.actILedger = transition.ledger;
+    const first = this.actILedger.quests[0];
+    const legacy = first && firstQuestFromLedger({ quests: [first] });
+    if (legacy) this.quest = legacy;
+    if (this.quest.status !== previous.status || this.quest.defeated !== previous.defeated) {
+      this.events.push({ type: 'questUpdated', status: this.quest.status, defeated: this.quest.defeated });
+    }
+    const current = this.actILedger.quests.find(entry => entry.questId === questId);
+    if (current) this.events.push({ type: 'actIQuestUpdated', questId, status: current.status });
+    if (reward) {
+      this.gold += reward.gold;
+      this.awardExperience(reward.questId === FIRST_QUEST_ID
+        ? Math.max(reward.xp, rewardForActivity('quest', this.level, this.level))
+        : reward.xp);
+      const next = ACT_I_MILESTONES.find(beat => beat.prerequisiteQuestId === reward.questId);
+      if (next) this.commitQuestTransition(
+        acceptQuest(ACT_I_QUEST_CATALOG, this.actILedger, next.questId), next.questId
+      );
+      if (reward.questId === 'forgotten_graves') this.spawnMorrow();
+    }
+    return true;
+  }
+
+  private storyEvent(questId: ActIStoryQuestId, eventId: string, occurrenceId: string): void {
+    if (this.questStatus(questId) !== 'active') return;
+    this.commitQuestTransition(
+      advanceObjective(ACT_I_QUEST_CATALOG, this.actILedger, questId, eventId, occurrenceId), questId
+    );
+    // Authoritative discovery/kill/zone events can complete world objectives.
+    // Vesna's final report requires a deliberate return and a dialogue turn-in.
+    if (questId !== 'vesnas_report' && this.questStatus(questId) === 'ready') {
+      this.commitQuestTransition(turnInQuest(ACT_I_QUEST_CATALOG, this.actILedger, questId), questId);
+    }
+  }
+
+  private recordVesnaReport(): void {
+    this.storyEvent('vesnas_report', 'act_i_report_delivered', 'vesna_report');
+  }
+
+  private discoverStoryLocations(): void {
+    if (this.zone !== 'wilderness' || !this.player.alive) return;
+    const sites = [
+      ['trail_of_black_ash', 'act1.corruption_site', 'corruption_traced'],
+      ['forgotten_graves', 'act1.abandoned_graveyard', 'graveyard_found'],
+      ['seal_of_rot', 'act1.evidence_lead', 'crypt_evidence_secured']
+    ] as const;
+    for (const [questId, featureId, eventId] of sites) {
+      if (this.questStatus(questId) !== 'active') continue;
+      const marker = this.storyFeatures.find(feature => feature.id === featureId);
+      if (marker && distance(this.player, marker.position) <= marker.radius + 18) {
+        this.storyEvent(questId, eventId, 'feature_' + marker.id.replaceAll('.', '_'));
+      }
+    }
+  }
+
+  /** A unique, combat-ready named foe uses existing wraith tactics and art. */
+  private spawnMorrow(): void {
+    if (this.zone !== 'wilderness' || this.questStatus('morrow_gravebound') !== 'active'
+      || this.units.some(unit => unit.actor.id === 'morrow_gravebound')
+      || this.units.length >= PACK_SIZE + 2) return;
+    const marker = this.storyFeatures.find(feature => feature.id === 'act1.grave_warden');
+    if (!marker) return;
+    const health = 270 + Math.max(0, this.level - 1) * 24;
+    this.units.push({
+      actor: { id: 'morrow_gravebound', type: 'wraith',
+        x: marker.position.x, y: marker.position.y,
+        health, maxHealth: health, alive: true },
+      intent: null, cooldown: 0.85, effects: [], abilityCooldowns: {}
+    });
   }
 
   command(command: GameCommand): void {
@@ -322,34 +407,14 @@ export class GameSimulation {
       this.temperEquipment(command.slot);
       return;
     }
-    // Dialogue pauses the world, but authoritative quest transitions and
-    // one-time rewards are evaluated through the shared typed quest engine.
-    if (command.type === 'questAccept') {
+    // Dialogue actions are gated by physical proximity and the ledger.
+    if (command.type === 'questAccept' || command.type === 'questTurnIn') {
       if (this.zone !== 'wilderness' || !this.player.alive || !nearWarden(this.player)) return;
-      const ledger = firstQuestLedger(this.quest);
-      const transition = ledger && acceptQuest(STARTER_QUEST_CATALOG, ledger, FIRST_QUEST_ID);
-      const next = transition?.changed ? firstQuestFromLedger(transition.ledger) : null;
-      if (next) {
-        this.quest = next;
-        this.events.push({ type: 'questUpdated', status: next.status, defeated: next.defeated });
-      }
-      return;
-    }
-    if (command.type === 'questTurnIn') {
-      if (this.zone !== 'wilderness' || !this.player.alive || !nearWarden(this.player)) return;
-      const ledger = firstQuestLedger(this.quest);
-      const transition = ledger && turnInQuest(STARTER_QUEST_CATALOG, ledger, FIRST_QUEST_ID);
-      const reward = transition?.rewardPlan;
-      const next = transition?.changed ? firstQuestFromLedger(transition.ledger) : null;
-      // Commit reward plus the quest completion together; no second payment
-      // is possible after saving, loading or repeatedly pressing Turn In.
-      if (reward && next && this.gold <= Number.MAX_SAFE_INTEGER - reward.gold) {
-        this.quest = next;
-        this.gold += reward.gold;
-        this.awardExperience(Math.max(reward.xp,
-          rewardForActivity('quest', this.level, this.level)));
-        this.events.push({ type: 'questUpdated', status: next.status, defeated: next.defeated });
-      }
+      const id = command.questId ?? FIRST_QUEST_ID;
+      const result = command.type === 'questAccept'
+        ? acceptQuest(ACT_I_QUEST_CATALOG, this.actILedger, id)
+        : turnInQuest(ACT_I_QUEST_CATALOG, this.actILedger, id);
+      this.commitQuestTransition(result, id);
       return;
     }
     if (command.type === 'useTownService') {
