@@ -104,6 +104,8 @@ describe('Wave D persistent, safe 24-slot camp stash', () => {
     expect(sim.restore(forged)).toBe(false);
     expect(sim.snapshot()).toEqual(s);
     const progress = sim.character();
+    const { stash: _missing, ...withoutStash } = progress;
+    expect(readSaveRecord({ format: 10, characterId: 'hero', character: withoutStash })).toBeNull();
     expect(createSaveRecord({ ...progress, stash: forged.stash })).toBeNull();
     expect(readSaveRecord({ format: 10, characterId: 'hero',
       character: { ...progress, stash: forged.stash } })).toBeNull();
