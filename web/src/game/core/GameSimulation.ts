@@ -1676,8 +1676,8 @@ export class GameSimulation {
     this.talentPoints += award.talentPointsGained;
     // Every level increases derived attributes, HP and class resource capacity.
     for (let level = prior + 1; level <= this.level; level++) {
-      this.refreshHealthLimit();
       const stats = deriveStats(this.classId, this.equipment, level);
+      updateHealthLimit(this.player, stats.maxHealth);
       this.resource = Math.min(stats.maxResource, this.resource + 2);
       this.player.health = resolveHealing(
         this.player.health, this.player.maxHealth,
@@ -1886,7 +1886,7 @@ export class GameSimulation {
       || !Number.isSafeInteger(s.gold) || s.gold < 0
       || !validQuest(s.quest)
       || !Number.isInteger(s.rngState) || s.rngState < 0 || s.rngState > 0xffffffff
-      || !Number.isFinite(s.resource) || s.resource < 0 || s.resource > deriveStats(s.classId, s.equipment, s.level).maxResource
+      || !Number.isFinite(s.resource) || s.resource < 0 || s.resource > CLASSES[s.classId].resourceMax + (s.level - 1) * 2
       || !Number.isFinite(s.respawnTimer) || s.respawnTimer < 0 || s.respawnTimer > 5
       || !Number.isFinite(s.shield) || s.shield < 0 || s.shield > 100000
       || !Array.isArray(s.projectiles) || s.projectiles.length > 80
