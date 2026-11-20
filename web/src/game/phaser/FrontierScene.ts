@@ -490,6 +490,15 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private onGameEvent(event: GameEvent): void {
+    if (event.type === 'waypointTravel') {
+      // The simulation already relocated the hero. Phaser owns presentation only.
+      this.heldMovement.release();
+      this.heroDeadUntil = 0;
+      this.heroHitUntil = 0;
+      this.heroBlockUntil = 0;
+      this.cameras.main.flash(550, 97, 174, 207);
+      return;
+    }
     if (event.type === 'playerRespawn') {
       this.heldMovement.release();
       this.heroDeadUntil = 0;
