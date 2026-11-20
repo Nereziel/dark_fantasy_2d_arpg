@@ -68,6 +68,12 @@ export function deriveStats(classId: ClassId, equipment: Equipment, level = 1): 
     minDmg += item.minDmg;
     maxDmg += item.maxDmg;
     block += item.block;
+    // Legendary powers are bound to item instances, not rolled on load/locale change.
+    if (item.legendaryPower) {
+      const power = Math.max(1, Math.floor(item.legendaryPower.magnitude * 0.15));
+      minDmg += power;
+      maxDmg += power;
+    }
     for (const affix of item.affixes) {
       switch (affix.stat) {
         case 'armor': armor += affix.value; break;
