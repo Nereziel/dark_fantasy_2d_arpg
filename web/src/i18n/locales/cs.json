@@ -2,6 +2,7 @@
   "dialogue": {
     "vesna": {
       "root": "Strážkyně Vesna se ohlédne ke zčernalým stromům za branou. Chceš znát příčinu zkázy?",
+      "history": "Vzpomínky na první výpravu",
       "ask": "Zeptat se na původ nákazy",
       "details": "Z hrobek se šíří prach a temné šeptání. Vesničané mizí. Nejdřív zastav nakažené tvory před branou, pak se vrať s hlášením.",
       "back": "Zpět k úkolu"
