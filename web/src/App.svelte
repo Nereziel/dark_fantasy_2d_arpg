@@ -15,6 +15,7 @@
   import CharacterSelect from './ui/CharacterSelect.svelte';
   import InventoryPanel from './ui/InventoryPanel.svelte';
   import CharacterSheet from './ui/CharacterSheet.svelte';
+  import TalentTree from './ui/TalentTree.svelte';
   import ControlsPanel from './ui/ControlsPanel.svelte';
   import SkillBar from './ui/SkillBar.svelte';
   import QuestJournal from './ui/QuestJournal.svelte';
@@ -39,6 +40,7 @@
   let selectedClass: ClassId = $state('WARRIOR');
   let inventoryOpen = $state(false);
   let characterOpen = $state(false);
+  let talentsOpen = $state(false);
   let controlsOpen = $state(false);
   let mapOpen = $state(false);
   let miniProjection = $derived(view.zone === 'wilderness' ? bridge.mapProjection('minimap') : null);
@@ -64,7 +66,8 @@
   }
 
   function openControls(): void {
-    if (!playing || dialogueOpen || tradeNpc !== null || townModal !== null || inventoryOpen || characterOpen) return;
+    if (!playing || dialogueOpen || tradeNpc !== null || townModal !== null
+      || inventoryOpen || characterOpen || talentsOpen) return;
     bridge.command({ type: 'pause', value: true });
     controlsOpen = true;
   }
@@ -81,7 +84,7 @@
 
   function openMap(): void {
     if (!playing || mapOpen || view.zone !== 'wilderness' || !view.player.alive
-      || view.paused || inventoryOpen || characterOpen || controlsOpen || dialogueOpen
+      || view.paused || inventoryOpen || characterOpen || talentsOpen || controlsOpen || dialogueOpen
       || tradeNpc !== null || townModal !== null) return;
     bridge.command({ type: 'pause', value: true });
     mapOpen = true;
@@ -167,6 +170,7 @@
     heldShiftKeys.clear();
     inventoryOpen = false;
     characterOpen = false;
+    talentsOpen = false;
     controlsOpen = false;
     mapOpen = false;
     dialogueOpen = false;
@@ -199,6 +203,7 @@
     playing = true;
   }
   function menu(): void {
+    talentsOpen = false;
     controlsOpen = false;
     mapOpen = false;
     heldShiftKeys.clear();
@@ -214,12 +219,12 @@
     playing = false;
   }
   function togglePause(): void {
-    if (controlsOpen || mapOpen) return;
+    if (controlsOpen || mapOpen || talentsOpen) return;
     if (!inventoryOpen && !characterOpen && !dialogueOpen && townModal === null && tradeNpc === null) bridge.command({ type: 'pause', value: !view.paused });
   }
 
   function openInventory(): void {
-    if (dialogueOpen || tradeNpc !== null || townModal !== null || inventoryOpen || characterOpen || view.paused || !view.player.alive) return;
+    if (dialogueOpen || tradeNpc !== null || townModal !== null || inventoryOpen || characterOpen || talentsOpen || view.paused || !view.player.alive) return;
     inventoryOpen = true;
     bridge.command({ type: 'pause', value: true });
   }
@@ -228,7 +233,7 @@
     bridge.command({ type: 'pause', value: false });
   }
   function openCharacterSheet(): void {
-    if (dialogueOpen || tradeNpc !== null || townModal !== null || inventoryOpen || characterOpen ||
+    if (dialogueOpen || tradeNpc !== null || townModal !== null || inventoryOpen || characterOpen || talentsOpen ||
       view.paused || !view.player.alive) return;
     characterOpen = true;
     bridge.command({ type: 'pause', value: true });
@@ -237,6 +242,18 @@
     characterOpen = false;
     bridge.command({ type: 'pause', value: false });
   }
+
+  function openTalents(): void {
+    if (!playing || !view.player.alive || view.paused || inventoryOpen || characterOpen
+      || controlsOpen || mapOpen || dialogueOpen || tradeNpc !== null || townModal !== null) return;
+    talentsOpen = true;
+    bridge.command({ type: 'pause', value: true });
+  }
+  function closeTalents(): void {
+    talentsOpen = false;
+    bridge.command({ type: 'pause', value: false });
+  }
+
   function interact(npcId: NpcId): void {
     if (inventoryOpen || characterOpen || dialogueOpen || townModal !== null || tradeNpc !== null || view.paused) return;
     bridge.command({ type: 'interactNpc', npcId });
@@ -256,6 +273,13 @@
   }
   function handleKeydown(event: KeyboardEvent): void {
     if (!playing || controlsOpen) return;
+    if (talentsOpen) {
+      if (event.code === 'Escape') {
+        event.preventDefault();
+        closeTalents();
+      }
+      return;
+    }
     const target = event.target;
     const isTyping = target instanceof HTMLElement
       && !!target.closest('input, textarea, select, [contenteditable="true"]');
@@ -278,7 +302,8 @@
 
     if (action === 'MENU') {
       event.preventDefault();
-      if (dialogueOpen || tradeNpc !== null) closeDialogue();
+      if (talentsOpen) closeTalents();
+      else if (dialogueOpen || tradeNpc !== null) closeDialogue();
       else if (inventoryOpen) closeInventory();
       else if (characterOpen) closeCharacterSheet();
       else togglePause();
@@ -298,7 +323,7 @@
       else openCharacterSheet();
       return;
     }
-    if (dialogueOpen || tradeNpc !== null || inventoryOpen || characterOpen
+    if (dialogueOpen || tradeNpc !== null || inventoryOpen || characterOpen || talentsOpen
       || view.paused || !view.player.alive) return;
 
     if (action === 'HOLD_POSITION') {
@@ -364,6 +389,7 @@
         messageKey = 'status.loaded';
         inventoryOpen = false;
         characterOpen = false;
+        talentsOpen = false;
         controlsOpen = false;
         mapOpen = false;
         dialogueOpen = false;
@@ -535,6 +561,9 @@
         <div class="hud-actions">
           <button onclick={openInventory}>{$t('inventory.open')}</button>
           <button onclick={openCharacterSheet}>{$t('character.open')}</button>
+          <button onclick={openTalents} disabled={!view.player.alive || view.paused}>
+            {$t('talents.open')}{view.talentPoints ? ' (' + view.talentPoints + ')' : ''}
+          </button>
           <button disabled={busy} onclick={save}>{$t('menu.save')}</button>
           <button disabled={busy} onclick={load}>{$t('menu.load')}</button>
         </div>
@@ -594,6 +623,8 @@
         <InventoryPanel {view} {bridge} close={closeInventory} />
       {:else if characterOpen}
         <CharacterSheet {view} close={closeCharacterSheet} />
+      {:else if talentsOpen}
+        <TalentTree {view} {bridge} close={closeTalents} />
       {:else if !view.player.alive}
         <div class="modal-shield" data-testid="death-overlay">
           <div class="pause-card" role="dialog" aria-modal="true" aria-label={$t('respawn.title')}>
