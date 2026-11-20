@@ -474,7 +474,13 @@
             aria-pressed={unit.actor.id === view.selectedTargetId}
             onclick={() => bridge.command({ type: 'attack', targetId: unit.actor.id })}
           >
-            <span>{unit.elite ? $t('hud.elite') + ' · ' : ''}{$t(unit.actor.id === 'morrow_gravebound' ? 'enemies.morrow_gravebound.name' : 'enemies.' + unit.actor.type + '.name')}
+            <span>{unit.elite ? $t('hud.elite') + ' · ' : ''}{$t(view.miniBossStates?.[unit.actor.id]
+              ? 'miniBossNames.' + unit.actor.id
+              : unit.actor.id === 'morrow_gravebound'
+                ? 'enemies.morrow_gravebound.name' : 'enemies.' + unit.actor.type + '.name')}
+              {#if view.miniBossStates?.[unit.actor.id]}
+                <small class="elite-modifiers">{$t('miniBoss.phase')} {view.miniBossStates?.[unit.actor.id]?.phase ?? 1}</small>
+              {/if}
               {#if unit.elite}
                 <small class="elite-modifiers">{unit.elite.modifiers.map(id => $t('eliteModifier.' + id)).join(' · ')}</small>
               {/if}
@@ -501,7 +507,10 @@
         </div>
         <div class="status-panel">
           <div class="status-label">{$t('hud.enemy')}</div>
-          <div class="status-value enemy-name">{$t(view.enemy.id === 'morrow_gravebound' ? 'enemies.morrow_gravebound.name' : 'enemies.' + view.enemy.type + '.name')}</div>
+          <div class="status-value enemy-name">{$t(view.miniBossStates?.[view.enemy.id]
+            ? 'miniBossNames.' + view.enemy.id
+            : view.enemy.id === 'morrow_gravebound'
+              ? 'enemies.morrow_gravebound.name' : 'enemies.' + view.enemy.type + '.name')}</div>
           <div class="enemy-health">{view.enemy.alive
             ? Math.round(100 * view.enemy.health / view.enemy.maxHealth) + '%'
             : '—'}</div>
