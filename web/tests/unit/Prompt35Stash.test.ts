@@ -28,6 +28,9 @@ describe('Prompt 35 — multi-tab stash pure rules', () => {
     expect(validateStashContents({ ...initial(), stashTabs: undefined })).toBe(true);
     expect(validateStashContents({ ...initial(), stashTabs: [] })).toBe(false);
     expect(validateStashContents({ ...initial(), stashTabs: [Array(24).fill(null)] })).toBe(false);
+    const sparse = Array(2) as unknown as Array<Array<Item | null>>;
+    sparse[0] = Array(24).fill(null);
+    expect(validateStashContents({ ...initial(), stashTabs: sparse })).toBe(false);
     expect(validateStashContents({ ...initial(), stashTabs: [Array(25).fill(null), Array(24).fill(null)] })).toBe(false);
     expect(validateStashContents({ ...initial(), stashTabs: [Array(24).fill(null), Array(24).fill(null), Array(24).fill(null)] })).toBe(false);
   });
@@ -126,8 +129,8 @@ describe('Prompt 35 — authoritative transfer and backwards compatible characte
   it('never trusts forged tab layouts and does not mutate on rejected restores', () => {
     const sim=new GameSimulation();
     const saved=sim.character();
-    expect(sim.restoreCharacter({...saved, stashTabs:[Array(24).fill(null)]})).toBe(false);
-    expect(sim.restore({...sim.snapshot(), stashTabs:[Array(24).fill(null)]})).toBe(false);
+    expect(sim.restoreCharacter({...saved, stashTabs:[Array(24).fill(null)] as never})).toBe(false);
+    expect(sim.restore({...sim.snapshot(), stashTabs:[Array(24).fill(null)] as never})).toBe(false);
     expect(sim.character().stashTabs).toBeUndefined();
     expect(readSaveRecord(createSaveRecord(saved))?.stashTabs).toBeUndefined();
   });
