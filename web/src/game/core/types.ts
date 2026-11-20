@@ -11,6 +11,7 @@ import type { SkillAim } from '../input/skillAiming';
 import type { WarriorAbilityId } from '../skills/warriorKit';
 import type { CombatTimelineState } from '../animation/combatTimeline';
 import type { StatusInstance } from '../status/statusRuntime';
+import type { StatusId } from '../status/statusDefinitions';
 import type { WorldObject, WorldObjectId } from '../world/interactables';
 
 export interface Point { x: number; y: number }
@@ -47,6 +48,10 @@ export interface ProjectileSnapshot extends Point {
   radius: number;
   remaining: number;
   base: number;
+  /** Optional on-hit effects from a catalog monster's telegraphed projectile. */
+  statusId?: StatusId;
+  statusDuration?: number;
+  statusMagnitude?: number;
 }
 
 export interface GameSnapshot {
@@ -84,7 +89,7 @@ export interface GameSnapshot {
   cooldowns: Cooldowns;
   /** Runtime Warrior actions and status effects are never part of CharacterProgress. */
   warriorCooldowns?: Partial<Record<WarriorAbilityId, number>>;
-  warriorAction?: { id: WarriorAbilityId; targetId: string | null; timeline: CombatTimelineState; hitCount: number } | null;
+  warriorAction?: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null;
   statusEffects?: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> };
   effects: ActiveEffects;
   stats: DerivedStats;
@@ -136,7 +141,8 @@ export type GameEvent =
   | { type: 'questUpdated'; status: QuestProgress['status']; defeated: number }
   | { type: 'enemyWindup'; enemyId: string; pattern: 'bolt' | 'sweep' | 'leap' }
   | { type: 'enemyAttack'; enemyId: string; hit: boolean }
-  | { type: 'enemyHeal'; enemyId: string; targetId: string; amount: number };
+  | { type: 'enemyHeal'; enemyId: string; targetId: string; amount: number }
+  | { type: 'enemyBuff'; enemyId: string; abilityId: string };
 export interface GameStateReader {
   snapshot(): GameSnapshot;
   subscribe(listener: (state: GameSnapshot) => void): () => void;

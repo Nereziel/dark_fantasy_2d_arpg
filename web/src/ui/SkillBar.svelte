@@ -81,10 +81,10 @@
   {/if}
   {#if view.effects.player.length > 0 || view.effects.enemy.length > 0}
     <div class="active-effects" aria-label={$t('combat.effects')}>
-      {#each view.effects.player as effect (effect.id)}
+      {#each view.effects.player.filter(effect => !view.statusEffects?.player.some(status => status.id === effect.id)) as effect (effect.id)}
         <span class="effect-chip beneficial">{$t('effects.' + effect.id)} {Math.ceil(effect.remaining)}s</span>
       {/each}
-      {#each view.effects.enemy as effect (effect.id)}
+      {#each view.effects.enemy.filter(effect => !view.statusEffects?.enemies?.[view.enemy.id]?.some(status => status.id === effect.id)) as effect (effect.id)}
         <span class="effect-chip hostile">{$t('effects.' + effect.id)} {Math.ceil(effect.remaining)}s</span>
       {/each}
     </div>

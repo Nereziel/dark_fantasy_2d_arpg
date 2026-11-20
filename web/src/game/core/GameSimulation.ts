@@ -6,7 +6,8 @@ import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../
 import { canActivateWarriorSkill, spendAndStartCooldown, advanceWarriorCooldowns, applyWarriorRageDelta, type WarriorActivationRequest } from '../skills/warriorEconomy';
 import { startCombatTimeline, advanceCombatTimeline, cancelCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
 import { STATUS_DEFINITIONS, type StatusId } from '../status/statusDefinitions';
-import { applyStatus, advanceStatuses, dispelStatuses, getStatusModifiers, type StatusInstance, type StatusRule } from '../status/statusRuntime';
+import { applyStatus, advanceStatuses, dispelStatuses, getStatusModifiers, type StatusInstance } from '../status/statusRuntime';
+import { isLegacyStatus, mergedLegacyEffects, monsterStatusImmunities, statusRule } from '../status/statusIntegration';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
 import { resolveTypedDamage, resolveHealing, type DamageType, type DamageResult } from '../combat/typedDamage';
 import type { SkillAim } from '../input/skillAiming';
@@ -21,8 +22,9 @@ import {
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
 import { planEnemyBehavior } from '../enemies/behaviorPlanner';
+import { monsterActions, monsterAction, type MonsterAction } from '../enemies/monsterRuntime';
 import { getEnemyArchetype } from '../enemies/archetypeCatalog';
-import { ACTOR_RADIUS, canOccupy, findPath, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
+import { ACTOR_RADIUS, canOccupy, findPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
   generateWorld, generateCrypt, type WorldLayout
@@ -61,7 +63,8 @@ function cloneUnit(unit: EnemyUnit): EnemyUnit {
     actor: { ...unit.actor },
     intent: unit.intent ? { ...unit.intent } : null,
     cooldown: unit.cooldown,
-    effects: unit.effects.map(effect => ({ ...effect }))
+    effects: unit.effects.map(effect => ({ ...effect })),
+    ...(unit.abilityCooldowns ? { abilityCooldowns: { ...unit.abilityCooldowns } } : {})
   };
 }
 function validActor(actor: ActorSnapshot, id: string, obstacles: readonly Obstacle[]): boolean {
@@ -114,7 +117,7 @@ export class GameSimulation {
   private cooldowns: Cooldowns = emptyCooldowns();
   private warriorCooldowns: Partial<Record<WarriorAbilityId, number>> = {};
   private warriorPending: { id: WarriorAbilityId; targetId: string | null } | null = null;
-  private warriorAction: { id: WarriorAbilityId; targetId: string | null; timeline: CombatTimelineState; hitCount: number } | null = null;
+  private warriorAction: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null = null;
   private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
   private effects: ActiveEffects = emptyEffects();
   private world: WorldLayout = generateWorld(0);
@@ -468,9 +471,14 @@ export class GameSimulation {
 
 
   /** Decide if a Warrior ability should cast now or approach its target first. */
-  private warriorActivation(id: WarriorAbilityId, targetId: string | null): WarriorActivationRequest {
+  private warriorActivation(id: WarriorAbilityId, targetId: string | null, aim?: SkillAim): WarriorActivationRequest {
     const ability = WARRIOR_ABILITIES[id];
     const actor = targetId ? this.units.find(u => u.actor.alive && u.actor.id === targetId)?.actor : null;
+    const directionalTarget = id === 'charge' && aim?.mode === 'DIRECTION' ? {
+      x: this.player.x + aim.direction.x * Math.min(170, ability.range),
+      y: this.player.y + aim.direction.y * Math.min(170, ability.range),
+      alive: true
+    } : null;
     return {
       skill: {
         id, cost: ability.rageCost, cooldown: ability.cooldown,
@@ -485,7 +493,7 @@ export class GameSimulation {
           cleave: Math.max(this.warriorCooldowns.cleave ?? 0, this.cooldowns.rmb),
           charge: Math.max(this.warriorCooldowns.charge ?? 0, this.cooldowns.slot1) }
       },
-      actor: this.player, target: actor ?? null,
+      actor: this.player, target: directionalTarget ?? actor ?? null,
       stunned: this.effects.player.some(e => e.id === 'stunned')
         || this.statusEffects.player.some(e => e.id === 'stunned' || e.id === 'frozen'),
       silenced: this.statusEffects.player.some(e => e.id === 'silenced'),
@@ -493,10 +501,10 @@ export class GameSimulation {
     };
   }
 
-  private requestWarriorAbility(id: WarriorAbilityId, targetId: string | null): void {
+  private requestWarriorAbility(id: WarriorAbilityId, targetId: string | null, aim?: SkillAim): void {
     if (!this.player.alive || this.paused || this.classId !== 'WARRIOR' || this.warriorAction) return;
     const ability = WARRIOR_ABILITIES[id];
-    const request = this.warriorActivation(id, targetId);
+    const request = this.warriorActivation(id, targetId, aim);
     const decision = canActivateWarriorSkill(request);
     if (decision.status === 'approach') {
       this.warriorPending = { id, targetId };
@@ -510,6 +518,9 @@ export class GameSimulation {
     if (decision.status !== 'ready') {
       this.warriorPending = null;
       return;
+    }
+    if (targetId && this.units.some(u => u.actor.id === targetId && u.actor.alive)) {
+      this.selectedTargetId = targetId;
     }
     const spent = spendAndStartCooldown(request);
     if (spent.decision.status !== 'ready') return;
@@ -530,36 +541,55 @@ export class GameSimulation {
       recoveryTicks: Math.max(1, Math.round(ability.recovery / FIXED_STEP)),
       movementLocked: true
     }).state;
-    this.warriorAction = { id, targetId, timeline, hitCount: 0 };
+    this.warriorAction = { id, targetId, ...(aim ? { aim } : {}), timeline, hitCount: 0 };
     const target = targetId ? this.units.find(u => u.actor.id === targetId)?.actor : null;
     this.events.push({ type: 'cast', skillId: id, x: target?.x ?? this.player.x, y: target?.y ?? this.player.y });
   }
 
+  /** Single authoritative status store; legacy effect DTOs are projections only. */
   private applyCanonicalStatus(
     recipient: 'player' | 'enemy', id: StatusId, sourceId: string,
     magnitude?: number, duration?: number, unit?: EnemyUnit
   ): void {
-    const definition = STATUS_DEFINITIONS[id];
-    const rule: StatusRule = {
-      id, duration: duration ?? definition.duration,
-      magnitude: magnitude ?? definition.magnitude,
-      stacking: definition.stackMode === 'stack' ? 'add' : 'refresh',
-      maxStacks: definition.maxStacks,
-      tickInterval: definition.tickInterval ?? undefined,
-      dispelCategory: definition.dispelCategory,
-      immunityTags: definition.immunityGroup ? [definition.immunityGroup] : [],
-      visualHook: definition.visualHook,
-      modifiers: definition.modifierKind === 'speedBoost' ? { moveSpeed: 1 }
-        : definition.modifierKind === 'movementSpeed' ? { moveSpeed: -1 }
-        : definition.modifierKind === 'damageReduction' ? { damageReduction: 1 }
-        : definition.modifierKind === 'damageTaken' ? { damageTaken: 1 } : {}
-    };
+    const rule = statusRule(id, magnitude, duration);
     if (recipient === 'player') {
       this.statusEffects.player = applyStatus(this.statusEffects.player, rule, sourceId);
+      if (id === 'shielded') this.shield = Math.max(this.shield, Math.round(rule.magnitude));
     } else if (unit?.actor.alive) {
       this.statusEffects.enemies[unit.actor.id] = applyStatus(
-        this.statusEffects.enemies[unit.actor.id] ?? [], rule, sourceId);
+        this.statusEffects.enemies[unit.actor.id] ?? [], rule, sourceId,
+        monsterStatusImmunities(unit.actor.type));
     }
+    this.syncLegacyStatuses();
+  }
+
+  private syncLegacyStatuses(): void {
+    this.effects.player = mergedLegacyEffects(this.effects.player, this.statusEffects.player);
+    for (const unit of this.units) {
+      unit.effects = mergedLegacyEffects(unit.effects,
+        this.statusEffects.enemies[unit.actor.id] ?? []);
+    }
+  }
+
+  /** Old transient combat snapshots remain readable, without parallel status timers. */
+  private importLegacyStatuses(): void {
+    for (const effect of this.effects.player) {
+      if (!isLegacyStatus(effect.id) || this.statusEffects.player.some(s => s.id === effect.id)) continue;
+      this.statusEffects.player = applyStatus(this.statusEffects.player,
+        statusRule(effect.id, effect.magnitude > 0 ? effect.magnitude : undefined, effect.remaining),
+        'legacy-hero');
+    }
+    for (const unit of this.units) {
+      for (const effect of unit.effects) {
+        if (!isLegacyStatus(effect.id)
+          || this.statusEffects.enemies[unit.actor.id]?.some(s => s.id === effect.id)) continue;
+        this.statusEffects.enemies[unit.actor.id] = applyStatus(
+          this.statusEffects.enemies[unit.actor.id] ?? [],
+          statusRule(effect.id, effect.magnitude > 0 ? effect.magnitude : undefined, effect.remaining),
+          'legacy-' + unit.actor.id, monsterStatusImmunities(unit.actor.type));
+      }
+    }
+    this.syncLegacyStatuses();
   }
 
   private tickCanonicalStatuses(dt: number): void {
@@ -590,7 +620,7 @@ export class GameSimulation {
     }
   }
 
-  private warriorImpact(id: WarriorAbilityId, targetId: string | null): void {
+  private warriorImpact(id: WarriorAbilityId, targetId: string | null, aim?: SkillAim): void {
     const ability = WARRIOR_ABILITIES[id];
     const target = targetId ? this.units.find(u => u.actor.alive && u.actor.id === targetId) : null;
     if (id === 'warCry') {
@@ -601,13 +631,33 @@ export class GameSimulation {
         cooldowns: this.warriorCooldowns
       }, ability.rageGain).rage;
     } else {
-      if (id === 'charge' && target) {
-        moveActor(this.player, target.actor, Math.max(0, distance(this.player, target.actor) - 52),
-          ACTOR_RADIUS, this.world.obstacles);
+      if (id === 'charge') {
+        if (aim?.mode === 'DIRECTION') {
+          // Do not dash *through* a nearby selected target; stop within melee reach.
+          const alongTarget = target
+            ? (target.actor.x - this.player.x) * aim.direction.x
+              + (target.actor.y - this.player.y) * aim.direction.y : null;
+          const travel = alongTarget !== null && alongTarget > 0 && alongTarget <= 170
+            ? Math.max(0, alongTarget - 52) : Math.min(170, ability.range);
+          const goal = {
+            x: this.player.x + aim.direction.x * travel,
+            y: this.player.y + aim.direction.y * travel
+          };
+          moveActor(this.player, goal, travel, ACTOR_RADIUS, this.world.obstacles);
+        } else if (target) {
+          moveActor(this.player, target.actor,
+            Math.min(170, Math.max(0, distance(this.player, target.actor) - 52)),
+            ACTOR_RADIUS, this.world.obstacles);
+        }
       }
+      const hitTarget = id === 'charge' && aim?.mode === 'DIRECTION'
+        ? [...this.aliveEnemies].filter(u => distance(this.player, u.actor) <= 82)
+            .sort((u, v) => distance(this.player, u.actor) - distance(this.player, v.actor))[0] ?? null
+        : target;
       const victims = ability.radius !== undefined
         ? [...this.aliveEnemies].filter(u => distance(this.player, u.actor) <= ability.radius! + 0.5)
-        : target && distance(this.player, target.actor) <= ability.range + 0.5 ? [target] : [];
+        : hitTarget && distance(this.player, hitTarget.actor) <= (id === 'charge' ? 82 : ability.range) + 0.5
+          ? [hitTarget] : [];
       for (const unit of victims) {
         const power = ability.condition
           && unit.actor.health / unit.actor.maxHealth <= ability.condition.threshold
@@ -644,7 +694,7 @@ export class GameSimulation {
     action.timeline = result.state;
     for (const event of result.events) {
       if (event.type === 'impact' && this.player.alive) {
-        this.warriorImpact(action.id, action.targetId);
+        this.warriorImpact(action.id, action.targetId, action.aim);
         action.hitCount++;
       }
     }
@@ -653,7 +703,7 @@ export class GameSimulation {
       const elapsed = action.timeline.elapsedTicks - action.timeline.windupTicks;
       const interval = Math.max(1, Math.round(ability.channel.tickInterval / FIXED_STEP));
       if (elapsed > 0 && elapsed % interval === 0) {
-        this.warriorImpact(action.id, action.targetId);
+        this.warriorImpact(action.id, action.targetId, action.aim);
         action.hitCount++;
       }
     }
@@ -663,8 +713,26 @@ export class GameSimulation {
   private requestCast(slot: SkillSlot, aim?: SkillAim): void {
     if (this.warriorAction) return;
     const skill = SKILLS[this.classId][slot];
-    if (skill.kind === 'dash' && this.holdPosition) return;
+    if (this.classId === 'WARRIOR') {
+      const targetId = aim?.mode === 'TARGET_ENTITY' ? aim.targetId
+        : this.focusedUnit.actor.alive ? this.focusedUnit.actor.id : null;
+      if (slot === 'slot1' && aim?.mode === 'DIRECTION') {
+        const target = targetId
+          ? this.units.find(u => u.actor.id === targetId && u.actor.alive)
+          : null;
+        this.requestWarriorAbility('charge',
+          target && distance(this.player, target.actor) <= WARRIOR_ABILITIES.charge.range
+            ? target.actor.id : null, aim);
+      } else {
+        this.requestWarriorAbility(skill.id as WarriorAbilityId, targetId, aim);
+      }
+      return;
+    }
+    if (skill.kind === 'dash' && (this.holdPosition || this.immobilized)) return;
+    // Root restricts movement and dashes, not stationary spells.
     if (this.effects.player.some(e => e.id === 'stunned')
+      || this.statusEffects.player.some(e =>
+        e.id === 'stunned' || e.id === 'frozen' || e.id === 'silenced')
       || this.cooldowns[slot] > 0.0001 || this.resource + 0.0001 < skill.cost) return;
 
     // Aimed positions and directions are validated by the authoritative simulation.
@@ -719,6 +787,14 @@ export class GameSimulation {
   }
 
   private applyEffect(target: 'enemy' | 'player', effect: ActiveEffect, unit = this.focusedUnit): void {
+    if (isLegacyStatus(effect.id)) {
+      this.applyCanonicalStatus(target, effect.id,
+        target === 'player' ? 'status-enemy' : 'hero',
+        effect.magnitude > 0 ? effect.magnitude : undefined, effect.remaining, unit);
+      return;
+    }
+    // Consecration/Skeleton are persistent field and summon abilities,
+    // not duplicative status damage timers.
     if (target === 'player') this.effects.player = applyOrRefreshEffect(this.effects.player, effect);
     else unit.effects = applyOrRefreshEffect(unit.effects, effect);
   }
@@ -742,8 +818,12 @@ export class GameSimulation {
   private resolveEnemyDamage(base: number, unit: EnemyUnit, type: DamageType,
     sourceId: string, multiplier = 1, critChance = 0): number {
     if (!unit.actor.alive) return 0;
+    const defenderStatus = getStatusModifiers(this.statusEffects.enemies[unit.actor.id] ?? []);
+    const attackerStatus = getStatusModifiers(this.statusEffects.player);
     const result = resolveTypedDamage({
-      type, base, multiplier, critChance,
+      type, base, multiplier: multiplier
+        * Math.max(0.1, 1 + (attackerStatus.damageDealt ?? 0))
+        * Math.max(0.1, 1 + (defenderStatus.damageTaken ?? 0)), critChance,
       defenderArmor: 10 + this.level * 3, defenderLevel: this.level,
       resistancePercent: Math.min(95, this.enemyResistance(unit, type) +
         100 * Math.min(0.8, getStatusModifiers(this.statusEffects.enemies[unit.actor.id] ?? []).damageReduction ?? 0))
@@ -773,8 +853,13 @@ export class GameSimulation {
       : type === 'poison' ? stats.poisonResist
       : type === 'shadow' ? stats.shadowResist
       : type === 'holy' ? stats.holyResist : 0;
+    const attackerStatus = getStatusModifiers(this.statusEffects.enemies[sourceId] ?? []);
+    const defenderStatus = getStatusModifiers(this.statusEffects.player);
     const result = resolveTypedDamage({
-      type, base, defenderArmor: stats.armor, defenderLevel: this.level,
+      type,
+      base: base * Math.max(0.1, 1 + (attackerStatus.damageDealt ?? 0))
+        * Math.max(0.1, 1 + (defenderStatus.damageTaken ?? 0)),
+      defenderArmor: stats.armor, defenderLevel: this.level,
       resistancePercent: Math.min(95, resistance +
         100 * Math.min(0.8, getStatusModifiers(this.statusEffects.player).damageReduction ?? 0)),
       dodgeChance: stats.dodgeChance,
@@ -786,12 +871,16 @@ export class GameSimulation {
     return result.damage > 0;
   }
 
-  private fireBolt(source: EnemyUnit, target: Point, radius: number, base: number): void {
+  private fireBolt(source: EnemyUnit, target: Point, radius: number, base: number, action?: MonsterAction): void {
     const shot: ProjectileSnapshot = {
       id: 'projectile-' + (++this.nextProjectileId),
       sourceId: source.actor.id, x: source.actor.x, y: source.actor.y,
-      target: { ...target }, type: 'shadow',
-      speed: 560, radius, remaining: 2.5, base
+      target: { ...target }, type: action?.statusId === 'poisoned' ? 'poison'
+        : action?.statusId === 'slowed' ? 'frost' : 'shadow',
+      speed: 560, radius, remaining: 2.5, base,
+      ...(action?.statusId ? { statusId: action.statusId } : {}),
+      ...(action?.statusDuration ? { statusDuration: action.statusDuration } : {}),
+      ...(action?.statusMagnitude ? { statusMagnitude: action.statusMagnitude } : {})
     };
     this.projectiles.push(shot);
     this.events.push({ type: 'projectileLaunch', id: shot.id, sourceId: shot.sourceId });
@@ -815,9 +904,14 @@ export class GameSimulation {
       }
       const sanctuary = this.zone === 'wilderness'
         && distance(this.player, this.world.camp) <= CAMP_RADIUS;
-      const hit = !blocked && landed && !sanctuary
-        && distance(this.player, shot.target) <= shot.radius
-        && this.dealPlayerDamage(shot.base, shot.type, shot.sourceId);
+      const impact = !blocked && landed && !sanctuary
+        && distance(this.player, shot.target) <= shot.radius && this.player.alive;
+      const hit = impact && (shot.base <= 0
+        || this.dealPlayerDamage(shot.base, shot.type, shot.sourceId));
+      if (hit && shot.statusId) {
+        this.applyCanonicalStatus('player', shot.statusId, shot.sourceId,
+          shot.statusMagnitude, shot.statusDuration);
+      }
       this.events.push({ type: 'projectileImpact', id: shot.id, hit: Boolean(hit) });
       this.events.push({ type: 'enemyAttack', enemyId: shot.sourceId, hit: Boolean(hit) });
     }
@@ -935,22 +1029,20 @@ export class GameSimulation {
       this.events.push({ type: 'playerDeath' });
     }
   }
+  /** Only aura/summon ticks remain here; all 15 statuses tick in statusRuntime. */
   private tickEffects(dt: number): void {
     for (const unit of this.units) {
       for (const effect of unit.effects) {
+        if (isLegacyStatus(effect.id)) continue;
         effect.remaining -= dt;
         effect.tick += dt;
-        if ((effect.id === 'burning' || effect.id === 'poisoned') && unit.actor.alive) {
-          while (effect.tick >= 1 && unit.actor.alive) {
-            effect.tick -= 1;
-            this.resolveEnemyDamage(effect.magnitude, unit,
-              effect.id === 'poisoned' ? 'poison' : 'fire', 'status-' + effect.id);
-          }
-        }
       }
-      unit.effects = unit.actor.alive ? unit.effects.filter(effect => effect.remaining > 0) : [];
+      unit.effects = unit.actor.alive
+        ? unit.effects.filter(effect => !isLegacyStatus(effect.id) && effect.remaining > 0)
+        : [];
     }
     for (const effect of this.effects.player) {
+      if (isLegacyStatus(effect.id)) continue;
       effect.remaining -= dt;
       effect.tick += dt;
       while (effect.tick >= 1 && effect.remaining > -0.0001 && this.player.alive) {
@@ -964,20 +1056,35 @@ export class GameSimulation {
             if (distance(this.player, unit.actor) <= 135) this.applyDamage(effect.magnitude, unit, 'holy');
           }
         } else if (effect.id === 'skeleton') {
-          const target = this.aliveEnemies
-            .find(unit => distance(this.player, unit.actor) <= 280);
+          const target = this.aliveEnemies.find(unit => distance(this.player, unit.actor) <= 280);
           if (target) this.applyDamage(effect.magnitude, target);
-        } else if (effect.id === 'poisoned' || effect.id === 'burning') {
-          this.dealPlayerDamage(effect.magnitude,
-            effect.id === 'poisoned' ? 'poison' : 'fire', 'status-' + effect.id);
         }
       }
     }
-    this.effects.player = this.effects.player.filter(effect => effect.remaining > 0);
+    this.effects.player = this.effects.player.filter(effect =>
+      !isLegacyStatus(effect.id) && effect.remaining > 0);
   }
 
+  private beginMonsterAttack(unit: EnemyUnit, choice?: MonsterAction): void {
+    const actor = unit.actor;
+    const def = ENEMY_DEFINITIONS[actor.type];
+    const pattern = choice?.attack ?? def.attack;
+    const center = pattern === 'sweep' ? actor : this.player;
+    const windup = choice?.windup ?? def.windup;
+    unit.intent = {
+      pattern, x: center.x, y: center.y,
+      radius: choice?.areaRadius ?? (choice && pattern === 'sweep'
+        ? Math.max(65, choice.range) : def.dangerRadius),
+      remaining: windup, total: windup,
+      ...(choice ? { abilityId: choice.id } : {})
+    };
+    if (choice) {
+      (unit.abilityCooldowns ??= {})[choice.id] = choice.cooldown;
+    }
+    this.events.push({ type: 'enemyWindup', enemyId: actor.id, pattern });
+  }
 
-  /** Data-driven Wave B AI runs in the deterministic TypeScript simulation. */
+  /** Deterministic tactical planner: obstacle-aware movement, role-specific actions. */
   private updateMonsterTactics(unit: EnemyUnit, dt: number): void {
     const actor = unit.actor;
     const def = ENEMY_DEFINITIONS[actor.type];
@@ -988,60 +1095,139 @@ export class GameSimulation {
     if (!spawn) return;
     const origin = { x: spawn.x, y: spawn.y + (this.wave % 2) * 25 };
     const role = enemyArchetype(actor.type);
+    const sanctuary = this.zone === 'wilderness'
+      && distance(this.player, this.world.camp) <= CAMP_RADIUS;
+    const target = sanctuary ? null : this.player;
+    const toPlayer = distance(actor, this.player);
+    const lineOfSight = hasLineOfSight(actor, this.player, this.world.obstacles);
+    const abilityCooldowns = unit.abilityCooldowns ?? (unit.abilityCooldowns = {});
+    const actions = monsterActions(actor.type);
+    const ready = (action: MonsterAction): boolean =>
+      (abilityCooldowns[action.id] ?? 0) <= 0;
     const allies = this.units.filter(u => u !== unit && u.actor.alive).map(u => ({
-      ...u.actor, lineOfSight: true,
-      reachable: distance(actor, u.actor) <= profile.aggroRange
+      ...u.actor,
+      lineOfSight: hasLineOfSight(actor, u.actor, this.world.obstacles),
+      reachable: findPath(actor, u.actor, ACTOR_RADIUS, this.world.obstacles).length > 0
     }));
+
+    // Heal first when an ally is critically injured; defensive buffs are secondary.
+    const healSkill = actions.find(action => action.kind === 'heal');
+    const urgentHeal = !!healSkill && this.units.some(other =>
+      other !== unit && other.actor.alive
+      && other.actor.health / other.actor.maxHealth < 0.88
+      && distance(actor, other.actor) <= healSkill.range);
+    // Buffs are committed as simulation statuses, not cosmetic renderer effects.
+    // Damaging frenzy uses the same canonical damageDealt modifier as Cursed.
+    const buff = !urgentHeal && target && toPlayer <= def.aggro && unit.cooldown <= 0
+      ? actions.find(action => action.kind === 'buff' && ready(action)
+        && this.units.some(u => u !== unit && u.actor.alive
+          && distance(actor, u.actor) <= action.range)) : undefined;
+    if (buff && buff.statusId) {
+      const base = statusRule(buff.statusId, buff.statusMagnitude, buff.statusDuration);
+      const rule = buff.buffType === 'damageBonus'
+        ? { ...base, modifiers: { moveSpeed: 1, damageDealt: 1 } } : base;
+      for (const ally of this.units) {
+        if (!ally.actor.alive || distance(actor, ally.actor) > buff.range) continue;
+        this.statusEffects.enemies[ally.actor.id] = applyStatus(
+          this.statusEffects.enemies[ally.actor.id] ?? [], rule,
+          actor.id, monsterStatusImmunities(ally.actor.type));
+      }
+      abilityCooldowns[buff.id] = buff.cooldown;
+      unit.cooldown = Math.max(unit.cooldown, 0.65);
+      this.syncLegacyStatuses();
+      this.events.push({ type: 'enemyBuff', enemyId: actor.id, abilityId: buff.id });
+      return;
+    }
+
+    // Charge, pounce and ranged control can start beyond ordinary attack range.
+    // Defensive area skills may fire inside their radius before a caster flees.
+    const specialist = target && unit.cooldown <= 0
+      && distance(actor, origin) <= profile.leashRange
+      && distance(origin, target) <= profile.leashRange
+      ? actions.find(action => (action.kind === 'damage' || action.kind === 'debuff')
+        && ready(action) && toPlayer <= action.range
+        && (lineOfSight || action.attack === 'sweep')
+        && (action.attack === 'leap' && toPlayer > def.attackRange
+          || action.attack === 'bolt' && action.statusId !== undefined
+            && toPlayer > def.attackRange
+          || action.attack === 'sweep' && action.areaRadius !== undefined
+            && toPlayer <= action.areaRadius && role === 'caster')) : undefined;
+    if (specialist) {
+      this.beginMonsterAttack(unit, specialist);
+      return;
+    }
+
+    const travel = target ? findPath(actor, target, ACTOR_RADIUS, this.world.obstacles) : [];
+    const patrol = {
+      x: origin.x + (index % 2 === 0 ? 36 : -36),
+      y: origin.y + (index === 1 ? 26 : -26)
+    };
     const decision = planEnemyBehavior({
-      actor, origin, target: this.player, allies,
+      actor, origin, target, allies,
       config: {
         archetypeId: role, aggroRange: def.aggro,
         attackRange: def.attackRange,
         preferredDistance: Math.min(def.preferredRange, def.attackRange),
         leashRange: Math.max(profile.leashRange, def.aggro + 100),
-        specialRange: role === 'healer' ? 220 : Math.min(def.aggro, Math.max(def.attackRange, 230)),
+        specialRange: role === 'healer' ? (healSkill?.range ?? 220)
+          : role === 'ambusher' ? Math.min(def.aggro, 230)
+            : Math.min(def.aggro, Math.max(def.attackRange, 230)),
         healHealthRatio: 0.88,
         fleeHealthRatio: profile.retreatThreshold
       },
-      attackCooldown: unit.cooldown, abilityCooldown: unit.cooldown,
-      lineOfSight: true,
+      attackCooldown: unit.cooldown,
+      abilityCooldown: healSkill ? Math.max(unit.cooldown, abilityCooldowns[healSkill.id] ?? 0)
+        : unit.cooldown,
+      lineOfSight,
       navigation: {
-        targetReachable: canOccupy(this.player, ACTOR_RADIUS, this.world.obstacles),
-        originReachable: canOccupy(origin, ACTOR_RADIUS, this.world.obstacles),
-        repositionReachable: true, retreatReachable: true, patrolReachable: true
-      }
+        targetReachable: target === null || travel.length > 0,
+        originReachable: findPath(actor, origin, ACTOR_RADIUS, this.world.obstacles).length > 0,
+        repositionReachable: true,
+        retreatReachable: true,
+        patrolReachable: canOccupy(patrol, ACTOR_RADIUS, this.world.obstacles)
+      },
+      patrolTarget: patrol
     });
+
     if (decision.action === 'heal') {
       const ally = this.units.find(u => u.actor.id === decision.targetId && u.actor.alive);
-      if (ally && unit.cooldown <= 0 && distance(actor, ally.actor) <= 220) {
-        ally.actor.health = resolveHealing(ally.actor.health, ally.actor.maxHealth, 36).health;
+      if (ally && healSkill && ready(healSkill) && unit.cooldown <= 0
+        && distance(actor, ally.actor) <= healSkill.range
+        && hasLineOfSight(actor, ally.actor, this.world.obstacles)) {
+        const healed = resolveHealing(ally.actor.health, ally.actor.maxHealth, healSkill.damage);
+        ally.actor.health = healed.health;
         this.statusEffects.enemies[ally.actor.id] = dispelStatuses(
           this.statusEffects.enemies[ally.actor.id] ?? [], { categories: ['curse'] });
-        unit.cooldown = 6.5;
-        this.events.push({ type: 'enemyHeal', enemyId: actor.id, targetId: ally.actor.id, amount: 36 });
+        abilityCooldowns[healSkill.id] = healSkill.cooldown;
+        unit.cooldown = Math.max(unit.cooldown, 0.65);
+        this.syncLegacyStatuses();
+        this.events.push({
+          type: 'enemyHeal', enemyId: actor.id, targetId: ally.actor.id, amount: healed.healed
+        });
       }
-    } else if (decision.action === 'cast' && decision.targetId !== this.player.id) {
-      const ally = this.units.find(u => u.actor.id === decision.targetId && u.actor.alive);
-      if (ally && unit.cooldown <= 0) {
-        this.applyCanonicalStatus('enemy', 'fortified', actor.id, 0.2, 6, ally);
-        unit.cooldown = 8;
-      }
-    } else if (decision.action === 'attack' || decision.action === 'cast') {
-      if (unit.cooldown > 0) return;
-      const center = def.attack === 'sweep' ? actor : this.player;
-      unit.intent = {
-        pattern: def.attack, x: center.x, y: center.y,
-        radius: def.dangerRadius, remaining: def.windup, total: def.windup
-      };
-      this.events.push({ type: 'enemyWindup', enemyId: actor.id, pattern: def.attack });
-    } else if ('destination' in decision) {
-      const point = decision.destination;
-      if (canOccupy(point, ACTOR_RADIUS, this.world.obstacles)) {
-        const pace = def.speed * profile.speedMultiplier
-          * (this.statusEffects.enemies[actor.id]?.some(e => e.id === 'slowed') ? 0.7 : 1);
-        const stop = decision.action === 'chase' ? Math.max(0, def.preferredRange - 4) : 0;
-        this.follow(actor, point, pace, dt, stop);
-      }
+      return;
+    }
+    if (decision.action === 'attack' || decision.action === 'cast') {
+      if (decision.targetId !== this.player.id || unit.cooldown > 0 || !target) return;
+      const choice = actions.find(action =>
+        (action.kind === 'damage' || action.kind === 'debuff') && ready(action)
+        && toPlayer <= action.range
+        && (lineOfSight || action.attack === 'sweep'));
+      this.beginMonsterAttack(unit, choice);
+      return;
+    }
+    if ('destination' in decision) {
+      const dest = decision.destination;
+      if (!canOccupy(dest, ACTOR_RADIUS, this.world.obstacles)) return;
+      const route = findPath(actor, dest, ACTOR_RADIUS, this.world.obstacles);
+      if (!route.length) return;
+      const point = route[0]!;
+      const slowed = getStatusModifiers(this.statusEffects.enemies[actor.id] ?? []).moveSpeed ?? 0;
+      const pace = def.speed * profile.speedMultiplier * Math.max(0.25, 1 + slowed);
+      const stop = decision.action === 'chase' && route.length === 1
+        && distance(dest, this.player) < 0.01
+        ? Math.max(0, def.preferredRange - 4) : 0;
+      this.follow(actor, point, pace, dt, stop);
     }
   }
 
@@ -1050,12 +1236,20 @@ export class GameSimulation {
     // The starter camp is a sanctuary even if the player retreats mid-combat.
     if (this.zone === 'wilderness' && distance(this.player, this.world.camp) <= CAMP_RADIUS) {
       unit.intent = null;
+      if (this.wave >= 2) this.updateMonsterTactics(unit, dt);
       return;
     }
     unit.cooldown = Math.max(0, unit.cooldown - dt);
+    if (unit.abilityCooldowns) {
+      for (const id of Object.keys(unit.abilityCooldowns)) {
+        unit.abilityCooldowns[id] = Math.max(0, unit.abilityCooldowns[id]! - dt);
+      }
+    }
     const actor = unit.actor;
     const def = ENEMY_DEFINITIONS[actor.type];
-    if (unit.effects.some(effect => effect.id === 'stunned')) {
+    if (unit.effects.some(effect => effect.id === 'stunned')
+      || this.statusEffects.enemies[actor.id]?.some(effect =>
+        effect.id === 'stunned' || effect.id === 'frozen')) {
       if (unit.intent) {
         unit.intent = null;
         unit.cooldown = Math.max(unit.cooldown, 0.55);
@@ -1075,19 +1269,20 @@ export class GameSimulation {
           actor.y = intent.y;
         }
       }
+      const action = intent.abilityId ? monsterAction(actor.type, intent.abilityId) : undefined;
+      const baseDamage = action ? action.damage : def.baseDamage + this.level * 2;
       if (intent.pattern === 'bolt') {
-        this.fireBolt(unit, intent, intent.radius, def.baseDamage + this.level * 2);
+        this.fireBolt(unit, intent, intent.radius, baseDamage, action);
         return;
       }
       const hit = distance(this.player, intent) <= intent.radius
-        && this.dealPlayerDamage(def.baseDamage + this.level * 2,
-          intent.pattern === 'leap' ? 'poison' : 'physical', actor.id);
-      if (hit && intent.pattern === 'sweep' && actor.type === 'spider' && this.player.alive) {
-        this.applyCanonicalStatus('player', 'poisoned', actor.id, 3, 4);
-      }
-      if (hit && intent.pattern === 'leap' && this.player.alive) {
-        this.applyEffect('player',
-          { id: 'poisoned', remaining: 3, magnitude: 3, tick: 0 });
+        && (baseDamage <= 0 || this.dealPlayerDamage(baseDamage,
+          intent.pattern === 'leap' && !action ? 'poison' : 'physical', actor.id));
+      if (hit && action?.statusId && this.player.alive) {
+        this.applyCanonicalStatus('player', action.statusId, actor.id,
+          action.statusMagnitude, action.statusDuration);
+      } else if (hit && !action && intent.pattern === 'leap' && this.player.alive) {
+        this.applyCanonicalStatus('player', 'poisoned', actor.id, 3, 3);
       }
       this.events.push({ type: 'enemyAttack', enemyId: actor.id, hit: Boolean(hit) });
       return;
@@ -1203,6 +1398,7 @@ export class GameSimulation {
     this.warriorCooldowns.charge = this.cooldowns.slot1;
     this.tickEffects(dt);
     this.tickCanonicalStatuses(dt);
+    this.syncLegacyStatuses();
     this.tickWarriorTimeline();
     if (this.player.alive) {
       const regen = regenerateHealth(
@@ -1273,7 +1469,14 @@ export class GameSimulation {
       if (WARRIOR_ABILITIES[pending.id].target === 'enemy' && !target) this.warriorPending = null;
       else if (target && distance(this.player, target.actor) > WARRIOR_ABILITIES[pending.id].range) {
         if (this.holdPosition || this.immobilized) this.warriorPending = null;
-        else this.follow(this.player, target.actor, speed, dt, WARRIOR_ABILITIES[pending.id].range - 4);
+        else {
+          const route = hasLineOfSight(this.player, target.actor, this.world.obstacles)
+            ? [] : findPath(this.player, target.actor, ACTOR_RADIUS, this.world.obstacles);
+          if (route.length > 0) this.follow(this.player, route[0]!, speed, dt,
+            route.length === 1 ? WARRIOR_ABILITIES[pending.id].range - 4 : 0);
+          else this.follow(this.player, target.actor, speed, dt,
+            WARRIOR_ABILITIES[pending.id].range - 4);
+        }
       } else this.requestWarriorAbility(pending.id, pending.targetId);
     } else if (this.pendingSkill && (focus.actor.alive || this.pendingAim !== null)) {
       const skill = SKILLS[this.classId][this.pendingSkill];
@@ -1292,17 +1495,33 @@ export class GameSimulation {
     } else if (this.attackTarget) {
       const target = this.units.find(unit => unit.actor.id === this.attackTarget && unit.actor.alive);
       if (!target) this.attackTarget = null;
-      else if (distance(this.player, target.actor) > definition.attackRange) {
+      else if (distance(this.player, target.actor) >
+        (this.classId === 'WARRIOR' ? Math.min(60, definition.attackRange) : definition.attackRange)) {
         if (!this.holdPosition) {
-          this.follow(this.player, target.actor, speed, dt, definition.attackRange - 4);
+          const range = this.classId === 'WARRIOR'
+            ? Math.min(60, definition.attackRange) : definition.attackRange;
+          const route = hasLineOfSight(this.player, target.actor, this.world.obstacles)
+            ? [] : findPath(this.player, target.actor, ACTOR_RADIUS, this.world.obstacles);
+          if (route.length > 0) {
+            this.follow(this.player, route[0]!, speed, dt, route.length === 1 ? range - 4 : 0);
+          } else {
+            this.follow(this.player, target.actor, speed, dt, range - 4);
+          }
         }
-      } else if (this.attackTimer <= 0 && !this.effects.player.some(e => e.id === 'stunned')) {
-        const stats = deriveStats(this.classId, this.equipment);
-        this.attackTimer = 0.68 / stats.attackSpeed;
-        this.applyDamage(1, target);
-        if (['WARRIOR', 'NECROMANCER', 'WARLOCK'].includes(this.classId)) {
-          this.resource = Math.min(definition.resourceMax,
-            this.resource + (this.classId === 'NECROMANCER' ? 10 : 8));
+      } else if (!this.immobilized && this.attackTimer <= 0) {
+        if (this.classId === 'WARRIOR') {
+          // Repeated left-click attacks share the same hit-frame and Rage policy.
+          this.requestWarriorAbility('basicAttack', target.actor.id);
+          if (this.warriorAction?.id === 'basicAttack') {
+            this.attackTarget = target.actor.id;
+          }
+        } else {
+          const stats = deriveStats(this.classId, this.equipment);
+          this.attackTimer = 0.68 / stats.attackSpeed;
+          this.applyDamage(1, target);
+          if (['NECROMANCER', 'WARLOCK'].includes(this.classId)) {
+            this.resource = Math.min(definition.resourceMax, this.resource + 8);
+          }
         }
       }
     } else if (this.pickupTarget) {
@@ -1527,6 +1746,12 @@ export class GameSimulation {
         && [p.x, p.y, p.target.x, p.target.y, p.speed, p.radius, p.remaining, p.base].every(Number.isFinite)
         && p.speed > 0 && p.remaining > 0 && p.remaining <= 5
         && p.radius > 0 && p.radius <= 250 && p.base >= 0
+        && (p.statusId === undefined || (typeof p.statusId === 'string'
+          && Object.hasOwn(STATUS_DEFINITIONS, p.statusId)))
+        && (p.statusDuration === undefined || (Number.isFinite(p.statusDuration)
+          && p.statusDuration > 0 && p.statusDuration <= 120))
+        && (p.statusMagnitude === undefined || (Number.isFinite(p.statusMagnitude)
+          && p.statusMagnitude >= 0 && p.statusMagnitude <= 10000))
         && ['physical', 'fire', 'frost', 'lightning', 'poison', 'holy', 'shadow', 'arcane'].includes(p.type))
       || !Array.isArray(s.usedInteractables) || s.usedInteractables.length > 8
       || !s.usedInteractables.every(isWorldObjectId)
@@ -1554,8 +1779,17 @@ export class GameSimulation {
           : unit.actor.type === packTypesForWave(s.wave)[index])
         && validActor(unit.actor, unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && validIntent(unit.intent)
-        && (unit.intent === null || unit.intent.pattern === ENEMY_DEFINITIONS[unit.actor.type].attack)
+        && (unit.intent?.abilityId === undefined
+          || monsterAction(unit.actor.type, unit.intent.abilityId) !== undefined)
+        && (unit.intent === null
+          || unit.intent.abilityId !== undefined
+          || unit.intent.pattern === ENEMY_DEFINITIONS[unit.actor.type].attack)
         && Number.isFinite(unit.cooldown) && unit.cooldown >= 0 && unit.cooldown <= 20
+        && (unit.abilityCooldowns === undefined || (!!unit.abilityCooldowns
+          && !Array.isArray(unit.abilityCooldowns)
+          && typeof unit.abilityCooldowns === 'object'
+          && Object.entries(unit.abilityCooldowns).every(([id, cd]) =>
+            !!monsterAction(unit.actor.type, id) && Number.isFinite(cd) && cd >= 0 && cd <= 30)))
         && Array.isArray(unit.effects) && unit.effects.length <= 8
         && unit.effects.every(isActiveEffect))
       || (s.selectedTargetId !== null && (
@@ -1611,6 +1845,7 @@ export class GameSimulation {
         .map(([id, arr]) => [id, arr.map(e => ({ ...e }))]))
     };
     this.effects = { player: s.effects.player.map(effect => ({ ...effect })), enemy: [] };
+    this.importLegacyStatuses();
     this.paused = false;
     this.movePath = [];
     this.attackTarget = null;

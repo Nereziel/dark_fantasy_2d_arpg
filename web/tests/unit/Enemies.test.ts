@@ -147,7 +147,8 @@ describe('group encounters with three independent opponents', () => {
         } : u)
       })).toBe(true);
       sim.command({ type: 'attack', targetId: unit.id });
-      advance(sim, 5);
+      // Warrior basic attack now damages only at its authoritative hit frame.
+      advance(sim, 28);
       expect(sim.snapshot().enemies[i]!.actor.alive).toBe(false);
     }
     const defeated = sim.snapshot();

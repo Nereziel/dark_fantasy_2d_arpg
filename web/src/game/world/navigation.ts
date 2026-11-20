@@ -63,6 +63,14 @@ function lineClear(start: Point, end: Point, radius: number, obstacles: readonly
   return true;
 }
 
+/** Combat projectiles require unblocked line of sight, independent of pathfinding. */
+export function hasLineOfSight(
+  from: Point, to: Point, obstacles: readonly Obstacle[] = OBSTACLES
+): boolean {
+  return canOccupy(from, 3, obstacles) && canOccupy(to, 3, obstacles)
+    && lineClear(from, to, 3, obstacles);
+}
+
 /** Bounded, deterministic A* on the static walkability grid. */
 export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS, obstacles: readonly Obstacle[] = OBSTACLES): Point[] {
   if (!canOccupy(goal, radius, obstacles)) return [];

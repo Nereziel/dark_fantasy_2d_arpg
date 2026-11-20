@@ -113,6 +113,8 @@ export interface EnemyIntent extends Point {
   radius: number;
   remaining: number;
   total: number;
+  /** Optional archetype-specific action; validated against the monster's catalog. */
+  abilityId?: string;
 }
 
 export interface EnemyUnit {
@@ -120,6 +122,8 @@ export interface EnemyUnit {
   intent: EnemyIntent | null;
   cooldown: number;
   effects: ActiveEffect[];
+  /** Independent per-ability timers, measured in simulation seconds. */
+  abilityCooldowns?: Record<string, number>;
 }
 export const PACK_SIZE = 3;
 const PACK_POSITIONS: readonly Point[] = [
@@ -141,7 +145,7 @@ export function createPack(wave: number, level: number, positions: readonly Poin
         type, x: pos.x, y: pos.y + (wave % 2) * 25,
         health: hp, maxHealth: hp, alive: true
       },
-      intent: null, cooldown: 0.35 + index * 0.3, effects: []
+      intent: null, cooldown: 0.35 + index * 0.3, effects: [], abilityCooldowns: {}
     };
   });
 }
@@ -165,7 +169,7 @@ export function createCryptPack(stage: 0 | 1, level: number, positions: readonly
         type, x: point.x, y: point.y,
         health, maxHealth: health, alive: true
       },
-      intent: null, cooldown: 0.65 + index * 0.3, effects: []
+      intent: null, cooldown: 0.65 + index * 0.3, effects: [], abilityCooldowns: {}
     };
   });
 }
@@ -199,5 +203,7 @@ export function validIntent(value: unknown): value is EnemyIntent | null {
     && intent.y! >= 0 && intent.y! <= 1400
     && intent.radius! >= 1 && intent.radius! <= 300
     && intent.remaining! > 0 && intent.remaining! <= 5
-    && intent.total! >= intent.remaining! && intent.total! <= 5;
+    && intent.total! >= intent.remaining! && intent.total! <= 5
+    && (intent.abilityId === undefined
+      || (typeof intent.abilityId === 'string' && /^[A-Za-z][A-Za-z0-9]{0,80}$/.test(intent.abilityId)));
 }

@@ -23,7 +23,11 @@ function defeat(sim: GameSimulation, index: number): void {
     })
   })).toBe(true);
   sim.command({ type: 'attack', targetId: unit.actor.id });
-  tick(sim, 5);
+  // Preserve fixed-tick impact timing while allowing the basic-attack cooldown
+  // from the previous encounter to finish before this hit begins.
+  for (let frame = 0; frame < 120 && sim.snapshot().enemies[index]!.actor.alive; frame++) {
+    sim.advance(16.667);
+  }
   expect(sim.snapshot().enemies[index]!.actor.alive).toBe(false);
 }
 
