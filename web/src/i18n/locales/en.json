@@ -33,7 +33,8 @@
     "wave": "Wave",
     "camp": "Emberwatch Camp",
     "autosave": "Character autosave enabled",
-    "shield": "Shield"
+    "shield": "Shield",
+    "elite": "Elite"
   },
   "status": {
     "ready": "Ready",
