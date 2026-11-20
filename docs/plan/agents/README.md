@@ -1,16 +1,11 @@
-# Koordinace agentů — Wave G připravena (31–33, Prompty 26–28)
+# Koordinace agentů — Wave G: core integrována (Prompty 26–28)
 
-**Aktuální připravená vlna:** [WAVE_G.md](WAVE_G.md), [INTEGRATION_G.md](INTEGRATION_G.md) a přesná zadání [Agent 31](31/TASK.md), [Agent 32](32/TASK.md), [Agent 33](33/TASK.md). Tři paralelní agenty, každý přesně jeden nový pure produkční modul a jeden vlastní unit test; maximálně **3 současně**.
+**20. 11. 2026 — herní jádro Wave G sloučeno do `main`.** Izolovaní agenti **31/32/33** (PR [#56](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/56), [#57](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/57), [#58](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/58)) a integrátor (PR [#59](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/59), [#60](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/60), [#61](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/61), [#62](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/62), [#63](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/63)) už dodali jádro krypty, klikatelné kontejnery/pasti, 4 minibossové i třífázového Hollow Kinga. **Agenty 01–33 znovu nespouštěj.**
 
-| Agent | Původní prompt | Přesně povolené dva soubory |
-| --- | --- | --- |
-| **31** | **26 — Corrupted Crypt** | `web/src/game/world/cryptTheme.ts` + `web/tests/unit/Agent31CryptTheme.test.ts` |
-| **32** | **27 — Mini Boss Framework** | `web/src/game/enemies/miniBossRules.ts` + `web/tests/unit/Agent32MiniBossRules.test.ts` |
-| **33** | **28 — The Hollow King Boss Framework** | `web/src/game/bosses/hollowKingPhases.ts` + `web/tests/unit/Agent33HollowKingPhases.test.ts` |
+[WAVE_G.md](WAVE_G.md), [INTEGRATION_G.md](INTEGRATION_G.md), [31/TASK.md](31/TASK.md), [32/TASK.md](32/TASK.md), [33/TASK.md](33/TASK.md) jsou historické zadání a integrační audit. Aktuální herní runtime `main` je `ab8aa0ca345ab71fa2aafd02885cfc207daaee88`; poslední PR HEAD CI má 696/696 Vitest, 14/14 Chromium, Svelte/TS 0 errors/warnings, build/legacy PASS.
 
-**Dispatch gate:** nejprve musí být plánovací PR Wave G skutečně **merged** a jeho HEAD CI zelená; teprve z nového `main` po merge se získá **jeden společný 40-char BASE_SHA**. Každý agent `scripts/agent-bootstrap.sh` → vlastní worktree → RED→GREEN → `bash scripts/verify.sh targeted tests/unit/AgentNN*.test.ts` → `bash scripts/verify.sh agent` → přesný 2-file **draft PR**. Agent nic nemerguje a nesahá do GameSimulation/FrontierScene/quest/save/UI/i18n ani jiných agentů. Cross-import mezi třemi novými moduly je zakázán; integrátor je spojí po ověření v pořadí 31→32→33. Výsledky pure agentních modulů **nejsou** hotové herní features: integrátor teprve naváže prop/trap interakce, miniboss AI a 3fázového Hollow Kinga, s browser E2E a full CI.
+**Status = CORE INTEGRATED, full acceptance pending.** Zbývá bezdebugový browser Act I/dungeon boss playthrough, originální dungeon audio/atlasy, plně objevitelné secret rooms, treasure-item rewards, offscreen entity/loot streaming memory performance, optional wilderness POI a verifikace přesného Pages deploy. Zachovat character-only save v11 + seed-scoped world facts format1, původní `crypt_lord-4` ID a quest `crypt_lord_fallen`. **Waypoint fast travel až Prompt 36.** Další prompt v původním pořadí **29 — Death and Respawn**; nové úkoly vyžadují nový plán a nový společný BASE_SHA.
 
-**Technický dluh:** Wave F je stále **CORE INTEGRATED** a nemá prokázaný kompletní bezdebugový Act I/crypt boss browser run, offscreen actor/loot resource budget ani live optional wilderness treasure/event. Tyto věci se NESMÍ ztratit při G integraci. Character save stále v11 (legacy v8–v10), samostatný world-instance record format 1; **waypoint fast travel je až Prompt 36**.
 
 ---
 

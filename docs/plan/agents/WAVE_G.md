@@ -1,6 +1,6 @@
 # Wave G — Corrupted Crypt, minibossové a Hollow King (Prompty 26–28)
 
-**Stav: PLÁN PŘIPRAVEN K DISPATCHI; agentní implementace ani runtime Wave G ještě nejsou hotové.**
+**Stav: HERNÍ JÁDRO WAVY G INTEGROVÁNO DO MAIN (20. 11. 2026); úplná acceptance stále otevřená.**
 **3 souběžní agenti (31–33), izolované worktree, společný BASE_SHA až po merge tohoto plánovacího PR, pouze draft PR a přesně dva soubory na agenta.**
 
 Zdroj: [originální Prompty 26–28](../../../2d_arpg_implementation_prompts.md), koordinační [README](README.md), [INTEGRATION_G.md](INTEGRATION_G.md) a agentní [TASK.md](31/TASK.md). Repo: `Nereziel/dark_fantasy_2d_arpg`.
@@ -52,3 +52,26 @@ Všech šest cílových souborů bylo při přípravě ověřeno jako **neexistu
 5. Nelze označit Prompt 26–28 za plně hotový pouze po merge izolovaných pravidel. Důkaz musí zahrnovat skutečný no-debug browser duel, originální art/atmosféru nebo poctivě označené placeholdery, zaručenou cestu/exit, jednorázové odměny, CS/EN a save reload. Viz [INTEGRATION_G.md](INTEGRATION_G.md).
 
 **STOP:** nevalidní seed, neprochozí dungeon, ztracené `ashes_at_gate` / Act I questy, duplicitní boss death/reward, přílišný number of add actors bez kontrol, skryté POI odhalení, změna character-only save v11, vypnuté testy nebo fast travel před Promptem 36.
+
+
+## Skutečný integrační výsledek — 20. 11. 2026
+
+Všichni tři agenti implementovali přesně své **2 povolené soubory** na společném `BASE_SHA ed91d615c4e84d33c78832ceeb251d6e8434c605`, RED→GREEN TDD a GREEN HEAD CI, integrátor je sloučil 31→32→33:
+
+- **Agent 31** [PR #56](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/56): Corrupted Crypt manifest `cryptTheme.ts` a testy.
+- **Agent 32** [PR #57](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/57): 4 reusable minibossové, pure ability/state/reward plans.
+- **Agent 33** [PR #58](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/58): Hollow King machine, tři odlišné fáze, warning/hazard/summon/death plans.
+
+Integrátor pak postupně otevřel, otestoval a sloučil samostatné runtime PR:
+
+| PR | Funkční připojení | Testování |
+| --- | --- | --- |
+| [#59](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/59) | `dungeonRuntime` + `FrontierScene`: seeded Corrupted Crypt renderer, urny, náhrobky, dekorace, místnosti, osvětlení, značky pastí, fallback Phaser Graphics | GREEN HEAD CI |
+| [#60](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/60) | Herní `interactCrypt`, klikatelné kontejnery, jednorázový gold, telegraph→damage pasti, seed-scoped `cryptUsedPropIds/cryptTriggeredTrapIds` a validace persistence | GREEN HEAD CI |
+| [#61](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/61) | Čtyři minibossové: Morrow + Bandit Captain, Brood Mother, Corrupted Knight; skutečné schopnosti, varování, omezené spawny, fase, jednorázové odměny, CS/EN | GREEN HEAD CI po opravě ochrany CAMP a TS union |
+| [#62](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/62) | Seedově korektní Hollow King boss-room arena adapter pro původní `crypt_lord-4` | GREEN HEAD CI |
+| [#63](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/63) | Reálná třífázová simulace Hollow Kinga, telegrafované damage windows, bounded skeleton adds, shadow hazards, HP/phase/warning HUD, CS/EN; původní `crypt_lord_slain`/Act I quest a loot bez zdvojení | GREEN HEAD CI [run 44787241680](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/44787241680), merge `ab8aa0ca345ab71fa2aafd02885cfc207daaee88` |
+
+Poslední runtime HEAD `407adea00fb69b86a420e88797b5f1bf64571b0c`: **72/72 Vitest test files a 696/696 unit tests**, **14/14 Chromium Playwright**, `svelte-check` **0 errors / 0 warnings**, produkční build a legacy HTML reference **PASS**. Test fáze 3 původně mylně očekával prázdný warning, přestože čistý plánovač správně vydal nové phase-3 warning po zrušení starého; upraven pouze tento chybný test, následná plná CI zelená.
+
+**Acceptance otevřená:** Neexistuje prokázaný kompletní bezdebugový browser průchod od vytvoření postavy přes celý Akt I, skutečné poražení všech tří Hollow King fází a návrat k Vesně. Tematické bespoke atlas/ambient audio assety ještě nejsou dodané (Phaser fallback), kompletní secret-room aktivace/poklady do inventáře nejsou plně ověřené, vyvážení mini-boss fight všech tříd vyžaduje herní test. Wave E/F dluh: optional wilderness treasure/event, offscreen AI/loot stream resource profiling, nezávislá verifikace Pages deployment konkrétního main SHA. **Status = CORE INTEGRATED, nikoli 100 % COMPLETE**; waypoint fast travel patří až Prompt 36. Další číselný Prompt 29 = Death and Respawn.
