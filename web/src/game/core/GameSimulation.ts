@@ -3605,6 +3605,11 @@ export class GameSimulation {
     };
     const eventPlans = restoredWilderness
       ? planWorldEvents(s.worldSeed,restoredWilderness.layout,restoredWilderness.features) : [];
+    const environmentPlan=restoredWilderness
+      ? planEnvironmentObjects(s.worldSeed,restoredWilderness.layout,restoredWilderness.features) : [];
+    const environmentUsed=s?.environmentUsedIds??[];
+    const projectedEnvironment=s?.zone==='wilderness'
+      ? visibleEnvironmentObjects(environmentPlan,environmentUsed) : [];
     const activeViews=Array.isArray(s?.worldEvents)
       ? s.worldEvents.filter(view=>view?.status==='active') : [];
     const activeEventPlan=activeViews.length===1
@@ -3653,6 +3658,10 @@ export class GameSimulation {
       || !validHollowAdds(s.hollowKingAddActorIds)
       || !validMiniStates(s.miniBossStates)
       || !validEventSnapshot()
+      || !validEnvironmentUsedIds(environmentUsed)
+      || !validShrineBlessings(s.environmentBlessings ?? [])
+      || (s.environmentObjects !== undefined &&
+        JSON.stringify(s.environmentObjects)!==JSON.stringify(projectedEnvironment))
       || (s.miniBossDefeatedIds !== undefined && (!Array.isArray(s.miniBossDefeatedIds)
         || s.miniBossDefeatedIds.length > MINI_BOSS_IDS.length
         || new Set(s.miniBossDefeatedIds).size !== s.miniBossDefeatedIds.length
@@ -3803,6 +3812,8 @@ export class GameSimulation {
     for (const id of s.cryptTriggeredTrapIds ?? []) this.cryptTriggeredTrapIds.add(id);
     this.storyFeatures = restoredWilderness!.features;
     this.initWorldSystems(restoredWilderness!);
+    this.environmentUsed=new Set(environmentUsed);
+    this.shrineBlessings=(s.environmentBlessings??[]).map(b=>({...b}));
     if (s.mapDiscovery) this.mapDiscovery = structuredClone(s.mapDiscovery);
     if (s.worldFacts) this.worldFacts = structuredClone(s.worldFacts);
     this.actILedger = createActIQuestLedger(s.questLedger ?? s.quest)!;
