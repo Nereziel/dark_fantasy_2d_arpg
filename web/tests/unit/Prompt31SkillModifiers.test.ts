@@ -49,9 +49,9 @@ describe('Prompt 31: generic, composable skill behavior', () => {
     const sword = rollItemForBase('greatsword', 'modifier-sword', 25, 'LEGENDARY',
       new SeededRng(13))!;
     expect(sword).toBeTruthy();
-    sword.affixes.push({ id:'talent-skill', stat:'skillRank', value: 2 });
-    // An arbitrary test fixture must remain an otherwise valid equipped item.
-    sword.affixes = sword.affixes.slice(0, 6);
+    // Retain a canonical item of an existing rarity while exercising the
+    // already supported skillRank affix (no new save/item schema needed).
+    sword.affixes = [{ id:'talent-skill', stat:'skillRank', value: 2 }];
     gear.MAIN_HAND = sword;
     const ranks = {
       'warlord.commandingCry': 1,
