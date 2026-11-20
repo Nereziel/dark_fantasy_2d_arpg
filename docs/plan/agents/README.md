@@ -1,3 +1,21 @@
+# Koordinace agentů — Wave G připravena (31–33, Prompty 26–28)
+
+**Aktuální připravená vlna:** [WAVE_G.md](WAVE_G.md), [INTEGRATION_G.md](INTEGRATION_G.md) a přesná zadání [Agent 31](31/TASK.md), [Agent 32](32/TASK.md), [Agent 33](33/TASK.md). Tři paralelní agenty, každý přesně jeden nový pure produkční modul a jeden vlastní unit test; maximálně **3 současně**.
+
+| Agent | Původní prompt | Přesně povolené dva soubory |
+| --- | --- | --- |
+| **31** | **26 — Corrupted Crypt** | `web/src/game/world/cryptTheme.ts` + `web/tests/unit/Agent31CryptTheme.test.ts` |
+| **32** | **27 — Mini Boss Framework** | `web/src/game/enemies/miniBossRules.ts` + `web/tests/unit/Agent32MiniBossRules.test.ts` |
+| **33** | **28 — The Hollow King Boss Framework** | `web/src/game/bosses/hollowKingPhases.ts` + `web/tests/unit/Agent33HollowKingPhases.test.ts` |
+
+**Dispatch gate:** nejprve musí být plánovací PR Wave G skutečně **merged** a jeho HEAD CI zelená; teprve z nového `main` po merge se získá **jeden společný 40-char BASE_SHA**. Každý agent `scripts/agent-bootstrap.sh` → vlastní worktree → RED→GREEN → `bash scripts/verify.sh targeted tests/unit/AgentNN*.test.ts` → `bash scripts/verify.sh agent` → přesný 2-file **draft PR**. Agent nic nemerguje a nesahá do GameSimulation/FrontierScene/quest/save/UI/i18n ani jiných agentů. Cross-import mezi třemi novými moduly je zakázán; integrátor je spojí po ověření v pořadí 31→32→33. Výsledky pure agentních modulů **nejsou** hotové herní features: integrátor teprve naváže prop/trap interakce, miniboss AI a 3fázového Hollow Kinga, s browser E2E a full CI.
+
+**Technický dluh:** Wave F je stále **CORE INTEGRATED** a nemá prokázaný kompletní bezdebugový Act I/crypt boss browser run, offscreen actor/loot resource budget ani live optional wilderness treasure/event. Tyto věci se NESMÍ ztratit při G integraci. Character save stále v11 (legacy v8–v10), samostatný world-instance record format 1; **waypoint fast travel je až Prompt 36**.
+
+---
+
+## Archiv: Wave F — agenti 28–30 integrováni
+
 # Koordinace agentů — Wave F: herní jádro integrováno (28–30)
 
 **Aktuální stav 20. 11. 2026:** Wave F (Prompty 23–25) má sloučené izolované agentní moduly **#48 / #50 / #49**, následně runtime **[#51](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/51)** (wilderness chunks), **[#52](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/52)** (mapa, fog, world-scoped persistence) a **[#53](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/53)** (procedurální krypta). Všechny PR prošly GREEN CI před merge; poslední #53 zahrnovalo 607/607 unit + 14/14 Chromium. **Agenty 28–30 znovu nespouštěj.**
