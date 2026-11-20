@@ -1,6 +1,7 @@
 /** Renderer-independent state and command contracts. Language strings are never saved. */
 import type { ClassId } from '../data/classes';
 import type { Equipment, GroundItem, Item, DerivedStats, EquipmentSlot } from '../data/items';
+import type { ItemFlags } from '../inventory/equipmentRules';
 import type { ActiveEffects, Cooldowns, SkillSlot } from '../skills/skills';
 import type { EnemySnapshot, EnemyIntent, EnemyUnit } from '../enemies/enemies';
 import type { QuestProgress } from '../quests/firstQuest';
@@ -38,6 +39,7 @@ export interface CharacterProgress {
   kills: number;
   inventory: Array<Item | null>;
   equipment: Equipment;
+  itemFlags?: Record<string, ItemFlags>;
   quest: QuestProgress;
 }
 
@@ -109,6 +111,7 @@ export interface GameSnapshot {
   inventory: Array<Item | null>;
   equipment: Equipment;
   groundLoot: GroundItem[];
+  itemFlags?: Record<string, ItemFlags>;
   quest: QuestProgress;
   paused: boolean;
   status: GameStatus;
@@ -131,6 +134,10 @@ export type GameCommand =
   | { type: 'pickup'; id: string }
   | { type: 'equip'; index: number }
   | { type: 'unequip'; slot: EquipmentSlot }
+  | { type: 'swapInventory'; fromIndex: number; toIndex: number }
+  | { type: 'sortInventory' }
+  | { type: 'setItemFlag'; itemId: string; flag: 'locked' | 'favorite'; value: boolean }
+  | { type: 'dropInventory'; index: number }
   | { type: 'pause'; value: boolean }
   | { type: 'reset'; classId?: ClassId; seed?: number };
 
