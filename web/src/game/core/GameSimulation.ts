@@ -633,11 +633,17 @@ export class GameSimulation {
     } else {
       if (id === 'charge') {
         if (aim?.mode === 'DIRECTION') {
+          // Do not dash *through* a nearby selected target; stop within melee reach.
+          const alongTarget = target
+            ? (target.actor.x - this.player.x) * aim.direction.x
+              + (target.actor.y - this.player.y) * aim.direction.y : null;
+          const travel = alongTarget !== null && alongTarget > 0 && alongTarget <= 170
+            ? Math.max(0, alongTarget - 52) : Math.min(170, ability.range);
           const goal = {
-            x: this.player.x + aim.direction.x * Math.min(170, ability.range),
-            y: this.player.y + aim.direction.y * Math.min(170, ability.range)
+            x: this.player.x + aim.direction.x * travel,
+            y: this.player.y + aim.direction.y * travel
           };
-          moveActor(this.player, goal, Math.min(170, ability.range), ACTOR_RADIUS, this.world.obstacles);
+          moveActor(this.player, goal, travel, ACTOR_RADIUS, this.world.obstacles);
         } else if (target) {
           moveActor(this.player, target.actor,
             Math.min(170, Math.max(0, distance(this.player, target.actor) - 52)),
@@ -1453,9 +1459,12 @@ export class GameSimulation {
     } else if (this.attackTarget) {
       const target = this.units.find(unit => unit.actor.id === this.attackTarget && unit.actor.alive);
       if (!target) this.attackTarget = null;
-      else if (distance(this.player, target.actor) > definition.attackRange) {
+      else if (distance(this.player, target.actor) >
+        (this.classId === 'WARRIOR' ? Math.min(60, definition.attackRange) : definition.attackRange)) {
         if (!this.holdPosition) {
-          this.follow(this.player, target.actor, speed, dt, definition.attackRange - 4);
+          const range = this.classId === 'WARRIOR'
+            ? Math.min(60, definition.attackRange) : definition.attackRange;
+          this.follow(this.player, target.actor, speed, dt, range - 4);
         }
       } else if (!this.immobilized && this.attackTimer <= 0) {
         if (this.classId === 'WARRIOR') {
