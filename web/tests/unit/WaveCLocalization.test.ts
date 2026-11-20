@@ -6,6 +6,7 @@ import { AFFIX_PREFIXES, AFFIX_SUFFIXES } from '../../src/game/items/affixGenera
 import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { rollItemForBase, SeededRng } from '../../src/game/data/items';
 import { itemDisplayName } from '../../src/game/items/itemName';
+import { ELITE_MODIFIER_IDS } from '../../src/game/enemies/eliteModifiers';
 
 describe('Wave C bilingual names and immutable loot instances', () => {
   it('provides every catalog base, affix and rarity key in Czech and English', () => {
@@ -29,6 +30,10 @@ describe('Wave C bilingual names and immutable loot instances', () => {
       }
       expect(translations.inventory.offHandEquip).toBeTruthy();
       expect(translations.inventory.legendaryPower).toBeTruthy();
+      for (const id of ELITE_MODIFIER_IDS) {
+        expect((translations.eliteModifier as Record<string,string>)[id],language + ':elite:' + id)
+          .toBeTruthy();
+      }
     }
   });
 
