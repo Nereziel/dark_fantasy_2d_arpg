@@ -68,6 +68,7 @@ export function validateStashContents(value: unknown): value is StashContents {
     || !completeArray(state.stash, STASH_SIZE)
     || (state.stashTabs !== undefined && (!Array.isArray(state.stashTabs)
       || state.stashTabs.length !== STASH_TAB_COUNT - 1
+      || !Object.hasOwn(state.stashTabs, 0) || !Object.hasOwn(state.stashTabs, 1)
       || !state.stashTabs.every(tab => completeArray(tab, STASH_SIZE))))
     || !state.equipment || !isRecord(state.equipment)
     || !planSwap({ inventory: state.inventory, equipment: state.equipment,
@@ -196,7 +197,8 @@ export interface StashViewEntry { readonly index: number; readonly item: Item }
 export function projectStashItems(
   slots: readonly (Item | null)[], filter: StashFilter = {}
 ): StashViewEntry[] {
-  if (!completeArray(slots, STASH_SIZE) || !isRecord(filter)
+  const rawFilter: unknown = filter;
+  if (!completeArray(slots, STASH_SIZE) || !isRecord(rawFilter)
     || (filter.rarity !== undefined && !rarityOrder.includes(filter.rarity))
     || (filter.category !== undefined && !['weapon','armor','accessory'].includes(filter.category))
     || (filter.sort !== undefined && !['rarity','level','name'].includes(filter.sort))
