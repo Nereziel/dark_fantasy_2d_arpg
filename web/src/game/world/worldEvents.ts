@@ -215,7 +215,7 @@ export function projectWorldEventViews(
   return plans.filter(plan=>discovered.has(plan.id)).map(plan=>{
     const done=completed.has(plan.id);
     const active=!done && activeId===plan.id;
-    const remaining=active?plan.enemySpawns.filter(spawn=>
+    const remaining=active?plan.enemySpawns.filter((spawn:WorldEventSpawn)=>
       enemies.some(enemy=>enemy.id===spawn.id && enemy.alive)).length
       :done?0:plan.enemySpawns.length;
     return {
