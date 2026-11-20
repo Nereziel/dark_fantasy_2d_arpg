@@ -515,7 +515,7 @@ export function stepHollowKing(
     next.timerSeconds = 0;
     next.activeAbility = null;
     next.warning = null;
-    next.rotationIndex = 0;
+    // Never reset this encounter-global sequence: warning/hazard/add IDs stay unique.
   }
   if (next.health === 0) {
     const death = planHollowKingDefeat(state);
