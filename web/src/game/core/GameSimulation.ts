@@ -6,6 +6,7 @@ import {
   type ItemFlags, type InventoryState, type EquipmentRules
 } from '../inventory/equipmentRules';
 import { ITEM_BASES, WEAPON_TYPES } from '../items/itemCatalog';
+import { rollLootTable, bossGuaranteedLoot, type LootContext, type LootRoll } from '../loot/lootTables';
 import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
 import { applyOrRefreshEffect } from '../status/effectStack';
 import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../skills/warriorKit';
@@ -46,7 +47,7 @@ import {
   WARDEN_ID, type QuestProgress
 } from '../quests/firstQuest';
 import {
-  SeededRng, createEquipment, deriveStats, isEquipmentSlot, isItem, rollItem,
+  SeededRng, createEquipment, deriveStats, isEquipmentSlot, isItem, rollItem, rollItemForBase,
   type Equipment, type EquipmentSlot, type GroundItem, type Item
 } from '../data/items';
 
@@ -458,7 +459,7 @@ export class GameSimulation {
         id: 'cache-' + object.id, x: object.position.x, y: object.position.y,
         item: { ...item, id: 'cache-' + object.id + '-item' }
       });
-      if (this.groundLoot.length > 30) this.groundLoot.shift();
+      // Chests preserve item ownership; never evict another ground item due to overflow.
     }
     this.events.push({ type: 'worldInteract', id: object.id, kind: object.kind });
   }
@@ -552,7 +553,7 @@ export class GameSimulation {
 
   private dropInventory(index: number): void {
     const result = planDrop(this.inventoryState(), index, this.inventoryRules());
-    if (!result.ok || this.groundLoot.length >= 30) return;
+    if (!result.ok || this.groundLoot.length >= 100) return;
     const id = 'discard-' + this.kills + '-' + this.rng.state + '-' + index;
     this.updateInventory(result);
     this.groundLoot.push({ id, item: result.dropped, x: this.player.x, y: this.player.y });
@@ -1756,17 +1757,36 @@ export class GameSimulation {
       this.gold += 100;
       this.awardExperience(rewardForActivity('boss', this.level, this.level));
     }
-    const rolled = rollItem(this.kills, this.level, this.rng);
-    const item = unit.actor.type === 'crypt_lord' && rolled.rarity === 'COMMON'
-      ? { ...rolled, rarity: 'RARE' as const } : rolled;
-    this.groundLoot.push({
-      id: 'drop-' + this.kills, x: unit.actor.x, y: unit.actor.y, item
-    });
-    if (this.groundLoot.length > 30) this.groundLoot.shift();
+    this.dropEnemyLoot(unit);
     this.events.push({ type: 'defeat', targetId: unit.actor.id, kills: this.kills });
-    this.events.push({ type: 'loot', id: 'drop-' + this.kills });
     if (this.aliveEnemies.length === 0) this.respawnTimer = this.zone === 'crypt' && this.dungeonStage === 1 ? 0 : 3.2;
   }
+  /** The one runtime path for normal, elite and boss drops; rolls share catalog+affixes. */
+  private dropEnemyLoot(unit: EnemyUnit): void {
+    const boss = unit.actor.type === 'crypt_lord';
+    const context: LootContext = {
+      playerLevel: this.level, monsterLevel: this.level,
+      zone: this.zone, isBoss: boss, difficulty: 'normal',
+      eliteModifiers: unit.elite?.modifiers ?? [],
+      magicFind: deriveStats(this.classId, this.equipment, this.level).magicFind
+    };
+    const selected = rollLootTable(context, this.rng);
+    const rolls: LootRoll[] = [
+      ...bossGuaranteedLoot(context), ...(selected ? [selected] : [])
+    ];
+    for (const [index, roll] of rolls.entries()) {
+      if (this.groundLoot.length >= 100) break;
+      const id = 'drop-' + this.kills + '-' + index;
+      const item = rollItemForBase(
+        roll.itemBaseId, 'drop-' + this.kills + '-item-' + index,
+        roll.itemLevel, roll.rarity, this.rng
+      );
+      if (!item) continue;
+      this.groundLoot.push({ id, x: unit.actor.x + index * 16, y: unit.actor.y, item });
+      this.events.push({ type: 'loot', id });
+    }
+  }
+
   private collectLoot(loot: GroundItem): void {
     const index = this.inventory.findIndex(item => item === null);
     if (index < 0) { this.pickupTarget = null; return; }
@@ -1999,7 +2019,7 @@ export class GameSimulation {
       || !planSwap({ inventory: s.inventory, equipment: s.equipment, flags: s.itemFlags }, 0, 0, {
         playerLevel: s.level
       }).ok
-      || !Array.isArray(s.groundLoot) || s.groundLoot.length > 30
+      || !Array.isArray(s.groundLoot) || s.groundLoot.length > 100
       || !s.groundLoot.every(loot => !!loot && typeof loot.id === 'string'
         && canOccupy(loot, 0, layout.obstacles) && isItem(loot.item))
     ) return false;
