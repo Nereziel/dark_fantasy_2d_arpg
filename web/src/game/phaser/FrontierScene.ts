@@ -28,8 +28,9 @@ import {
   generateWorld, generateCrypt
 } from '../world/generator';
 import {
-  WARDEN_POSITION, NPC_POSITIONS, MERCHANT_ID, BLACKSMITH_ID, type NpcId
+  WARDEN_POSITION, NPC_POSITIONS, MERCHANT_ID, BLACKSMITH_ID
 } from '../world/npcs';
+import { getTownManifest, townEntry } from '../world/townManifest';
 
 const WIDTH = 2200;
 const HEIGHT = 1400;
@@ -121,6 +122,27 @@ export class FrontierScene extends Phaser.Scene {
         color: '#e8c58c', stroke: '#0c121b', strokeThickness: 4
       }).setOrigin(0.5).setDepth(82);
       this.campDecor.push(vendorMarker);
+    }
+
+    // Services and civilians share the seed-independent town manifest. Only the
+    // three original NPCs have dedicated silhouettes; new entries are distinct.
+    for (const entry of getTownManifest().filter(value => value.capability !== 'existing')) {
+      const { x, y } = entry.position;
+      const actor = this.add.graphics().setPosition(x, y).setDepth(49);
+      const civilian = entry.role === 'civilian';
+      const structure = entry.role === 'stash' || entry.role === 'waypoint';
+      actor.fillStyle(0x0b121c, 0.6).fillEllipse(0, 16, 36, 11);
+      actor.fillStyle(civilian ? 0x54616e : structure ? 0x6e596a : 0x546e65)
+        .fillRoundedRect(-12, -19, 24, 35, 5);
+      actor.fillStyle(structure ? 0xb6a47e : 0xe2c1a0).fillCircle(0, -22, 9);
+      this.campDecor.push(actor);
+      const symbol = entry.role === 'healer' ? '+' : entry.role === 'potionVendor' ? '✦'
+        : entry.role === 'stash' ? '▣' : entry.role === 'waypoint' ? '◈' : '·';
+      const marker = this.add.text(x, y - 55, symbol, {
+        fontFamily: 'Georgia, serif', fontSize: '21px', color: civilian ? '#a9b4bd' : '#efd0a2',
+        stroke: '#0a1420', strokeThickness: 4
+      }).setOrigin(0.5).setDepth(82);
+      this.campDecor.push(marker);
     }
 
     this.hero = this.add.graphics();
@@ -263,8 +285,9 @@ export class FrontierScene extends Phaser.Scene {
       }))
     ];
     if (state.zone === 'wilderness') {
-      for (const id of Object.keys(NPC_POSITIONS) as NpcId[]) {
-        targets.push({ kind: 'NPC', id, position: NPC_POSITIONS[id], hitRadius: 40 });
+      for (const entry of getTownManifest()) {
+        targets.push({ kind: 'NPC', id: entry.id, position: entry.position,
+          hitRadius: Math.max(24, entry.collisionRadius + 12) });
       }
     }
     return resolvePointerContext({
@@ -334,6 +357,13 @@ export class FrontierScene extends Phaser.Scene {
     if (action === 'FORCE_MOVE') {
       this.heldMovement.begin(world, this.time.now);
       this.bridge.command({ type: 'move', destination: { x: world.x, y: world.y } });
+      return;
+    }
+    // The pure pointer resolver keeps NPC hit-testing uniform; new services
+    // use a separate typed command until their original NPCs gain full roles.
+    if (context.kind === 'NPC' && townEntry(context.id)?.capability !== 'existing') {
+      this.bridge.command({ type: 'interactTown', entryId: context.id });
+      this.heldMovement.release();
       return;
     }
     const command = contextToCommand(context);
@@ -675,7 +705,7 @@ export class FrontierScene extends Phaser.Scene {
         .strokeCircle(state.player.x, state.player.y, 27 + Math.sin(progress * 0.12) * 4);
     }
     if (state.zone === 'wilderness' && this.hoveredId) {
-      const npc = NPC_POSITIONS[this.hoveredId as NpcId];
+      const npc = townEntry(this.hoveredId)?.position;
       if (npc) this.statusVisuals.lineStyle(2, 0xf3d49e, 0.86)
         .strokeCircle(npc.x, npc.y, 34);
     }
