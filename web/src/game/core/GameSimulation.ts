@@ -572,7 +572,7 @@ export class GameSimulation {
       ?? position) }, radius: 320 };
   }
 
-  private miniBossHit(unit: EnemyUnit, action: Extract<MiniBossActionPlan, {kind:'impact'}>): boolean {
+  private miniBossHit(unit: EnemyUnit, action: Extract<MiniBossActionPlan, { kind: 'telegraph' | 'impact' }>): boolean {
     const player = this.player, boss = unit.actor;
     if (!player.alive) return false;
     const dist = distance(player, action.point);
