@@ -286,6 +286,10 @@ export class FrontierScene extends Phaser.Scene {
     const portal = state.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT;
     const targets: ContextTarget[] = [
       { kind: 'INTERACTABLE', id: 'crypt-portal', position: portal, hitRadius: 64 },
+      ...(state.cryptInteractables ?? []).map(prop => ({
+        kind: 'INTERACTABLE' as const, id: prop.id,
+        position: prop.position, hitRadius: prop.hitRadius
+      })),
       ...state.interactables.map(object => ({
         kind: 'INTERACTABLE' as const, id: object.id,
         position: object.position, hitRadius: object.hitRadius
@@ -378,6 +382,11 @@ export class FrontierScene extends Phaser.Scene {
     // use a separate typed command until their original NPCs gain full roles.
     if (context.kind === 'NPC' && townEntry(context.id)?.capability !== 'existing') {
       this.bridge.command({ type: 'interactTown', entryId: context.id });
+      this.heldMovement.release();
+      return;
+    }
+    if (context.kind === 'INTERACTABLE' && context.id.startsWith('crypt/')) {
+      this.bridge.command({ type: 'interactCrypt', id: context.id });
       this.heldMovement.release();
       return;
     }
@@ -481,7 +490,28 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private onGameEvent(event: GameEvent): void {
-    if (event.type === 'eliteCue') {
+    if (event.type === 'cryptTrapWindup' || event.type === 'cryptTrap') {
+      const ring = this.obtainImpact(event.x, event.y, 89);
+      const color = event.type === 'cryptTrapWindup' ? 0xd9b477 : 0xe26973;
+      ring.lineStyle(4, color, 0.95)
+        .strokeCircle(0, 0, event.type === 'cryptTrapWindup' ? event.radius : 23);
+      ring.fillStyle(color, 0.13).fillCircle(0, 0,
+        event.type === 'cryptTrapWindup' ? event.radius : 23);
+      this.tweens.add({
+        targets: ring, alpha: 0, scaleX: 1.2, scaleY: 1.2,
+        duration: event.type === 'cryptTrapWindup' ? 850 : 380,
+        onComplete: () => this.releaseImpact(ring)
+      });
+    } else if (event.type === 'cryptInteract') {
+      const prop = buildCryptWorld(this.bridge.snapshot().worldSeed).theme.interactables
+        .find(value => value.id === event.id);
+      if (prop) {
+        const ring = this.obtainImpact(prop.position.x, prop.position.y, 85);
+        ring.lineStyle(3, 0xebcb85).strokeCircle(0, 0, 24);
+        this.tweens.add({ targets: ring, alpha: 0, scaleX: 1.6, scaleY: 1.6,
+          duration: 430, onComplete: () => this.releaseImpact(ring) });
+      }
+    } else if (event.type === 'eliteCue') {
       const visual = this.obtainImpact(event.x, event.y, 86);
       const tint = event.effect === 'fireAura' || event.effect === 'deathExplosion'
         ? 0xed7745 : event.effect === 'hazardousGround' ? 0x83b368 : 0x90bde8;
@@ -816,6 +846,18 @@ export class FrontierScene extends Phaser.Scene {
         .fillCircle(state.player.x - 29, state.player.y + 27, 2);
     }
     this.interactableVisuals.clear();
+    for (const prop of state.cryptInteractables ?? []) {
+      const x = prop.position.x, y = prop.position.y;
+      const chest = prop.capability === 'lootContainer';
+      this.interactableVisuals.fillStyle(chest ? 0x75522f : 0x5b5368, 0.97)
+        .fillRoundedRect(x - 13, y - 11, 26, 22, 4);
+      this.interactableVisuals.lineStyle(2, chest ? 0xe5bb73 : 0xc1b2b1, 0.88)
+        .strokeRoundedRect(x - 13, y - 11, 26, 22, 4);
+      if (this.hoveredId === prop.id) {
+        this.interactableVisuals.lineStyle(3, 0xffd38d)
+          .strokeCircle(x, y, prop.hitRadius + 5);
+      }
+    }
     for (const object of state.interactables) {
       const x = object.position.x, y = object.position.y;
       if (object.kind === 'chest') {
@@ -1060,6 +1102,7 @@ export class FrontierScene extends Phaser.Scene {
       }
     }
     for (const prop of theme.props) {
+      if (prop.capability !== 'decorative') continue;
       if (!theme.roomVisuals.find(room => room.roomId === prop.roomId)?.initiallyVisible) continue;
       const x = prop.position.x, y = prop.position.y, r = prop.footprintRadius;
       const color = prop.fallback.color;
