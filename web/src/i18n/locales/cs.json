@@ -468,5 +468,10 @@
   "worldObjects": {
     "shrine": "Svatyně duší ti dala ochranný štít.",
     "chest": "Otevřel jsi truhlu."
+  },
+  "progression": {
+    "experience": "Zkušenosti",
+    "skillPoints": "Body dovedností",
+    "talentPoints": "Talentové body"
   }
 }
