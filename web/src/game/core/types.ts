@@ -141,7 +141,8 @@ export type GameEvent =
   | { type: 'questUpdated'; status: QuestProgress['status']; defeated: number }
   | { type: 'enemyWindup'; enemyId: string; pattern: 'bolt' | 'sweep' | 'leap' }
   | { type: 'enemyAttack'; enemyId: string; hit: boolean }
-  | { type: 'enemyHeal'; enemyId: string; targetId: string; amount: number };
+  | { type: 'enemyHeal'; enemyId: string; targetId: string; amount: number }
+  | { type: 'enemyBuff'; enemyId: string; abilityId: string };
 export interface GameStateReader {
   snapshot(): GameSnapshot;
   subscribe(listener: (state: GameSnapshot) => void): () => void;
