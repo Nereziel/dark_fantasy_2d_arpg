@@ -18,7 +18,7 @@ import { HeldPointerMovement } from '../input/heldMovement';
 import { playerAnimation } from '../entities/playerAnimation';
 import {
   PIXEL_ANIMATIONS, PIXEL_ANIMATION_FRAMES, PIXEL_FRAME_HEIGHT, PIXEL_FRAME_WIDTH,
-  pixelAtlasKey, pixelFrame, renderPixelAtlas, type PixelActor, type PixelAnimation
+  pixelAtlasKey, pixelFrame, pixelTimelineFrame, renderPixelAtlas, type PixelActor, type PixelAnimation
 } from './pixelSpriteAtlas';
 import { ACTOR_RADIUS, canOccupy, type Obstacle } from '../world/navigation';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
@@ -594,7 +594,7 @@ export class FrontierScene extends Phaser.Scene {
     const castTicks = state.warriorAction?.timeline ?? state.classAction?.timeline;
     const heroFrame = castTicks && (visualPose === 'attack' || visualPose === 'cast'
       || visualPose === 'channel')
-      ? this.timedFrame(castTicks.elapsedTicks, castTicks.totalTicks ?? 1)
+      ? pixelTimelineFrame(castTicks)
       : Math.floor(this.time.now / (visualPose === 'run' ? 95 : 150)) % PIXEL_ANIMATION_FRAMES;
     this.heroSprite.setFrame(pixelFrame(visualPose, heroFrame));
     this.heroSprite.setVisible(state.player.alive || this.time.now < this.heroDeadUntil);
@@ -656,7 +656,7 @@ export class FrontierScene extends Phaser.Scene {
     this.telegraph.clear();
     this.statusVisuals.clear();
     if (animation === 'channeling' || animation === 'casting') {
-      const progress = state.warriorAction?.timeline.elapsedTicks ?? 0;
+      const progress = (state.warriorAction?.timeline ?? state.classAction?.timeline)?.elapsedTicks ?? 0;
       this.statusVisuals.lineStyle(2, animation === 'channeling' ? 0xe5b56a : 0xc8ceee, 0.65)
         .strokeCircle(state.player.x, state.player.y, 27 + Math.sin(progress * 0.12) * 4);
     }
