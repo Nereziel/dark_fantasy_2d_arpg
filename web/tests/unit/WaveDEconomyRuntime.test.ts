@@ -83,7 +83,7 @@ describe('Wave D economy integration', () => {
     sim.command({ type: 'equip', index: 0 });
     sim.command({ type: 'temperItem', slot: 'BELT' });
     const record = createSaveRecord(sim.character());
-    expect(record?.format).toBe(10);
+    expect(record?.format).toBe(11);
     const next = new GameSimulation(9);
     expect(next.restoreCharacter(readSaveRecord(record)!, 33)).toBe(true);
     expect(next.snapshot().gold).toBe(15);
