@@ -176,4 +176,20 @@ describe('Wave C integration edge regressions', () => {
     }
   });
 
+  it('rejects forged catalog level, weapon type and oversized legendary powers on load', () => {
+    const base = rollItemForBase('greatsword', 'security-great', 20,
+      'LEGENDARY', new SeededRng(991))!;
+    const sim = new GameSimulation();
+    const before = sim.character();
+    const bagWith = (item: Item) => ({ ...before,
+      inventory: before.inventory.map((entry, index) => index === 0 ? item : entry) });
+    expect(createSaveRecord(bagWith({ ...base, requiredLevel: 1 }))).toBeNull();
+    expect(createSaveRecord(bagWith({ ...base, weaponType: 'DAGGER' }))).toBeNull();
+    expect(createSaveRecord(bagWith({
+      ...base, legendaryPower: { id: 'power.greatsword', magnitude: 1_000_001 }
+    }))).toBeNull();
+    expect(createSaveRecord(bagWith({ ...base, rarity: 'COMMON' }))).toBeNull();
+    expect(sim.character()).toEqual(before);
+  });
+
 });
