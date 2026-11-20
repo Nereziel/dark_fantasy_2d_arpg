@@ -682,6 +682,18 @@ export class FrontierScene extends Phaser.Scene {
         this.telegraph.fillStyle(0xffd3a7, 0.55 + progress * 0.4)
           .fillCircle(intent.x, intent.y, 4);
       }
+      if (unit.elite) {
+        this.statusVisuals.lineStyle(3, 0xefbd67, 0.95)
+          .strokeEllipse(actor.x, actor.y + 6, 74, 56);
+        if (unit.elite.modifiers.includes('fireAura')) {
+          this.statusVisuals.lineStyle(2, 0xf07742, 0.45)
+            .strokeCircle(actor.x, actor.y, 105);
+        }
+        if (unit.elite.shield > 0) {
+          this.statusVisuals.lineStyle(3, 0x82c8fa, 0.72)
+            .strokeCircle(actor.x, actor.y, 35);
+        }
+      }
       this.drawStatuses(actor.x,actor.y,state.statusEffects?.enemies?.[actor.id] ?? []);
       this.healthBar.fillStyle(0x080a10, 0.9)
         .fillRect(actor.x - 26, actor.y - 45, 52, 8);
