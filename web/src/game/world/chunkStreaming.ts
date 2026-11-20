@@ -447,7 +447,7 @@ export function validateChunkIndex(value: unknown): value is ChunkIndex {
     }
     for (const road of chunk.roads) {
       if (!record(road) || !idString(road.roadId) && !/^road-[a-z0-9_-]{1,80}$/.test(String(road.roadId))
-        || !Number.isInteger(road.segmentIndex) || road.segmentIndex < 0
+        || typeof road.segmentIndex !== 'number' || !Number.isInteger(road.segmentIndex) || road.segmentIndex < 0
         || !inWorld(road.from) || !inWorld(road.to)
         || !positive(road.width) || road.width > 300
         || !roadTouchesChunk(road.from, road.to, road.width, chunk.bounds)) return false;
@@ -463,7 +463,7 @@ export function validateChunkIndex(value: unknown): value is ChunkIndex {
       if (!record(anchor) || !idString(anchor.id) || anchorIds.has(anchor.id)
         || !inWorld(anchor.position) || typeof anchor.radius !== 'number'
         || !Number.isFinite(anchor.radius) || anchor.radius < 0
-        || !['camp', 'cryptGate', 'town', 'worldObject'].includes(anchor.kind)
+        || typeof anchor.kind !== 'string' || !['camp', 'cryptGate', 'town', 'worldObject'].includes(anchor.kind)
         || !circleTouchesChunk(anchor.position, anchor.radius, chunk.bounds)) return false;
       anchorIds.add(anchor.id);
     }
