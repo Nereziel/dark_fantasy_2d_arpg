@@ -349,6 +349,24 @@ export class GameSimulation {
       }
       return;
     }
+    if (command.type === 'useTownService') {
+      // Town services must work while the modal pauses the combat simulation.
+      const entry = townEntry(command.entryId);
+      if (!entry || !this.player.alive || this.zone !== 'wilderness'
+        || !canInteractTownEntry(this.player, entry.id)) return;
+      const healer = entry.role === 'healer';
+      const restorer = entry.role === 'potionVendor';
+      if (!healer && !restorer) return;
+      const price = healer ? 15 : 12;
+      if (this.gold < price) return;
+      if (healer && this.player.health >= this.player.maxHealth) return;
+      if (restorer && this.resource >= deriveStats(this.classId, this.equipment, this.level).maxResource) return;
+      this.gold -= price;
+      if (healer) this.player.health = this.player.maxHealth;
+      if (restorer) this.resource = deriveStats(this.classId, this.equipment, this.level).maxResource;
+      this.events.push({ type: 'townServiceUsed', entryId: entry.id, goldSpent: price });
+      return;
+    }
     if (!this.player.alive || this.paused) return;
     if (command.type === 'swapInventory') { this.updateInventory(planSwap(this.inventoryState(), command.fromIndex, command.toIndex, this.inventoryRules())); return; }
     if (command.type === 'sortInventory') { this.updateInventory(sortInventory(this.inventoryState(), this.inventoryRules())); return; }
