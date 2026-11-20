@@ -130,14 +130,15 @@ function validItem(item: unknown): item is Item {
 function validRules(rules?: EquipmentRules): boolean {
   if (rules === undefined) return true;
   if (!isRecord(rules)) return false;
-  if (rules.playerLevel !== undefined &&
-    (!Number.isSafeInteger(rules.playerLevel) || rules.playerLevel < 1
-      || rules.playerLevel > MAX_LEVEL)) return false;
+  const playerLevel: unknown = rules.playerLevel;
+  if (playerLevel !== undefined &&
+    (typeof playerLevel !== 'number' || !Number.isSafeInteger(playerLevel)
+      || playerLevel < 1 || playerLevel > MAX_LEVEL)) return false;
   if (rules.requiredLevelsById !== undefined) {
     if (!isRecord(rules.requiredLevelsById) || rules.playerLevel === undefined) return false;
     for (const [id, level] of Object.entries(rules.requiredLevelsById)) {
-      if (!isStableId(id) || !Number.isSafeInteger(level)
-        || level < 1 || level > MAX_LEVEL) return false;
+      if (!isStableId(id) || typeof level !== 'number'
+        || !Number.isSafeInteger(level) || level < 1 || level > MAX_LEVEL) return false;
     }
   }
   if (rules.twoHandedItemIds !== undefined) {
@@ -356,15 +357,18 @@ export function sortInventory(
     || right.level - left.level
     || compareText(left.templateId, right.templateId)
     || compareText(left.id, right.id));
-  draft.inventory = occupied.concat(
-    Array<null>(input.inventory.length - occupied.length).fill(null)
-  );
+  draft.inventory = [
+    ...occupied,
+    ...Array<null>(input.inventory.length - occupied.length).fill(null)
+  ];
   return { ok: true, state: draft };
 }
 
 function validFilter(filter: InventoryFilter): boolean {
   if (!isRecord(filter)) return false;
-  if (filter.rarity !== undefined && !RARITY_ORDER.includes(filter.rarity)) return false;
+  if (filter.rarity !== undefined &&
+    (typeof filter.rarity !== 'string'
+      || !RARITY_ORDER.some(rarity => rarity === filter.rarity))) return false;
   if (filter.slot !== undefined && !isEquipmentSlot(filter.slot)) return false;
   if (filter.templateId !== undefined && !isStableId(filter.templateId)) return false;
   if (filter.favorite !== undefined && typeof filter.favorite !== 'boolean') return false;
