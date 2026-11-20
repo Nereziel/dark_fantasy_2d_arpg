@@ -12,7 +12,7 @@ const context: LootContext = {
 };
 
 const quality: Record<LootRarity, number> = {
-  COMMON: 1, UNCOMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5
+  COMMON: 1, UNCOMMON: 2, RARE: 3, EPIC: 4, LEGENDARY: 5, MYTHIC: 6
 };
 
 function avgQuality(input: LootContext, seedCount = 1000): number {
