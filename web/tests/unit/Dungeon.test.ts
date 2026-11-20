@@ -131,7 +131,7 @@ describe('Crypt of the Hollow Crown', () => {
     killUnit(sim, 0);
     const before = sim.snapshot();
     const save = createSaveRecord(sim.character());
-    expect(save?.format).toBe(10);
+    expect(save?.format).toBe(11);
     const text = JSON.stringify(save);
     for (const key of ['zone', 'dungeonStage', 'dungeonCleared', 'worldSeed',
       'enemies', 'groundLoot', 'cooldowns', 'effects', 'respawnTimer']) {
