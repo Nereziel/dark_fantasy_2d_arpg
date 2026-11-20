@@ -1,6 +1,7 @@
 import { GameSimulation } from '../game/core/GameSimulation';
 import type { CharacterProgress } from '../game/core/types';
 import { MAX_LEVEL } from '../game/progression/progressionRules';
+import { createEquipment } from '../game/data/items';
 
 const DATABASE = 'aether-ruin-web';
 const STORE = 'saves';
@@ -47,6 +48,7 @@ export function migrateV8Character(raw: unknown): CharacterProgress | null {
   const level = Math.min(old.level!, MAX_LEVEL);
   return validateCharacter({
     ...old, level, xp: level === MAX_LEVEL ? 0 : old.xp!,
+    equipment: { ...createEquipment(), ...(old.equipment ?? {}) },
     skillPoints: level - 1,
     talentPoints: Math.floor(level / 5)
   });
