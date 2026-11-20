@@ -37,9 +37,10 @@ import { getEnemyArchetype } from '../enemies/archetypeCatalog';
 import { ACTOR_RADIUS, canOccupy, findPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
-  generateCrypt, type WorldLayout
+  type WorldLayout
 } from '../world/generator';
 import { buildWilderness, type WildernessRuntimeWorld } from '../world/wildernessRuntime';
+import { buildCryptWorld } from '../world/dungeonRuntime';
 import {
   createChunkIndex, createWorldFactLedger, applyWorldFact, makeWorldFact,
   validateWorldFactLedger, type ChunkIndex, type WorldFactLedger, type WorldFactKind
@@ -1609,7 +1610,9 @@ export class GameSimulation {
     const profile = getEnemyArchetype(enemyArchetype(actor.type));
     if (!profile || !actor.alive || !this.player.alive) return;
     const index = this.units.indexOf(unit);
-    const spawn = this.world.encounterPositions[index] ?? (unit.summoned ? actor : undefined);
+    const spawn = this.zone === 'crypt' && this.dungeonStage === 1 && index < PACK_SIZE
+      ? CRYPT_BOSS_POSITIONS[index]
+      : this.world.encounterPositions[index] ?? (unit.summoned ? actor : undefined);
     if (!spawn) return;
     const origin = { x: spawn.x, y: spawn.y + (this.wave % 2) * 25 };
     const role = enemyArchetype(actor.type);
@@ -1854,7 +1857,7 @@ export class GameSimulation {
     const seed = this.world.seed;
     this.zone = destination;
     const wilderness = destination === 'wilderness' ? buildWilderness(seed) : null;
-    this.world = wilderness?.layout ?? generateCrypt(seed);
+    this.world = wilderness?.layout ?? buildCryptWorld(seed).layout;
     this.storyFeatures = wilderness?.features ?? [];
     this.player.x = destination === 'crypt' ? CRYPT_EXIT.x : CAMP.x;
     this.player.y = destination === 'crypt' ? CRYPT_EXIT.y : CAMP.y;
@@ -2468,7 +2471,7 @@ export class GameSimulation {
     const layout = s && Number.isSafeInteger(s.worldSeed)
       && s.worldSeed >= 0 && s.worldSeed <= 0xffffffff
       && (s.zone === 'wilderness' || s.zone === 'crypt')
-      ? (s.zone === 'crypt' ? generateCrypt(s.worldSeed) : buildWilderness(s.worldSeed).layout)
+      ? (s.zone === 'crypt' ? buildCryptWorld(s.worldSeed).layout : buildWilderness(s.worldSeed).layout)
       : null;
     const restoredWilderness = layout ? buildWilderness(s.worldSeed) : null;
     const restoredIndex = restoredWilderness ? createChunkIndex(restoredWilderness) : null;
