@@ -21,6 +21,7 @@ import type { CryptInteractable } from '../world/cryptTheme';
 import type { MiniBossState, MiniBossId } from '../enemies/miniBossRules';
 import type { HollowKingState } from '../bosses/hollowKingPhases';
 import type { RespawnCheckpointId, RespawnDestination } from './deathRespawn';
+import type { TalentRanks, WarriorTalentId } from '../progression/talentTree';
 import type { WorldFactLedger } from '../world/chunkStreaming';
 
 export interface Point { x: number; y: number }
@@ -58,6 +59,8 @@ export interface CharacterProgress {
   /** Unspent points, reconstructible on migration from v8 characters. */
   skillPoints?: number;
   talentPoints?: number;
+  /** Persistent rank investment, empty on legacy v11 records. */
+  talentRanks?: TalentRanks;
   gold: number;
   kills: number;
   inventory: Array<Item | null>;
@@ -117,6 +120,7 @@ export interface GameSnapshot {
   xp: number;
   skillPoints?: number;
   talentPoints?: number;
+  talentRanks?: TalentRanks;
   gold: number;
   resource: number;
   rngState: number;
@@ -196,6 +200,8 @@ export type GameCommand =
   | { type: 'dropInventory'; index: number }
   | { type: 'pause'; value: boolean }
   | { type: 'respawn' }
+  | { type: 'spendTalent'; id: WarriorTalentId }
+  | { type: 'respecTalents' }
   | { type: 'reset'; classId?: ClassId; seed?: number };
 
 export type GameEvent =
@@ -217,6 +223,8 @@ export type GameEvent =
   | { type: 'loot'; id: string }
   | { type: 'pickup'; id: string }
   | { type: 'levelUp'; level: number }
+  | { type: 'talentSpent'; id: WarriorTalentId; rank: number }
+  | { type: 'talentsRespecced'; goldSpent: number }
   | { type: 'playerDeath' }
   | { type: 'checkpointActivated'; id: RespawnCheckpointId }
   | { type: 'playerRespawn'; checkpointId: RespawnDestination['id'];
