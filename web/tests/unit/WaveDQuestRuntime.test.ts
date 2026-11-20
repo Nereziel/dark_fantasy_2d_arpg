@@ -68,7 +68,7 @@ describe('Wave D generic quest runtime and branching dialogue integration', () =
     expect(sim.snapshot().gold).toBe(paid.gold);
     expect(sim.snapshot().xp).toBe(paid.xp);
     const record = createSaveRecord(sim.character());
-    expect(record?.format).toBe(9);
+    expect(record?.format).toBe(10);
     expect(JSON.stringify(record)).not.toContain('worldSeed');
     const loaded = new GameSimulation();
     expect(loaded.restoreCharacter(readSaveRecord(record)!, 1007)).toBe(true);
