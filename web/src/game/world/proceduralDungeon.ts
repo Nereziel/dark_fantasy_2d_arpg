@@ -523,8 +523,9 @@ export function validateProceduralDungeon(input: unknown): DungeonValidationRepo
       return invalid('unreachable physical objective, boss, encounter or exit');
     }
   }
+  const safeStart = input.playerSpawn as Point; // narrowed above; capture outside callback
   if (![[-40, 0], [40, 0], [0, -40], [0, 40]].some(([dx, dy]) =>
-    canOccupy({ x: input.playerSpawn.x + dx!, y: input.playerSpawn.y + dy! }, ACTOR_RADIUS, obstacles))) {
+    canOccupy({ x: safeStart.x + dx!, y: safeStart.y + dy! }, ACTOR_RADIUS, obstacles))) {
     return invalid('no safe first movement step');
   }
   return { valid: true, errors: [], checkedPaths: goals.length };
@@ -542,8 +543,9 @@ export function generateProceduralDungeon(
   if (!isRecord(options) || Object.keys(options).some(key => key !== 'maxAttempts' && key !== 'bounds')) {
     throw new RangeError('Invalid dungeon generation options');
   }
-  const maxAttempts = options.maxAttempts ?? MAX_ATTEMPTS;
-  if (!Number.isInteger(maxAttempts) || maxAttempts < 0 || maxAttempts > MAX_ATTEMPTS) {
+  const maxAttempts: unknown = options.maxAttempts ?? MAX_ATTEMPTS;
+  if (typeof maxAttempts !== 'number' || !Number.isInteger(maxAttempts)
+    || maxAttempts < 0 || maxAttempts > MAX_ATTEMPTS) {
     throw new RangeError('Dungeon attempt budget must be bounded');
   }
   if (options.bounds !== undefined
