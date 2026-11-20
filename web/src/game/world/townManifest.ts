@@ -212,7 +212,8 @@ export function canInteractTownEntry(hero: unknown, id: unknown): boolean {
 function validObstacle(value: unknown): value is Obstacle {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const wall = value as Partial<Obstacle>;
-  return validId(wall.id) && Number.isFinite(wall.x) && Number.isFinite(wall.y)
+  return typeof wall.id === 'string' && /^[a-z][a-z0-9_-]*$/.test(wall.id)
+    && Number.isFinite(wall.x) && Number.isFinite(wall.y)
     && finitePositive(wall.width) && finitePositive(wall.height)
     && wall.x !== undefined && wall.y !== undefined
     && wall.x >= 0 && wall.y >= 0
