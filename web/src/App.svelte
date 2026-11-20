@@ -452,8 +452,8 @@
         <div class="toast" role="status">{$t(messageKey)}</div>
       {/if}
       {#if townModal}
-        <div class="modal-shield town-service-shield">
-          <section class="pause-card town-service-card" role="dialog" aria-modal="true" aria-label={$t(townModal.nameKey)}>
+        <div class="modal-shield town-service-shield" role="dialog" aria-modal="true" aria-label={$t(townModal.nameKey)}>
+          <section class="pause-card town-service-card">
             <h2>{$t(townModal.nameKey)}</h2>
             <p>{$t(townModal.descriptionKey)}</p>
             {#if townModal.role === 'healer'}
