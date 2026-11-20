@@ -28,6 +28,7 @@ import type { GemAction, GemWallet } from '../gems/gemRules';
 import type { GemId } from '../gems/gemCatalog';
 import type { PotionCharges, PotionId, PotionState } from '../consumables/potionRules';
 import type { WaypointId } from '../world/waypointTravel';
+import type { WorldEventKind, WorldEventId, WorldEventView } from '../world/worldEvents';
 import type { StashTabs } from '../inventory/stashRules';
 
 export interface Point { x: number; y: number }
@@ -188,6 +189,8 @@ export interface GameSnapshot {
   respawnAt?: RespawnDestination | null;
   /** Activated checkpoint facts never enter character-only saves. */
   activatedCheckpointIds?: RespawnCheckpointId[];
+  /** Discovered-only optional event status; completed facts remain in worldFacts. */
+  worldEvents?: WorldEventView[];
   /** Session-only invulnerability to avoid an immediate repeated death. */
   respawnProtectionSeconds?: number;
   paused: boolean;
@@ -265,6 +268,9 @@ export type GameEvent =
   | { type: 'checkpointActivated'; id: RespawnCheckpointId }
   | { type: 'waypointActivated'; id: WaypointId }
   | { type: 'waypointTravel'; from: WaypointId; to: WaypointId; x: number; y: number }
+  | { type: 'worldEventStarted'; id: WorldEventId; kind: WorldEventKind; x: number; y: number }
+  | { type: 'worldEventCompleted'; id: WorldEventId; kind: WorldEventKind;
+      gold: number; xp: number; x: number; y: number; itemId: string | null }
   | { type: 'playerRespawn'; checkpointId: RespawnDestination['id'];
       fromZone: ZoneId; x: number; y: number }
   | { type: 'warriorImpact'; id: WarriorAbilityId; x: number; y: number;
