@@ -150,9 +150,9 @@ const SEED_MAX = 0xffffffff;
 
 type Writable<T> = { -readonly [K in keyof T]: T[K] };
 const ABILITIES: Readonly<Record<HollowKingPhase, readonly HollowKingAbility[]>> = Object.freeze({
-  1: Object.freeze(['royal_cleave', 'grave_lunge']),
-  2: Object.freeze(['raise_dead', 'grave_circle']),
-  3: Object.freeze(['rune_storm', 'kings_judgment'])
+  1: Object.freeze(['royal_cleave', 'grave_lunge'] as const),
+  2: Object.freeze(['raise_dead', 'grave_circle'] as const),
+  3: Object.freeze(['rune_storm', 'kings_judgment'] as const)
 });
 const ABILITY_SPECS: Readonly<Record<HollowKingAbility, {
   readonly shape: HollowKingShape; readonly radius: number;
@@ -178,8 +178,10 @@ function point(value: unknown): value is HollowKingPoint {
   return record(value) && finite(value.x) && finite(value.y);
 }
 function rect(value: unknown): value is HollowKingRect {
-  return point(value) && finite(value.width) && finite(value.height)
-    && value.width > 0 && value.height > 0;
+  if (!record(value) || !point(value)) return false;
+  const width = (value as Record<string, unknown>)['width'];
+  const height = (value as Record<string, unknown>)['height'];
+  return finite(width) && finite(height) && width > 0 && height > 0;
 }
 function withinWorld(p: HollowKingPoint): boolean {
   return p.x >= ACTOR_RADIUS && p.y >= ACTOR_RADIUS
