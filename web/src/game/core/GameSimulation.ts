@@ -383,7 +383,7 @@ export class GameSimulation {
       || shrine.position.x > box.x + box.width
       || shrine.position.y > box.y + box.height) return result.value;
     return { ...result.value, markers: [...result.value.markers, {
-      id: shrine.id, kind: 'waypoint', activated: true,
+      id: shrine.id, kind: 'waypoint' as const, activated: true,
       position: { ...shrine.position }, presentationKey: shrine.nameKey
     }].sort((a,b) => a.id.localeCompare(b.id)) };
   }
