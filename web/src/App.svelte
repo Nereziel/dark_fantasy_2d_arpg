@@ -387,7 +387,11 @@
             aria-pressed={unit.actor.id === view.selectedTargetId}
             onclick={() => bridge.command({ type: 'attack', targetId: unit.actor.id })}
           >
-            <span>{unit.elite ? $t('hud.elite') + ' · ' : ''}{$t('enemies.' + unit.actor.type + '.name')}</span>
+            <span>{unit.elite ? $t('hud.elite') + ' · ' : ''}{$t('enemies.' + unit.actor.type + '.name')}
+              {#if unit.elite}
+                <small class="elite-modifiers">{unit.elite.modifiers.map(id => $t('eliteModifier.' + id)).join(' · ')}</small>
+              {/if}
+            </span>
             <span class="roster-health">{unit.actor.alive
               ? Math.ceil(100 * unit.actor.health / unit.actor.maxHealth) + '%'
               : '—'}</span>
