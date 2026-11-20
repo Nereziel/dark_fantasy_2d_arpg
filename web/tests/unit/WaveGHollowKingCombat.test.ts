@@ -83,7 +83,10 @@ describe('Wave G Hollow King combat integration', () => {
     })) })).toBe(true);
     tick(sim, 1);
     expect(sim.snapshot().hollowKing?.phase).toBe(3);
-    expect(sim.snapshot().hollowKing?.warning).toBeNull();
+    // A phase transition cancels the previous warning but may immediately
+    // telegraph the new phase's first ability. It must never impact instantly.
+    expect(sim.snapshot().hollowKing?.warning?.phase).toBe(3);
+    expect(sim.snapshot().hollowKing?.warning?.windupSeconds).toBeGreaterThan(0.5);
     expect(sim.snapshot().enemies[0]!.actor.id).toBe('crypt_lord-4');
     expect(sim.character()).not.toHaveProperty('hollowKing');
     expect(sim.worldProgress()).not.toHaveProperty('hollowKing');
