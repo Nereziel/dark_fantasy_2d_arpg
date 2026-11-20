@@ -1,4 +1,5 @@
 import { GameSimulation } from '../core/GameSimulation';
+import type { EquipmentSlot } from '../data/items';
 import { newSessionSeed } from '../world/generator';
 import { resolveSkillAim, type SkillAim } from '../input/skillAiming';
 import { GAME_BINDINGS } from '../input/gameBindings';
