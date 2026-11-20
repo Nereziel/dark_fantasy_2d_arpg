@@ -757,5 +757,16 @@
     "optionalPoi": "Mysterious Site",
     "optionalTreasure": "Hidden Treasure",
     "optionalEvent": "Wilderness Event"
+  },
+  "map": {
+    "title": "World Map",
+    "open": "Map",
+    "close": "Close Map",
+    "minimap": "Minimap",
+    "legend": "Explored terrain is green; undiscovered areas stay hidden. Press M to open the map.",
+    "player": "Hero",
+    "town": "Camp",
+    "quest": "Quest",
+    "unknownQuest": "Unexplored quest destination"
   }
 }
