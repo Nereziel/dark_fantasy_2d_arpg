@@ -101,7 +101,7 @@ describe('first permanent campaign quest and NPC interaction', () => {
     const quest = { ...state.quest, status: 'active' as const, defeated: 2 };
     expect(sim.restore({ ...state, quest })).toBe(true);
     const record = createSaveRecord(sim.character());
-    expect(record?.format).toBe(8);
+    expect(record?.format).toBe(9);
     expect(record?.character.quest).toEqual(quest);
     expect(JSON.stringify(record)).not.toContain('worldSeed');
     const next = new GameSimulation(123);
