@@ -10,6 +10,7 @@
 import type { CombatTimelineState } from '../animation/combatTimeline';
 import type { ClassId } from '../data/classes';
 import type { EnemyType } from '../enemies/enemies';
+import { pixelClassCombatMarks } from './classCombatGlyphs';
 
 export const PIXEL_ANIMATIONS = [
   'idle', 'walk', 'run', 'attack', 'cast', 'channel', 'hit', 'block', 'dodge', 'death'
@@ -91,7 +92,7 @@ function line(ctx: CanvasRenderingContext2D,color:string,x:number,y:number,w:num
 }
 
 /** One 48×56 pixel-art frame, rooted at feet for collision/health-bar alignment. */
-function paintFrame(ctx: CanvasRenderingContext2D, look: PixelActorLook,
+function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: PixelActorLook,
   animation: PixelAnimation, frame: number): void {
   const run = animation === 'run' || animation === 'dodge';
   const stride = animation === 'walk' || run ? [-3,1,4,-1][frame]! : 0;
@@ -209,6 +210,10 @@ function paintFrame(ctx: CanvasRenderingContext2D, look: PixelActorLook,
     rect(ctx,look.highlight,x-20,24+y,13,17);
     rect(ctx,look.accent,x-14,27+y,3,12);
   }
+  // Contact ornaments are baked once, into the correct pre-impact/impact
+  // frame. There is no per-tick particle allocation or new combat authority.
+  for (const mark of pixelClassCombatMarks(actor, animation, frame))
+    rect(ctx, mark.color, mark.x, mark.y, mark.size, mark.size);
 }
 
 /** Generates a complete Phaser-ready atlas canvas with named frames. */
@@ -224,7 +229,7 @@ export function renderPixelAtlas(actor: PixelActor): HTMLCanvasElement {
     for(let frame=0;frame<PIXEL_ANIMATION_FRAMES;frame++) {
       ctx.save();
       ctx.translate(frame*PIXEL_FRAME_WIDTH,row*PIXEL_FRAME_HEIGHT);
-      paintFrame(ctx,look,animation,frame);
+      paintFrame(ctx,actor,look,animation,frame);
       ctx.restore();
     }
   });
