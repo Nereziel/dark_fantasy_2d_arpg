@@ -54,7 +54,7 @@ export interface EquipmentRules {
 
 export type InventoryError =
   | 'INVALID_STATE' | 'DUPLICATE_ID' | 'INVALID_RULES'
-  | 'INVALID_INDEX' | 'EMPTY_SLOT' | 'INVALID_SLOT'
+  | 'INVALID_INDEX' | 'EMPTY_SLOT' | 'INVALID_SLOT' | 'SLOT_OCCUPIED'
   | 'INCOMPATIBLE_SLOT' | 'INVENTORY_FULL' | 'HAND_CONFLICT'
   | 'LEVEL_REQUIRED' | 'PROTECTED_ITEM' | 'ITEM_NOT_FOUND'
   | 'INVALID_FILTER' | 'INVALID_CLASS';
@@ -305,6 +305,26 @@ export function planUnequip(
   if (freeIndex < 0) return fail('INVENTORY_FULL');
   const draft = cloneState(input);
   draft.inventory[freeIndex] = draft.equipment[slot];
+  draft.equipment[slot] = null;
+  return { ok: true, state: draft };
+}
+
+/** Dragged equipped item into one *specific* empty bag cell. Never displace
+ * an existing bag item or guess another index; all checks remain authoritative. */
+export function planUnequipAt(
+  input: InventoryState,
+  slot: EquipmentSlot,
+  destinationIndex: number,
+  rules?: EquipmentRules
+): PlanResult {
+  const error = validateState(input, rules);
+  if (error) return fail(error);
+  if (!isEquipmentSlot(slot)) return fail('INVALID_SLOT');
+  if (!validIndex(destinationIndex, input.inventory)) return fail('INVALID_INDEX');
+  if (input.equipment[slot] === null) return fail('EMPTY_SLOT');
+  if (input.inventory[destinationIndex] !== null) return fail('SLOT_OCCUPIED');
+  const draft = cloneState(input);
+  draft.inventory[destinationIndex] = draft.equipment[slot];
   draft.equipment[slot] = null;
   return { ok: true, state: draft };
 }

@@ -2,7 +2,7 @@ import type { ActorSnapshot, CharacterProgress, GameCommand, GameEvent, GameSnap
 import { spawnPlayer, updateHealthLimit, advanceResource, regenerateHealth } from '../entities/player';
 import { awardProgression, rewardForActivity, xpRequiredForLevel, MAX_LEVEL } from '../progression/progressionRules';
 import {
-  planEquip, planUnequip, planSwap, planDrop, sortInventory, favoriteOrLockItem,
+  planEquip, planUnequip, planUnequipAt, planSwap, planDrop, sortInventory, favoriteOrLockItem,
   type ItemFlags, type InventoryState, type EquipmentRules
 } from '../inventory/equipmentRules';
 import { ITEM_BASES, WEAPON_TYPES } from '../items/itemCatalog';
@@ -1293,6 +1293,7 @@ export class GameSimulation {
     }
     if (command.type === 'equip') { this.equip(command.index, command.slot); return; }
     if (command.type === 'unequip') { this.unequip(command.slot); return; }
+    if (command.type === 'unequipTo') { this.unequipTo(command.slot, command.index); return; }
     // Shop actions must be checked inside the authoritative simulation.
     // A shop panel pauses combat, but doesn't disable transactions.
     if (command.type === 'buyItem') {
@@ -1818,6 +1819,9 @@ export class GameSimulation {
 
   private unequip(slot: EquipmentSlot): void {
     this.updateInventory(planUnequip(this.inventoryState(), slot, this.inventoryRules()));
+  }
+  private unequipTo(slot: EquipmentSlot, index: number): void {
+    this.updateInventory(planUnequipAt(this.inventoryState(), slot, index, this.inventoryRules()));
   }
 
   private dropInventory(index: number): void {

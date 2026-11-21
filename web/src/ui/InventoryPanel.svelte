@@ -2,79 +2,208 @@
   import { _ as t, locale } from 'svelte-i18n';
   import type { GameSnapshot } from '../game/core/types';
   import type { GameBridge } from '../game/bridge/GameBridge';
+  import type { Item } from '../game/data/items';
   import { RARITIES } from '../game/data/items';
   import { WEAPON_TYPES } from '../game/items/itemCatalog';
   import { itemDisplayName } from '../game/items/itemName';
-  let { view, bridge, close }: {
-    view: GameSnapshot;
-    bridge: GameBridge;
-    close: () => void;
-  } = $props();
 
-  function equip(index: number, slot?: keyof GameSnapshot['equipment']): void {
-    bridge.command({ type: 'equip', index, ...(slot ? { slot } : {}) });
-  }
-  function unequip(slot: keyof GameSnapshot['equipment']): void {
-    bridge.command({ type: 'unequip', slot });
-  }
+  let { view, bridge, close }: { view: GameSnapshot; bridge: GameBridge; close: () => void } = $props();
+  type EquipmentSlot = keyof GameSnapshot['equipment'];
+  type Source = { kind: 'bag'; index: number } | { kind: 'gear'; slot: EquipmentSlot };
+
+  const slots: readonly EquipmentSlot[] = [
+    'HELMET', 'MAIN_HAND', 'CHEST', 'OFF_HAND', 'GLOVES', 'BELT',
+    'BOOTS', 'RING_1', 'AMULET', 'RING_2', 'RELIC', 'CHARM'
+  ];
   let rarityFilter = $state('ALL');
-  let moveSource = $state<number | null>(null);
-  function move(index: number): void {
-    if (moveSource === null) { moveSource = index; return; }
-    bridge.command({ type: 'swapInventory', fromIndex: moveSource, toIndex: index });
-    moveSource = null;
+  // Read initial props through a closure, then keep selection as independent UI state.
+  function initialSelection(): Source | null {
+    const index = view.inventory.findIndex(Boolean);
+    if (index >= 0) return { kind: 'bag', index };
+    const slot = slots.find(slot => !!view.equipment[slot]);
+    return slot ? { kind: 'gear', slot } : null;
   }
-  function flag(itemId: string, kind: 'locked' | 'favorite'): void {
-    const old = view.itemFlags?.[itemId]?.[kind] ?? false;
-    bridge.command({ type: 'setItemFlag', itemId, flag: kind, value: !old });
+  let selected = $state<Source | null>(initialSelection());
+  let hovered = $state<Source | null>(null);
+  let dragged = $state<Source | null>(null);
+  let helpOpen = $state(false);
+
+  let displayed = $derived(hovered ?? selected);
+  let inspected = $derived.by((): Item | null => {
+    if (!displayed) return null;
+    return displayed.kind === 'bag' ? view.inventory[displayed.index] ?? null
+      : view.equipment[displayed.slot];
+  });
+  let comparedSlot = $derived.by((): EquipmentSlot | null => {
+    if (!displayed || !inspected) return null;
+    return displayed.kind === 'gear' ? displayed.slot : inspected.slot;
+  });
+  let equippedItem = $derived(comparedSlot ? view.equipment[comparedSlot] : null);
+  let delta = $derived(displayed?.kind === 'bag'
+    ? bridge.previewEquipment(displayed.index) : null);
+
+  function itemName(item: Item): string {
+    return itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId));
+  }
+  function equip(index: number, slot?: EquipmentSlot): void {
+    if (!view.inventory[index]) return;
+    bridge.command({ type: 'equip', index, ...(slot ? { slot } : {}) });
+    selected = null;
+  }
+  function unequip(slot: EquipmentSlot): void {
+    if (!view.equipment[slot]) return;
+    bridge.command({ type: 'unequip', slot });
+    selected = null;
+  }
+  function flag(item: Item, kind: 'favorite' | 'locked'): void {
+    bridge.command({ type: 'setItemFlag', itemId: item.id, flag: kind,
+      value: !(view.itemFlags?.[item.id]?.[kind] ?? false) });
+  }
+  function pickBag(index: number): void {
+    if (selected?.kind === 'bag' && selected.index !== index) {
+      bridge.command({ type: 'swapInventory', fromIndex: selected.index, toIndex: index });
+      selected = null;
+    } else if (selected?.kind === 'gear') {
+      if (view.inventory[index]) equip(index, selected.slot);
+      else bridge.command({ type: 'unequipTo', slot: selected.slot, index });
+      selected = null;
+    } else {
+      selected = view.inventory[index] ? { kind: 'bag', index } : null;
+    }
+  }
+  function pickGear(slot: EquipmentSlot): void {
+    if (selected?.kind === 'bag') equip(selected.index, slot);
+    else selected = view.equipment[slot] ? { kind: 'gear', slot } : null;
+  }
+  function startDrag(event: DragEvent, source: Source): void {
+    dragged = source;
+    selected = source;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', 'aether-inventory');
+    }
+  }
+  function permitDrop(event: DragEvent): void {
+    if (!dragged) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  }
+  function dropBag(event: DragEvent, index: number): void {
+    if (!dragged) return;
+    event.preventDefault();
+    const source = dragged;
+    dragged = null;
+    if (source.kind === 'bag' && source.index !== index) {
+      bridge.command({ type: 'swapInventory', fromIndex: source.index, toIndex: index });
+    } else if (source.kind === 'gear') {
+      if (view.inventory[index]) equip(index, source.slot);
+      else bridge.command({ type: 'unequipTo', slot: source.slot, index });
+    }
+    selected = null;
+  }
+  function dropGear(event: DragEvent, slot: EquipmentSlot): void {
+    if (!dragged) return;
+    event.preventDefault();
+    const source = dragged;
+    dragged = null;
+    if (source.kind === 'bag') equip(source.index, slot);
+    selected = null;
+  }
+  const stats: readonly { key: 'armor' | 'damageMin' | 'damageMax' | 'maxHealth'; label: string }[] = [
+    { key: 'armor', label: 'stat.armor' },
+    { key: 'damageMin', label: 'stat.damageMin' },
+    { key: 'damageMax', label: 'stat.damageMax' },
+    { key: 'maxHealth', label: 'stat.maxHealth' }
+  ];
+  function sign(value: number): string {
+    return value > 0 ? '+' + value : String(value);
+  }
+  function equipInspected(slot?: EquipmentSlot): void {
+    if (displayed?.kind === 'bag') equip(displayed.index, slot);
+  }
+  function unequipInspected(): void {
+    if (displayed?.kind === 'gear') unequip(displayed.slot);
+  }
+  function flagInspected(kind: 'locked' | 'favorite'): void {
+    if (inspected) flag(inspected, kind);
+  }
+  function dropInspected(): void {
+    if (displayed?.kind === 'bag') bridge.command({ type: 'dropInventory', index: displayed.index });
   }
 </script>
 
 <div class="inventory-overlay">
   <div class="inventory-window" role="dialog" aria-modal="true" aria-label={$t('inventory.title')}>
     <header class="inventory-header">
-      <div><div class="inventory-kicker">AETHER &amp; RUIN</div><h2>{$t('inventory.title')}</h2></div>
-      <button class="close-button" onclick={close} aria-label={$t('inventory.close')}>✕</button>
+      <div>
+        <span class="kicker">AETHER &amp; RUIN / EQUIPMENT</span>
+        <h2>{$t('inventory.title')}</h2>
+      </div>
+      <div class="header-controls">
+        <button class="help-toggle" onclick={() => { helpOpen = !helpOpen; }} aria-expanded={helpOpen}>
+          {$locale === 'cs' ? 'Ovládání' : 'Controls'}
+        </button>
+        <button class="close-button" onclick={close} aria-label={$t('inventory.close')}>✕</button>
+      </div>
     </header>
 
+    {#if helpOpen}
+      <p class="help-note">
+        {$locale === 'cs'
+          ? 'Přetáhni předmět do slotu výbavy nebo do batohu. Dvojklik na předmět jej nasadí, dvojklik na výbavu jej sundá. Kliknutím vyber a druhým kliknutím přesuň. Najeď kurzorem pro porovnání.'
+          : 'Drag items into an equipment slot or another bag cell. Double-click to equip or unequip. Click once to select, then click the destination. Hover to compare stats.'}
+      </p>
+    {/if}
+
     <div class="inventory-layout">
-      <div class="equipment-section">
+      <section class="equipment-section" aria-label={$t('inventory.equipped')}>
         <h3>{$t('inventory.equipped')}</h3>
         <div class="equipment-grid">
-          {#each Object.entries(view.equipment) as [slot, item] (slot)}
-            <div class="equipment-item">
-              <div class="equipment-slot-name">{$t('item.slot.' + slot)}</div>
-              {#if item}
-                <div class="equipment-name" style:color={RARITIES[item.rarity].color}>
-                  {item.icon} {itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}
-                </div>
-                {#if item.upgrades > 0}
-                  <div class="item-temper">{$t('trade.tempering')} +{item.upgrades}/3</div>
-                {/if}
-                <button class="item-action" onclick={() => unequip(slot as keyof GameSnapshot['equipment'])}>
-                  {$t('inventory.unequip')}
-                </button>
-              {:else}
-                <span class="empty-slot">{$t('inventory.empty')}</span>
-              {/if}
-            </div>
+          {#each slots as slot (slot)}
+            {@const item = view.equipment[slot]}
+            <button type="button" class="equipment-slot"
+              class:has-item={!!item}
+              class:selected={selected?.kind === 'gear' && selected.slot === slot}
+              style:grid-area={slot}
+              style:border-color={item ? RARITIES[item.rarity].color : undefined}
+              data-equipment-slot={slot}
+              draggable={!!item}
+              ondragstart={(event) => startDrag(event, { kind: 'gear', slot })}
+              ondragend={() => { dragged = null; }}
+              ondragover={permitDrop}
+              ondrop={(event) => dropGear(event, slot)}
+              onpointerenter={() => { hovered = { kind: 'gear', slot }; }}
+              onpointerleave={() => { hovered = null; }}
+              onfocus={() => { hovered = { kind: 'gear', slot }; }}
+              onclick={() => pickGear(slot)}
+              ondblclick={() => unequip(slot)}
+              aria-label={$t('item.slot.' + slot) + (item ? ': ' + itemName(item) : ': ' + $t('inventory.empty'))}
+              title={item ? itemName(item) : $t('inventory.empty')}>
+              <span class="slot-label">{$t('item.slot.' + slot)}</span>
+              <span class="slot-icon" style:color={item ? RARITIES[item.rarity].color : '#55616a'}>
+                {item ? item.icon : '◇'}
+              </span>
+              {#if item?.upgrades}<span class="slot-level">+{item.upgrades}</span>{/if}
+            </button>
           {/each}
         </div>
-        <div class="stat-list">
+        <div class="core-stats">
           <div><span>{$t('stat.armor')}</span><strong>{view.stats.armor}</strong></div>
-          <div><span>{$t('stat.strength')}</span><strong>{view.stats.strength}</strong></div>
-          <div><span>{$t('stat.dexterity')}</span><strong>{view.stats.dexterity}</strong></div>
-          <div><span>{$t('stat.intelligence')}</span><strong>{view.stats.intelligence}</strong></div>
-          <div><span>{$t('stat.vitality')}</span><strong>{view.stats.vitality}</strong></div>
+          <div><span>{$t('stat.damageMin')}–{$t('stat.damageMax')}</span>
+            <strong>{view.stats.damageMin}–{view.stats.damageMax}</strong></div>
           <div><span>{$t('stat.critChance')}</span><strong>{view.stats.critChance}%</strong></div>
+          <div><span>{$t('stat.maxHealth')}</span><strong>{view.stats.maxHealth}</strong></div>
         </div>
-      </div>
+      </section>
 
-      <div class="backpack-section">
-        <div class="bag-heading"><h3>{$t('inventory.bag')}</h3><span>{view.inventory.filter(Boolean).length}/24</span></div>
+      <section class="backpack-section" aria-label={$t('inventory.bag')}>
+        <div class="bag-heading">
+          <h3>{$t('inventory.bag')}</h3>
+          <span>{view.inventory.filter(Boolean).length} / {view.inventory.length}</span>
+        </div>
         <div class="bag-toolbar">
-          <button onclick={() => bridge.command({ type: 'sortInventory' })}>{$t('inventory.sort')}</button>
-          <label>{$t('inventory.filter')}
+          <label>
+            {$t('inventory.filter')}
             <select bind:value={rarityFilter} aria-label={$t('inventory.filter')}>
               <option value="ALL">{$t('inventory.all')}</option>
               {#each Object.keys(RARITIES) as rarity (rarity)}
@@ -82,90 +211,228 @@
               {/each}
             </select>
           </label>
-          {#if moveSource !== null}<span role="status">{$t('inventory.swapPrompt')}</span>{/if}
+          <button onclick={() => { selected = null; bridge.command({ type: 'sortInventory' }); }}>
+            {$t('inventory.sort')}
+          </button>
         </div>
-        <div class="bag-grid">
-          {#each view.inventory as item, index (index)}
-            <div class="bag-slot" class:pending-move={moveSource === index}
-              title={item ? itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId)) : $t('inventory.empty')}>
+        <div class="bag-grid" role="group" aria-label={$t('inventory.bag')}>
+          {#each view.inventory as item,index (index)}
+            <button type="button" class="bag-slot"
+              class:occupied={!!item}
+              class:filtered-out={!!item && rarityFilter !== 'ALL' && item.rarity !== rarityFilter}
+              class:selected={selected?.kind === 'bag' && selected.index === index}
+              class:favorite={!!(item && view.itemFlags?.[item.id]?.favorite)}
+              class:locked={!!(item && view.itemFlags?.[item.id]?.locked)}
+              style:border-color={item ? RARITIES[item.rarity].color : undefined}
+              data-bag-index={index}
+              draggable={!!item}
+              ondragstart={(event) => startDrag(event, { kind: 'bag', index })}
+              ondragend={() => { dragged = null; }}
+              ondragover={permitDrop}
+              ondrop={(event) => dropBag(event,index)}
+              onpointerenter={() => { hovered = item ? { kind: 'bag', index } : null; }}
+              onpointerleave={() => { hovered = null; }}
+              onfocus={() => { hovered = item ? { kind: 'bag', index } : null; }}
+              onclick={() => pickBag(index)}
+              ondblclick={() => { if (item) equip(index); }}
+              oncontextmenu={(event) => { if (item) { event.preventDefault(); equip(index); } }}
+              aria-label={item ? itemName(item) : $t('inventory.empty')}
+              title={item ? itemName(item) : $t('inventory.empty')}>
               {#if item && (rarityFilter === 'ALL' || item.rarity === rarityFilter)}
-                {@const delta = bridge.previewEquipment(index)}
-                <div class="item-card">
-                  <div class="item-visual" style:color={RARITIES[item.rarity].color}>{item.icon}</div>
-                  <div class="item-title" style:color={RARITIES[item.rarity].color}>{itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</div>
-                  <div class="item-rarity">{$t('item.rarity.' + item.rarity)}</div>
-                  {#if item.twoHanded}<div class="item-affix">{$t('inventory.twoHanded')}</div>{/if}
-                  {#if (item.requiredLevel ?? 1) > 1}
-                    <div class="item-affix">{$t('inventory.requireLevel')}: {item.requiredLevel}</div>
-                  {/if}
-                  {#if (item.sockets?.length ?? 0) > 0}<div class="item-affix">◯ × {item.sockets?.length}</div>{/if}
-                  {#if item.legendaryPower}<div class="item-affix">{$t('inventory.legendaryPower')}: +{Math.max(1, Math.floor(item.legendaryPower.magnitude * 0.15))} {$t('stat.damageMin')}</div>{/if}
-                  {#if item.upgrades > 0}
-                    <div class="item-temper">{$t('trade.tempering')} +{item.upgrades}/3</div>
-                  {/if}
-                  {#each item.affixes as affix (affix.id)}
-                    <div class="item-affix">{$t('item.affix.' + affix.id)} +{affix.value} {$t('stat.' + affix.stat)}</div>
-                  {/each}
-                  {#if delta}
-                    <div class="item-affix">{$t('inventory.comparison')}:
-                      {$t('stat.armor')} {delta.armor >= 0 ? '+' : ''}{delta.armor},
-                      {$t('stat.damageMin')} {delta.damageMin >= 0 ? '+' : ''}{delta.damageMin},
-                      {$t('stat.maxHealth')} {delta.maxHealth >= 0 ? '+' : ''}{delta.maxHealth}
-                    </div>
-                  {/if}
-                  <button class="item-action" onclick={() => equip(index)}>{$t('inventory.equip')}</button>
-                  {#if item.weaponType && WEAPON_TYPES[item.weaponType].canOffHand}
-                    <button class="item-action" onclick={() => equip(index, 'OFF_HAND')}>{$t('inventory.offHandEquip')}</button>
-                  {/if}
-                  <div class="bag-actions">
-                    <button onclick={() => flag(item.id, 'favorite')}>{$t(view.itemFlags?.[item.id]?.favorite ? 'inventory.unfavorite' : 'inventory.favorite')}</button>
-                    <button onclick={() => flag(item.id, 'locked')}>{$t(view.itemFlags?.[item.id]?.locked ? 'inventory.unlock' : 'inventory.lock')}</button>
-                    <button onclick={() => move(index)}>{$t('inventory.move')}</button>
-                    <button onclick={() => bridge.command({ type: 'dropInventory', index })}>{$t('inventory.drop')}</button>
-                  </div>
-                </div>
+                <span class="bag-item-icon">{item.icon}</span>
+                <span class="sr-only">{itemName(item)}</span>
+                <span class="item-level">{item.level}</span>
+                {#if view.itemFlags?.[item.id]?.favorite}<span class="favorite-mark">★</span>{/if}
+                {#if view.itemFlags?.[item.id]?.locked}<span class="lock-mark">◆</span>{/if}
               {:else}
-                {#if moveSource !== null}<button class="empty-symbol" onclick={() => move(index)} aria-label={$t('inventory.move')}>◇</button>
-                {:else}<span class="empty-symbol" aria-hidden="true">◇</span>{/if}
+                <span class="empty-icon" aria-hidden="true">·</span>
               {/if}
-            </div>
+            </button>
           {/each}
         </div>
-      </div>
+        <div class="bag-footer">
+          <span>{$locale === 'cs' ? 'Přetahování · dvojklik pro nasazení' : 'Drag & drop · double-click to equip'}</span>
+          {#if selected?.kind === 'bag'}
+            <button onclick={() => { selected = null; }}>{$locale === 'cs' ? 'Zrušit výběr' : 'Clear selection'}</button>
+          {/if}
+        </div>
+      </section>
+
+      <aside class="item-inspector" data-testid="item-inspector"
+        aria-label={$locale === 'cs' ? 'Porovnání výbavy' : 'Equipment comparison'}>
+        <h3>{$t('inventory.comparison')}</h3>
+        {#if inspected}
+          <div class="comparison-grid">
+            <section class="item-detail">
+              <span class="detail-tag">{$locale === 'cs'
+                ? (displayed?.kind === 'gear' ? 'NASAZENO' : 'V BATOHU')
+                : (displayed?.kind === 'gear' ? 'EQUIPPED' : 'IN BAG')}</span>
+              <span class="detail-icon" style:color={RARITIES[inspected.rarity].color}>{inspected.icon}</span>
+              <strong class="item-title" style:color={RARITIES[inspected.rarity].color}>
+                {itemName(inspected)}
+              </strong>
+              <span class="rarity-label">{$t('item.rarity.' + inspected.rarity)} · {$t('inventory.requireLevel')} {inspected.requiredLevel ?? 1}</span>
+              <div class="item-property"><span>{$t('stat.damageMin')}–{$t('stat.damageMax')}</span><strong>{inspected.minDmg}–{inspected.maxDmg}</strong></div>
+              <div class="item-property"><span>{$t('stat.armor')}</span><strong>{inspected.armor}</strong></div>
+              <div class="item-property"><span>{$t('stat.blockChance')}</span><strong>{inspected.block}%</strong></div>
+              {#if inspected.twoHanded}<p>{$t('inventory.twoHanded')}</p>{/if}
+              {#if inspected.sockets?.length}<p>◯ {inspected.sockets?.length}</p>{/if}
+              {#if inspected.upgrades > 0}<p>{$t('trade.tempering')} +{inspected.upgrades}</p>{/if}
+              {#if inspected.legendaryPower}<p>{$t('inventory.legendaryPower')}: +{inspected.legendaryPower.magnitude}</p>{/if}
+              {#each inspected.affixes as affix,i (i)}
+                <div class="affix-line">{$t('item.affix.' + affix.id)} · +{affix.value} {$t('stat.' + affix.stat)}</div>
+              {/each}
+            </section>
+            <section class="item-detail comparison-equipped">
+              <span class="detail-tag">{$locale === 'cs' ? 'SROVNÁNÍ S NASAZENÝM' : 'CURRENT EQUIPMENT'}</span>
+              {#if displayed?.kind === 'bag' && equippedItem}
+                <span class="detail-icon" style:color={RARITIES[equippedItem.rarity].color}>{equippedItem.icon}</span>
+                <strong class="item-title" style:color={RARITIES[equippedItem.rarity].color}>{itemName(equippedItem)}</strong>
+                <span class="rarity-label">{$t('item.rarity.' + equippedItem.rarity)}</span>
+                <div class="item-property"><span>{$t('stat.damageMin')}–{$t('stat.damageMax')}</span><strong>{equippedItem.minDmg}–{equippedItem.maxDmg}</strong></div>
+                <div class="item-property"><span>{$t('stat.armor')}</span><strong>{equippedItem.armor}</strong></div>
+                <div class="item-property"><span>{$t('stat.blockChance')}</span><strong>{equippedItem.block}%</strong></div>
+                {#each equippedItem.affixes as affix,i (i)}
+                  <div class="affix-line">{$t('item.affix.' + affix.id)} · +{affix.value} {$t('stat.' + affix.stat)}</div>
+                {/each}
+              {:else if displayed?.kind === 'gear'}
+                <p class="detail-placeholder">
+                  {$locale === 'cs' ? 'Tento předmět je nasazen. Najeď na předmět v batohu pro srovnání.' : 'This item is equipped. Hover a bag item for a side-by-side comparison.'}
+                </p>
+              {:else}
+                <p class="detail-placeholder">
+                  {$locale === 'cs' ? 'Prázdný slot. Předmět lze nasadit dvojklikem nebo přetažením.' : 'Empty equipment slot. Double-click or drag the item to equip it.'}
+                </p>
+              {/if}
+            </section>
+          </div>
+          {#if displayed?.kind === 'bag'}
+            <div class="stat-deltas" data-testid="item-stat-comparison">
+              <h4>{$locale === 'cs' ? 'Změna statistik po nasazení' : 'Stats after equipping'}</h4>
+              {#if delta}
+                {#each stats as stat (stat.key)}
+                  <div data-stat={stat.key}>
+                    <span>{$t(stat.label)}</span>
+                    <span class="before">{view.stats[stat.key]}</span>
+                    <span class="arrow">→</span>
+                    <strong class:gain={delta[stat.key] > 0} class:loss={delta[stat.key] < 0}>
+                      {view.stats[stat.key] + delta[stat.key]}
+                      <small>({sign(delta[stat.key])})</small>
+                    </strong>
+                  </div>
+                {/each}
+              {:else}
+                <p class="invalid-equip">{$locale === 'cs'
+                  ? 'Předmět nelze nasadit: zkontroluj úroveň, typ slotu nebo druhou ruku.'
+                  : 'Cannot equip: check the required level, slot type or two-handed conflict.'}</p>
+              {/if}
+            </div>
+            <div class="inspector-actions">
+              <button class="primary-action" onclick={() => equipInspected()}>
+                {$t('inventory.equip')}
+              </button>
+              {#if inspected.weaponType && WEAPON_TYPES[inspected.weaponType].canOffHand}
+                <button onclick={() => equipInspected('OFF_HAND')}>{$t('inventory.offHandEquip')}</button>
+              {/if}
+              <button onclick={() => flagInspected('favorite')}>
+                {$t(view.itemFlags?.[inspected.id]?.favorite ? 'inventory.unfavorite' : 'inventory.favorite')}
+              </button>
+              <button onclick={() => flagInspected('locked')}>
+                {$t(view.itemFlags?.[inspected.id]?.locked ? 'inventory.unlock' : 'inventory.lock')}
+              </button>
+              <button onclick={dropInspected}>
+                {$t('inventory.drop')}
+              </button>
+            </div>
+          {:else if displayed?.kind === 'gear'}
+            <div class="inspector-actions">
+              <button class="primary-action" onclick={unequipInspected}>
+                {$t('inventory.unequip')}
+              </button>
+            </div>
+          {/if}
+        {:else}
+          <div class="inspect-placeholder">
+            <span class="placeholder-glyph">✧</span>
+            <p>{$locale === 'cs'
+              ? 'Najeď kurzorem na předmět v batohu nebo na nasazenou výbavu. Tady se ukážou vlastnosti a přesné rozdíly.'
+              : 'Hover a bag item or equipped gear to see its attributes and exact character-stat differences.'}</p>
+          </div>
+        {/if}
+      </aside>
     </div>
   </div>
 </div>
 
 <style>
-  .inventory-overlay {position:absolute;inset:0;z-index:7;background:#05070abd;display:grid;place-items:center;padding:22px}
-  .inventory-window {width:min(1050px,100%);height:min(770px,92vh);background:linear-gradient(145deg,#1b232c,#0b1018);border:1px solid #a0875f;box-shadow:0 22px 85px #000e;display:flex;flex-direction:column;overflow:hidden}
-  .inventory-header{display:flex;align-items:center;justify-content:space-between;padding:17px 24px;border-bottom:1px solid #554a38}
-  h2{font:1.5rem Georgia,serif;color:#ecddbd;margin:5px 0 0}
-  h3{font:1.12rem Georgia,serif;color:#cbb58e;margin:0 0 13px}
-  .inventory-kicker{font-size:.59rem;letter-spacing:.24em;color:#897e6a}
-  .close-button{padding:9px 13px}
-  .inventory-layout{display:grid;grid-template-columns:1fr 1.25fr;gap:20px;padding:22px 24px;overflow:auto}
-  .equipment-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-  .equipment-item{border:1px solid #41454b;background:#101823;padding:10px;min-height:78px;display:flex;flex-direction:column;gap:5px}
-  .equipment-slot-name{color:#a6a9a8;font-size:.7rem}
-  .equipment-name{font-size:.82rem}
-  .item-action{border:1px solid #766346;background:#30281e;color:#e8d6b3;font-size:.69rem;padding:5px 7px;align-self:flex-start;margin-top:auto}
-  .empty-slot{color:#68727b;font-size:.72rem;margin:auto 0}
-  .stat-list{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px;color:#bdc5c7;font-size:.76rem}
-  .stat-list>div{display:flex;justify-content:space-between;gap:5px;border-bottom:1px solid #424a4f;padding:6px}
-  .stat-list strong{color:#eadab5}
-  .bag-heading{display:flex;justify-content:space-between;color:#b3b2ae}
-  .bag-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
-  .bag-slot{border:1px solid #3a434c;min-height:100px;background:#0c131b;padding:7px}
-  .empty-symbol{display:grid;place-items:center;height:100%;color:#28353e;background:transparent;border:0;width:100%}
-  .pending-move{outline:2px solid #c99c67}
-  .bag-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 10px;font-size:.72rem}
-  .bag-toolbar select{background:#101823;color:#e0d5ba;border:1px solid #746448;margin-left:6px}
-  .bag-toolbar button,.bag-actions button{background:#1b2630;color:#e0d6be;border:1px solid #5c6470;padding:3px 5px;font-size:.65rem}
-  .bag-actions{display:flex;flex-wrap:wrap;gap:4px}
-  .item-card{display:flex;flex-direction:column;gap:4px;min-height:90px}
-  .item-visual{font-size:1.2rem}.item-title{font-size:.77rem}
-  .item-rarity,.item-affix{font-size:.63rem;color:#adb5b8}
-  .item-temper{font-size:.66rem;color:#e8c080}
-  @media(max-width:750px){.inventory-layout{grid-template-columns:1fr}.inventory-window{height:96vh}.bag-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  .inventory-overlay{position:absolute;inset:0;z-index:40;display:grid;place-items:center;background:#03060bdf;padding:clamp(8px,2vh,24px)}
+  .inventory-window{width:min(1320px,100%);max-height:min(850px,96dvh);min-height:0;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(155deg,#20242c,#0b111a 70%);border:1px solid #9d845d;box-shadow:0 25px 90px #000e}
+  .inventory-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid #61513b}
+  .kicker{font-size:.58rem;letter-spacing:.2em;color:#a59678}
+  h2{font:1.5rem Georgia,serif;color:#ecdcc0;margin:3px 0 0}
+  h3{font:1.1rem Georgia,serif;color:#d8bd8e;margin:0 0 12px}
+  .header-controls{display:flex;gap:7px}
+  .header-controls button,.bag-toolbar button,.bag-footer button,.inspector-actions button{border:1px solid #70614d;background:#202831;color:#e9dcc1;font-size:.74rem;padding:7px 10px}
+  .help-note{padding:9px 20px;margin:0;color:#e2cda9;background:#232620;border-bottom:1px solid #625745;font-size:.76rem}
+  .inventory-layout{display:grid;grid-template-columns:minmax(245px,.95fr) minmax(275px,1fr) minmax(300px,1.2fr);gap:18px;min-height:0;overflow:auto;padding:18px}
+  .equipment-section,.backpack-section,.item-inspector{min-width:0}
+  .equipment-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:
+    ". HELMET ."
+    "MAIN_HAND CHEST OFF_HAND"
+    "GLOVES BELT BOOTS"
+    "RING_1 AMULET RING_2"
+    ". RELIC CHARM";gap:8px;justify-items:stretch}
+  .equipment-slot{position:relative;min-width:0;aspect-ratio:1.2;border:1px solid #45505a;background:radial-gradient(circle at center,#1c2930,#0a121a);padding:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+  .equipment-slot.has-item{background:radial-gradient(circle at center,#222d36,#131822)}
+  .equipment-slot.selected,.bag-slot.selected{outline:2px solid #f0d199;outline-offset:1px}
+  .equipment-slot:focus-visible,.bag-slot:focus-visible{outline:2px solid #d8bf8d;outline-offset:1px}
+  .slot-label{font-size:clamp(.55rem,.65vw,.7rem);color:#b4b3ae;text-align:center;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .slot-icon{font:clamp(1.3rem,2vw,2rem) Georgia,serif;line-height:1.1}
+  .slot-level{font-size:.6rem;color:#ddb36c;position:absolute;right:4px;bottom:3px}
+  .core-stats{display:grid;gap:6px;margin-top:15px}
+  .core-stats div{display:flex;justify-content:space-between;gap:8px;padding:7px 9px;background:#141d24;border-bottom:1px solid #3c484e;font-size:.76rem;color:#abb8b9}
+  .core-stats strong{color:#ebd9b3;font-variant-numeric:tabular-nums}
+  .bag-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;color:#cfc0a9}
+  .bag-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;font-size:.72rem;color:#b2b5ae}
+  .bag-toolbar label{display:flex;align-items:center;gap:6px;min-width:0}
+  .bag-toolbar select{min-width:0;max-width:125px;padding:5px;color:#ddd1b9;border:1px solid #77674d;background:#192027;font-size:.72rem}
+  .bag-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
+  .bag-slot{position:relative;min-width:0;aspect-ratio:1/1.15;display:grid;place-items:center;padding:3px;border:1px solid #39434c;background:#101820}
+  .bag-slot.occupied{background:radial-gradient(circle at 50% 30%,#26313a,#111820 75%)}
+  .bag-slot.filtered-out{opacity:.20}
+  .bag-slot.favorite:before{content:' ';position:absolute;inset:2px;border:1px solid #efc87b80;pointer-events:none}
+  .bag-item-icon{font:clamp(1.2rem,2vw,1.8rem) Georgia,serif;color:#ebd6b0;text-shadow:0 2px 7px #000}
+  .item-level{position:absolute;bottom:2px;right:4px;font-size:.55rem;color:#a5bbbd}
+  .favorite-mark{position:absolute;top:1px;left:3px;font-size:.55rem;color:#eec776}
+  .lock-mark{position:absolute;top:1px;right:3px;font-size:.5rem;color:#a6c9d5}
+  .empty-icon{font-size:1rem;color:#36434b}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .bag-footer{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:12px;font-size:.67rem;color:#8f9b9c}
+  .item-inspector{padding:14px;border:1px solid #4f5047;background:linear-gradient(#141e26,#0b141c);overflow:auto;max-height:100%}
+  .comparison-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .item-detail{min-width:0;display:flex;flex-direction:column;gap:6px;background:#0b121a;border:1px solid #38434b;padding:10px}
+  .comparison-equipped{background:#121921}
+  .detail-tag{font-size:.58rem;letter-spacing:.1em;color:#b4a17b}
+  .detail-icon{font:1.9rem Georgia,serif;text-align:center;margin:4px}
+  .item-title{font: .82rem/1.3 Georgia,serif;overflow-wrap:anywhere}
+  .rarity-label{font-size:.67rem;color:#acb5b8}
+  .item-property{display:flex;justify-content:space-between;gap:4px;font-size:.64rem;color:#aeb8b9;padding:4px 0;border-bottom:1px solid #29313b}
+  .item-property strong{color:#f0ddbd;white-space:nowrap}
+  .affix-line{font-size:.64rem;line-height:1.4;color:#b1d1b7;overflow-wrap:anywhere}
+  .item-detail p{margin:3px 0;font-size:.67rem;color:#cbb18a}
+  .detail-placeholder{font-size:.7rem!important;line-height:1.6;color:#a9b4b7!important}
+  .stat-deltas{margin-top:12px;border-top:1px solid #5b5143;padding-top:10px}
+  h4{font: .85rem Georgia,serif;color:#dec393;margin:0 0 9px}
+  .stat-deltas>div{display:grid;grid-template-columns:minmax(90px,1fr) auto auto minmax(68px,auto);align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid #29333c;font-size:.73rem}
+  .stat-deltas .before{color:#a6a9a8}.stat-deltas .arrow{color:#756b60}
+  .stat-deltas strong{color:#e4ddd0;text-align:right;font-variant-numeric:tabular-nums}
+  .stat-deltas small{font-size:.65rem;display:block;color:inherit}
+  .stat-deltas .gain{color:#91d6a6}.stat-deltas .loss{color:#e2a098}
+  .invalid-equip{font-size:.72rem;color:#e2af8c}
+  .inspector-actions{display:flex;flex-wrap:wrap;gap:5px;margin-top:13px}
+  .inspector-actions .primary-action{border-color:#ba9361;background:#4b3a29}
+  .inspect-placeholder{text-align:center;display:grid;place-items:center;min-height:220px;color:#99a8a7;font-size:.8rem;line-height:1.65;padding:16px}
+  .placeholder-glyph{font:3rem Georgia,serif;color:#796c55}
+  @media(max-width:1080px){.inventory-layout{grid-template-columns:minmax(235px,.9fr) minmax(280px,1.1fr)}.item-inspector{grid-column:1/-1;max-height:none}.comparison-grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:650px){.inventory-overlay{padding:4px}.inventory-window{max-height:99dvh}.inventory-header{padding:9px 12px}.inventory-layout{grid-template-columns:1fr;padding:12px;gap:18px}.equipment-grid{max-width:410px;margin:auto}.bag-grid{max-width:490px}.item-inspector{grid-column:auto}.help-toggle{padding:5px}.header-controls button{font-size:.65rem}}
 </style>
