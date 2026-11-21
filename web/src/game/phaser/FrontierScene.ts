@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { get } from 'svelte/store';
 import { _ as translate, locale } from 'svelte-i18n';
 import { planCombatVfx } from './combatVfxPlan';
+import { planCombatReadability, type CombatReadabilityInput } from './combatReadabilityPlan';
 import { statusVisuals } from '../status/statusVisuals';
 import type { StatusInstance } from '../status/statusRuntime';
 import type { GameBridge } from '../bridge/GameBridge';
@@ -497,6 +498,40 @@ export class FrontierScene extends Phaser.Scene {
     else graphic.destroy();
   }
 
+  /** Respect operating-system reduced-motion preference without touching game timing. */
+  private reducedCombatMotion(): boolean {
+    return typeof window !== 'undefined'
+      && (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false);
+  }
+
+  /** Geometry-only overlay; gameplay state and authoritative hit timing never change. */
+  private showCombatReadability(event: CombatReadabilityInput): void {
+    const cue = planCombatReadability(event);
+    if (!cue) return;
+    const graphic = this.obtainImpact(cue.position.x, cue.position.y, 89);
+    if (cue.ring) {
+      graphic.lineStyle(cue.strokeWidth + 4, 0x08121c, 0.96)
+        .strokeCircle(0, 0, cue.radius);
+      graphic.lineStyle(cue.strokeWidth, cue.color, 0.98)
+        .strokeCircle(0, 0, cue.radius);
+      graphic.fillStyle(cue.color, 0.07).fillCircle(0, 0, cue.radius);
+    }
+    graphic.lineStyle(cue.strokeWidth + 4, 0x08121c, 0.96);
+    for (const line of cue.segments)
+      graphic.lineBetween(line.x1, line.y1, line.x2, line.y2);
+    graphic.lineStyle(cue.strokeWidth, cue.color, 0.98);
+    for (const line of cue.segments)
+      graphic.lineBetween(line.x1, line.y1, line.x2, line.y2);
+
+    if (this.reducedCombatMotion()) {
+      // A stationary readable mark, kept for the original warning duration.
+      this.time.delayedCall(cue.durationMs, () => this.releaseImpact(graphic));
+    } else {
+      this.tweens.add({ targets: graphic, alpha: 0, scaleX: 1.12, scaleY: 1.12,
+        duration: cue.durationMs, onComplete: () => this.releaseImpact(graphic) });
+    }
+  }
+
   private showDeathFeedback(actorId: string, position: Point): void {
     const cues = planCombatVfx({ type: 'death', position, actorId });
     for (const cue of cues) {
@@ -579,42 +614,55 @@ export class FrontierScene extends Phaser.Scene {
       return;
     }
     if (event.type === 'hollowKingCue') {
-      const ring = this.obtainImpact(event.x, event.y, 88);
-      const tint = event.kind === 'phaseChanged' ? 0xb59ae9
-        : event.kind === 'hitWindow' ? 0xf06c6f
-        : event.kind === 'telegraph' ? 0xeeb478 : 0x8eaeaf;
-      ring.lineStyle(event.kind === 'telegraph' ? 5 : 3, tint, 0.90)
-        .strokeCircle(0, 0, Math.min(128, Math.max(18, event.radius)));
-      ring.fillStyle(tint, 0.11).fillCircle(0, 0,
-        Math.min(128, Math.max(18, event.radius)));
-      this.tweens.add({ targets: ring, alpha: 0, scaleX: 1.16, scaleY: 1.16,
-        duration: event.kind === 'telegraph' ? 700 : 360,
-        onComplete: () => this.releaseImpact(ring) });
+      if (event.kind === 'telegraph') {
+        this.showCombatReadability({
+          type: 'telegraph', threat: 'boss',
+          position: { x: event.x, y: event.y }, radius: event.radius
+        });
+      } else {
+        const ring = this.obtainImpact(event.x, event.y, 88);
+        const tint = event.kind === 'phaseChanged' ? 0xb59ae9
+          : event.kind === 'hitWindow' ? 0xf06c6f : 0x8eaeaf;
+        ring.lineStyle(3, tint, 0.90)
+          .strokeCircle(0, 0, Math.min(128, Math.max(18, event.radius)));
+        ring.fillStyle(tint, 0.11).fillCircle(0, 0,
+          Math.min(128, Math.max(18, event.radius)));
+        this.tweens.add({ targets: ring, alpha: 0, scaleX: 1.16, scaleY: 1.16,
+          duration: 360, onComplete: () => this.releaseImpact(ring) });
+      }
     } else if (event.type === 'miniBossCue') {
-      const graphic = this.obtainImpact(event.x, event.y, 88);
-      const color = event.kind === 'telegraph' ? 0xf1b568
-        : event.kind === 'impact' ? 0xe16a67
-        : event.kind === 'phase' ? 0xa691db : 0x93b4b5;
-      graphic.lineStyle(event.kind === 'telegraph' ? 5 : 3, color, 0.92)
-        .strokeCircle(0, 0, Math.max(18, Math.min(140, event.radius)));
-      graphic.fillStyle(color, event.kind === 'telegraph' ? 0.16 : 0.1)
-        .fillCircle(0, 0, Math.max(18, Math.min(140, event.radius)));
-      this.tweens.add({ targets: graphic, alpha: 0,
-        scaleX: 1.2, scaleY: 1.2,
-        duration: event.kind === 'telegraph' ? 800 : 480,
-        onComplete: () => this.releaseImpact(graphic) });
+      if (event.kind === 'telegraph') {
+        this.showCombatReadability({
+          type: 'telegraph', threat: 'miniboss',
+          position: { x: event.x, y: event.y }, radius: event.radius
+        });
+      } else {
+        const graphic = this.obtainImpact(event.x, event.y, 88);
+        const color = event.kind === 'impact' ? 0xe16a67
+          : event.kind === 'phase' ? 0xa691db : 0x93b4b5;
+        graphic.lineStyle(3, color, 0.92)
+          .strokeCircle(0, 0, Math.max(18, Math.min(140, event.radius)));
+        graphic.fillStyle(color, 0.1)
+          .fillCircle(0, 0, Math.max(18, Math.min(140, event.radius)));
+        this.tweens.add({ targets: graphic, alpha: 0,
+          scaleX: 1.2, scaleY: 1.2, duration: 480,
+          onComplete: () => this.releaseImpact(graphic) });
+      }
     } else if (event.type === 'cryptTrapWindup' || event.type === 'cryptTrap') {
-      const ring = this.obtainImpact(event.x, event.y, 89);
-      const color = event.type === 'cryptTrapWindup' ? 0xd9b477 : 0xe26973;
-      ring.lineStyle(4, color, 0.95)
-        .strokeCircle(0, 0, event.type === 'cryptTrapWindup' ? event.radius : 23);
-      ring.fillStyle(color, 0.13).fillCircle(0, 0,
-        event.type === 'cryptTrapWindup' ? event.radius : 23);
-      this.tweens.add({
-        targets: ring, alpha: 0, scaleX: 1.2, scaleY: 1.2,
-        duration: event.type === 'cryptTrapWindup' ? 850 : 380,
-        onComplete: () => this.releaseImpact(ring)
-      });
+      if (event.type === 'cryptTrapWindup') {
+        this.showCombatReadability({
+          type: 'telegraph', threat: 'trap',
+          position: { x: event.x, y: event.y }, radius: event.radius
+        });
+      } else {
+        const ring = this.obtainImpact(event.x, event.y, 89);
+        ring.lineStyle(4, 0xe26973, 0.95).strokeCircle(0, 0, 23);
+        ring.fillStyle(0xe26973, 0.13).fillCircle(0, 0, 23);
+        this.tweens.add({
+          targets: ring, alpha: 0, scaleX: 1.2, scaleY: 1.2,
+          duration: 380, onComplete: () => this.releaseImpact(ring)
+        });
+      }
     } else if (event.type === 'cryptInteract') {
       const prop = buildCryptWorld(this.bridge.snapshot().worldSeed).theme.interactables
         .find(value => value.id === event.id);
@@ -697,6 +745,11 @@ export class FrontierScene extends Phaser.Scene {
       const actor = event.targetId === 'hero' ? state.player
         : state.enemies.find(unit => unit.actor.id === event.targetId)?.actor;
       if (!actor) return;
+      this.showCombatReadability({
+        type: 'impact', position: { x: actor.x, y: actor.y }, damage: event.damage,
+        outcome: event.dodged ? 'dodged' : event.blocked ? 'blocked' : 'hit',
+        critical: event.critical
+      });
       if (event.damage > 0) {
         if (event.targetId === 'hero') this.heroHitUntil = this.time.now + 140;
         else this.enemyHitUntil.set(event.targetId, this.time.now + 140);
@@ -721,7 +774,8 @@ export class FrontierScene extends Phaser.Scene {
       });
       for (const cue of cues) {
         if (cue.type === 'screenShake') {
-          this.cameras.main.shake(cue.durationMs, 0.0025 * cue.intensity);
+          if (!this.reducedCombatMotion())
+            this.cameras.main.shake(cue.durationMs, 0.0025 * cue.intensity);
         } else if (cue.type === 'floatText') {
           const text = cue.content.kind === 'damage'
             ? '-' + cue.content.amount : get(translate)(cue.content.key);
