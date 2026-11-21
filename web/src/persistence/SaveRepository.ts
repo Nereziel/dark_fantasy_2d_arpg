@@ -6,7 +6,44 @@ import { isCharacterId } from '../game/creation/characterCreation';
 
 const DATABASE = 'aether-ruin-web';
 const STORE = 'saves';
-const SLOT = 'first-character';
+const SLOT = 'first-character'; // Backward-compatible alias for the last active hero.
+const CHARACTER_PREFIX = 'character:';
+export const MAX_SAVED_CHARACTERS = 12;
+
+/** Canonical character slot; always validated before use as an IndexedDB key. */
+export function characterSaveKey(characterId: unknown): string | null {
+  return isCharacterId(characterId) ? CHARACTER_PREFIX + characterId : null;
+}
+
+export interface SavedCharacterInfo {
+  characterId: string;
+  classId: CharacterProgress['classId'];
+  level: number;
+  savedAt: number;
+}
+
+/** Pure catalog projection; invalid/forged records never appear in the UI. */
+export function summarizeSaveRecords(
+  entries: Iterable<readonly [IDBValidKey, unknown]>
+): SavedCharacterInfo[] {
+  const catalog = new Map<string, SavedCharacterInfo>();
+  for (const [key, raw] of entries) {
+    if (typeof key !== 'string') continue;
+    if (key !== SLOT && !key.startsWith(CHARACTER_PREFIX)) continue;
+    const character = readSaveRecord(raw);
+    const record = raw as Partial<SavedGame> | null;
+    if (!character || !record || !Number.isFinite(record.savedAt)
+      || (record.savedAt ?? -1) < 0) continue;
+    const id = character.characterId ?? 'hero';
+    if (key !== SLOT && key !== characterSaveKey(id)) continue;
+    const info = { characterId: id, classId: character.classId,
+      level: character.level, savedAt: record.savedAt! };
+    const current = catalog.get(id);
+    if (!current || current.savedAt < info.savedAt) catalog.set(id, info);
+  }
+  return [...catalog.values()].sort((a, b) =>
+    b.savedAt - a.savedAt || a.characterId.localeCompare(b.characterId));
+}
 
 /**
  * Persistent character only. A new session always starts with fresh monsters,
@@ -126,15 +163,98 @@ async function perform<T>(
   });
 }
 
+/**
+ * A successful transaction publishes both the canonical slot and the legacy
+ * active alias atomically. Existing single-slot browsers still see the latest
+ * hero, while older heroes stay independently addressable by characterId.
+ */
 export function saveGame(character: CharacterProgress): Promise<void> {
   const record = createSaveRecord(character);
-  if (!record) return Promise.reject(new Error('Invalid character progression'));
-  return perform<void>('readwrite', store => { store.put(record, SLOT); });
+  const key = record && characterSaveKey(record.characterId);
+  if (!record || !key) return Promise.reject(new Error('Invalid character progression'));
+  return perform<void>('readwrite', store => {
+    const request = store.getAllKeys();
+    request.onsuccess = () => {
+      const keys = request.result.filter(k =>
+        typeof k === 'string' && k.startsWith(CHARACTER_PREFIX));
+      const hasCanonical = keys.includes(key);
+      // One legacy character may exist without a canonical key yet.
+      const activeRequest = store.get(SLOT);
+      activeRequest.onsuccess = () => {
+        const legacy = readSaveRecord(activeRequest.result);
+        const legacyId = legacy?.characterId ?? (legacy ? 'hero' : null);
+        const legacyExtra = legacyId && !keys.includes(CHARACTER_PREFIX + legacyId) ? 1 : 0;
+        if (!hasCanonical && keys.length + legacyExtra >= MAX_SAVED_CHARACTERS) {
+          store.transaction.abort();
+          return;
+        }
+        store.put(record, key);
+        store.put(record, SLOT);
+      };
+    };
+  });
 }
 
-export function loadGame(): Promise<CharacterProgress | null> {
+/** Without an ID, load the last active alias (legacy API). */
+export function loadGame(characterId?: string): Promise<CharacterProgress | null> {
+  if (characterId !== undefined && !characterSaveKey(characterId)) {
+    return Promise.resolve(null);
+  }
   return perform<CharacterProgress | null>('readonly', (store, setResult) => {
-    const request = store.get(SLOT);
-    request.onsuccess = () => { setResult(readSaveRecord(request.result)); };
+    if (characterId === undefined) {
+      const request = store.get(SLOT);
+      request.onsuccess = () => { setResult(readSaveRecord(request.result)); };
+      return;
+    }
+    const request = store.get(characterSaveKey(characterId)!);
+    request.onsuccess = () => {
+      const canonical = readSaveRecord(request.result);
+      if (canonical && (canonical.characterId ?? 'hero') === characterId) {
+        setResult(canonical);
+        return;
+      }
+      // Migration-by-read: v8–v11 single-slot hero remains readable.
+      const legacy = store.get(SLOT);
+      legacy.onsuccess = () => {
+        const candidate = readSaveRecord(legacy.result);
+        setResult(candidate && (candidate.characterId ?? 'hero') === characterId
+          ? candidate : null);
+      };
+    };
+  });
+}
+
+export function listCharacters(): Promise<SavedCharacterInfo[]> {
+  return perform<SavedCharacterInfo[]>('readonly', (store, setResult) => {
+    const entries: Array<readonly [IDBValidKey, unknown]> = [];
+    const request = store.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        setResult(summarizeSaveRecords(entries));
+        return;
+      }
+      entries.push([cursor.key, cursor.value]);
+      cursor.continue();
+    };
+  });
+}
+
+/** Atomic removal of a character, its world facts and active aliases when owned. */
+export function deleteCharacter(characterId: string): Promise<void> {
+  const key = characterSaveKey(characterId);
+  if (!key) return Promise.reject(new Error('Invalid character identity'));
+  return perform<void>('readwrite', store => {
+    store.delete(key);
+    store.delete('world:' + key);
+    const active = store.get(SLOT);
+    active.onsuccess = () => {
+      const record = readSaveRecord(active.result);
+      if (record && (record.characterId ?? 'hero') === characterId) store.delete(SLOT);
+    };
+    const world = store.get('world:first-character');
+    world.onsuccess = () => {
+      if (world.result?.characterId === characterId) store.delete('world:first-character');
+    };
   });
 }
