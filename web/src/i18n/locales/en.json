@@ -365,7 +365,9 @@
       "venom": "Venom",
       "mastery": "Mastery",
       "legion": "Legion",
-      "fortitude": "Fortitude"
+      "fortitude": "Fortitude",
+      "consecrated": "Consecrated",
+      "ofFaith": "of Faith"
     },
     "slot": {
       "HELMET": "Helmet",
@@ -477,6 +479,26 @@
     "execute": {
       "name": "Execute",
       "desc": "A powerful strike dealing extra damage to weakened enemies."
+    },
+    "holyStrike": {
+      "name": "Holy Strike",
+      "desc": "A close-range radiant blow that restores Faith when it lands."
+    },
+    "divineShield": {
+      "name": "Divine Shield",
+      "desc": "Conjure a protective barrier and gain Fortified for six seconds."
+    },
+    "healingLight": {
+      "name": "Healing Light",
+      "desc": "Spend Faith to restore health; holy-caster talents strengthen the heal."
+    },
+    "holyAura": {
+      "name": "Holy Aura",
+      "desc": "Regenerate health and gain protection while searing nearby enemies."
+    },
+    "smite": {
+      "name": "Smite",
+      "desc": "Send a powerful ranged holy strike and leave enemies Vulnerable."
     }
   },
   "enemies": {
@@ -775,8 +797,11 @@
     "brood_mother": "Brood Mother",
     "corrupted_knight": "Corrupted Knight"
   },
-  "miniBoss": { "phase": "Phase" },
-  "boss": { "hollowKing": {
+  "miniBoss": {
+    "phase": "Phase"
+  },
+  "boss": {
+    "hollowKing": {
       "name": "The Hollow King",
       "phase1": "Phase I — Royal Blade",
       "phase2": "Phase II — Rise of the Dead",
@@ -789,7 +814,8 @@
         "rune_storm": "Rune Storm",
         "kings_judgment": "King's Judgment"
       }
-    } },
+    }
+  },
   "respawn": {
     "title": "You Have Fallen",
     "description": "Combat has ended. Your equipment, level, and quest progress are preserved.",
@@ -814,7 +840,11 @@
     "branches": {
       "berserker": "Berserker",
       "guardian": "Guardian",
-      "warlord": "Warlord"
+      "warlord": "Warlord",
+      "holyWarrior": "Holy Warrior",
+      "paladinGuardian": "Sacred Guardian",
+      "auraMaster": "Aura Master",
+      "holyCaster": "Holy Caster"
     },
     "nodes": {
       "berserker": {
@@ -870,8 +900,43 @@
           "name": "Commander",
           "description": "Increase War Cry haste and fortification magnitude by +6 percentage points per rank."
         }
+      },
+      "paladin": {
+        "zeal": {
+          "name": "Zeal",
+          "description": "Increase damage dealt by Holy attacks by 8% per rank."
+        },
+        "righteousFire": {
+          "name": "Righteous Fire",
+          "description": "Increase critical strike chance by 1.6 points per rank."
+        },
+        "aegis": {
+          "name": "Aegis",
+          "description": "Gain 13 armor per rank."
+        },
+        "bulwark": {
+          "name": "Bulwark of Faith",
+          "description": "Strengthen Divine Shield by 12% per rank."
+        },
+        "hymn": {
+          "name": "Hymn of Light",
+          "description": "Strengthen Holy Aura effects by 15% per rank."
+        },
+        "benediction": {
+          "name": "Benediction",
+          "description": "Extend Holy Aura's duration by two seconds per rank."
+        },
+        "prayer": {
+          "name": "Faithful Prayer",
+          "description": "Increase Faith regeneration by 0.8 per second per rank."
+        },
+        "inquisition": {
+          "name": "Inquisition",
+          "description": "Improve Healing Light by 12% per rank."
+        }
       }
-    }
+    },
+    "paladinTitle": "Paladin Talent Tree"
   },
   "skillModifiers": {
     "enhanced": "Enhanced",
