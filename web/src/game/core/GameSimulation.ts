@@ -39,6 +39,7 @@ import { STATUS_DEFINITIONS, type StatusId } from '../status/statusDefinitions';
 import { applyStatus, advanceStatuses, dispelStatuses, getStatusModifiers, type StatusInstance } from '../status/statusRuntime';
 import { isLegacyStatus, mergedLegacyEffects, monsterStatusImmunities, statusRule } from '../status/statusIntegration';
 import { CLASSES, isClassId, type ClassId } from '../data/classes';
+import { createStarterEquipment, isCharacterId } from '../creation/characterCreation';
 import { resolveTypedDamage, resolveHealing, type DamageType, type DamageResult } from '../combat/typedDamage';
 import type { SkillAim } from '../input/skillAiming';
 import { getWorldObject, isWorldObjectId, worldObjectsFor, type WorldObjectId } from '../world/interactables';
@@ -274,6 +275,7 @@ function validWaveBState(s: GameSnapshot): boolean {
 
 export class GameSimulation {
   private classId: ClassId = 'WARRIOR';
+  private characterId = 'hero';
   private equipment: Equipment = createEquipment();
   private inventory: Array<Item | null> = Array(INVENTORY_SIZE).fill(null);
   private stash: Array<Item | null> = Array(STASH_SIZE).fill(null);
@@ -1179,6 +1181,18 @@ export class GameSimulation {
   command(command: GameCommand): void {
     // A new click/action cancels any pending auto-approach.
     if(command.type!=='interactEnvironment')this.pendingEnvironmentId=null;
+    if (command.type === 'createCharacter') {
+      if (!isClassId(command.classId) || !isCharacterId(command.characterId)
+        || command.characterId === 'hero'
+        || (command.seed !== undefined && (!Number.isSafeInteger(command.seed)
+          || command.seed < 0 || command.seed > 0xffffffff))) return;
+      this.reset(command.classId, command.seed ?? this.world.seed);
+      this.characterId = command.characterId;
+      this.equipment = createStarterEquipment(command.classId);
+      this.refreshHealthLimit();
+      this.player.health = this.player.maxHealth;
+      return;
+    }
     if (command.type === 'reset') {
       this.reset(isClassId(command.classId) ? command.classId : 'WARRIOR', command.seed ?? this.world.seed);
       return;
@@ -4148,6 +4162,7 @@ export class GameSimulation {
   /** Persistent character-only projection. No combat, position, wave, seed or drops. */
   character(): CharacterProgress {
     return {
+      ...(this.characterId !== 'hero' ? { characterId: this.characterId } : {}),
       classId: this.classId,
       level: this.level,
       xp: this.xp,
@@ -4188,13 +4203,15 @@ export class GameSimulation {
    * the running game. All world/transient state is reset on every load.
    */
   restoreCharacter(progress: CharacterProgress, seed = this.world.seed): boolean {
-    if (!progress || !isClassId(progress.classId)) return false;
+    if (!progress || !isClassId(progress.classId)
+      || (progress.characterId !== undefined && !isCharacterId(progress.characterId))) return false;
 
     const scratch = new GameSimulation();
     scratch.reset(progress.classId);
     const baseline = scratch.snapshot();
     const candidate: GameSnapshot = {
       ...baseline,
+      ...(progress.characterId !== undefined ? { characterId: progress.characterId } : {}),
       level: progress.level,
       xp: progress.xp,
       skillPoints: progress.skillPoints ?? Math.max(0, Math.min(MAX_LEVEL - 1, progress.level - 1)),
@@ -4221,6 +4238,7 @@ export class GameSimulation {
     if (!scratch.restore(candidate)) return false;
 
     this.reset(progress.classId, seed);
+    this.characterId = progress.characterId ?? 'hero';
     this.level = progress.level;
     this.xp = progress.xp;
     this.skillPoints = scratch.skillPoints;
@@ -4264,6 +4282,7 @@ export class GameSimulation {
       dungeonStage: this.dungeonStage,
       dungeonCleared: this.dungeonCleared,
       classId: this.classId,
+      ...(this.characterId !== 'hero' ? { characterId: this.characterId } : {}),
       player: { ...this.player },
       enemy: { ...focus.actor },
       enemyIntent: focus.intent ? { ...focus.intent } : null,
@@ -4447,6 +4466,7 @@ export class GameSimulation {
         && ids.every(id => typeof id === 'string' && known.includes(id))
         && new Set(ids).size === ids.length);
     if (!s || !layout || s.version !== 5 || !isClassId(s.classId)
+      || (s.characterId !== undefined && !isCharacterId(s.characterId))
       || (s.mapDiscovery !== undefined && (!restoredMapWorld
         || !validateMapDiscovery(s.mapDiscovery, restoredMapWorld)))
       || (s.worldFacts !== undefined && (!restoredIndex
@@ -4684,6 +4704,7 @@ export class GameSimulation {
     this.dungeonStage = s.dungeonStage;
     this.dungeonCleared = s.dungeonCleared;
     this.classId = s.classId;
+    this.characterId = s.characterId ?? 'hero';
     this.quest = { ...s.quest };
     this.equipment = cloneEquipment(s.equipment);
     this.inventory = s.inventory.map(cloneItem);
@@ -4818,6 +4839,7 @@ export class GameSimulation {
     this.storyFeatures = wilderness.features;
     this.initWorldSystems(wilderness);
     this.classId = classId;
+    this.characterId = 'hero';
     this.equipment = createEquipment();
     this.inventory = Array(INVENTORY_SIZE).fill(null);
     this.stash = Array(STASH_SIZE).fill(null);

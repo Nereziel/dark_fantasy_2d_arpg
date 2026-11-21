@@ -1,4 +1,5 @@
 import type { WorldSessionProgress } from '../game/core/types';
+import { isCharacterId } from '../game/creation/characterCreation';
 import { validateMapDiscovery } from '../game/world/mapDiscovery';
 import { MINI_BOSS_IDS } from '../game/enemies/miniBossRules';
 import { validCheckpointIds } from '../game/core/deathRespawn';
@@ -15,14 +16,15 @@ const MAX_RECORD_BYTES = 120_000;
 
 interface WorldRecord {
   format: 1;
-  characterId: 'hero';
+  characterId: string;
   progress: WorldSessionProgress;
 }
 
-export function readWorldRecord(raw: unknown): WorldSessionProgress | null {
+export function readWorldRecord(raw: unknown, expectedCharacterId = 'hero'): WorldSessionProgress | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const record = raw as Partial<WorldRecord>;
-  if (record.format !== 1 || record.characterId !== 'hero'
+  if (record.format !== 1 || !isCharacterId(expectedCharacterId)
+    || record.characterId !== expectedCharacterId
     || !record.progress || record.progress.version !== 1
     || !Number.isSafeInteger(record.progress.seed)
     || record.progress.seed < 0 || record.progress.seed > 0xffffffff
@@ -52,9 +54,10 @@ export function readWorldRecord(raw: unknown): WorldSessionProgress | null {
   } catch { return null; }
 }
 
-export function createWorldRecord(progress: WorldSessionProgress): WorldRecord | null {
-  const candidate: WorldRecord = { format: 1, characterId: 'hero', progress };
-  return readWorldRecord(candidate) ? structuredClone(candidate) : null;
+export function createWorldRecord(progress: WorldSessionProgress, characterId = 'hero'): WorldRecord | null {
+  if (!isCharacterId(characterId)) return null;
+  const candidate: WorldRecord = { format: 1, characterId, progress };
+  return readWorldRecord(candidate, characterId) ? structuredClone(candidate) : null;
 }
 
 function withStore<T>(mode: IDBTransactionMode,
@@ -80,15 +83,15 @@ function withStore<T>(mode: IDBTransactionMode,
   });
 }
 
-export async function saveWorldProgress(progress: WorldSessionProgress): Promise<void> {
-  const record = createWorldRecord(progress);
+export async function saveWorldProgress(progress: WorldSessionProgress, characterId = 'hero'): Promise<void> {
+  const record = createWorldRecord(progress, characterId);
   if (!record) throw new RangeError('Invalid world-instance progress');
   return withStore<void>('readwrite', store => { store.put(record, SLOT); });
 }
 
-export async function loadWorldProgress(): Promise<WorldSessionProgress | null> {
+export async function loadWorldProgress(characterId = 'hero'): Promise<WorldSessionProgress | null> {
   return withStore<WorldSessionProgress | null>('readonly', (store, done) => {
     const request = store.get(SLOT);
-    request.onsuccess = () => { done(readWorldRecord(request.result)); };
+    request.onsuccess = () => { done(readWorldRecord(request.result, characterId)); };
   });
 }

@@ -265,30 +265,49 @@
     "essence": "Esence",
     "soul": "Síla duší"
   },
+  "creation": {
+    "details": "Podrobnosti vybrané třídy",
+    "strengths": "Přednosti",
+    "resource": "Zdroj",
+    "equipment": "Počáteční výbava",
+    "overwriteWarning": "Vytvoření nového hrdiny přepíše dosavadní uloženou postavu a její postup ve světě."
+  },
   "classes": {
     "WARRIOR": {
       "name": "Válečník",
-      "desc": "Odolný bojovník, který čerpá hněv z blízkého boje."
+      "desc": "Odolný bojovník, který čerpá hněv z blízkého boje.",
+      "strengths": "Silný boj zblízka a vysoká výdrž",
+      "starter": "Široký meč a železná přilba"
     },
     "PALADIN": {
       "name": "Paladin",
-      "desc": "Svatý bojovník s ochranou, vírou a božskou mocí."
+      "desc": "Svatý bojovník s ochranou, vírou a božskou mocí.",
+      "strengths": "Svatá obrana a ovládání boje zblízka",
+      "starter": "Palcát a štít"
     },
     "MAGE": {
       "name": "Mág",
-      "desc": "Pán živlů a magie, který zasahuje z bezpečné vzdálenosti."
+      "desc": "Pán živlů a magie, který zasahuje z bezpečné vzdálenosti.",
+      "strengths": "Živelná magie na dálku a kouzlení",
+      "starter": "Hůlka a ochranný talisman"
     },
     "ROGUE": {
       "name": "Tulák",
-      "desc": "Rychlý zabiják využívající obratnost a kritické zásahy."
+      "desc": "Rychlý zabiják využívající obratnost a kritické zásahy.",
+      "strengths": "Rychlý pohyb a přesné údery",
+      "starter": "Dýka a kožené boty"
     },
     "NECROMANCER": {
       "name": "Nekromant",
-      "desc": "Povolává moc smrti a pohlcuje esenci padlých."
+      "desc": "Povolává moc smrti a pohlcuje esenci padlých.",
+      "strengths": "Nemrtví pomocníci a oslabující kletby",
+      "starter": "Hůlka a krvavý amulet"
     },
     "WARLOCK": {
       "name": "Černokněžník",
-      "desc": "Temný mág pracující s kletbami a silou duší."
+      "desc": "Temný mág pracující s kletbami a silou duší.",
+      "strengths": "Démoničtí spojenci a postupné poškození",
+      "starter": "Hůlka a pečetní prsten"
     }
   },
   "item": {
