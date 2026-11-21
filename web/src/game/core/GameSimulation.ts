@@ -12,6 +12,9 @@ import { rollEliteModifiers, applyEliteStats, eliteOnHitPlan, eliteOnPeriodicPla
 import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
 import { applyOrRefreshEffect } from '../status/effectStack';
 import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../skills/warriorKit';
+import { PALADIN_EXTRA_SKILLS, getPaladinAbility, planPaladinCast,
+  validPaladinCooldowns, advancePaladinCooldowns,
+  type PaladinAbilityId, type PaladinCooldowns } from '../skills/paladinKit';
 import { projectEquippedSkill, type SkillProjection } from '../skills/skillModifiers';
 import { canActivateWarriorSkill, spendAndStartCooldown, advanceWarriorCooldowns, applyWarriorRageDelta, type WarriorActivationRequest } from '../skills/warriorEconomy';
 import { startCombatTimeline, advanceCombatTimeline, cancelCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
@@ -49,7 +52,7 @@ import { buildWilderness, type WildernessRuntimeWorld } from '../world/wildernes
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonRuntime';
 import {
   applyTalentStats, planSpendTalent, planRespecTalents, projectTalentBonuses,
-  validateTalentBuild, type TalentRanks, type WarriorTalentId
+  validateTalentBuild, type TalentRanks, type TalentId
 } from '../progression/talentTree';
 import { buildHollowKingRuntime } from '../bosses/hollowKingRuntime';
 import {
@@ -229,10 +232,12 @@ export class GameSimulation {
   private rng = new SeededRng();
   private cooldowns: Cooldowns = emptyCooldowns();
   private warriorCooldowns: Partial<Record<WarriorAbilityId, number>> = {};
+  private paladinCooldowns: PaladinCooldowns = {};
   private warriorPending: { id: WarriorAbilityId; targetId: string | null } | null = null;
   private warriorAction: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null = null;
   private classAction: {
     kind: 'basic' | 'skill'; slot: SkillSlot | null; targetId: string | null;
+    paladinAbilityId?: PaladinAbilityId;
     aim?: SkillAim; timeline: CombatTimelineState;
   } | null = null;
   private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
@@ -1056,6 +1061,7 @@ export class GameSimulation {
     this.evadeCooldown = 0;
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
+    this.paladinCooldowns = {};
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
@@ -1740,7 +1746,8 @@ export class GameSimulation {
   /** Single derived stat projection; talent effects never mutate equipment or DTOs. */
   private currentStats(equipment: Equipment = this.equipment, level = this.level) {
     const base = deriveStats(this.classId, equipment, level);
-    const stats=this.classId==='WARRIOR' ? applyTalentStats(base,this.talentRanks) : base;
+    const stats=(this.classId==='WARRIOR'||this.classId==='PALADIN')
+      ? applyTalentStats(base,this.talentRanks) : base;
     if(!this.shrineBlessings.length)return stats;
     return {...stats,
       armor:stats.armor+(this.hasShrineBlessing('armor')?30+level*2:0),
@@ -1752,7 +1759,7 @@ export class GameSimulation {
   }
 
   /** Modal UI sends a request; only simulation checks/commits spent ranks. */
-  private spendTalent(id: WarriorTalentId): void {
+  private spendTalent(id: TalentId): void {
     if (!this.player.alive) return;
     const plan = planSpendTalent(this.classId, this.level, this.talentPoints,
       this.talentRanks, id);
@@ -2830,6 +2837,7 @@ export class GameSimulation {
     this.effects = emptyEffects();
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
+    this.paladinCooldowns = {};
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
@@ -2882,6 +2890,7 @@ export class GameSimulation {
       rage: this.resource, maxRage: this.currentStats().maxResource,
       cooldowns: this.warriorCooldowns
     }, dt).cooldowns } as Partial<Record<WarriorAbilityId, number>>;
+    this.paladinCooldowns=advancePaladinCooldowns(this.paladinCooldowns,dt);
     this.warriorCooldowns.cleave = this.cooldowns.rmb;
     this.warriorCooldowns.charge = this.cooldowns.slot1;
     this.tickEffects(dt);
@@ -3499,6 +3508,7 @@ export class GameSimulation {
       rngState: this.rng.state,
       cooldowns: { ...this.cooldowns },
       warriorCooldowns: { ...this.warriorCooldowns },
+      paladinCooldowns: { ...this.paladinCooldowns },
       warriorAction: this.warriorAction ? {
         ...this.warriorAction, timeline: { ...this.warriorAction.timeline }
       } : null,
@@ -3651,6 +3661,7 @@ export class GameSimulation {
       || !validHollowAdds(s.hollowKingAddActorIds)
       || !validMiniStates(s.miniBossStates)
       || !validEventSnapshot()
+      || !validPaladinCooldowns(s.paladinCooldowns ?? {})
       || !validEnvironmentUsedIds(environmentUsed)
       || !validShrineBlessings(s.environmentBlessings ?? [])
       || (s.environmentObjects !== undefined &&
@@ -3870,6 +3881,7 @@ export class GameSimulation {
     this.rng = new SeededRng(s.rngState);
     this.cooldowns = { ...s.cooldowns };
     this.warriorCooldowns = s.warriorCooldowns ? { ...s.warriorCooldowns } : {};
+    this.paladinCooldowns = s.paladinCooldowns ? { ...s.paladinCooldowns } : {};
     this.warriorAction = s.warriorAction ? {
       ...s.warriorAction, timeline: { ...s.warriorAction.timeline }
     } : null;
@@ -3945,6 +3957,7 @@ export class GameSimulation {
     this.rng = new SeededRng(seed === 0 ? 0x49ac127b : ((seed ^ 0x49ac127b) >>> 0));
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
+    this.paladinCooldowns = {};
     this.warriorAction = null;
     this.classAction = null;
     this.warriorPending = null;
