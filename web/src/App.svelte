@@ -304,7 +304,7 @@
     const isTyping = target instanceof HTMLElement
       && !!target.closest('input, textarea, select, [contenteditable="true"]');
     if (mapOpen) {
-      if (!isTyping && (event.code === 'Escape' || event.code === 'KeyM')) {
+      if (event.code === 'Escape' || (!isTyping && event.code === 'KeyM')) {
         event.preventDefault();
         closeMap();
       }
@@ -612,9 +612,7 @@
         {/each}
       </aside>
       </div>
-      <SkillBar {bridge} {view} />
-      <div class="game-hud">
-        <div class="portrait"><span>✦</span></div>
+      <div class="game-hud" data-testid="combat-dock">
         <div class="vital-panel">
           <div class="vital-top"><span>{$t('hud.health')}</span><strong>{view.player.health} / {view.player.maxHealth}</strong></div>
           <div class="health-track"><div class="health-fill" style:width={`${100 * view.player.health / view.player.maxHealth}%`}></div></div>
@@ -626,26 +624,21 @@
           <div class="hud-details"><span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
           <div class="experience-track"><div style:width={`${xpRequiredForLevel(view.level) > 0 ? 100 * view.xp / xpRequiredForLevel(view.level) : 100}%`}></div></div>
         </div>
-        <div class="status-panel">
-          <div class="status-label">{$t('hud.enemy')}</div>
-          <div class="status-value enemy-name">{$t(view.enemy.id === 'crypt_lord-4' && view.zone === 'crypt'
-            ? 'boss.hollowKing.name' : view.miniBossStates?.[view.enemy.id]
-            ? 'miniBossNames.' + view.enemy.id
-            : view.enemy.id === 'morrow_gravebound'
-              ? 'enemies.morrow_gravebound.name' : 'enemies.' + view.enemy.type + '.name')}</div>
-          <div class="enemy-health">{view.enemy.alive
-            ? Math.round(100 * view.enemy.health / view.enemy.maxHealth) + '%'
-            : '—'}</div>
-          <div class="status-label">{$t('hud.status')}: {$t(`status.${view.status}`)}</div>
-        </div>
+        <SkillBar {bridge} {view} />
         <div class="hud-actions">
-          <button onclick={openInventory}>{$t('inventory.open')}</button>
-          <button onclick={openCharacterSheet}>{$t('character.open')}</button>
-          <button onclick={openTalents} disabled={!view.player.alive || view.paused}>
-            {$t('talents.open')}{view.talentPoints ? ' (' + view.talentPoints + ')' : ''}
-          </button>
-          <button disabled={busy} onclick={save}>{$t('menu.save')}</button>
-          <button disabled={busy} onclick={load}>{$t('menu.load')}</button>
+          <button onclick={openInventory} aria-label={$t('inventory.open')} title={$t('inventory.open')}
+            data-quick-action="inventory"><span aria-hidden="true">▦</span><span class="quick-key">I</span></button>
+          <button onclick={openCharacterSheet} aria-label={$t('character.open')} title={$t('character.open')}
+            data-quick-action="character"><span aria-hidden="true">♙</span><span class="quick-key">C</span></button>
+          <button onclick={openTalents} disabled={!view.player.alive || view.paused}
+            aria-label={$t('talents.open') + (view.talentPoints ? ' (' + view.talentPoints + ')' : '')}
+            title={$t('talents.open')}
+            data-quick-action="talents"><span aria-hidden="true">✧</span><span class="quick-key">T</span>
+            {#if (view.talentPoints ?? 0) > 0}<span class="quick-notice">{view.talentPoints}</span>{/if}</button>
+          <button disabled={busy} onclick={save} aria-label={$t('menu.save')} title={$t('menu.save')}
+            data-quick-action="save"><span aria-hidden="true">▣</span><span class="quick-key">S</span></button>
+          <button disabled={busy} onclick={load} aria-label={$t('menu.load')} title={$t('menu.load')}
+            data-quick-action="load"><span aria-hidden="true">↺</span><span class="quick-key">L</span></button>
         </div>
       </div>
 
@@ -653,13 +646,22 @@
         <div class="toast" role="status">{$t(messageKey)}</div>
       {/if}
       {#if mapOpen && fullProjection}
-        <div class="modal-shield" role="dialog" aria-modal="true" aria-label={$t('map.title')}>
+        <div class="modal-shield map-shield" role="dialog" aria-modal="true" aria-label={$t('map.title')}
+          data-testid="world-map-dialog">
           <section class="pause-card world-map-card">
-            <h2>{$t('map.title')}</h2>
-            <p>{$t('map.legend')}</p>
-            <WorldMapCanvas projection={fullProjection} />
-            <WaypointPanel {view} {bridge} />
-            <button class="secondary" onclick={closeMap}>{$t('map.close')}</button>
+            <header class="world-map-header">
+              <h2>{$t('map.title')}</h2>
+              <button class="map-close-button" data-testid="map-close"
+                aria-label={$t('map.close')} title={$t('map.close')}
+                onclick={closeMap}><span aria-hidden="true">✕</span><span>{$t('map.close')}</span></button>
+            </header>
+            <p class="world-map-legend">{$t('map.legend')}</p>
+            <div class="world-map-content">
+              <WorldMapCanvas projection={fullProjection} />
+            </div>
+            <div class="world-map-footer">
+              <WaypointPanel {view} {bridge} />
+            </div>
           </section>
         </div>
       {:else if townModal}
@@ -747,7 +749,7 @@
 
   /* Independent, scroll-safe HUD columns: no magic top:335px/508px offsets. */
   .hud-left-column,.hud-right-column {
-    position:absolute;z-index:3;top:85px;bottom:195px;
+    position:absolute;z-index:3;top:85px;bottom:clamp(145px,19vh,190px);
     display:flex;flex-direction:column;align-items:stretch;gap:10px;
     overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;
     scrollbar-color:#6c5f49 #111920;
@@ -785,13 +787,9 @@
   .hud-right-column :global(.enemy-roster){box-shadow:none;max-height:210px;overflow:auto}
   .hud-right-column :global(.event-panel){max-height:150px;overflow:auto}
   .hud-right-column :global(.dungeon-panel){max-height:180px;overflow:auto}
-  /* Seven-skill bars can occupy most of the screen width. Reserve their
-     vertical area at intermediate sizes so the side HUD never covers controls. */
-  @media (min-width:851px) and (max-width:1400px) {
-    .hud-left-column,.hud-right-column{bottom:clamp(300px,46vh,430px)}
-  }
+  /* Side HUD is always above the single compact combat dock. */
   @media(max-width:850px){
-    .hud-left-column,.hud-right-column{top:72px;bottom:max(390px,54vh);gap:6px}
+    .hud-left-column,.hud-right-column{top:72px;bottom:clamp(130px,22vh,185px);gap:6px}
     .hud-left-column{left:7px;width:clamp(132px,22vw,180px)}
     .hud-right-column{right:7px;width:clamp(132px,22vw,180px)}
     .hud-left-column :global(.world-guide){display:none}
@@ -799,7 +797,7 @@
     .hud-left-column :global(.camp-services button){font-size:.64rem;padding:5px 4px}
   }
   @media(max-width:560px){
-    .hud-left-column,.hud-right-column{top:64px;bottom:max(405px,56vh);gap:5px}
+    .hud-left-column,.hud-right-column{top:64px;bottom:clamp(125px,23vh,180px);gap:5px}
     .hud-left-column{width:clamp(120px,30vw,148px);left:4px}
     .hud-right-column{width:clamp(120px,30vw,148px);right:4px}
     .hud-right-column :global(.enemy-roster){max-height:110px}
@@ -825,20 +823,40 @@
     padding: 6px 8px;
     margin-top: 5px;
   }
+  .map-shield { z-index: 90; inset: 0; display: grid; place-items: center;
+    background: #03070cf2; padding: clamp(6px, 2vw, 22px); overflow: hidden; }
   .world-map-card {
-    width: min(94vw, 1050px);
+    width: min(100%, 1060px);
+    height: min(100%, 800px);
     max-width: none;
-    height: min(88vh, 740px);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    max-height: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding: clamp(9px, 1.6vw, 18px);
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    gap: clamp(6px, 1vh, 11px);
+    overflow: hidden;
+    text-align: left;
   }
-  .world-map-card :global(.map-canvas) { flex: 1; }
-  .world-map-card h2 { margin: 0; }
-  .world-map-card p { margin: 0; color: #c5b698; font-size: .85rem; }
+  .world-map-header { display: flex; justify-content: space-between; align-items: center;
+    gap: 15px; min-width: 0; }
+  .world-map-header h2 { margin: 0; font-size: clamp(1rem, 2.2vw, 1.45rem); }
+  .world-map-header .map-close-button { display: flex; align-items: center; gap: 8px;
+    border: 1px solid #b39563; background: #292b30; padding: 7px 11px;
+    min-height: 40px; flex: 0 0 auto; font-size: .8rem; position: relative; z-index: 2; }
+  .world-map-legend { margin: 0; color: #c5b698; font-size: .75rem;
+    line-height: 1.4; max-height: 3.2em; overflow: hidden; }
+  .world-map-content { min-width: 0; min-height: 0; display: grid; overflow: hidden; }
+  .world-map-content :global(.map-canvas) { width: 100%; height: 100%; min-height: 0; }
+  .world-map-footer { max-height: min(180px, 23vh); min-height: 0; overflow-y: auto; }
+  .world-map-footer :global(.travel-panel) { margin: 0; max-height: none; }
   @media (max-width: 700px) {
     .minimap-overlay { width: 145px; min-width: 0; right: 8px; top: 110px; }
-    .world-map-card { width: 96vw; height: 75vh; }
+    .world-map-card { width: 100%; height: 100%; }
+    .world-map-legend { font-size: .66rem; }
+    .world-map-footer { max-height: min(138px, 22vh); }
+    .world-map-header .map-close-button { padding: 5px 9px; }
   }
   .potion-shop{margin:12px 0;border-top:1px solid #6b5541;padding:10px 0}
   .potion-shop h3{font-size:.9rem;margin:5px 0 10px}

@@ -272,31 +272,66 @@
   {/if}
 </div>
 
+
 <style>
-  .potion-row{display:flex;gap:5px;justify-content:center;align-items:center;pointer-events:none;flex-wrap:wrap;margin-top:7px}
-  .potion-row button{pointer-events:auto;background:#201e21ed;border:1px solid #77674d;color:#e8d8ba;min-height:32px;padding:5px 9px;font-size:.72rem}
-  .potion-row button:disabled{opacity:.5;cursor:default}
-  .potion-row .potion-select.chosen{border-color:#e3b76e;background:#39302a}
-  .potion-key{color:#e7b477;border:1px solid #8b7251;padding:0 4px;margin-right:5px}
-  .potion-use strong{margin-left:8px}
-  .potion-timer{margin-left:8px;color:#e7a6a6}
-  .skill-ui{position:absolute;z-index:3;left:50%;bottom:144px;transform:translateX(-50%);pointer-events:none;width:min(930px,96vw)}
-  .skill-toolbar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;pointer-events:none}
-  .skill-button{pointer-events:auto;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:170px;min-height:83px;padding:9px 8px;border:1px solid #88704e;background:linear-gradient(#222b36eb,#10141be9);box-shadow:0 10px 25px #000c}
-  .skill-button.extra{width:90px;min-height:80px}
-  .skill-button.extra .skill-icon{font-size:1.3rem}
-  .skill-button.extra .skill-title{font-size:.65rem}
-  .skill-button:hover:not(:disabled){border-color:#e6bd81;background:#343642ed}
-  .skill-button:disabled{opacity:.6;cursor:default}
-  .skill-shortcut{position:absolute;left:7px;top:6px;font-size:.6rem;color:#b6a185}
-  .skill-icon{font:1.8rem Georgia,serif;color:#e1bf81}
-  .skill-title{font: .77rem Georgia,serif;color:#eee4d2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .skill-cost{position:absolute;right:8px;top:6px;color:#8ec9ef;font-size:.64rem}
-  .skill-modified{position:absolute;left:4px;bottom:3px;padding:1px 3px;
-    font-size:.51rem;color:#f5d08b;background:#5d3146b7;border:1px solid #b77b87}
-  .skill-cooldown{position:absolute;inset:0;background:#090d14c9;display:grid;place-items:center;font-size:1.05rem;color:#f1cf9e}
-  .active-effects{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:8px;pointer-events:none}
-  .effect-chip{border:1px solid #475960;padding:4px 8px;background:#10151bdd;color:#a9cbbc;font-size:.66rem}
-  .effect-chip.hostile{border-color:#7c4e56;color:#e4a1a0}
-  @media(max-width:720px){.skill-ui{bottom:115px;min-width:min(340px,94vw)}.skill-button{width:115px;min-height:64px;padding:7px}.skill-button.extra{width:60px;min-height:64px}.skill-icon{font-size:1.35rem}.skill-title{font-size:.65rem}.active-effects{margin-top:3px}}
+  /* Skills belong to the single bottom combat dock; never float over vitals. */
+  .skill-ui { position:relative; z-index:1; display:flex; flex-direction:column;
+    align-items:stretch; justify-content:center; width:100%; min-width:0; gap:3px;
+    pointer-events:auto; }
+  .skill-toolbar { display:flex; justify-content:center; align-items:stretch;
+    gap:clamp(2px, .45vw, 6px); width:100%; min-width:0; flex-wrap:nowrap; }
+  .skill-button, .skill-button.extra {
+    position:relative; flex:1 1 0; width:0; min-width:0; max-width:86px;
+    height:70px; min-height:0; padding:15px 3px 5px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:2px; border:1px solid #88704e; border-radius:3px;
+    background:linear-gradient(#283340f5,#131921f5);
+    box-shadow:inset 0 1px #b8a47d24,0 2px 9px #0008;
+    pointer-events:auto; overflow:hidden;
+  }
+  .skill-button:hover:not(:disabled) { border-color:#e6bd81; background:#343d48; }
+  .skill-button:disabled { opacity:.54; cursor:default; }
+  .skill-shortcut { position:absolute; left:4px; top:3px; font:600 .59rem Inter,sans-serif; color:#e6c793; }
+  .skill-icon,.skill-button.extra .skill-icon { font:1.55rem Georgia,serif; line-height:1; color:#e1bf81; }
+  .skill-title,.skill-button.extra .skill-title { font: .56rem Georgia,serif;
+    color:#eee4d2; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .skill-cost { position:absolute; right:4px; top:3px; color:#8ec9ef; font-size:.55rem; }
+  .skill-modified { position:absolute; left:2px; bottom:1px; padding:1px 2px;
+    font-size:.48rem; color:#f5d08b; background:#5d3146b7; border:1px solid #b77b87; }
+  .skill-cooldown { position:absolute; inset:0; background:#090d14d8; display:grid;
+    place-items:center; font:700 1rem Inter,sans-serif; color:#f1cf9e; }
+  .potion-row { display:flex; gap:4px; justify-content:center; align-items:center;
+    flex-wrap:nowrap; margin:0; width:100%; min-width:0; pointer-events:auto; }
+  .potion-row button { min-width:0; min-height:23px; padding:3px 6px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; background:#201e21eb;
+    border:1px solid #77674d; border-radius:2px; color:#e8d8ba; font-size:.6rem; }
+  .potion-row .potion-use { display:flex; align-items:center; gap:3px; flex:0 1 auto; }
+  .potion-row .potion-select { flex:0 1 auto; }
+  .potion-row button:disabled { opacity:.5; cursor:default; }
+  .potion-row .potion-select.chosen { border-color:#e3b76e; background:#39302a; }
+  .potion-key { color:#e7b477; border:1px solid #8b7251; padding:0 3px; }
+  .potion-use strong,.potion-timer { margin-left:3px; }
+  .potion-timer { color:#e7a6a6; }
+  .active-effects { display:flex; justify-content:center; gap:4px; min-width:0;
+    margin:0; white-space:nowrap; overflow-x:auto; scrollbar-width:thin; }
+  .effect-chip { flex:0 0 auto; border:1px solid #475960; padding:2px 5px;
+    background:#10151bdd; color:#a9cbbc; font-size:.59rem; }
+  .effect-chip.hostile { border-color:#7c4e56; color:#e4a1a0; }
+  .necro-minions,.rogue-status { text-align:center; font-size:.6rem; color:#d5c3a5; line-height:1.2; }
+  @media(max-width:1100px) {
+    .skill-button,.skill-button.extra { height:60px; padding:15px 2px 3px; }
+    .skill-title,.skill-button.extra .skill-title { display:none; }
+    .skill-icon,.skill-button.extra .skill-icon { font-size:1.45rem; }
+    .potion-row button { padding:2px 4px; min-height:22px; font-size:.57rem; }
+    .potion-use span:nth-child(2) { display:none; }
+  }
+  @media(max-width:650px) {
+    .skill-button,.skill-button.extra { height:46px; padding:12px 0 1px; }
+    .skill-icon,.skill-button.extra .skill-icon { font-size:1.1rem; }
+    .skill-shortcut,.skill-cost { font-size:.49rem; }
+    .potion-row { gap:2px; }
+    .potion-row button { padding:2px 3px; min-height:20px; font-size:.52rem; }
+    .potion-timer { display:none; }
+    .necro-minions,.rogue-status { font-size:.51rem; }
+  }
 </style>
