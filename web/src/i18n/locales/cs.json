@@ -894,11 +894,19 @@
     "open": "Mapa",
     "close": "Zavřít mapu",
     "minimap": "Minimapa",
-    "legend": "Objevené oblasti jsou zelené, neprozkoumané zůstávají skryté. Z aktivovaného waypointu lze cestovat k jinému aktivovanému bodu. Klávesa M otevře mapu.",
+    "legend": "Zobrazuje se jen objevený terén a skutečné cesty. Tmavé oblasti jsou neznámé; objevují se průzkumem. Tažením posouvej mapu, kolečkem nebo dvěma prsty přibližuj.",
     "player": "Hrdina",
     "town": "Tábor",
     "quest": "Úkol",
-    "unknownQuest": "Neobjevený cíl úkolu"
+    "unknownQuest": "Neobjevený cíl úkolu",
+    "markerLegend": "Vysvětlivky značek",
+    "dungeonEntrance": "Dungeon",
+    "waypoint": "Cestovní bod",
+    "controls": "Ovládání mapy",
+    "zoomIn": "Přiblížit",
+    "zoomOut": "Oddálit",
+    "center": "Vystředit na hrdinu",
+    "reset": "Zobrazit celou mapu"
   },
   "miniBossNames": {
     "bandit_captain": "Kapitán banditů",
