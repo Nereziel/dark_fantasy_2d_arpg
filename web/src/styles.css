@@ -88,6 +88,23 @@ h1 span,.brand-mark span{color:#b88b59}
 .enemy-roster button.targeted{border-color:#f3bd6b;color:#ffe3b4;background:#393126}
 .enemy-roster button:disabled{opacity:.35}
 .roster-health{color:#dc8e85;flex-shrink:0;font-variant-numeric:tabular-nums}
+/* Prioritize dangerous targets without expanding outside the scrollable HUD. */
+.enemy-roster button{min-width:0;max-width:100%;align-items:flex-start}
+.enemy-roster .roster-label{min-width:0;flex:1 1 auto;overflow-wrap:anywhere;line-height:1.3}
+.enemy-roster button.bossTarget{
+  display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:start;
+  gap:4px 6px;border-color:#d7af6e;background:#302920;
+}
+.enemy-roster button.eliteTarget:not(.bossTarget){border-color:#b9876d;background:#292322}
+.enemy-roster button.bossTarget.targeted{border-color:#fff0bb;background:#423221}
+.enemy-roster .boss-health-track{
+  display:block;grid-column:1/-1;width:100%;height:6px;overflow:hidden;
+  background:#161923;border:1px solid #745b42;border-radius:2px
+}
+.enemy-roster .boss-health-fill{
+  display:block;height:100%;max-width:100%;background:#bd664e
+}
+
 @media(max-width:720px){.enemy-roster{right:7px;top:167px;width:min(178px,45vw);padding:6px}.enemy-roster button{padding:5px;font-size:.6rem}.enemy-roster-title{font-size:.63rem}.danger-alert{top:62px}}
 
 /* Camp merchant and blacksmith controls. NPC panels pause combat while open. */
