@@ -10,6 +10,7 @@ import { RARITIES } from '../data/items';
 import { itemDisplayName } from '../items/itemName';
 import { SKILLS } from '../skills/skills';
 import { getPaladinAbility } from '../skills/paladinKit';
+import { getMageSpell } from '../skills/mageKit';
 import type { GameEvent, ZoneId, Point } from '../core/types';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
 import {
@@ -617,7 +618,8 @@ export class FrontierScene extends Phaser.Scene {
     } else if (event.type === 'cast') {
       const definition = Object.values(SKILLS)
         .flatMap(kit => Object.values(kit))
-        .find(skill => skill.id === event.skillId) ?? getPaladinAbility(event.skillId);
+        .find(skill => skill.id === event.skillId) ?? getPaladinAbility(event.skillId)
+        ?? getMageSpell(event.skillId);
       const ring = this.obtainImpact(event.x, event.y, 85);
       ring.lineStyle(4, definition?.color ?? 0xffddaa, 0.95).strokeCircle(0, 0, 18);
       this.tweens.add({

@@ -367,7 +367,15 @@
       "legion": "Legion",
       "fortitude": "Fortitude",
       "consecrated": "Consecrated",
-      "ofFaith": "of Faith"
+      "ofFaith": "of Faith",
+      "flamebound": "Flamebound",
+      "frostwoven": "Frostwoven",
+      "stormtouched": "Stormtouched",
+      "runecharged": "Runecharged",
+      "ofCinders": "of Cinders",
+      "ofWinter": "of Winter",
+      "ofThunder": "of Thunder",
+      "ofMysteries": "of Mysteries"
     },
     "slot": {
       "HELMET": "Helmet",
@@ -499,6 +507,26 @@
     "smite": {
       "name": "Smite",
       "desc": "Send a powerful ranged holy strike and leave enemies Vulnerable."
+    },
+    "chainLightning": {
+      "name": "Chain Lightning",
+      "desc": "A lightning strike that jumps through nearby visible enemies and briefly stuns them."
+    },
+    "meteor": {
+      "name": "Meteor",
+      "desc": "Call a fiery impact at the mouse position, burning enemies in the blast."
+    },
+    "teleport": {
+      "name": "Teleport",
+      "desc": "Move instantly to a clear destination along an unobstructed path."
+    },
+    "arcaneBarrier": {
+      "name": "Arcane Barrier",
+      "desc": "Consume Mana to create a temporary protective shield."
+    },
+    "blizzard": {
+      "name": "Blizzard",
+      "desc": "Summon a lingering frost storm at the cursor, damaging and chilling enemies."
     }
   },
   "enemies": {
@@ -844,7 +872,11 @@
       "holyWarrior": "Holy Warrior",
       "paladinGuardian": "Sacred Guardian",
       "auraMaster": "Aura Master",
-      "holyCaster": "Holy Caster"
+      "holyCaster": "Holy Caster",
+      "fire": "Fire",
+      "frost": "Frost",
+      "lightning": "Lightning",
+      "arcane": "Arcane"
     },
     "nodes": {
       "berserker": {
@@ -934,9 +966,60 @@
           "name": "Inquisition",
           "description": "Improve Healing Light by 12% per rank."
         }
+      },
+      "mage": {
+        "ember": {
+          "name": "Ember",
+          "description": "Increase Mage spell damage by 4% per rank."
+        },
+        "pyromancy": {
+          "name": "Pyromancy",
+          "description": "Increase burn duration by 15% per rank."
+        },
+        "inferno": {
+          "name": "Inferno",
+          "description": "Expand ground-spell area by 8% per rank."
+        },
+        "rime": {
+          "name": "Rime",
+          "description": "Increase chilling slow intensity by 5 percentage points per rank."
+        },
+        "frostbite": {
+          "name": "Frostbite",
+          "description": "Increase chill duration by 12% per rank."
+        },
+        "permafrost": {
+          "name": "Permafrost",
+          "description": "Increase Mana regeneration by 0.07 per second per rank."
+        },
+        "spark": {
+          "name": "Spark",
+          "description": "Increase Chain Lightning damage by 5% per rank."
+        },
+        "conduction": {
+          "name": "Conduction",
+          "description": "Increase critical chance by 2.5 percentage points per rank."
+        },
+        "tempest": {
+          "name": "Tempest",
+          "description": "Add one extra Chain Lightning jump per rank."
+        },
+        "focus": {
+          "name": "Arcane Focus",
+          "description": "Reduce extra spell Mana costs by 4% per rank."
+        },
+        "aegis": {
+          "name": "Arcane Aegis",
+          "description": "Add 7% of maximum health to Arcane Barrier per rank."
+        },
+        "transcendence": {
+          "name": "Transcendence",
+          "description": "Reduce Teleport cooldown by 7% per rank."
+        }
       }
     },
-    "paladinTitle": "Paladin Talent Tree"
+    "paladinTitle": "Paladin Talent Tree",
+    "mageTitle": "Mage Talent Tree"
   },
   "skillModifiers": {
     "enhanced": "Enhanced",

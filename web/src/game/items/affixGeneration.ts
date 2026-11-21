@@ -9,7 +9,8 @@ export type AffixTier = 1 | 2 | 3 | 4 | 5 | 6;
 export type AffixLocale = 'cs' | 'en';
 export type ItemTag =
   | 'weapon' | 'armor' | 'jewelry' | 'shield'
-  | 'melee' | 'ranged' | 'caster' | 'minion' | 'paladin';
+  | 'melee' | 'ranged' | 'caster' | 'minion' | 'paladin'
+  | 'mage.fire' | 'mage.frost' | 'mage.lightning' | 'mage.arcane';
 
 export type AffixStat =
   | 'strength' | 'dexterity' | 'intelligence' | 'vitality'
@@ -105,7 +106,8 @@ const RARITY_RULES: Readonly<Record<AffixRarity, { readonly count: number; reado
   });
 
 const ITEM_TAGS: readonly ItemTag[] = Object.freeze([
-  'weapon', 'armor', 'jewelry', 'shield', 'melee', 'ranged', 'caster', 'minion', 'paladin'
+  'weapon', 'armor', 'jewelry', 'shield', 'melee', 'ranged', 'caster', 'minion', 'paladin',
+  'mage.fire', 'mage.frost', 'mage.lightning', 'mage.arcane'
 ]);
 const BASE_TAGS: readonly ItemTag[] = Object.freeze(['weapon', 'armor', 'jewelry', 'shield']);
 const AFFIX_STATS: readonly AffixStat[] = Object.freeze([
@@ -183,6 +185,19 @@ export const AFFIX_PREFIXES: readonly AffixDefinition[] = Object.freeze([
   }),
   prefix('consecrated','resourceRegen',14,0.8,2.2,{
     minItemLevel:12,requiredTags:['paladin','weapon','melee'],decimal:true
+  }),
+  prefix('flamebound','fireDamage',13,3,8,{
+    minItemLevel:12,requiredTags:['mage.fire','weapon','caster'],
+    exclusionGroup:'elemental-damage'
+  }),
+  prefix('frostwoven','coldResistance',12,3,8,{
+    minItemLevel:12,requiredTags:['mage.frost','weapon','caster']
+  }),
+  prefix('stormtouched','critChance',12,0.8,2.3,{
+    minItemLevel:12,requiredTags:['mage.lightning','weapon','caster'],decimal:true
+  }),
+  prefix('runecharged','resourceRegen',12,0.7,1.9,{
+    minItemLevel:12,requiredTags:['mage.arcane','weapon','caster'],decimal:true
   })
 ]);
 
@@ -213,6 +228,20 @@ export const AFFIX_SUFFIXES: readonly AffixDefinition[] = Object.freeze([
   suffix('fortitude', 'maxHealth', 9, 8, 18),
   suffix('ofFaith','skillRank',12,1,1,{
     minRarity:'EPIC',minItemLevel:36,requiredTags:['paladin','weapon','melee'],special:true
+  }),
+  suffix('ofCinders','fireDamage',11,3,7,{
+    minItemLevel:12,requiredTags:['mage.fire','weapon','caster'],
+    exclusionGroup:'elemental-damage'
+  }),
+  suffix('ofWinter','coldResistance',11,3,8,{
+    minItemLevel:12,requiredTags:['mage.frost','weapon','caster']
+  }),
+  suffix('ofThunder','critChance',11,0.8,2.3,{
+    minItemLevel:12,requiredTags:['mage.lightning','weapon','caster'],decimal:true
+  }),
+  suffix('ofMysteries','skillRank',10,1,1,{
+    minRarity:'EPIC',minItemLevel:36,
+    requiredTags:['mage.arcane','weapon','caster'],special:true
   })
 ]);
 
@@ -406,7 +435,11 @@ const PREFIX_NAMES: Readonly<Record<string, PrefixName>> = Object.freeze({
   channeling: adjective('Channeling', 'Soustředěný', 'Soustředěná', 'Soustředěné'),
   arcane: adjective('Arcane', 'Arkánní', 'Arkánní', 'Arkánní'),
   summoning: adjective('Summoning', 'Vyvolávací', 'Vyvolávací', 'Vyvolávací'),
-  consecrated: adjective('Consecrated','Posvěcený','Posvěcená','Posvěcené')
+  consecrated: adjective('Consecrated','Posvěcený','Posvěcená','Posvěcené'),
+  flamebound: adjective('Flamebound','Ohnivý','Ohnivá','Ohnivé'),
+  frostwoven: adjective('Frostwoven','Mrazivý','Mrazivá','Mrazivé'),
+  stormtouched: adjective('Stormtouched','Bouřný','Bouřná','Bouřné'),
+  runecharged: adjective('Runecharged','Runový','Runová','Runové')
 });
 
 const SUFFIX_NAMES: Readonly<Record<string, SuffixName>> = Object.freeze({
@@ -427,7 +460,11 @@ const SUFFIX_NAMES: Readonly<Record<string, SuffixName>> = Object.freeze({
   mastery: { en: 'of Mastery', cs: 'mistrovství' },
   legion: { en: 'of the Legion', cs: 'legií' },
   fortitude: { en: 'of Fortitude', cs: 'odolnosti' },
-  ofFaith: {en:'of Faith',cs:'víry'}
+  ofFaith: {en:'of Faith',cs:'víry'},
+  ofCinders: {en:'of Cinders',cs:'žhavých uhlíků'},
+  ofWinter: {en:'of Winter',cs:'zimy'},
+  ofThunder: {en:'of Thunder',cs:'hromu'},
+  ofMysteries: {en:'of Mysteries',cs:'tajemství'}
 });
 for (const label of Object.values(SUFFIX_NAMES)) Object.freeze(label);
 

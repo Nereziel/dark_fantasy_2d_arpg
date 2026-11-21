@@ -13,6 +13,8 @@ import type { DamageType } from '../combat/typedDamage';
 import type { SkillAim } from '../input/skillAiming';
 import type { WarriorAbilityId } from '../skills/warriorKit';
 import type { PaladinAbilityId, PaladinCooldowns } from '../skills/paladinKit';
+import type { MageExtraSpellId, MageCooldowns } from '../skills/mageKit';
+import type { MageTimedZone } from '../skills/mageCombatPlans';
 import type { CombatTimelineState } from '../animation/combatTimeline';
 import type { StatusInstance } from '../status/statusRuntime';
 import type { StatusId } from '../status/statusDefinitions';
@@ -159,6 +161,9 @@ export interface GameSnapshot {
   warriorCooldowns?: Partial<Record<WarriorAbilityId, number>>;
   /** Independent Paladin timers; never serialized to CharacterProgress v11. */
   paladinCooldowns?: PaladinCooldowns;
+  /** Transient Mage class timers and active elemental fields. */
+  mageCooldowns?: MageCooldowns;
+  mageZones?: MageTimedZone[];
   warriorAction?: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null;
   /** Transient hit-frame state of the other five classes, never persisted. */
   classAction?: {
@@ -166,6 +171,7 @@ export interface GameSnapshot {
     slot: SkillSlot | null;
     /** Paladin extra abilities reuse the canonical class timeline with a null slot. */
     paladinAbilityId?: PaladinAbilityId;
+    mageAbilityId?: MageExtraSpellId;
     targetId: string | null;
     aim?: SkillAim;
     timeline: CombatTimelineState;
@@ -217,6 +223,7 @@ export type GameCommand =
   | { type: 'cast'; slot: SkillSlot; targetId?: string; aim?: SkillAim }
   | { type: 'warriorAbility'; id: WarriorAbilityId; targetId?: string }
   | { type: 'paladinAbility'; id: PaladinAbilityId; targetId?: string }
+  | { type: 'mageAbility'; id: MageExtraSpellId; targetId?: string; position?: Point }
   | { type: 'interactNpc'; npcId: NpcId }
   | { type: 'interactTown'; entryId: string }
   | { type: 'travelWaypoint'; destinationId: WaypointId }
