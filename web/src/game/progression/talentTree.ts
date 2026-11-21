@@ -2,7 +2,8 @@
 // Gameplay/loot/character state remain exclusively authoritative in GameSimulation.
 import type { DerivedStats } from '../stats/deriveStats';
 
-export type TalentBranch = 'berserker' | 'guardian' | 'warlord';
+export type TalentBranch = 'berserker' | 'guardian' | 'warlord'
+  | 'holyWarrior' | 'paladinGuardian' | 'auraMaster' | 'holyCaster';
 export type WarriorTalentId =
   | 'berserker.battleFury' | 'berserker.bloodlust'
   | 'berserker.executioner' | 'berserker.lastStand'
@@ -10,7 +11,12 @@ export type WarriorTalentId =
   | 'guardian.stalwart' | 'guardian.bulwark'
   | 'warlord.commandingCry' | 'warlord.shockwave'
   | 'warlord.warDrums' | 'warlord.commander';
-export type TalentRanks = Partial<Record<WarriorTalentId, number>>;
+export type PaladinTalentId = 'paladin.zeal' | 'paladin.righteousFire'
+  | 'paladin.aegis' | 'paladin.bulwark'
+  | 'paladin.hymn' | 'paladin.benediction'
+  | 'paladin.prayer' | 'paladin.inquisition';
+export type TalentId = WarriorTalentId | PaladinTalentId;
+export type TalentRanks = Partial<Record<TalentId, number>>;
 
 export interface TalentBonuses {
   armor: number;
@@ -27,6 +33,13 @@ export interface TalentBonuses {
   stunDuration: number;
   shieldOnWarCryPercent: number;
   lowHealthDamageMultiplier: number;
+  /** Paladin-only effect projections; inactive for every Warrior build. */
+  holyDamage: number;
+  healBonus: number;
+  shieldStrength: number;
+  auraStrength: number;
+  auraDuration: number;
+  faithRegen: number;
 }
 export type TalentEffectKey = keyof TalentBonuses;
 export type TalentEffectKind = 'stat' | 'skill' | 'passive' | 'conditional';
@@ -36,11 +49,12 @@ export interface TalentEffect {
   readonly perRank: number;
 }
 export interface TalentPrerequisite {
-  readonly id: WarriorTalentId;
+  readonly id: TalentId;
   readonly minRank: number;
 }
 export interface TalentDefinition {
-  readonly id: WarriorTalentId;
+  readonly id: TalentId;
+  readonly classId?: 'PALADIN';
   readonly branch: TalentBranch;
   readonly unlockLevel: number;
   readonly maxRank: number;
@@ -101,15 +115,44 @@ export const TALENT_TREE: readonly TalentDefinition[] = [
     ]}
 ] as const;
 
-const byId = new Map(TALENT_TREE.map(node => [node.id, node]));
+/** Paladin extends the same skill-tree planner without changing the Warrior's
+ * original three branches or talent IDs, so preexisting saves remain stable. */
+export const PALADIN_TALENT_TREE:readonly TalentDefinition[]=[
+  {id:'paladin.zeal',classId:'PALADIN',branch:'holyWarrior',unlockLevel:5,maxRank:3,
+    prerequisites:[],effects:[{kind:'skill',key:'holyDamage',perRank:0.08}]},
+  {id:'paladin.righteousFire',classId:'PALADIN',branch:'holyWarrior',unlockLevel:12,maxRank:3,
+    prerequisites:[{id:'paladin.zeal',minRank:1}],
+    effects:[{kind:'stat',key:'critChance',perRank:1.6}]},
+  {id:'paladin.aegis',classId:'PALADIN',branch:'paladinGuardian',unlockLevel:5,maxRank:3,
+    prerequisites:[],effects:[{kind:'stat',key:'armor',perRank:13}]},
+  {id:'paladin.bulwark',classId:'PALADIN',branch:'paladinGuardian',unlockLevel:12,maxRank:3,
+    prerequisites:[{id:'paladin.aegis',minRank:1}],
+    effects:[{kind:'skill',key:'shieldStrength',perRank:0.12}]},
+  {id:'paladin.hymn',classId:'PALADIN',branch:'auraMaster',unlockLevel:5,maxRank:3,
+    prerequisites:[],effects:[{kind:'skill',key:'auraStrength',perRank:0.15}]},
+  {id:'paladin.benediction',classId:'PALADIN',branch:'auraMaster',unlockLevel:12,maxRank:3,
+    prerequisites:[{id:'paladin.hymn',minRank:1}],
+    effects:[{kind:'skill',key:'auraDuration',perRank:2}]},
+  {id:'paladin.prayer',classId:'PALADIN',branch:'holyCaster',unlockLevel:5,maxRank:3,
+    prerequisites:[],effects:[{kind:'stat',key:'faithRegen',perRank:0.8}]},
+  {id:'paladin.inquisition',classId:'PALADIN',branch:'holyCaster',unlockLevel:12,maxRank:3,
+    prerequisites:[{id:'paladin.prayer',minRank:1}],
+    effects:[{kind:'skill',key:'healBonus',perRank:0.12}]}
+] as const;
+
+export const allTalentsForClass=(classId:unknown):readonly TalentDefinition[] =>
+  classId==='WARRIOR'?TALENT_TREE:classId==='PALADIN'?PALADIN_TALENT_TREE:[];
+
+const byId = new Map([...TALENT_TREE,...PALADIN_TALENT_TREE].map(node => [node.id, node]));
 const keys: readonly TalentEffectKey[] = [
   'armor','maxHealth','maxResource','resourceRegen','attackSpeed','blockChance',
   'critChance','rageGain','warCryDuration','warCryStrength','warCryRage',
-  'stunDuration','shieldOnWarCryPercent','lowHealthDamageMultiplier'
+  'stunDuration','shieldOnWarCryPercent','lowHealthDamageMultiplier',
+  'holyDamage','healBonus','shieldStrength','auraStrength','auraDuration','faithRegen'
 ];
 
 export function getTalent(id: unknown): TalentDefinition | null {
-  return typeof id === 'string' ? byId.get(id as WarriorTalentId) ?? null : null;
+  return typeof id === 'string' ? byId.get(id as TalentId) ?? null : null;
 }
 
 export function spentTalentPoints(ranks: unknown): number {
@@ -128,11 +171,11 @@ export function validateTalentBuild(
     || (unspent as number) > Math.floor((level as number) / 5)
     || !ranks || typeof ranks !== 'object' || Array.isArray(ranks)) return false;
   const entries = Object.entries(ranks);
-  if (entries.length > TALENT_TREE.length
-    || (classId !== 'WARRIOR' && entries.length > 0)) return false;
+  const available=allTalentsForClass(classId);
+  if(entries.length>available.length)return false;
   for (const [id, rank] of entries) {
     const node = getTalent(id);
-    if (!node || !Number.isSafeInteger(rank) || (rank as number) < 1
+    if (!node || !available.includes(node) || !Number.isSafeInteger(rank) || (rank as number) < 1
       || (rank as number) > node.maxRank || (level as number) < node.unlockLevel) return false;
     if (node.prerequisites.some(req =>
       (ranks as Record<string, unknown>)[req.id] === undefined
@@ -153,7 +196,7 @@ export function canSpendTalent(
 ): TalentDecision {
   if (!validateTalentBuild(classId,level,unspent,ranks)) return {ok:false,reason:'invalidBuild'};
   const node = getTalent(id);
-  if (!node || classId !== 'WARRIOR') return {ok:false,reason:'unknownTalent'};
+  if (!node || !allTalentsForClass(classId).includes(node)) return {ok:false,reason:'unknownTalent'};
   if (level < node.unlockLevel) return {ok:false,reason:'lockedLevel'};
   if (node.prerequisites.some(req => (ranks[req.id] ?? 0) < req.minRank))
     return {ok:false,reason:'missingPrerequisite'};
@@ -205,7 +248,7 @@ export function planRespecTalents(
 /** Pure additive effect projection. Simulator decides when conditional triggers fire. */
 export function projectTalentBonuses(ranks: Readonly<TalentRanks>): TalentBonuses {
   const values = Object.fromEntries(keys.map(key => [key,0])) as Record<TalentEffectKey,number>;
-  for (const node of TALENT_TREE) {
+  for (const node of [...TALENT_TREE,...PALADIN_TALENT_TREE]) {
     const rank = ranks[node.id] ?? 0;
     if (!Number.isSafeInteger(rank) || rank < 1 || rank > node.maxRank) continue;
     for (const effect of node.effects) values[effect.key] += effect.perRank * rank;
@@ -225,7 +268,7 @@ export function applyTalentStats(
     physicalResist: Math.round(100 * armor / (armor + 250)),
     maxHealth: base.maxHealth + bonuses.maxHealth,
     maxResource: base.maxResource + bonuses.maxResource,
-    resourceRegen: Number((base.resourceRegen + bonuses.resourceRegen).toFixed(2)),
+    resourceRegen: Number((base.resourceRegen + bonuses.resourceRegen + bonuses.faithRegen).toFixed(2)),
     attackSpeed: Number((base.attackSpeed + bonuses.attackSpeed).toFixed(2)),
     blockChance: Number(Math.min(60,base.blockChance + bonuses.blockChance).toFixed(1)),
     critChance: Number(Math.min(75,base.critChance + bonuses.critChance).toFixed(1))
