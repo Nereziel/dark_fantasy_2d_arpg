@@ -70,7 +70,7 @@ export const MAGE_EXTRA_SPELLS: Readonly<Record<MageExtraSpellId, Readonly<MageS
       cost: 42, cooldown: 18, range: 320, power: 0.48, radius: 165,
       status: 'chilled', duration: 6, tickInterval: 0.75
     })
-  });
+  } satisfies Record<MageExtraSpellId, MageSpell>);
 
 export type MageCooldowns = Partial<Record<MageExtraSpellId, number>>;
 interface Point { readonly x: number; readonly y: number }
@@ -236,10 +236,7 @@ export const MAGE_TALENT_TREE: readonly MageTalentDefinition[] = Object.freeze([
     requires: ['mage.focus'], effects: [{ key: 'barrierStrength', perRank: 0.07 }] },
   { id: 'mage.transcendence', school: 'arcane', minLevel: 15, maxRank: 2,
     requires: ['mage.aegis'], effects: [{ key: 'teleportCooldown', perRank: 0.07 }] }
-].map(def => Object.freeze({
-  ...def, requires: Object.freeze([...def.requires]),
-  effects: Object.freeze(def.effects.map(e => Object.freeze({ ...e })))
-})));
+] satisfies readonly MageTalentDefinition[]);
 
 export const MAGE_AFFIX_TAGS = Object.freeze([
   'mage.fire', 'mage.frost', 'mage.lightning', 'mage.arcane'
