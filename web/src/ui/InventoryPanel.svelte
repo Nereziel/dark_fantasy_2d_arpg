@@ -43,8 +43,12 @@
       || bridge.previewEquipment(target.index, source.slot) !== null;
   }
   function isDropHover(target: Source): boolean {
-    return dropHover?.kind === target.kind && (target.kind === 'bag'
-      ? dropHover.index === target.index : dropHover.slot === target.slot);
+    if (!dropHover || dropHover.kind !== target.kind) return false;
+    if (dropHover.kind === 'bag' && target.kind === 'bag') {
+      return dropHover.index === target.index;
+    }
+    return dropHover.kind === 'gear' && target.kind === 'gear'
+      && dropHover.slot === target.slot;
   }
   function clearDrag(): void { dragged = null; dropHover = null; }
 
