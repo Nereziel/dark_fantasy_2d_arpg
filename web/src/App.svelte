@@ -6,6 +6,7 @@
   import type { GameSnapshot, Point } from './game/core/types';
   import { resolveKeyboardAction, rebindAction, type InputBinding, type InputAction } from './game/input/bindings';
   import { GAME_BINDINGS } from './game/input/gameBindings';
+  import { prioritizeCombatRoster } from './game/ui/combatRoster';
   import { loadGame, saveGame, listCharacters, deleteCharacter, MAX_SAVED_CHARACTERS, type SavedCharacterInfo } from './persistence/SaveRepository';
   import { loadWorldProgress, saveWorldProgress } from './persistence/WorldProgressRepository';
   import type { WorldSessionProgress } from './game/core/types';
@@ -45,6 +46,10 @@
   const bridge = new GameBridge();
   let playing = $state(false);
   let view: GameSnapshot = $state(bridge.snapshot());
+  // Read-only display projection; never reorder GameSimulation's enemy array.
+  let rosterUnits = $derived(prioritizeCombatRoster(
+    view.enemies, view.miniBossStates, view.selectedTargetId
+  ));
   let messageKey = $state('');
   let busy = $state(false);
   let selectedClass: ClassId = $state('WARRIOR');
@@ -827,14 +832,18 @@
         <DungeonPanel {view} {bridge} />
       <aside class="enemy-roster" aria-label={$t('hud.enemies')}>
         <div class="enemy-roster-title">{$t('hud.enemies')} · {view.enemies.filter(unit => unit.actor.alive).length}/{view.enemies.length} · {$t('hud.wave')} {view.wave + 1}</div>
-        {#each view.enemies as unit (unit.actor.id)}
+        {#each rosterUnits as unit (unit.actor.id)}
           <button
             class:targeted={unit.actor.id === view.selectedTargetId}
+            class:bossTarget={unit.actor.id === 'crypt_lord-4' || !!view.miniBossStates?.[unit.actor.id]}
+            class:eliteTarget={!!unit.elite}
+            data-threat={unit.actor.id === 'crypt_lord-4' || view.miniBossStates?.[unit.actor.id]
+              ? 'boss' : unit.elite ? 'elite' : 'normal'}
             disabled={!unit.actor.alive || !view.player.alive || view.paused}
             aria-pressed={unit.actor.id === view.selectedTargetId}
             onclick={() => bridge.command({ type: 'attack', targetId: unit.actor.id })}
           >
-            <span>{unit.elite ? $t('hud.elite') + ' · ' : ''}{$t(unit.actor.id === 'crypt_lord-4' && view.zone === 'crypt'
+            <span class="roster-label">{unit.elite ? $t('hud.elite') + ' · ' : ''}{$t(unit.actor.id === 'crypt_lord-4' && view.zone === 'crypt'
               ? 'boss.hollowKing.name' : view.miniBossStates?.[unit.actor.id]
               ? 'miniBossNames.' + unit.actor.id
               : unit.actor.id === 'morrow_gravebound'
@@ -849,6 +858,12 @@
             <span class="roster-health">{unit.actor.alive
               ? Math.ceil(100 * unit.actor.health / unit.actor.maxHealth) + '%'
               : '—'}</span>
+            {#if unit.actor.alive && (unit.actor.id === 'crypt_lord-4' || view.miniBossStates?.[unit.actor.id])}
+              <span class="boss-health-track" aria-hidden="true">
+                <span class="boss-health-fill" style:width={`${Math.max(0, Math.min(100,
+                  100 * unit.actor.health / Math.max(1, unit.actor.maxHealth)))}%`}></span>
+              </span>
+            {/if}
           </button>
         {/each}
       </aside>
@@ -1088,8 +1103,13 @@
     }
     .hud-left-column {left:4px;width:clamp(115px,30vw,165px)}
     .hud-right-column{right:4px;width:clamp(115px,30vw,165px)}
-    .hud-right-column :global(.enemy-roster){max-height:125px}
-    .hud-right-column .minimap-overlay{padding:3px}
+    /* Boss/elite targets must remain above the minimap, never hidden beneath
+       a tall map or scroll-only event panels on narrow phones. */
+    .hud-right-column :global(.danger-alert){order:0}
+    .hud-right-column :global(.enemy-roster){order:1;max-height:min(31dvh,160px)}
+    .hud-right-column .minimap-overlay{order:2;padding:3px}
+    .hud-right-column :global(.event-panel){order:3}
+    .hud-right-column :global(.dungeon-panel){order:4}
     .hud-left-column :global(.camp-services button){min-height:44px}
   }
   @media(max-height:480px) and (min-width:651px){
