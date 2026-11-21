@@ -20,19 +20,19 @@
   let price = $derived(respecGoldCost(view.level, view.talentRanks ?? {}));
   let canRespec = $derived(planRespecTalents(view.classId, view.level,
     view.talentPoints ?? 0, view.talentRanks ?? {}, view.gold).ok);
+  let talentTitleKey = $derived(view.classId==='PALADIN' ? 'talents.paladinTitle'
+    : view.classId==='MAGE' ? 'talents.mageTitle'
+    : view.classId==='NECROMANCER' ? 'talents.necromancerTitle'
+    : view.classId==='ROGUE' ? 'talents.rogueTitle'
+    : view.classId==='WARLOCK' ? 'talents.warlockTitle' : 'talents.title');
 </script>
 
 <div class="talent-backdrop">
-  <div class="talent-dialog" role="dialog" aria-modal="true" aria-label={$t('talents.title')}>
+  <div class="talent-dialog" role="dialog" aria-modal="true" aria-label={$t(talentTitleKey)}>
     <header>
       <div>
         <div class="eyebrow">AETHER &amp; RUIN</div>
-        <h2>{$t(view.classId==='PALADIN' ? 'talents.paladinTitle'
-          : view.classId==='MAGE' ? 'talents.mageTitle'
-          : view.classId==='NECROMANCER' ? 'talents.necromancerTitle'
-          : view.classId==='ROGUE' ? 'talents.rogueTitle'
-          : view.classId==='WARLOCK' ? 'talents.warlockTitle'
-          : 'talents.title')}</h2>
+        <h2>{$t(talentTitleKey)}</h2>
         <p>{$t('talents.available')}: <strong>{view.talentPoints ?? 0}</strong>
           · {$t('talents.invested')}: <strong>{invested}</strong>
           · {$t('hud.gold')}: <strong>{view.gold}</strong></p>
