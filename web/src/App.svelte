@@ -33,6 +33,7 @@
   import { WARDEN_ID } from './game/quests/firstQuest';
   import { townEntry, type TownEntry } from './game/world/townManifest';
   import { CLASSES, type ClassId } from './game/data/classes';
+  import { PALADIN_EXTRA_IDS } from './game/skills/paladinKit';
   import { POTION_IDS, POTIONS } from './game/consumables/potionRules';
   import { xpRequiredForLevel } from './game/progression/progressionRules';
 
@@ -366,13 +367,19 @@
       const id = slots[action as keyof typeof slots];
       event.preventDefault();
       bridge.command({ type: 'warriorAbility', id, targetId: view.selectedTargetId ?? view.enemy.id });
+    } else if (view.classId === 'PALADIN'
+      && ['SLOT_2','SLOT_3','SLOT_4','SLOT_5','SLOT_6'].includes(action)) {
+      event.preventDefault();
+      const slotIndex=Number(action.slice(-1))-2;
+      const id=PALADIN_EXTRA_IDS[slotIndex];
+      if(id)bridge.command({type:'paladinAbility',id,targetId:view.selectedTargetId??view.enemy.id});
     } else if (action === 'FORCE_MOVE' || action === 'PRIMARY') {
       const position = bridge.pointerPosition();
       if (!position) return;
       event.preventDefault();
       bridge.command({ type: 'move', destination: position });
     }
-    // Non-Warrior classes retain reserved slots until their class kits are complete.
+    // Remaining classes retain reserved slots until their original kits are complete.
   }
   function handleKeyup(event: KeyboardEvent): void {
     if (!heldShiftKeys.delete(event.code)) return;
