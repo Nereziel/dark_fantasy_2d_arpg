@@ -1,8 +1,12 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { _ as t, locale } from 'svelte-i18n';
   import type { GameSnapshot } from '../game/core/types';
   import type { GameBridge } from '../game/bridge/GameBridge';
-  import type { Item } from '../game/data/items';
+  import type { Item, RarityId } from '../game/data/items';
+  import ItemArt from './ItemArt.svelte';
+  import { DEFAULT_GROUND_LOOT_FILTER, normalizeGroundLootFilter, type GroundLootFilter,
+    type GroundLootCategory } from '../game/items/groundLootVisibility';
   import { RARITIES } from '../game/data/items';
   import { WEAPON_TYPES } from '../game/items/itemCatalog';
   import { itemDisplayName } from '../game/items/itemName';
@@ -28,6 +32,25 @@
   let dragged = $state<Source | null>(null);
   let dropHover = $state<Source | null>(null);
   let helpOpen = $state(false);
+  let placementMessage = $state('');
+  const groundFilterStorageKey = 'aether-ruin-ground-loot-filter-v1';
+  let lootFilter: GroundLootFilter = $state({ ...DEFAULT_GROUND_LOOT_FILTER });
+  onMount(() => {
+    lootFilter = bridge.groundLootFilter();
+    try {
+      const saved = window.localStorage.getItem(groundFilterStorageKey);
+      if (saved) {
+        lootFilter = normalizeGroundLootFilter(JSON.parse(saved));
+        bridge.setGroundLootFilter(lootFilter);
+      }
+    } catch { /* Invalid preferences never break inventory or save. */ }
+  });
+  function updateLootFilter(next: GroundLootFilter): void {
+    lootFilter = normalizeGroundLootFilter(next);
+    bridge.setGroundLootFilter(lootFilter);
+    try { window.localStorage.setItem(groundFilterStorageKey, JSON.stringify(lootFilter)); }
+    catch { /* Private browsing still permits session-only filters. */ }
+  }
   // A touch tap inspects. Reorganizing items requires the explicit mobile move action.
   let touchInput = $state(false);
   let moveArmed = $state(false);
@@ -70,9 +93,15 @@
     return itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId));
   }
   function equip(index: number, slot?: EquipmentSlot): void {
-    if (!view.inventory[index]) return;
+    const item = view.inventory[index];
+    if (!item) return;
+    if (bridge.previewEquipment(index, slot) === null) {
+      placementMessage = $t('inventory.invalidPlacement');
+      return;
+    }
     bridge.command({ type: 'equip', index, ...(slot ? { slot } : {}) });
-    selected = null;
+    selected = { kind: 'gear', slot: slot ?? item.slot };
+    placementMessage = '';
     moveArmed = false;
   }
   function unequip(slot: EquipmentSlot): void {
@@ -90,7 +119,10 @@
       selected = view.inventory[index] ? { kind: 'bag', index } : null;
       return;
     }
-    if (touchInput && moveArmed && selected && !canPlace({ kind: 'bag', index }, selected)) return;
+    if (touchInput && moveArmed && selected && !canPlace({ kind: 'bag', index }, selected)) {
+      placementMessage = $t('inventory.invalidPlacement'); return;
+    }
+    placementMessage = '';
     moveArmed = false;
     if (selected?.kind === 'bag' && selected.index !== index) {
       bridge.command({ type: 'swapInventory', fromIndex: selected.index, toIndex: index });
@@ -108,7 +140,10 @@
       selected = view.equipment[slot] ? { kind: 'gear', slot } : null;
       return;
     }
-    if (touchInput && moveArmed && selected && !canPlace({ kind: 'gear', slot }, selected)) return;
+    if (touchInput && moveArmed && selected && !canPlace({ kind: 'gear', slot }, selected)) {
+      placementMessage = $t('inventory.invalidPlacement'); return;
+    }
+    placementMessage = '';
     moveArmed = false;
     if (selected?.kind === 'bag') equip(selected.index, slot);
     else selected = view.equipment[slot] ? { kind: 'gear', slot } : null;
@@ -134,7 +169,8 @@
     const source = dragged;
     const valid = canPlace({ kind: 'bag', index }, source);
     clearDrag();
-    if (!valid) return;
+    if (!valid) { placementMessage = $t('inventory.invalidPlacement'); return; }
+    placementMessage = '';
     moveArmed = false;
     if (source.kind === 'bag' && source.index !== index) {
       bridge.command({ type: 'swapInventory', fromIndex: source.index, toIndex: index });
@@ -150,17 +186,22 @@
     const source = dragged;
     const valid = canPlace({ kind: 'gear', slot }, source);
     clearDrag();
-    if (!valid) return;
+    if (!valid) { placementMessage = $t('inventory.invalidPlacement'); return; }
+    placementMessage = '';
     moveArmed = false;
     if (source.kind === 'bag') equip(source.index, slot);
     selected = null;
   }
-  const stats: readonly { key: 'armor' | 'damageMin' | 'damageMax' | 'maxHealth'; label: string }[] = [
+  const stats = [
     { key: 'armor', label: 'stat.armor' },
     { key: 'damageMin', label: 'stat.damageMin' },
     { key: 'damageMax', label: 'stat.damageMax' },
-    { key: 'maxHealth', label: 'stat.maxHealth' }
-  ];
+    { key: 'maxHealth', label: 'stat.maxHealth' },
+    { key: 'critChance', label: 'stat.critChance' },
+    { key: 'attackSpeed', label: 'stat.attackSpeed' },
+    { key: 'blockChance', label: 'stat.blockChance' },
+    { key: 'fireResist', label: 'stat.fireResist' }
+  ] as const;
   function sign(value: number): string {
     return value > 0 ? '+' + value : String(value);
   }
@@ -232,7 +273,7 @@
               title={item ? itemName(item) : $t('inventory.empty')}>
               <span class="slot-label">{$t('item.slot.' + slot)}</span>
               <span class="slot-icon" style:color={item ? RARITIES[item.rarity].color : '#55616a'}>
-                {item ? item.icon : '◇'}
+                {#if item}<ItemArt {item} />{:else}<span aria-hidden="true">◇</span>{/if}
               </span>
               {#if item?.upgrades}<span class="slot-level">+{item.upgrades}</span>{/if}
             </button>
@@ -273,6 +314,36 @@
             {$t('inventory.sort')}
           </button>
         </div>
+        <div class="ground-loot-settings" data-testid="ground-loot-filter">
+          <strong>{$t('inventory.groundLootFilter')}</strong>
+          <label>
+            {$t('inventory.minRarity')}
+            <select aria-label={$t('inventory.minRarity')} value={lootFilter.minRarity}
+              onchange={event => updateLootFilter({ ...lootFilter,
+                minRarity: event.currentTarget.value as RarityId })}>
+              {#each Object.keys(RARITIES) as rarity (rarity)}
+                <option value={rarity}>{$t('item.rarity.' + rarity)}</option>
+              {/each}
+            </select>
+          </label>
+          <label>
+            {$t('inventory.itemCategory')}
+            <select aria-label={$t('inventory.itemCategory')} value={lootFilter.category}
+              onchange={event => updateLootFilter({ ...lootFilter,
+                category: event.currentTarget.value as GroundLootCategory })}>
+              <option value="all">{$t('inventory.lootAll')}</option>
+              <option value="weapons">{$t('inventory.lootWeapons')}</option>
+              <option value="armor">{$t('inventory.lootArmor')}</option>
+              <option value="accessories">{$t('inventory.lootAccessories')}</option>
+            </select>
+          </label>
+          <label class="favorite-filter">
+            <input type="checkbox" checked={lootFilter.alwaysShowFavorites}
+              onchange={event => updateLootFilter({ ...lootFilter,
+                alwaysShowFavorites: event.currentTarget.checked })} />
+            {$t('inventory.alwaysShowFavorites')}
+          </label>
+        </div>
         <div class="bag-grid" role="group" aria-label={$t('inventory.bag')}>
           {#each view.inventory as item,index (index)}
             {@const filtered = !!item && rarityFilter !== 'ALL' && item.rarity !== rarityFilter}
@@ -304,7 +375,9 @@
               aria-label={item ? itemName(item) : $t('inventory.empty')}
               title={item ? itemName(item) : $t('inventory.empty')}>
               {#if item}
-                <span class="bag-item-icon">{item.icon}</span>
+                <span class="bag-item-icon" style:color={RARITIES[item.rarity].color}>
+                  <ItemArt {item} />
+                </span>
                 <span class="sr-only">{itemName(item)}</span>
                 <span class="item-level">{item.level}</span>
                 {#if view.itemFlags?.[item.id]?.favorite}<span class="favorite-mark">★</span>{/if}
@@ -330,7 +403,7 @@
         {#if inspected}
           <div class="touch-move-bar">
             <button type="button" aria-pressed={moveArmed}
-              onclick={() => { touchInput = true; moveArmed = !moveArmed; }}>
+              onclick={() => { touchInput = true; placementMessage = ''; moveArmed = !moveArmed; }}>
               {$locale === 'cs'
                 ? (moveArmed ? 'Zrušit přesun' : 'Přesunout klepnutím')
                 : (moveArmed ? 'Cancel move' : 'Move by tap')}
@@ -341,12 +414,17 @@
                 : 'Tap the destination slot.'}</span>
             {/if}
           </div>
+          {#if placementMessage}
+            <p class="placement-error" role="status">{placementMessage}</p>
+          {/if}
           <div class="comparison-grid">
             <section class="item-detail">
               <span class="detail-tag">{$locale === 'cs'
                 ? (displayed?.kind === 'gear' ? 'NASAZENO' : 'V BATOHU')
                 : (displayed?.kind === 'gear' ? 'EQUIPPED' : 'IN BAG')}</span>
-              <span class="detail-icon" style:color={RARITIES[inspected.rarity].color}>{inspected.icon}</span>
+              <span class="detail-icon" style:color={RARITIES[inspected.rarity].color}>
+                <ItemArt item={inspected} detail />
+              </span>
               <strong class="item-title" style:color={RARITIES[inspected.rarity].color}>
                 {itemName(inspected)}
               </strong>
@@ -354,7 +432,12 @@
               <div class="item-property"><span>{$t('stat.damageMin')}–{$t('stat.damageMax')}</span><strong>{inspected.minDmg}–{inspected.maxDmg}</strong></div>
               <div class="item-property"><span>{$t('stat.armor')}</span><strong>{inspected.armor}</strong></div>
               <div class="item-property"><span>{$t('stat.blockChance')}</span><strong>{inspected.block}%</strong></div>
-              {#if inspected.twoHanded}<p>{$t('inventory.twoHanded')}</p>{/if}
+              {#if inspected.twoHanded}
+                <p>{$t('inventory.twoHanded')}</p>
+                {#if displayed?.kind === 'bag' && view.equipment.OFF_HAND}
+                  <p class="two-hand-warning">{$t('inventory.twoHandPreview')}</p>
+                {/if}
+              {/if}
               {#if inspected.sockets?.length}<p>◯ {inspected.sockets?.length}</p>{/if}
               {#if inspected.upgrades > 0}<p>{$t('trade.tempering')} +{inspected.upgrades}</p>{/if}
               {#if inspected.legendaryPower}<p>{$t('inventory.legendaryPower')}: +{inspected.legendaryPower.magnitude}</p>{/if}
@@ -365,7 +448,9 @@
             <section class="item-detail comparison-equipped">
               <span class="detail-tag">{$locale === 'cs' ? 'SROVNÁNÍ S NASAZENÝM' : 'CURRENT EQUIPMENT'}</span>
               {#if displayed?.kind === 'bag' && equippedItem}
-                <span class="detail-icon" style:color={RARITIES[equippedItem.rarity].color}>{equippedItem.icon}</span>
+                <span class="detail-icon" style:color={RARITIES[equippedItem.rarity].color}>
+                  <ItemArt item={equippedItem} detail />
+                </span>
                 <strong class="item-title" style:color={RARITIES[equippedItem.rarity].color}>{itemName(equippedItem)}</strong>
                 <span class="rarity-label">{$t('item.rarity.' + equippedItem.rarity)}</span>
                 <div class="item-property"><span>{$t('stat.damageMin')}–{$t('stat.damageMax')}</span><strong>{equippedItem.minDmg}–{equippedItem.maxDmg}</strong></div>
@@ -407,7 +492,7 @@
               {/if}
             </div>
             <div class="inspector-actions">
-              <button class="primary-action" onclick={() => equipInspected()}>
+              <button class="primary-action" disabled={!delta} onclick={() => equipInspected()}>
                 {$t('inventory.equip')}
               </button>
               {#if inspected.weaponType && WEAPON_TYPES[inspected.weaponType].canOffHand}
@@ -469,7 +554,8 @@
   .equipment-slot.drop-invalid,.bag-slot.drop-invalid{outline:2px dashed #d57e80;outline-offset:-3px;box-shadow:inset 0 0 9px #9a393944}
   .equipment-slot:focus-visible,.bag-slot:focus-visible{outline:2px solid #d8bf8d;outline-offset:1px}
   .slot-label{font-size:clamp(.55rem,.65vw,.7rem);color:#b4b3ae;text-align:center;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .slot-icon{font:clamp(1.3rem,2vw,2rem) Georgia,serif;line-height:1.1}
+  .slot-icon{display:flex;align-items:center;justify-content:center;
+    width:clamp(29px,65%,52px);height:clamp(29px,65%,52px);line-height:1}
   .slot-level{font-size:.6rem;color:#ddb36c;position:absolute;right:4px;bottom:3px}
   .core-stats{display:grid;gap:6px;margin-top:15px}
   .core-stats div{display:flex;justify-content:space-between;gap:8px;padding:7px 9px;background:#141d24;border-bottom:1px solid #3c484e;font-size:.76rem;color:#abb8b9}
@@ -478,12 +564,25 @@
   .bag-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;font-size:.72rem;color:#b2b5ae}
   .bag-toolbar label{display:flex;align-items:center;gap:6px;min-width:0}
   .bag-toolbar select{min-width:0;max-width:125px;padding:5px;color:#ddd1b9;border:1px solid #77674d;background:#192027;font-size:.72rem}
+  .ground-loot-settings {
+    display:flex;align-items:center;flex-wrap:wrap;gap:7px 11px;
+    margin:8px 0 12px;padding:9px;
+    border:1px solid #594c3b;background:#171f24;
+    font-size:.7rem;color:#e1d6c1;
+  }
+  .ground-loot-settings strong { color:#e6c792;width:100%; }
+  .ground-loot-settings label { display:flex;align-items:center;gap:5px;min-width:0; }
+  .ground-loot-settings select { max-width:122px;min-width:65px;padding:6px 3px;
+    color:#e6d8bc;border:1px solid #766451;background:#121c26;font-size:.72rem; }
+  .ground-loot-settings input { width:16px;height:16px;accent-color:#aa9467; }
+  .placement-error,.two-hand-warning {color:#eeb69d;font-size:.73rem;line-height:1.35}
   .bag-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
   .bag-slot{position:relative;min-width:0;aspect-ratio:1/1.15;display:grid;place-items:center;padding:3px;border:1px solid #39434c;background:#101820}
   .bag-slot.occupied{background:radial-gradient(circle at 50% 30%,#26313a,#111820 75%)}
   .bag-slot.filtered-out{opacity:.35;filter:grayscale(.7);cursor:not-allowed}
   .bag-slot.favorite:before{content:' ';position:absolute;inset:2px;border:1px solid #efc87b80;pointer-events:none}
-  .bag-item-icon{font:clamp(1.2rem,2vw,1.8rem) Georgia,serif;color:#ebd6b0;text-shadow:0 2px 7px #000}
+  .bag-item-icon{display:flex;align-items:center;justify-content:center;
+    width:min(90%,46px);height:min(90%,46px);margin:auto;}
   .item-level{position:absolute;bottom:2px;right:4px;font-size:.55rem;color:#a5bbbd}
   .favorite-mark{position:absolute;top:1px;left:3px;font-size:.55rem;color:#eec776}
   .lock-mark{position:absolute;top:1px;right:3px;font-size:.5rem;color:#a6c9d5}
@@ -495,7 +594,8 @@
   .item-detail{min-width:0;display:flex;flex-direction:column;gap:6px;background:#0b121a;border:1px solid #38434b;padding:10px}
   .comparison-equipped{background:#121921}
   .detail-tag{font-size:.58rem;letter-spacing:.1em;color:#b4a17b}
-  .detail-icon{font:1.9rem Georgia,serif;text-align:center;margin:4px}
+  .detail-icon{display:flex;align-items:center;justify-content:center;
+    width:52px;height:52px;margin:4px auto;}
   .item-title{font: .82rem/1.3 Georgia,serif;overflow-wrap:anywhere}
   .rarity-label{font-size:.67rem;color:#acb5b8}
   .item-property{display:flex;justify-content:space-between;gap:4px;font-size:.64rem;color:#aeb8b9;padding:4px 0;border-bottom:1px solid #29313b}
@@ -533,7 +633,7 @@
     }
     .item-inspector{
       grid-column:1;order:-2;position:sticky;top:0;z-index:5;
-      max-height:clamp(170px,34dvh,300px);min-height:0;
+      max-height:clamp(180px,40dvh,306px);min-height:0;
       padding:9px 11px;overflow-y:auto;overscroll-behavior:contain;
       box-shadow:0 8px 22px #000b;
     }
@@ -541,12 +641,12 @@
     .touch-hint{display:inline}
     .desktop-hint{display:none}
     .touch-move-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px}
-    .touch-move-bar button{min-height:38px;padding:6px 10px;background:#46392a;border-color:#af8a58}
+    .touch-move-bar button{min-height:44px;padding:6px 10px;background:#46392a;border-color:#af8a58}
     .touch-move-bar button[aria-pressed="true"]{background:#705032;color:#fff3dc}
     .touch-move-bar span{font-size:.73rem;color:#ebd2a0}
-    .comparison-grid{grid-template-columns:minmax(0,1fr);gap:7px}
-    .item-detail{gap:4px;padding:8px}
-    .detail-icon{font-size:1.5rem;margin:2px}
+    .comparison-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+    .item-detail{gap:3px;padding:6px}
+    .detail-icon{width:42px;height:42px;margin:1px auto}
     .item-property,.affix-line{font-size:.72rem}
     .stat-deltas>div{grid-template-columns:minmax(78px,1fr) auto auto minmax(52px,auto);gap:4px}
     .inspect-placeholder{min-height:90px;padding:8px}
@@ -554,10 +654,15 @@
     .backpack-section{order:-1}
     .equipment-section{order:0}
     .bag-grid{max-width:490px;margin:auto}
-    .bag-slot{aspect-ratio:1;min-height:40px}
+    .bag-slot{aspect-ratio:1;min-height:44px}
     .equipment-grid{max-width:410px;margin:auto;gap:6px}
     .equipment-slot{aspect-ratio:1.35}
-    .inspector-actions button{min-height:38px}
+    .inspector-actions button{min-height:44px}
+    .ground-loot-settings{gap:7px;padding:7px}
+    .ground-loot-settings label{flex-wrap:wrap}
+    .ground-loot-settings select{max-width:115px}
+    .comparison-grid .item-property{font-size:.64rem}
+    .comparison-grid .rarity-label{font-size:.61rem}
     .help-note{padding:7px 11px}
   }
 </style>

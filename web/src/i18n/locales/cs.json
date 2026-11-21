@@ -215,7 +215,17 @@
     "twoHanded": "Obouruční",
     "comparison": "Změna statistik",
     "offHandEquip": "Nasadit do druhé ruky",
-    "legendaryPower": "Legendární vlastnost"
+    "legendaryPower": "Legendární vlastnost",
+    "groundLootFilter": "Zobrazení kořisti na zemi (pouze vzhled)",
+    "minRarity": "Minimální vzácnost",
+    "itemCategory": "Typ předmětu",
+    "lootAll": "Všechny typy",
+    "lootWeapons": "Zbraně a štíty",
+    "lootArmor": "Zbroj",
+    "lootAccessories": "Šperky a relikvie",
+    "alwaysShowFavorites": "Vždy zobrazit oblíbené",
+    "invalidPlacement": "Sem předmět přesunout nelze. Vyber vhodný slot nebo zruš přesun.",
+    "twoHandPreview": "Nasazení obouruční zbraně také sundá předmět z druhé ruky."
   },
   "stat": {
     "strength": "Síla",

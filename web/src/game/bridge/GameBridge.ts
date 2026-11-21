@@ -1,5 +1,7 @@
 import { GameSimulation } from '../core/GameSimulation';
-import type { EquipmentSlot } from '../data/items';
+import type { EquipmentSlot, GroundItem } from '../data/items';
+import { DEFAULT_GROUND_LOOT_FILTER, filterVisibleGroundLoot, normalizeGroundLootFilter,
+  type GroundLootFilter } from '../items/groundLootVisibility';
 import { newSessionSeed } from '../world/generator';
 import { resolveSkillAim, type SkillAim } from '../input/skillAiming';
 import { GAME_BINDINGS } from '../input/gameBindings';
@@ -17,7 +19,16 @@ export class GameBridge implements GameStateReader {
   private pointerWorld: Point | null = null;
   private pointerEnemy: string | null = null;
   private bindingMap: readonly InputBinding[] = GAME_BINDINGS;
+  /** Local presentation preference, deliberately excluded from character/world saves. */
+  private groundFilter: GroundLootFilter = { ...DEFAULT_GROUND_LOOT_FILTER };
 
+  groundLootFilter(): GroundLootFilter { return { ...this.groundFilter }; }
+  setGroundLootFilter(input: unknown): void {
+    this.groundFilter = normalizeGroundLootFilter(input);
+  }
+  visibleGroundLoot(state: Pick<GameSnapshot, 'groundLoot' | 'itemFlags'>): GroundItem[] {
+    return filterVisibleGroundLoot(state.groundLoot, state.itemFlags ?? {}, this.groundFilter);
+  }
   bindings(): readonly InputBinding[] { return this.bindingMap; }
   setBindings(bindings: readonly InputBinding[]): void {
     this.bindingMap = bindings.map(binding => ({ ...binding }));

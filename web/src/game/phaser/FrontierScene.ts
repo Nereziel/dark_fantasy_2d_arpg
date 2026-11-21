@@ -318,7 +318,7 @@ export class FrontierScene extends Phaser.Scene {
         kind: 'INTERACTABLE' as const, id: object.id,
         position: object.position, hitRadius: object.hitRadius
       })),
-      ...state.groundLoot.map(drop => ({
+      ...this.bridge.visibleGroundLoot(state).map(drop => ({
         kind: 'LOOT' as const, id: drop.id, position: { x: drop.x, y: drop.y }, hitRadius: 30
       })),
       ...state.enemies.map(unit => ({
@@ -1127,7 +1127,8 @@ export class FrontierScene extends Phaser.Scene {
         .strokeCircle(state.player.x, state.player.y, 27);
     }
     this.groundItems.clear();
-    const activeDrops = new Set(state.groundLoot.map(drop => drop.id));
+    const visibleDrops = this.bridge.visibleGroundLoot(state);
+    const activeDrops = new Set(visibleDrops.map(drop => drop.id));
     for (const [id, label] of this.groundLabels) {
       if (activeDrops.has(id)) continue;
       label.destroy();
@@ -1135,7 +1136,7 @@ export class FrontierScene extends Phaser.Scene {
     }
     const translateItem = get(translate);
     const language = get(locale) ?? 'en';
-    for (const drop of state.groundLoot) {
+    for (const drop of visibleDrops) {
       const hex = RARITIES[drop.item.rarity].color.replace('#', '');
       const color = Number.parseInt(hex, 16);
       if (this.hoveredId === drop.id) {
