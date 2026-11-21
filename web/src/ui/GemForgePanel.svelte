@@ -8,6 +8,7 @@
     type GemBaseId, type GemId
   } from '../game/gems/gemCatalog';
   import { quoteGemRecipe } from '../game/gems/gemRules';
+  import GemArt from './GemArt.svelte';
 
   let { view, bridge }: {view:GameSnapshot; bridge:GameBridge} = $props();
 
@@ -73,7 +74,10 @@
     {#each GEM_BASES as base (base.id)}
       {@const first = (base.id+'.1') as GemId}
       <div class="gem-entry" data-gem-base={base.id}>
-        <strong>{$t('gems.names.'+base.id)}</strong>
+        <div class="gem-entry-header">
+          <GemArt gemId={first} />
+          <strong>{$t('gems.names.'+base.id)}</strong>
+        </div>
         <small>{$t('gems.tier')} 1 · {gemCost(base.id)}</small>
         <div class="gem-controls">
           <button disabled={!canForge(base.id)}
@@ -91,7 +95,7 @@
     {#each GEM_IDS as gemId (gemId)}
       {#if (view.gems?.[gemId]??0)>0}
         <div class="gem-wallet-item" data-gem-id={gemId}>
-          <span>{name(gemId)}</span>
+          <span class="gem-wallet-preview"><GemArt {gemId} compact />{name(gemId)}</span>
           <strong>{view.gems?.[gemId]}</strong>
           {#if tierOf(gemId)<3}
             <button disabled={(view.gems?.[gemId]??0)<3 || view.gold<tierOf(gemId)*15
@@ -121,7 +125,8 @@
               <div class="socket-row" data-socket-index={index}>
                 <span class="socket-index">{$t('gems.socket')} {index+1}</span>
                 {#if isGemId(socket)}
-                  <span class="socket-filled">{name(socket)}
+                  <span class="socket-filled">
+                    <GemArt gemId={socket} compact />{name(socket)}
                     <small>{bonusLabel(target.item,socket)}</small>
                   </span>
                   <button disabled={view.gold<6*tierOf(socket) || (view.gems?.[socket]??0)>=9999}
@@ -133,6 +138,7 @@
                   {#each heldGems as gemId (gemId)}
                     <button onclick={()=>insert(target,index,gemId)}
                       aria-label={$t('gems.insert')+' '+name(gemId)}>
+                      <GemArt {gemId} compact />
                       {$t('gems.insert')} {name(gemId)}
                       <small>{bonusLabel(target.item,gemId)}</small>
                     </button>
@@ -156,6 +162,8 @@
   .gem-catalog{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
   .gem-entry,.gem-wallet-item,.socket-item{background:#111d27;border:1px solid #465563;padding:10px}
   .gem-entry{display:flex;flex-direction:column;gap:5px;font-size:.8rem}
+  .gem-entry-header,.gem-wallet-preview{display:flex;align-items:center;gap:7px;min-width:0}
+  .gem-entry-header strong{min-width:0;overflow-wrap:anywhere}
   .gem-entry strong,.socket-item strong{color:#e7d6b1}
   .gem-entry small,.socket-item small{font-size:.66rem;color:#afbcb8}
   .gem-controls{display:flex;gap:7px;justify-content:space-between;align-items:center;margin-top:auto}
@@ -169,11 +177,13 @@
   .socket-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px;
     background:#1b2730;border:1px solid #36444e;font-size:.7rem}
   .socket-index{color:#d2a976}
-  .socket-filled{color:#eed398}
+  .socket-filled{color:#eed398;display:inline-block;line-height:1.35}
   .socket-filled small{display:block;color:#b4c3b9}
   button{font-size:.69rem;border:1px solid #8a7756;color:#eed9b4;
     background:#2a343c;padding:7px 9px}
   button small{display:block;font-size:.61rem;color:#c5b49d}
+  .socket-row button{min-height:42px;line-height:1.45}
+  .gem-entry-header :global(svg),.gem-wallet-preview :global(svg){flex-shrink:0}
   button:disabled{opacity:.4;cursor:not-allowed}
   @media(max-width:730px){.gem-catalog{grid-template-columns:repeat(2,minmax(0,1fr))}
     .gem-wallet{grid-template-columns:1fr}}
