@@ -22,6 +22,10 @@ export type CombatReadabilityInput =
       threat: 'boss' | 'miniboss' | 'trap';
       position: ReadabilityPoint;
       radius: number;
+      /** Authoritative Hollow King sector; omission means a circular warning. */
+      shape?: 'circle' | 'cone';
+      angleRadians?: number;
+      arcDegrees?: number;
     }>
   | Readonly<{
       type: 'impact';
@@ -40,6 +44,8 @@ export interface CombatReadabilityCue {
   readonly strokeWidth: number;
   readonly color: number;
   readonly ring: boolean;
+  /** Exclusive with ring; world-accurate cone boundaries in radians. */
+  readonly sector?: Readonly<{ fromRadians: number; toRadians: number }>;
   /** Distinct outlined geometry, readable without relying only on hue or text. */
   readonly segments: readonly ReadabilityLine[];
 }
@@ -72,6 +78,32 @@ function buildWarning(radius: number): ReadabilityLine[] {
   lines.push(segment(0, scale * 0.72, 0, scale * 0.89));
   lines.push(segment(-scale * 0.38, -scale * 1.05, 0, -scale * 1.22));
   lines.push(segment(0, -scale * 1.22, scale * 0.38, -scale * 1.05));
+  return lines;
+}
+
+/** Sector boundary and directional chevrons entirely inside the real hit region. */
+function buildCone(radius: number, fromRadians: number, toRadians: number): ReadabilityLine[] {
+  const at = (angle: number, fraction: number): ReadabilityPoint => ({
+    x: Math.cos(angle) * radius * fraction,
+    y: Math.sin(angle) * radius * fraction
+  });
+  const lines: ReadabilityLine[] = [];
+  const line = (a: ReadabilityPoint, b: ReadabilityPoint): void => {
+    lines.push(segment(a.x, a.y, b.x, b.y));
+  };
+  // Both radial boundaries and a bounded eight-segment arc show real coverage.
+  line({ x: 0, y: 0 }, at(fromRadians, 1));
+  for (let i = 0; i < 8; i++) {
+    const step = (toRadians - fromRadians) / 8;
+    line(at(fromRadians + i * step, 1),
+      at(fromRadians + (i + 1) * step, 1));
+  }
+  line(at(toRadians, 1), { x: 0, y: 0 });
+  const angle = (fromRadians + toRadians) / 2;
+  const spread = Math.min(0.19, (toRadians - fromRadians) / 4);
+  line(at(angle, 0.22), at(angle, 0.68));
+  line(at(angle - spread, 0.49), at(angle, 0.68));
+  line(at(angle + spread, 0.49), at(angle, 0.68));
   return lines;
 }
 
@@ -117,11 +149,13 @@ function makeCue(
   color: number,
   strokeWidth: number,
   ring: boolean,
-  lines: ReadabilityLine[]
+  lines: ReadabilityLine[],
+  sector?: Readonly<{ fromRadians: number; toRadians: number }>
 ): CombatReadabilityCue {
   return Object.freeze({
     kind, position: point(position), radius, durationMs,
     color, strokeWidth, ring,
+    ...(sector ? { sector: Object.freeze({ ...sector }) } : {}),
     segments: Object.freeze(lines)
   });
 }
@@ -139,10 +173,25 @@ export function planCombatReadability(
     if (event.threat !== 'boss' && event.threat !== 'miniboss' && event.threat !== 'trap')
       return null;
     if (!Number.isFinite(event.radius) || event.radius <= 0) return null;
+    const shape = event.shape ?? 'circle';
+    if (shape !== 'circle' && shape !== 'cone') return null;
+    if (shape === 'cone' && (!Number.isFinite(event.angleRadians)
+      || Math.abs(event.angleRadians!) > Math.PI
+      || !Number.isFinite(event.arcDegrees) || event.arcDegrees! <= 0
+      || event.arcDegrees! > 360)) return null;
     const radius = Math.max(18, Math.min(140, event.radius));
     const durationMs = event.threat === 'boss' ? 700 : event.threat === 'miniboss' ? 800 : 850;
     const color = event.threat === 'boss' ? 0xfbe0a7 : event.threat === 'miniboss'
       ? 0xffd19b : 0xf4d8b0;
+    if (shape === 'cone') {
+      const halfArc = event.arcDegrees! * Math.PI / 360;
+      const sector = Object.freeze({
+        fromRadians: event.angleRadians! - halfArc,
+        toRadians: event.angleRadians! + halfArc
+      });
+      return makeCue('warning', event.position, radius, durationMs,
+        color, 4, false, buildCone(radius, sector.fromRadians, sector.toRadians), sector);
+    }
     return makeCue('warning', event.position, radius, durationMs,
       color, 4, true, buildWarning(radius));
   }

@@ -20,3 +20,29 @@ test('reduced-motion mobile combat keeps authoritative abilities and canvas resp
   expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(false);
   await expect(canvas).toBeVisible();
 });
+
+test('combat alerts and class actions remain within the 320–430px mobile canvas layout', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  const canvas = page.locator('.phaser-container canvas');
+  const dock = page.getByTestId('combat-dock');
+  for (const width of [320, 390, 430]) {
+    await page.setViewportSize({ width, height: 720 });
+    await expect(canvas).toBeVisible();
+    await expect(dock).toBeVisible();
+    const bounds = await Promise.all([canvas.boundingBox(), dock.boundingBox()]);
+    expect(bounds[0]).not.toBeNull();
+    expect(bounds[1]).not.toBeNull();
+    for (const box of bounds) {
+      if (!box) continue;
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.height).toBeGreaterThan(0);
+      expect(box.x).toBeGreaterThanOrEqual(-1);
+      expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
+    }
+    await expect(dock.getByRole('button', { name: 'War Cry' })).toBeVisible();
+  }
+});

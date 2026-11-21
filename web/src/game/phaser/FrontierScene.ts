@@ -515,6 +515,16 @@ export class FrontierScene extends Phaser.Scene {
       graphic.lineStyle(cue.strokeWidth, cue.color, 0.98)
         .strokeCircle(0, 0, cue.radius);
       graphic.fillStyle(cue.color, 0.07).fillCircle(0, 0, cue.radius);
+    } else if (cue.sector) {
+      // Render only the authoritative attack wedge. A circle would falsely
+      // mark safe space around a cleave/lunge as hazardous.
+      const { fromRadians, toRadians } = cue.sector;
+      graphic.fillStyle(cue.color, 0.08);
+      graphic.slice(0, 0, cue.radius, fromRadians, toRadians, false).fillPath();
+      graphic.lineStyle(cue.strokeWidth + 4, 0x08121c, 0.96);
+      graphic.slice(0, 0, cue.radius, fromRadians, toRadians, false).strokePath();
+      graphic.lineStyle(cue.strokeWidth, cue.color, 0.98);
+      graphic.slice(0, 0, cue.radius, fromRadians, toRadians, false).strokePath();
     }
     graphic.lineStyle(cue.strokeWidth + 4, 0x08121c, 0.96);
     for (const line of cue.segments)
@@ -615,10 +625,18 @@ export class FrontierScene extends Phaser.Scene {
     }
     if (event.type === 'hollowKingCue') {
       if (event.kind === 'telegraph') {
-        this.showCombatReadability({
-          type: 'telegraph', threat: 'boss',
-          position: { x: event.x, y: event.y }, radius: event.radius
-        });
+        // A GameEvent carries a radius only. The updated simulation snapshot
+        // contains the exact circle/cone geometry. Never invent a full circle
+        // if the warning has already been retired by a later simulation tick.
+        const warning = this.bridge.snapshot().hollowKing?.warning;
+        if (warning && warning.ability === event.ability) {
+          const g = warning.geometry;
+          this.showCombatReadability({
+            type: 'telegraph', threat: 'boss',
+            position: { x: g.position.x, y: g.position.y }, radius: g.radius,
+            shape: g.shape, angleRadians: g.angleRadians, arcDegrees: g.arcDegrees
+          });
+        }
       } else {
         const ring = this.obtainImpact(event.x, event.y, 88);
         const tint = event.kind === 'phaseChanged' ? 0xb59ae9
@@ -1057,6 +1075,24 @@ export class FrontierScene extends Phaser.Scene {
           .strokeCircle(intent.x, intent.y, intent.radius);
         this.telegraph.fillStyle(0xffd3a7, 0.55 + progress * 0.4)
           .fillCircle(intent.x, intent.y, 4);
+        // Static four-point ticks remain readable at small mobile viewport
+        // sizes, even without depending on the warning's red fill.
+        const edge = Math.max(8, intent.radius);
+        const tick = Math.min(12, Math.max(5, edge * 0.2));
+        this.telegraph.lineStyle(4, 0x101722, 0.96);
+        for (const sign of [-1, 1]) {
+          this.telegraph.lineBetween(intent.x + sign * (edge - tick), intent.y,
+            intent.x + sign * edge, intent.y);
+          this.telegraph.lineBetween(intent.x, intent.y + sign * (edge - tick),
+            intent.x, intent.y + sign * edge);
+        }
+        this.telegraph.lineStyle(2, 0xffe0a9, 0.96);
+        for (const sign of [-1, 1]) {
+          this.telegraph.lineBetween(intent.x + sign * (edge - tick), intent.y,
+            intent.x + sign * edge, intent.y);
+          this.telegraph.lineBetween(intent.x, intent.y + sign * (edge - tick),
+            intent.x, intent.y + sign * edge);
+        }
       }
       if (unit.elite) {
         this.statusVisuals.lineStyle(3, 0xefbd67, 0.95)
