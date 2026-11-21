@@ -24,40 +24,60 @@ test.describe('mobile touch HUD', () => {
       { width: 740, height: 390 }
     ]) {
       await page.setViewportSize(viewport);
-      const dockRect = await dock.boundingBox();
-      expect(dockRect).not.toBeNull();
-      if (!dockRect) continue;
-      expect(dockRect.x).toBeGreaterThanOrEqual(0);
-      expect(dockRect.y).toBeGreaterThanOrEqual(0);
-      expect(dockRect.x + dockRect.width).toBeLessThanOrEqual(viewport.width + 1);
-      expect(dockRect.y + dockRect.height).toBeLessThanOrEqual(viewport.height + 1);
-      expect(dockRect.height).toBeLessThan(viewport.height * 0.6);
 
-      for (const action of await quickActions.all()) {
-        const bounds = await action.boundingBox();
-        expect(bounds).not.toBeNull();
-        if (!bounds) continue;
-        expect(bounds.width).toBeGreaterThanOrEqual(43);
-        expect(bounds.height).toBeGreaterThanOrEqual(43);
-        expect(bounds.x).toBeGreaterThanOrEqual(dockRect.x - 1);
-        expect(bounds.x + bounds.width).toBeLessThanOrEqual(dockRect.x + dockRect.width + 1);
-        expect(bounds.y + bounds.height).toBeLessThanOrEqual(dockRect.y + dockRect.height + 1);
-        await expect(action).toBeInViewport({ ratio: 0.8 });
+      // One DOM snapshot per viewport. Previously 60+ cross-process
+      // locator/boundingBox/assertion roundtrips could exceed the 30s test
+      // timeout under CI load, despite a correctly rendered HUD.
+      const geometry = await dock.evaluate(element => {
+        const measure = (node: Element) => {
+          const rect = node.getBoundingClientRect();
+          const style = getComputedStyle(node);
+          const visible = style.display !== 'none' && style.visibility !== 'hidden'
+            && rect.width > 0 && rect.height > 0;
+          const intersectionWidth = Math.max(0,
+            Math.min(rect.right, innerWidth) - Math.max(rect.left, 0));
+          const intersectionHeight = Math.max(0,
+            Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0));
+          return {
+            x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+            viewportRatio: visible
+              ? (intersectionWidth * intersectionHeight) / (rect.width * rect.height) : 0
+          };
+        };
+        return {
+          dock: measure(element),
+          actions: Array.from(element.querySelectorAll('[data-quick-action]'), measure),
+          skills: Array.from(element.querySelectorAll('.skill-button'), measure),
+          header: measure(document.querySelector('.game-header')!)
+        };
+      });
+
+      const outer = geometry.dock;
+      expect(outer.x, JSON.stringify(viewport)).toBeGreaterThanOrEqual(0);
+      expect(outer.y).toBeGreaterThanOrEqual(0);
+      expect(outer.x + outer.width).toBeLessThanOrEqual(viewport.width + 1);
+      expect(outer.y + outer.height).toBeLessThanOrEqual(viewport.height + 1);
+      expect(outer.height).toBeLessThan(viewport.height * 0.6);
+
+      expect(geometry.actions).toHaveLength(5);
+      for (const action of geometry.actions) {
+        expect(action.width).toBeGreaterThanOrEqual(43);
+        expect(action.height).toBeGreaterThanOrEqual(43);
+        expect(action.x).toBeGreaterThanOrEqual(outer.x - 1);
+        expect(action.x + action.width).toBeLessThanOrEqual(outer.x + outer.width + 1);
+        expect(action.y + action.height).toBeLessThanOrEqual(outer.y + outer.height + 1);
+        expect(action.viewportRatio).toBeGreaterThanOrEqual(0.8);
       }
-      for (const skill of await skillButtons.all()) {
-        const bounds = await skill.boundingBox();
-        expect(bounds).not.toBeNull();
-        if (bounds && viewport.width <= 430) {
-          expect(bounds.height).toBeGreaterThanOrEqual(43);
-          expect(bounds.width).toBeGreaterThanOrEqual(43);
+      expect(geometry.skills).toHaveLength(7);
+      if (viewport.width <= 430) {
+        for (const skill of geometry.skills) {
+          expect(skill.height).toBeGreaterThanOrEqual(43);
+          expect(skill.width).toBeGreaterThanOrEqual(43);
         }
       }
-      const header = page.locator('.game-header');
-      const headerRect = await header.boundingBox();
-      if (headerRect) {
-        expect(headerRect.x).toBeGreaterThanOrEqual(0);
-        expect(headerRect.x + headerRect.width).toBeLessThanOrEqual(viewport.width + 1);
-      }
+      expect(geometry.header.x).toBeGreaterThanOrEqual(0);
+      expect(geometry.header.x + geometry.header.width)
+        .toBeLessThanOrEqual(viewport.width + 1);
     }
   });
 
