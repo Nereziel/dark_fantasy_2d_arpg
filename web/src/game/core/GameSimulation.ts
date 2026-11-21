@@ -2330,9 +2330,11 @@ export class GameSimulation {
     const result=stepOwnedSummons(this.summons,{
       dt,ownerId:this.player.id,ownerPosition:this.player,
       ownerAlive:this.player.alive,zone:this.zone,
-      enemies:this.units.map(u=>({
-        id:u.actor.id,x:u.actor.x,y:u.actor.y,alive:u.actor.alive
-      })),obstacles:this.world.obstacles
+      enemies: this.zone==='wilderness'
+        && distance(this.player,this.world.camp)<=CAMP_RADIUS ? []
+        : this.units.map(u=>({
+          id:u.actor.id,x:u.actor.x,y:u.actor.y,alive:u.actor.alive
+        })),obstacles:this.world.obstacles
     });
     if(!result){this.summons=[];return;}
     this.summons=[...result.summons];
@@ -4154,9 +4156,9 @@ export class GameSimulation {
       || (s.summons??[]).filter(a=>a.kind==='golem').length>1
       || (s.summons??[]).filter(a=>a.kind==='skeleton').length>4
       || (s.summons??[]).length>5
+      // Corpse source may already have been removed by a later wave respawn.
       || (s.corpses??[]).some(c=>c.zone!==s.zone
-        || !canOccupy(c,0,layout.obstacles)
-        || !s.enemies.some(u=>u.actor.id===c.enemyId&&!u.actor.alive))
+        || !canOccupy(c,0,layout.obstacles))
       || (s.nextSummonSequence!==undefined
         && (!Number.isSafeInteger(s.nextSummonSequence)
           || s.nextSummonSequence<1 || s.nextSummonSequence>100000001
