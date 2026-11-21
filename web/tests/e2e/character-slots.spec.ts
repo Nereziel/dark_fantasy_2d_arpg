@@ -65,3 +65,66 @@ test('two-step deletion removes only its own saved character and world record', 
   await page.getByRole('button', { name: 'Load', exact: true }).click();
   await expect(page.locator('.hud-details')).toContainText('Warrior · Level 1');
 });
+
+test('legacy single-slot hero and its world are preserved when a new hero is created', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await createHero(page, 'WARRIOR');
+  const originalId = await expect.poll(async () => page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('aether-ruin-web', 1);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return new Promise<string | null>((resolve, reject) => {
+      const tx = db.transaction('saves', 'readonly');
+      const a = tx.objectStore('saves').get('first-character');
+      const w = tx.objectStore('saves').get('world:first-character');
+      tx.oncomplete = () => { db.close(); resolve(a.result && w.result ? a.result.characterId : null); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  })).toMatch(/^char-[0-9a-f]{32}$/);
+  // Collapse the database to the old first-character/world:first-character layout.
+  const id = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('aether-ruin-web', 1);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return new Promise<string>((resolve, reject) => {
+      const tx = db.transaction('saves', 'readwrite');
+      const store = tx.objectStore('saves');
+      const alias = store.get('first-character');
+      let result = '';
+      alias.onsuccess = () => {
+        result = alias.result.characterId;
+        store.delete('character:' + result);
+        store.delete('world:character:' + result);
+      };
+      tx.oncomplete = () => { db.close(); resolve(result); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  });
+  expect(id).toMatch(/^char-[0-9a-f]{32}$/);
+  await page.getByRole('button', { name: 'Main menu' }).click();
+  await expect(page.locator('.saved-character-row')).toHaveCount(1);
+  await createHero(page, 'MAGE');
+  await page.getByRole('button', { name: 'Main menu' }).click();
+  await expect(page.locator('.saved-character-row')).toHaveCount(2);
+  const savedWorld = await page.evaluate(async characterId => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('aether-ruin-web', 1);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction('saves', 'readonly');
+      const c = tx.objectStore('saves').get('character:' + characterId);
+      const w = tx.objectStore('saves').get('world:character:' + characterId);
+      tx.oncomplete = () => { db.close(); resolve(c.result?.characterId === characterId
+        && w.result?.characterId === characterId); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  }, id);
+  expect(savedWorld).toBe(true);
+});
