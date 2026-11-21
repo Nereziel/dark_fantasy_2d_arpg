@@ -3983,6 +3983,10 @@ export class GameSimulation {
       paladinCooldowns: { ...this.paladinCooldowns },
       mageCooldowns: { ...this.mageCooldowns },
       mageZones: this.mageZones.map(z => ({ ...z, position: { ...z.position } })),
+      necroCooldowns: { ...this.necroCooldowns },
+      summons: this.summons.map(a => ({ ...a })),
+      corpses: this.corpses.map(c => ({ ...c })),
+      nextSummonSequence: this.nextSummonSequence,
       warriorAction: this.warriorAction ? {
         ...this.warriorAction, timeline: { ...this.warriorAction.timeline }
       } : null,
@@ -4137,6 +4141,27 @@ export class GameSimulation {
       || !validEventSnapshot()
       || !validPaladinCooldowns(s.paladinCooldowns ?? {})
       || (s.classId!=='PALADIN' && Object.keys(s.paladinCooldowns ?? {}).length>0)
+      || !validNecroCooldowns(s.necroCooldowns ?? {})
+      || (s.classId!=='NECROMANCER'
+        && Object.keys(s.necroCooldowns ?? {}).length>0)
+      || !validOwnedSummons(s.summons ?? [])
+      || !validCorpseTokens(s.corpses ?? [])
+      || (s.classId!=='NECROMANCER'
+        && ((s.summons?.length??0)>0 || (s.corpses?.length??0)>0))
+      || (s.summons??[]).some(a=>a.ownerId!=='hero'||a.zone!==s.zone
+        || !canOccupy(a,ACTOR_RADIUS,layout.obstacles)
+        || !s.player.alive)
+      || (s.summons??[]).filter(a=>a.kind==='golem').length>1
+      || (s.summons??[]).filter(a=>a.kind==='skeleton').length>4
+      || (s.summons??[]).length>5
+      || (s.corpses??[]).some(c=>c.zone!==s.zone
+        || !canOccupy(c,0,layout.obstacles)
+        || !s.enemies.some(u=>u.actor.id===c.enemyId&&!u.actor.alive))
+      || (s.nextSummonSequence!==undefined
+        && (!Number.isSafeInteger(s.nextSummonSequence)
+          || s.nextSummonSequence<1 || s.nextSummonSequence>100000001
+          || (s.summons??[]).some(a=>
+            Number(a.id.slice(a.id.lastIndexOf('.')+1))>=s.nextSummonSequence!)))
       || !validMageCooldowns(s.mageCooldowns ?? {})
       || (s.classId !== 'MAGE' && Object.keys(s.mageCooldowns ?? {}).length > 0)
       || (s.mageZones !== undefined && (!Array.isArray(s.mageZones)
@@ -4369,6 +4394,10 @@ export class GameSimulation {
     this.paladinCooldowns = s.paladinCooldowns ? { ...s.paladinCooldowns } : {};
     this.mageCooldowns = s.mageCooldowns ? { ...s.mageCooldowns } : {};
     this.mageZones = (s.mageZones ?? []).map(z => ({ ...z, position: { ...z.position } }));
+    this.necroCooldowns = { ...(s.necroCooldowns ?? {}) };
+    this.summons = (s.summons ?? []).map(a=>({...a}));
+    this.corpses = (s.corpses ?? []).map(c=>({...c}));
+    this.nextSummonSequence = s.nextSummonSequence ?? 1;
     this.warriorAction = s.warriorAction ? {
       ...s.warriorAction, timeline: { ...s.warriorAction.timeline }
     } : null;
