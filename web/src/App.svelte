@@ -33,6 +33,7 @@
   import { WARDEN_ID } from './game/quests/firstQuest';
   import { townEntry, type TownEntry } from './game/world/townManifest';
   import { CLASSES, type ClassId } from './game/data/classes';
+  import { createCharacterId } from './game/creation/characterCreation';
   import { PALADIN_EXTRA_IDS } from './game/skills/paladinKit';
   import { MAGE_EXTRA_IDS } from './game/skills/mageKit';
   import { NECRO_EXTRA_IDS } from './game/skills/necromancerKit';
@@ -87,9 +88,15 @@
   const autosaver = new CharacterAutosaver(saveGame, 1400, () => {
     messageKey = 'status.saveError';
   });
-  const worldAutosaver = new CharacterAutosaver<WorldSessionProgress>(saveWorldProgress, 1700, () => {
-    messageKey = 'status.saveError';
-  });
+  type BoundWorldProgress = { characterId:string; progress:WorldSessionProgress };
+  const worldAutosaver = new CharacterAutosaver<BoundWorldProgress>(
+    record => saveWorldProgress(record.progress,record.characterId),
+    1700, () => { messageKey = 'status.saveError'; }
+  );
+  function boundWorldProgress():BoundWorldProgress|null {
+    const progress=bridge.worldProgress();
+    return progress ? {characterId:bridge.character().characterId??'hero',progress}:null;
+  }
 
   function openMap(): void {
     if (!playing || mapOpen || view.zone !== 'wilderness' || !view.player.alive
@@ -161,7 +168,7 @@
       view = latest;
       if (playing) {
         autosaver.schedule(bridge.character());
-        const world = bridge.worldProgress();
+        const world = boundWorldProgress();
         if (world) worldAutosaver.schedule(world);
       }
     });
@@ -200,24 +207,34 @@
     bridge.command({ type: 'respawn' });
   }
 
-  function newGame(): void {
-    bridge.command({ type: 'reset', classId: selectedClass });
-    messageKey = '';
-    inventoryOpen = false;
-    characterOpen = false;
-    controlsOpen = false;
-    mapOpen = false;
-    dialogueOpen = false;
-    tradeNpc = null;
-    townModal = null;
-    playing = true;
-    void autosaver.saveNow(bridge.character()).catch(() => {
-      messageKey = 'status.saveError';
-    });
-    const world = bridge.worldProgress();
-    if (world) void worldAutosaver.saveNow(world).catch(() => {
-      messageKey = 'status.saveError';
-    });
+  async function newGame(): Promise<void> {
+    if(busy)return;
+    busy=true;
+    try {
+      // Drain the previous hero's queued writes before changing the save slot.
+      await Promise.all([autosaver.flush(),worldAutosaver.flush()]);
+      bridge.command({ type:'createCharacter',classId:selectedClass,
+        characterId:createCharacterId(window.crypto.randomUUID()) });
+      messageKey='';
+      inventoryOpen=false;
+      characterOpen=false;
+      talentsOpen=false;
+      controlsOpen=false;
+      mapOpen=false;
+      dialogueOpen=false;
+      tradeNpc=null;
+      townModal=null;
+      playing=true;
+      const world=boundWorldProgress();
+      await Promise.all([
+        autosaver.saveNow(bridge.character()),
+        ...(world?[worldAutosaver.saveNow(world)]:[])
+      ]);
+    } catch {
+      messageKey='status.saveError';
+    } finally {
+      busy=false;
+    }
   }
   function resume(): void {
     bridge.command({ type: 'pause', value: false });
@@ -434,7 +451,7 @@
   async function save(): Promise<void> {
     busy = true;
     try {
-      const world = bridge.worldProgress();
+      const world = boundWorldProgress();
       await Promise.all([
         autosaver.saveNow(bridge.character()),
         ...(world ? [worldAutosaver.saveNow(world)] : [])
@@ -450,7 +467,8 @@
     busy = true;
     try {
       await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
-      const [character, world] = await Promise.all([loadGame(), loadWorldProgress()]);
+      const character=await loadGame();
+      const world=character ? await loadWorldProgress(character.characterId??'hero') : null;
       if (character && bridge.restoreCharacter(character, world?.seed)) {
         if (world) bridge.restoreWorldProgress(world);
         messageKey = 'status.loaded';
@@ -464,7 +482,7 @@
         townModal = null;
         selectedClass = bridge.snapshot().classId;
         autosaver.prime(bridge.character());
-        const currentWorld = bridge.worldProgress();
+        const currentWorld=boundWorldProgress();
         if (currentWorld) worldAutosaver.prime(currentWorld);
         playing = true;
       } else {
@@ -496,7 +514,7 @@
         <p class="subtitle">{ $t('menu.subtitle') }</p>
         <CharacterSelect selected={selectedClass} choose={(id) => { selectedClass = id; }} />
         <div class="menu-actions">
-          <button class="primary" onclick={newGame}>{$t('menu.start')}</button>
+          <button class="primary" disabled={busy} onclick={newGame}>{$t('menu.start')}</button>
           <button class="secondary" onclick={resume}>{$t('menu.continue')}</button>
           <button class="secondary" disabled={busy} onclick={load}>{$t('menu.load')}</button>
         </div>
