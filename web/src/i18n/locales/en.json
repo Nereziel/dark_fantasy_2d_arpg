@@ -215,7 +215,17 @@
     "twoHanded": "Two-handed",
     "comparison": "Stat difference",
     "offHandEquip": "Equip offhand",
-    "legendaryPower": "Legendary power"
+    "legendaryPower": "Legendary power",
+    "groundLootFilter": "Ground loot labels (visual only)",
+    "minRarity": "Minimum rarity",
+    "itemCategory": "Item type",
+    "lootAll": "All types",
+    "lootWeapons": "Weapons & shields",
+    "lootArmor": "Armor",
+    "lootAccessories": "Jewelry & relics",
+    "alwaysShowFavorites": "Always show favorites",
+    "invalidPlacement": "Cannot place here. Choose a compatible slot or cancel move.",
+    "twoHandPreview": "Equipping this two-handed item also removes your off-hand item."
   },
   "stat": {
     "strength": "Strength",
