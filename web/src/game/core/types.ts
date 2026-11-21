@@ -16,6 +16,8 @@ import type { PaladinAbilityId, PaladinCooldowns } from '../skills/paladinKit';
 import type { MageExtraSpellId, MageCooldowns } from '../skills/mageKit';
 import type { MageTimedZone } from '../skills/mageCombatPlans';
 import type { NecroExtraSpellId, NecroCooldowns } from '../skills/necromancerKit';
+import type { RogueExtraAbilityId, RogueCooldowns } from '../skills/rogueKit';
+import type { RogueTrap } from '../skills/rogueCombatPlans';
 import type { OwnedSummon, CorpseToken } from '../summons/summonOwnership';
 import type { CombatTimelineState } from '../animation/combatTimeline';
 import type { StatusInstance } from '../status/statusRuntime';
@@ -171,6 +173,11 @@ export interface GameSnapshot {
   corpses?: CorpseToken[];
   nextSummonSequence?: number;
   necroCooldowns?: NecroCooldowns;
+  /** Transient Rogue stealth, cooldowns, and authoritative deployed traps. */
+  rogueCooldowns?: RogueCooldowns;
+  rogueStealthSeconds?: number;
+  rogueTraps?: RogueTrap[];
+  rogueNextTrapSequence?: number;
   warriorAction?: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null;
   /** Transient hit-frame state of the other five classes, never persisted. */
   classAction?: {
@@ -180,6 +187,7 @@ export interface GameSnapshot {
     paladinAbilityId?: PaladinAbilityId;
     mageAbilityId?: MageExtraSpellId;
     necroAbilityId?: NecroExtraSpellId;
+    rogueAbilityId?: RogueExtraAbilityId;
     targetId: string | null;
     aim?: SkillAim;
     timeline: CombatTimelineState;
@@ -233,6 +241,7 @@ export type GameCommand =
   | { type: 'paladinAbility'; id: PaladinAbilityId; targetId?: string }
   | { type: 'mageAbility'; id: MageExtraSpellId; targetId?: string; position?: Point }
   | { type: 'necroAbility'; id: NecroExtraSpellId; targetId?: string; position?: Point }
+  | { type: 'rogueAbility'; id: RogueExtraAbilityId; targetId?: string; position?: Point }
   | { type: 'interactNpc'; npcId: NpcId }
   | { type: 'interactTown'; entryId: string }
   | { type: 'travelWaypoint'; destinationId: WaypointId }
