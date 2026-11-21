@@ -17,6 +17,7 @@ import type { MageExtraSpellId, MageCooldowns } from '../skills/mageKit';
 import type { MageTimedZone } from '../skills/mageCombatPlans';
 import type { NecroExtraSpellId, NecroCooldowns } from '../skills/necromancerKit';
 import type { RogueExtraAbilityId, RogueCooldowns } from '../skills/rogueKit';
+import type { WarlockExtraSpellId, WarlockCooldowns } from '../skills/warlockKit';
 import type { RogueTrap } from '../skills/rogueCombatPlans';
 import type { OwnedSummon, CorpseToken } from '../summons/summonOwnership';
 import type { CombatTimelineState } from '../animation/combatTimeline';
@@ -173,6 +174,8 @@ export interface GameSnapshot {
   corpses?: CorpseToken[];
   nextSummonSequence?: number;
   necroCooldowns?: NecroCooldowns;
+  /** Warlock cooldowns are session-only; no change to character save v11. */
+  warlockCooldowns?: WarlockCooldowns;
   /** Transient Rogue stealth, cooldowns, and authoritative deployed traps. */
   rogueCooldowns?: RogueCooldowns;
   rogueStealthSeconds?: number;
@@ -188,6 +191,7 @@ export interface GameSnapshot {
     mageAbilityId?: MageExtraSpellId;
     necroAbilityId?: NecroExtraSpellId;
     rogueAbilityId?: RogueExtraAbilityId;
+    warlockAbilityId?: WarlockExtraSpellId;
     targetId: string | null;
     aim?: SkillAim;
     timeline: CombatTimelineState;
@@ -242,6 +246,7 @@ export type GameCommand =
   | { type: 'mageAbility'; id: MageExtraSpellId; targetId?: string; position?: Point }
   | { type: 'necroAbility'; id: NecroExtraSpellId; targetId?: string; position?: Point }
   | { type: 'rogueAbility'; id: RogueExtraAbilityId; targetId?: string; position?: Point }
+  | { type: 'warlockAbility'; id: WarlockExtraSpellId; targetId?: string }
   | { type: 'interactNpc'; npcId: NpcId }
   | { type: 'interactTown'; entryId: string }
   | { type: 'travelWaypoint'; destinationId: WaypointId }
