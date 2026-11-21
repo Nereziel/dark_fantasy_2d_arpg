@@ -31,7 +31,7 @@ describe('Prompt 43 — Warlock actual gameplay',()=>{
     tick(sim);
     expect(sim.snapshot().summons?.[0]).toMatchObject({
       ownerId:'hero',kind:'demon',zone:'wilderness'});
-    const saved=sim.character() as Record<string,unknown>;
+    const saved=sim.character() as unknown as Record<string,unknown>;
     expect(saved.summons).toBeUndefined();
     expect(saved.warlockCooldowns).toBeUndefined();
     sim.command({type:'reset',classId:'MAGE',seed:42});
