@@ -924,12 +924,12 @@
         </div>
       {:else if view.paused}
         <div class="modal-shield">
-          <section class="pause-card" role="dialog" aria-modal="true" aria-label={$t('menu.paused')}>
+          <div class="pause-card" role="dialog" aria-modal="true" aria-label={$t('menu.paused')}>
             <h2>{$t('menu.paused')}</h2>
-            <button class="primary" onclick={togglePause}>{$t('menu.resume')}</button>
+            <button class="primary" onclick={() => togglePause()}>{$t('menu.resume')}</button>
             <button class="secondary" onclick={(event) => openControls(event.currentTarget)}>{$t('bindings.open')}</button>
             <button class="secondary" onclick={menu}>{$t('menu.back')}</button>
-          </section>
+          </div>
         </div>
       {/if}
     </main>
