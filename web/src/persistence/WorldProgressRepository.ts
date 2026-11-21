@@ -95,8 +95,23 @@ export async function saveWorldProgress(progress: WorldSessionProgress, characte
   // Both aliases are committed together, so changing characters never deletes
   // their independently saved map discovery, waypoints or persistent facts.
   return withStore<void>('readwrite', store => {
-    store.put(record, key);
-    store.put(record, SLOT);
+    const previous = store.get(SLOT);
+    previous.onsuccess = () => {
+      const previousId: unknown = previous.result?.characterId;
+      const previousKey = worldSaveKey(previousId);
+      if (previousKey && previousKey !== key
+        && readWorldRecord(previous.result, previousId as string)) {
+        const current = store.get(previousKey);
+        current.onsuccess = () => {
+          if (!current.result) store.put(previous.result, previousKey);
+          store.put(record, key);
+          store.put(record, SLOT);
+        };
+      } else {
+        store.put(record, key);
+        store.put(record, SLOT);
+      }
+    };
   });
 }
 
