@@ -957,7 +957,16 @@
       "fire": "Oheň",
       "frost": "Mráz",
       "lightning": "Blesky",
-      "arcane": "Arkána"
+      "arcane": "Arkána",
+      "bone": "Kostěná magie",
+      "summoning": "Vyvolávání",
+      "blood": "Krvavé rituály",
+      "assassin": "Vrah",
+      "shadow": "Stíny",
+      "trapper": "Pasti",
+      "demonology": "Démonologie",
+      "corruption": "Zkaženost",
+      "soul": "Magie duší"
     },
     "nodes": {
       "berserker": {
@@ -1097,10 +1106,129 @@
           "name": "Transcendence",
           "description": "Za rank zkracuje cooldown Teleportu o 7 %."
         }
+      },
+      "necro": {
+        "boneSpear": {
+          "name": "Pronikavé kosti",
+          "description": "Kostěné kopí způsobuje o 11 % větší poškození za každý stupeň."
+        },
+        "boneFracture": {
+          "name": "Tříštění kostí",
+          "description": "Výbuch mrtvoly má o 10 % větší dosah za každý stupeň."
+        },
+        "corpseMastery": {
+          "name": "Mistr mrtvol",
+          "description": "Jed z Výbuchu mrtvoly je o 20 % silnější za každý stupeň."
+        },
+        "legion": {
+          "name": "Oživená legie",
+          "description": "Kostlivci mají o 14 % větší sílu vyvolání za každý stupeň."
+        },
+        "golemCore": {
+          "name": "Golemovo jádro",
+          "description": "Golem má o 14 % větší sílu vyvolání za každý stupeň."
+        },
+        "soulLink": {
+          "name": "Spojení duší",
+          "description": "Kostlivci a golemové mají o 12 % více maximálních životů za každý stupeň."
+        },
+        "bloodTithe": {
+          "name": "Krvavý desátek",
+          "description": "Sání krve léčí o dalších 9 % způsobeného poškození za stupeň."
+        },
+        "crimsonCurse": {
+          "name": "Karmínová kletba",
+          "description": "Kletby a zranitelnost trvají o 15 % déle za každý stupeň."
+        },
+        "plagueNova": {
+          "name": "Morová nova",
+          "description": "Smrtící nova má o 9 % větší dosah za každý stupeň."
+        }
+      },
+      "rogue": {
+        "precision": {
+          "name": "Přesnost vraha",
+          "description": "Zvyšuje šanci na kritický zásah o 2 procentní body za každý stupeň."
+        },
+        "execution": {
+          "name": "Poprava",
+          "description": "Útok do zad způsobuje o 15 % větší poškození za každý stupeň."
+        },
+        "hemorrhage": {
+          "name": "Krvácení",
+          "description": "Krvácení z Vějíře nožů trvá o 20 % déle za každý stupeň."
+        },
+        "veil": {
+          "name": "Závoj stínů",
+          "description": "Stínový krok prodlužuje skrytí o 0,6 sekundy za každý stupeň."
+        },
+        "ambush": {
+          "name": "Přepadení",
+          "description": "Útok do zad ze skrytí způsobuje o 15 % větší poškození za stupeň."
+        },
+        "shadowHaste": {
+          "name": "Stínový spěch",
+          "description": "Stínový krok přidá 4 procentní body zrychlení za každý stupeň."
+        },
+        "venom": {
+          "name": "Jedové pasti",
+          "description": "Pasti způsobují o 16 % více jedového poškození za každý stupeň."
+        },
+        "binding": {
+          "name": "Svazující dráty",
+          "description": "Pasti drží nepřátele zakořeněné o 20 % déle za stupeň."
+        },
+        "serration": {
+          "name": "Zubatá past",
+          "description": "Jed z pastí trvá o 18 % déle za každý stupeň."
+        }
+      },
+      "warlock": {
+        "abyssalPower": {
+          "name": "Síla propasti",
+          "description": "Vyvolaný démon má o 13 % větší sílu za každý stupeň."
+        },
+        "demonBlood": {
+          "name": "Démonická krev",
+          "description": "Démon má o 12 % více maximálních životů za každý stupeň."
+        },
+        "soulPact": {
+          "name": "Pakt duší",
+          "description": "Útoky démona obnoví 2,5 % způsobeného poškození jako životy za stupeň."
+        },
+        "blight": {
+          "name": "Nákaza",
+          "description": "Jed ze Zkaženosti je o 16 % silnější za každý stupeň."
+        },
+        "hex": {
+          "name": "Přetrvávající kletba",
+          "description": "Kletba ze Zkaženosti trvá o 14 % déle za každý stupeň."
+        },
+        "torment": {
+          "name": "Muka",
+          "description": "Oslabující kletba je o 4 procentní body silnější za každý stupeň."
+        },
+        "shadowBolt": {
+          "name": "Mistrovství stínového šípu",
+          "description": "Stínový šíp způsobuje o 13 % větší poškození za každý stupeň."
+        },
+        "hellfireReach": {
+          "name": "Dosah pekelného ohně",
+          "description": "Dosah Pekelného ohně je o 8 % větší za každý stupeň."
+        },
+        "soulFeast": {
+          "name": "Hostina duší",
+          "description": "Stínový šíp léčí 7 % způsobeného poškození za každý stupeň."
+        }
       }
     },
     "paladinTitle": "Strom talentů paladina",
-    "mageTitle": "Strom talentů mága"
+    "mageTitle": "Strom talentů mága",
+    "necromancerTitle": "Strom talentů nekromanta",
+    "rogueTitle": "Strom talentů tuláka",
+    "warlockTitle": "Strom talentů černokněžníka",
+    "rankPreview": "Aktuální stupeň",
+    "nextRank": "Další stupeň"
   },
   "skillModifiers": {
     "enhanced": "Změněno",
