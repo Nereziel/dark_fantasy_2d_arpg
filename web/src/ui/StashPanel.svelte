@@ -120,7 +120,7 @@
 <div class="stash-columns">
   <section>
     <h3>{$t('town.stashBag')} ({view.inventory.filter(Boolean).length}/24)</h3>
-    <div class="stash-list" data-stash-bag
+    <div class="stash-list" data-stash-bag role="region" aria-label={$t('town.stashBag')}
       class:drop-ready={canDropBag()}
       class:drop-hover={dropHover === 'bag' && canDropBag()}
       ondragover={(event) => allowDrop(event, 'bag')}
@@ -128,7 +128,7 @@
       ondrop={dropIntoBag}>
       {#each view.inventory as item, index (index)}
         {#if item}
-          <div class="stash-row" data-item-id={item.id} data-bag-index={index}
+          <div class="stash-row" role="group" aria-label={item.id} data-item-id={item.id} data-bag-index={index}
             draggable={!view.itemFlags?.[item.id]?.locked && !view.itemFlags?.[item.id]?.favorite}
             ondragstart={(event) => dragStart(event, { kind: 'bag', index, id: item.id })}
             ondragend={clearDrag}>
@@ -186,14 +186,14 @@
     <button class="stash-organize" onclick={() => bridge.command({ type: 'stashSort', tab: activeTab })}>
       {$t('stash.organize')}
     </button>
-    <div class="stash-list" data-stash-items={activeTab} role="tabpanel"
+    <div class="stash-list" data-stash-items={activeTab} role="tabpanel" tabindex="0"
       class:drop-ready={!!dragged && canDropTab(activeTab)}
       class:drop-hover={dropHover === 'stash' && canDropTab(activeTab)}
       ondragover={(event) => allowDrop(event, 'stash')}
       ondragleave={() => { if (dropHover === 'stash') dropHover = null; }}
       ondrop={(event) => dropIntoTab(event, activeTab)}>
       {#each storedRows as { index, item } (item.id)}
-        <div class="stash-row" data-item-id={item.id} data-slot-index={index} draggable="true"
+        <div class="stash-row" role="group" aria-label={item.id} data-item-id={item.id} data-slot-index={index} draggable="true"
           ondragstart={(event) => dragStart(event, { kind: 'stash', tab: activeTab, index, id: item.id })}
           ondragend={clearDrag}>
           <span style:color={RARITIES[item.rarity].color}>{item.icon} {itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</span>
