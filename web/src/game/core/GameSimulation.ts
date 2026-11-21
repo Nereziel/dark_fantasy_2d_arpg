@@ -17,6 +17,11 @@ import { PALADIN_EXTRA_SKILLS, getPaladinAbility, planPaladinCast,
   type PaladinAbilityId, type PaladinCooldowns } from '../skills/paladinKit';
 import { getMageSpell, planMageCast, advanceMageCooldowns, validMageCooldowns,
   type MageExtraSpellId, type MageCooldowns } from '../skills/mageKit';
+import { getRogueAbility, planRogueCast, validRogueCooldowns,
+  advanceRogueCooldowns, type RogueExtraAbilityId, type RogueCooldowns } from '../skills/rogueKit';
+import { planRogueMultishot, planRogueBackstab, planRogueStep,
+  createRogueTrap, tickRogueTraps, validRogueTraps,
+  type RogueTrap } from '../skills/rogueCombatPlans';
 import { getNecroSpell, planNecroCast, advanceNecroCooldowns, validNecroCooldowns,
   type NecroExtraSpellId, type NecroCooldowns } from '../skills/necromancerKit';
 import { createOwnedSummon, stepOwnedSummons, addCorpseToken, stepCorpseTokens,
@@ -214,13 +219,17 @@ function validWaveBState(s: GameSnapshot): boolean {
       || (action.necroAbilityId !== undefined
         && (s.classId !== 'NECROMANCER' || action.kind !== 'skill'
           || action.slot !== null || !getNecroSpell(action.necroAbilityId)))
-      || [action.paladinAbilityId,action.mageAbilityId,action.necroAbilityId]
+      || (action.rogueAbilityId !== undefined
+        && (s.classId !== 'ROGUE' || action.kind !== 'skill'
+          || action.slot !== null || !getRogueAbility(action.rogueAbilityId)))
+      || [action.paladinAbilityId,action.mageAbilityId,action.necroAbilityId,action.rogueAbilityId]
         .filter(id=>id!==undefined).length>1
       || (action.kind === 'basic'
         ? action.slot !== null || action.paladinAbilityId !== undefined
           || action.mageAbilityId !== undefined || action.necroAbilityId !== undefined
+          || action.rogueAbilityId !== undefined
         : action.paladinAbilityId !== undefined || action.mageAbilityId !== undefined
-          || action.necroAbilityId !== undefined
+          || action.necroAbilityId !== undefined || action.rogueAbilityId !== undefined
           ? action.slot !== null : !isSkillSlot(action.slot))
       || typeof action.targetId !== 'string' && action.targetId !== null
       || (typeof action.targetId === 'string' && action.targetId.length > 128)
@@ -232,7 +241,9 @@ function validWaveBState(s: GameSnapshot): boolean {
             ? getMageSpell(action.mageAbilityId)?.id
             : action.necroAbilityId !== undefined
               ? getNecroSpell(action.necroAbilityId)?.id
-              : SKILLS[s.classId][action.slot as SkillSlot].id)
+              : action.rogueAbilityId !== undefined
+                ? getRogueAbility(action.rogueAbilityId)?.id
+                : SKILLS[s.classId][action.slot as SkillSlot].id)
       || !Number.isSafeInteger(timeline.elapsedTicks) || timeline.elapsedTicks < 0
       || !Number.isSafeInteger(timeline.windupTicks) || timeline.windupTicks < 1
       || !Number.isSafeInteger(timeline.recoveryTicks) || timeline.recoveryTicks < 0
@@ -267,6 +278,10 @@ export class GameSimulation {
   private mageCooldowns: MageCooldowns = {};
   private mageZones: MageTimedZone[] = [];
   private necroCooldowns: NecroCooldowns = {};
+  private rogueCooldowns: RogueCooldowns = {};
+  private rogueStealthSeconds = 0;
+  private rogueTraps: RogueTrap[] = [];
+  private rogueNextTrapSequence = 1;
   private summons: OwnedSummon[] = [];
   private corpses: CorpseToken[] = [];
   private nextSummonSequence = 1;
@@ -277,6 +292,7 @@ export class GameSimulation {
     paladinAbilityId?: PaladinAbilityId;
     mageAbilityId?: MageExtraSpellId;
     necroAbilityId?: NecroExtraSpellId;
+    rogueAbilityId?: RogueExtraAbilityId;
     aim?: SkillAim; timeline: CombatTimelineState;
   } | null = null;
   private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
@@ -1104,6 +1120,10 @@ export class GameSimulation {
     this.mageCooldowns = {};
     this.mageZones = [];
     this.necroCooldowns = {};
+    this.rogueCooldowns = {};
+    this.rogueStealthSeconds = 0;
+    this.rogueTraps = [];
+    this.rogueNextTrapSequence = 1;
     this.summons = [];
     this.corpses = [];
     this.nextSummonSequence = 1;
@@ -1200,6 +1220,8 @@ export class GameSimulation {
       // Ally scene changes do not reset spell cooldowns or stable ID clock.
       this.summons = [];
       this.corpses = [];
+      this.rogueTraps = [];
+      this.rogueStealthSeconds = 0;
       this.eliteQueue = [];
       this.movementSpeed = 0;
       this.accumulator = 0;
@@ -1501,6 +1523,11 @@ export class GameSimulation {
     if(command.type==='paladinAbility') {
       if(this.classId!=='PALADIN')return;
       this.requestPaladinAbility(command.id,command.targetId??null);
+      return;
+    }
+    if (command.type === 'rogueAbility') {
+      if (this.classId !== 'ROGUE') return;
+      this.requestRogueAbility(command.id,command.targetId??null,command.position);
       return;
     }
     if (command.type === 'necroAbility') {
@@ -2214,6 +2241,145 @@ export class GameSimulation {
   }
 
   /** Validate and commit class Essence once before the timeline hit frame. */
+  /** Weapon stance is authoritative: bows/crossbows unlock true ranged basic attacks. */
+  private rogueRangedWeapon(): boolean {
+    const main=this.equipment.MAIN_HAND;
+    return this.classId === 'ROGUE' && !!main
+      && (main.weaponType === 'BOW' || main.weaponType === 'CROSSBOW'
+        || main.templateId==='bow' || main.templateId==='crossbow');
+  }
+  private rogueAttackRange(): number {
+    return this.rogueRangedWeapon() ? 305 : CLASSES[this.classId].attackRange;
+  }
+
+  private requestRogueAbility(id:RogueExtraAbilityId,targetId:string|null,
+    cursor?:Point):void{
+    if(this.classId!=='ROGUE'||!this.player.alive||this.paused
+      ||this.classAction||this.warriorAction
+      ||this.statusEffects.player.some(x=>x.id==='stunned'||x.id==='frozen'
+        ||x.id==='silenced'))return;
+    const spell=getRogueAbility(id);
+    if(!spell || (spell.kind==='mobility'&&this.immobilized))return;
+    const target=targetId
+      ?this.units.find(u=>u.actor.alive&&u.actor.id===targetId)
+      :this.focusedUnit.actor.alive?this.focusedUnit:undefined;
+    const aimCursor=cursor??(id==='multishot'?target?.actor:
+      id==='trap'?{x:this.player.x+54,y:this.player.y}:undefined);
+    if(id==='trap' && (this.rogueTraps.length>=3
+      ||!aimCursor||!createRogueTrap('hero',this.rogueNextTrapSequence,
+        this.zone,aimCursor,this.world.obstacles)))return;
+    if(id==='shadowStep' && (!target
+      ||!planRogueStep(this.player,target.actor,spell.range,this.world.obstacles)))return;
+    const plan=planRogueCast(id,{
+      energy:this.resource,cooldowns:this.rogueCooldowns,origin:this.player,
+      targetId:target?.actor.id??null,targetPosition:target?.actor??null,
+      targetAlive:!!target?.actor.alive,
+      targetVisible:!!target&&hasLineOfSight(this.player,target.actor,this.world.obstacles),
+      cursor:aimCursor??null
+    });
+    if(!plan.ok)return;
+    this.resource=plan.energyAfter;
+    this.rogueCooldowns=plan.cooldowns;
+    this.pendingSkill=null;
+    this.pendingAim=null;
+    this.movePath=[];
+    this.pickupTarget=null;
+    this.attackTarget=null;
+    const kind=spell.kind==='mobility'?'dash':spell.kind==='nova'?'nova'
+      :spell.kind==='trap'?'summon':spell.kind==='volley'?'dot':'strike';
+    const timeline=classSkillTimeline({
+      id:spell.id,icon:spell.icon,kind,
+      target:spell.aimMode==='SELF'?'self':'enemy',
+      cost:spell.cost,cooldown:spell.cooldown,range:spell.range,
+      power:spell.power,color:spell.color,duration:spell.duration
+    });
+    this.classAction={
+      kind:'skill',slot:null,rogueAbilityId:id,
+      targetId:spell.aimMode==='TARGET_ENTITY'?target?.actor.id??null:null,
+      aim:plan.aim,timeline:startCombatTimeline(timeline).state
+    };
+    const position=plan.aim.mode==='GROUND_POSITION'?plan.aim.position:
+      target?.actor??this.player;
+    this.events.push({type:'cast',skillId:id,x:position.x,y:position.y});
+  }
+
+  private resolveRogueImpact(id:RogueExtraAbilityId,targetId:string|null,
+    aim?:SkillAim):void{
+    if(this.classId!=='ROGUE'||!this.player.alive)return;
+    const skill=getRogueAbility(id);
+    if(!skill)return;
+    if(id==='backstab'&&targetId){
+      const enemy=this.units.find(u=>u.actor.alive&&u.actor.id===targetId);
+      if(!enemy || distance(this.player,enemy.actor)>skill.range
+        || !hasLineOfSight(this.player,enemy.actor,this.world.obstacles))return;
+      const face=enemy.intent
+        ?{x:enemy.intent.x-enemy.actor.x,y:enemy.intent.y-enemy.actor.y}
+        :{x:this.player.x-enemy.actor.x,y:this.player.y-enemy.actor.y};
+      const bonus=planRogueBackstab(this.player,enemy.actor,face,
+        this.rogueStealthSeconds>0);
+      this.applyDamage(skill.power*bonus*(this.equipment.MAIN_HAND?.weaponType==='DAGGER'
+        ?1.22:1),enemy,'physical');
+      this.rogueStealthSeconds=0;
+    }else if(id==='multishot'&&aim?.mode==='GROUND_POSITION'){
+      const hits=planRogueMultishot(this.player,aim.position,
+        this.units.map(u=>({
+          id:u.actor.id,x:u.actor.x,y:u.actor.y,alive:u.actor.alive
+        })),skill.range,Math.PI/2,this.world.obstacles,5);
+      for(const hit of hits){
+        const enemy=this.units.find(u=>u.actor.alive&&u.actor.id===hit);
+        if(enemy)this.applyDamage(skill.power
+          *(this.rogueRangedWeapon()?1.25:0.85),enemy,'physical');
+      }
+      this.rogueStealthSeconds=0;
+    }else if(id==='shadowStep'&&targetId){
+      const enemy=this.units.find(u=>u.actor.alive&&u.actor.id===targetId);
+      if(!enemy)return;
+      const destination=planRogueStep(this.player,enemy.actor,skill.range,
+        this.world.obstacles);
+      if(!destination)return;
+      this.player.x=destination.x;this.player.y=destination.y;
+      this.movePath=[];this.attackTarget=null;
+      this.rogueStealthSeconds=skill.duration;
+      this.observeExploration();
+    }else if(id==='trap'&&aim?.mode==='GROUND_POSITION'){
+      if(this.rogueTraps.length>=3)return;
+      const next=createRogueTrap(this.player.id,this.rogueNextTrapSequence,
+        this.zone,aim.position,this.world.obstacles);
+      if(!next || distance(this.player,next)>skill.range)return;
+      this.rogueTraps.push(next);
+      this.rogueNextTrapSequence++;
+    }else if(id==='fanOfKnives'){
+      for(const enemy of [...this.aliveEnemies]){
+        if(distance(this.player,enemy.actor)>skill.radius
+          ||!hasLineOfSight(this.player,enemy.actor,this.world.obstacles))continue;
+        const damage=this.applyDamage(skill.power,enemy,'physical');
+        if(damage>0&&enemy.actor.alive)
+          this.applyCanonicalStatus('enemy','bleeding','hero',4,4,enemy);
+      }
+      this.rogueStealthSeconds=0;
+    }
+  }
+
+  private tickRogueTraps(dt:number):void{
+    if(!this.rogueTraps.length)return;
+    const result=tickRogueTraps(this.rogueTraps,dt,this.zone,
+      this.zone==='wilderness' && distance(this.player,this.world.camp)<=CAMP_RADIUS
+        ?[]:this.units.map(u=>({
+          id:u.actor.id,x:u.actor.x,y:u.actor.y,alive:u.actor.alive
+        })),this.world.obstacles);
+    if(!result){this.rogueTraps=[];return;}
+    this.rogueTraps=[...result.traps];
+    for(const hit of result.hits){
+      const enemy=this.units.find(u=>u.actor.alive&&u.actor.id===hit.id);
+      if(!enemy)continue;
+      const dealt=this.applyDamage(hit.power,enemy,'poison');
+      if(dealt>0&&enemy.actor.alive){
+        this.applyCanonicalStatus('enemy','rooted','hero',1,1.2,enemy);
+        this.applyCanonicalStatus('enemy','poisoned','hero',3,4,enemy);
+      }
+    }
+  }
+
   private requestNecroAbility(id: NecroExtraSpellId, targetId: string | null,
     position?: Point): void {
     if (this.classId !== 'NECROMANCER' || this.paused || !this.player.alive
@@ -2625,7 +2791,7 @@ export class GameSimulation {
     const stats = this.currentStats();
     const rolled = stats.damageMin + this.rng.next() * (stats.damageMax - stats.damageMin);
     const primary = ['MAGE', 'NECROMANCER', 'WARLOCK'].includes(this.classId)
-      ? stats.intelligence : stats.strength;
+      ? stats.intelligence : this.classId==='ROGUE'?stats.dexterity:stats.strength;
     return this.resolveEnemyDamage(
       rolled, unit, type, 'hero',
       (1 + primary * 0.035) * Math.max(0, power)
@@ -2639,7 +2805,8 @@ export class GameSimulation {
   }
 
   private dealPlayerDamage(base: number, type: DamageType, sourceId: string): boolean {
-    if (!this.player.alive || this.respawnProtectionSeconds > 0) return false;
+    if (!this.player.alive || this.respawnProtectionSeconds > 0
+      || (this.classId==='ROGUE' && this.rogueStealthSeconds>0)) return false;
     const stats = this.currentStats();
     const resistance = type === 'fire' ? stats.fireResist
       : type === 'frost' ? stats.frostResist
@@ -2784,7 +2951,8 @@ export class GameSimulation {
       if (action.kind === 'basic') {
         const target = this.units.find(unit =>
           unit.actor.id === action.targetId && unit.actor.alive);
-        if (target && distance(this.player, target.actor) <= CLASSES[this.classId].attackRange + 10) {
+        if (target && distance(this.player, target.actor) <= this.rogueAttackRange() + 10
+          && hasLineOfSight(this.player,target.actor,this.world.obstacles)) {
           this.applyDamage(1, target);
           if (this.classId === 'PALADIN') {
             this.resource = Math.min(this.currentStats().maxResource,this.resource+5);
@@ -2799,6 +2967,8 @@ export class GameSimulation {
         this.resolveMageImpact(action.mageAbilityId, action.targetId, action.aim);
       } else if (action.necroAbilityId) {
         this.resolveNecroImpact(action.necroAbilityId,action.targetId,action.aim);
+      } else if (action.rogueAbilityId) {
+        this.resolveRogueImpact(action.rogueAbilityId,action.targetId,action.aim);
       } else if (action.slot) {
         this.resolveClassCast(action.slot, action.aim, action.targetId);
       }
@@ -2825,6 +2995,8 @@ export class GameSimulation {
     }
     const mageBonuses = this.classId === 'MAGE'
       ? projectTalentBonuses(this.talentRanks) : null;
+    if (this.classId==='ROGUE' && skill.id==='shadowDash' && aim?.mode==='DIRECTION')
+      this.rogueStealthSeconds=Math.max(this.rogueStealthSeconds,0.7);
     if (skill.id === 'raiseSkeleton' && this.classId === 'NECROMANCER') {
       this.spawnNecroAlly('skeleton');
     } else if (skill.id === 'fireball' && aim?.mode === 'GROUND_POSITION') {
@@ -2934,6 +3106,10 @@ export class GameSimulation {
       this.accumulator = 0;
       this.shield = 0;
       this.projectiles = [];
+      this.rogueTraps = [];
+      this.rogueStealthSeconds = 0;
+      this.rogueCooldowns = {};
+      this.rogueNextTrapSequence = 1;
       this.eliteQueue = [];
       this.cryptArmedTraps.clear();
       this.statusEffects = { player: [], enemies: {} };
@@ -3296,6 +3472,8 @@ export class GameSimulation {
     // Dispose transient corpses and allies; preserve cooldown economy and IDs.
     this.summons = [];
     this.corpses = [];
+    this.rogueTraps = [];
+    this.rogueStealthSeconds = 0;
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
@@ -3352,6 +3530,9 @@ export class GameSimulation {
     this.mageCooldowns=advanceMageCooldowns(this.mageCooldowns,dt) ?? {};
     this.tickMageZones(dt);
     this.necroCooldowns=advanceNecroCooldowns(this.necroCooldowns,dt)??{};
+    this.rogueCooldowns=advanceRogueCooldowns(this.rogueCooldowns,dt)??{};
+    this.rogueStealthSeconds=Math.max(0,this.rogueStealthSeconds-dt);
+    this.tickRogueTraps(dt);
     this.corpses=[...(stepCorpseTokens(this.corpses,dt)??[])];
     this.tickOwnedSummons(dt);
     this.warriorCooldowns.cleave = this.cooldowns.rmb;
@@ -3497,10 +3678,10 @@ export class GameSimulation {
       const target = this.units.find(unit => unit.actor.id === this.attackTarget && unit.actor.alive);
       if (!target) this.attackTarget = null;
       else if (distance(this.player, target.actor) >
-        (this.classId === 'WARRIOR' ? Math.min(60, definition.attackRange) : definition.attackRange)) {
+        (this.classId === 'WARRIOR' ? Math.min(60, definition.attackRange) : this.rogueAttackRange())) {
         if (!this.holdPosition) {
           const range = this.classId === 'WARRIOR'
-            ? Math.min(60, definition.attackRange) : definition.attackRange;
+            ? Math.min(60, definition.attackRange) : this.rogueAttackRange();
           const route = hasLineOfSight(this.player, target.actor, this.world.obstacles)
             ? [] : findPath(this.player, target.actor, ACTOR_RADIUS, this.world.obstacles);
           if (route.length > 0) {
@@ -3509,7 +3690,8 @@ export class GameSimulation {
             this.follow(this.player, target.actor, speed, dt, range - 4);
           }
         }
-      } else if (!this.immobilized && this.attackTimer <= 0) {
+      } else if (!this.immobilized && this.attackTimer <= 0
+        && hasLineOfSight(this.player,target.actor,this.world.obstacles)) {
         if (this.classId === 'WARRIOR') {
           // Repeated left-click attacks share the same hit-frame and Rage policy.
           this.requestWarriorAbility('basicAttack', target.actor.id);
@@ -3980,6 +4162,10 @@ export class GameSimulation {
       mageCooldowns: { ...this.mageCooldowns },
       mageZones: this.mageZones.map(z => ({ ...z, position: { ...z.position } })),
       necroCooldowns: { ...this.necroCooldowns },
+      rogueCooldowns: { ...this.rogueCooldowns },
+      rogueStealthSeconds: this.rogueStealthSeconds,
+      rogueTraps: this.rogueTraps.map(trap=>({...trap})),
+      rogueNextTrapSequence: this.rogueNextTrapSequence,
       summons: this.summons.map(a => ({ ...a })),
       corpses: this.corpses.map(c => ({ ...c })),
       nextSummonSequence: this.nextSummonSequence,
@@ -4137,6 +4323,21 @@ export class GameSimulation {
       || !validEventSnapshot()
       || !validPaladinCooldowns(s.paladinCooldowns ?? {})
       || (s.classId!=='PALADIN' && Object.keys(s.paladinCooldowns ?? {}).length>0)
+      || !validRogueCooldowns(s.rogueCooldowns ?? {})
+      || (s.classId!=='ROGUE'
+        && (Object.keys(s.rogueCooldowns ?? {}).length>0
+          || (s.rogueTraps?.length??0)>0 || (s.rogueStealthSeconds??0)>0))
+      || !Number.isFinite(s.rogueStealthSeconds ?? 0)
+      || (s.rogueStealthSeconds??0)<0 || (s.rogueStealthSeconds??0)>3
+      || (!s.player.alive && (s.rogueStealthSeconds??0)>0)
+      || !validRogueTraps(s.rogueTraps ?? [])
+      || (s.rogueTraps??[]).some(t=>t.ownerId!=='hero'
+        || t.zone!==s.zone || !canOccupy(t,ACTOR_RADIUS,layout.obstacles))
+      || (s.rogueNextTrapSequence!==undefined
+        && (!Number.isSafeInteger(s.rogueNextTrapSequence)
+          || s.rogueNextTrapSequence<1 || s.rogueNextTrapSequence>100000001
+          || (s.rogueTraps??[]).some(t=>
+            Number(t.id.slice(t.id.lastIndexOf('.')+1))>=s.rogueNextTrapSequence!)))
       || !validNecroCooldowns(s.necroCooldowns ?? {})
       || (s.classId!=='NECROMANCER'
         && Object.keys(s.necroCooldowns ?? {}).length>0)
@@ -4391,6 +4592,10 @@ export class GameSimulation {
     this.mageCooldowns = s.mageCooldowns ? { ...s.mageCooldowns } : {};
     this.mageZones = (s.mageZones ?? []).map(z => ({ ...z, position: { ...z.position } }));
     this.necroCooldowns = { ...(s.necroCooldowns ?? {}) };
+    this.rogueCooldowns = { ...(s.rogueCooldowns ?? {}) };
+    this.rogueStealthSeconds = s.rogueStealthSeconds ?? 0;
+    this.rogueTraps = (s.rogueTraps??[]).map(t=>({...t}));
+    this.rogueNextTrapSequence = s.rogueNextTrapSequence??1;
     this.summons = (s.summons ?? []).map(a=>({...a}));
     this.corpses = (s.corpses ?? []).map(c=>({...c}));
     this.nextSummonSequence = s.nextSummonSequence ?? 1;
@@ -4473,6 +4678,10 @@ export class GameSimulation {
     this.mageCooldowns = {};
     this.mageZones = [];
     this.necroCooldowns = {};
+    this.rogueCooldowns = {};
+    this.rogueStealthSeconds = 0;
+    this.rogueTraps = [];
+    this.rogueNextTrapSequence = 1;
     this.summons = [];
     this.corpses = [];
     this.nextSummonSequence = 1;

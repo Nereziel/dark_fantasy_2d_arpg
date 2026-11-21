@@ -9,6 +9,7 @@
   import { PALADIN_EXTRA_IDS, PALADIN_EXTRA_SKILLS, type PaladinAbilityId } from '../game/skills/paladinKit';
   import { MAGE_EXTRA_IDS, MAGE_EXTRA_SPELLS, type MageExtraSpellId } from '../game/skills/mageKit';
   import { NECRO_EXTRA_IDS, NECRO_EXTRA_SPELLS, type NecroExtraSpellId } from '../game/skills/necromancerKit';
+  import { ROGUE_EXTRA_IDS, ROGUE_EXTRA_SKILLS, type RogueExtraAbilityId } from '../game/skills/rogueKit';
   import { projectEquippedSkill } from '../game/skills/skillModifiers';
   import { projectTalentBonuses } from '../game/progression/talentTree';
   const extraWarriorSkills = ['groundSlam', 'warCry', 'whirlwind', 'execute', 'basicAttack'] as const;
@@ -40,6 +41,12 @@
       ...(position ? { position } : {}) });
   }
 
+  function castRogue(id:RogueExtraAbilityId):void{
+    const position=bridge.pointerPosition();
+    bridge.command({type:'rogueAbility',id,
+      targetId:view.selectedTargetId??view.enemy.id,
+      ...(position?{position}:{})});
+  }
   function cast(slot: 'rmb' | 'slot1'): void {
     const aim = bridge.skillAim(slot);
     bridge.command({ type: 'cast', slot, ...(aim ? { aim } : {}) });
@@ -149,6 +156,26 @@
         </button>
       {/each}
     {/if}
+    {#if view.classId === 'ROGUE'}
+      {#each ROGUE_EXTRA_IDS as id,index (id)}
+        {@const skill=ROGUE_EXTRA_SKILLS[id]}
+        {@const remaining=view.rogueCooldowns?.[id]??0}
+        <button class="skill-button extra" class:cooldown={remaining>0}
+          data-rogue-ability={id}
+          disabled={view.paused || !view.player.alive || remaining>0
+            || !!view.classAction || view.resource+0.001<skill.cost
+            || id==='trap' && (view.rogueTraps?.length??0)>=3}
+          aria-label={$t('skills.'+id+'.name')}
+          title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.energy')}
+          onclick={()=>castRogue(id)}>
+          <span class="skill-shortcut">{index+2}</span>
+          <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
+          <span class="skill-title">{$t('skills.'+id+'.name')}</span>
+          <span class="skill-cost">{skill.cost}</span>
+          {#if remaining>0}<span class="skill-cooldown">{Math.ceil(remaining)}s</span>{/if}
+        </button>
+      {/each}
+    {/if}
     {#if view.classId === 'NECROMANCER'}
       {#each NECRO_EXTRA_IDS as id,index (id)}
         {@const skill = NECRO_EXTRA_SPELLS[id]}
@@ -175,6 +202,12 @@
       aria-label={$t('necromancer.minions')}>
       {$t('necromancer.minions')}: {(view.summons ?? []).length}/5
       · {$t('necromancer.corpses')}: {(view.corpses ?? []).length}
+    </div>
+  {/if}
+  {#if view.classId==='ROGUE'}
+    <div data-testid="rogue-status" class="rogue-status">
+      {$t('rogue.traps')}: {(view.rogueTraps??[]).length}/3
+      · {$t('rogue.stealth')}: {(view.rogueStealthSeconds??0).toFixed(1)}s
     </div>
   {/if}
   <div class="potion-row" aria-label={$t('potions.bar')}>

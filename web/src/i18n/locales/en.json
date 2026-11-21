@@ -445,8 +445,8 @@
       "desc": "Damage and slow nearby enemies with a surge of cold."
     },
     "shadowDash": {
-      "name": "Shadow Dash",
-      "desc": "Dash to an enemy and land a powerful strike."
+      "name": "Dash",
+      "desc": "Dash toward the pointer through navigable terrain, briefly evading attacks."
     },
     "poisonBlade": {
       "name": "Poison Blade",
@@ -547,6 +547,26 @@
     "deathNova": {
       "name": "Death Nova",
       "desc": "Blast nearby enemies with poisonous death magic."
+    },
+    "backstab": {
+      "name": "Backstab",
+      "desc": "Strike a nearby target; attacks from behind or from stealth deal much greater damage. Daggers gain a bonus."
+    },
+    "multishot": {
+      "name": "Multishot",
+      "desc": "Fire a piercing spread at up to five enemies ahead. Bow and crossbow attacks deal increased damage."
+    },
+    "shadowStep": {
+      "name": "Shadow Step",
+      "desc": "Step behind a targeted enemy without crossing walls and become briefly concealed."
+    },
+    "trap": {
+      "name": "Poison Trap",
+      "desc": "Place a trap that roots and poisons the first enemy entering its radius. Three traps maximum."
+    },
+    "fanOfKnives": {
+      "name": "Fan of Knives",
+      "desc": "Strike all nearby visible enemies and apply bleeding."
     }
   },
   "enemies": {
@@ -1252,5 +1272,9 @@
   "necromancer": {
     "minions": "Minions",
     "corpses": "Corpses"
+  },
+  "rogue": {
+    "traps": "Traps",
+    "stealth": "Concealment"
   }
 }

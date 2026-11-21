@@ -445,8 +445,8 @@
       "desc": "Zasáhne a zpomalí nepřátele v blízkosti hrdiny."
     },
     "shadowDash": {
-      "name": "Stínový výpad",
-      "desc": "Přesune se k nepříteli a zasadí silný úder."
+      "name": "Úskok",
+      "desc": "Přesune hrdinu směrem ke kurzoru přes průchodný terén a krátce ho ochrání."
     },
     "poisonBlade": {
       "name": "Jedová čepel",
@@ -547,6 +547,26 @@
     "deathNova": {
       "name": "Nova smrti",
       "desc": "Otráví a zraní všechny blízké nepřátele."
+    },
+    "backstab": {
+      "name": "Bodnutí do zad",
+      "desc": "Zasáhne blízký cíl. Zezadu nebo ze skrytí způsobí výrazně vyšší poškození, s dýkou má bonus."
+    },
+    "multishot": {
+      "name": "Vícenásobný výstřel",
+      "desc": "Zasáhne až pět nepřátel před hrdinou. Luk a kuše zvyšují poškození."
+    },
+    "shadowStep": {
+      "name": "Stínový krok",
+      "desc": "Přesune hrdinu za cíleného nepřítele bez průchodu zdmi a krátce ho skryje."
+    },
+    "trap": {
+      "name": "Jedová past",
+      "desc": "Umístí past, která prvního nepřítele znehybní a otráví. Maximálně tři pasti."
+    },
+    "fanOfKnives": {
+      "name": "Vějíř nožů",
+      "desc": "Zasáhne všechny viditelné nepřátele poblíž a způsobí krvácení."
     }
   },
   "enemies": {
@@ -1252,5 +1272,9 @@
   "necromancer": {
     "minions": "Přisluhovači",
     "corpses": "Mrtvoly"
+  },
+  "rogue": {
+    "traps": "Pasti",
+    "stealth": "Skrytí"
   }
 }

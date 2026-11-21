@@ -12,6 +12,7 @@ import { SKILLS } from '../skills/skills';
 import { getPaladinAbility } from '../skills/paladinKit';
 import { getMageSpell } from '../skills/mageKit';
 import { getNecroSpell } from '../skills/necromancerKit';
+import { getRogueAbility } from '../skills/rogueKit';
 import type { GameEvent, ZoneId, Point } from '../core/types';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
 import {
@@ -60,6 +61,7 @@ export class FrontierScene extends Phaser.Scene {
   /** Friendly actors are never added to the hostile enemy roster. */
   private readonly summonSprites = new Map<string, Phaser.GameObjects.Sprite>();
   private corpsesVisual!: Phaser.GameObjects.Graphics;
+  private rogueTrapsVisual!: Phaser.GameObjects.Graphics;
   private readonly enemyPositions = new Map<string, Point>();
   private readonly enemyDeadUntil = new Map<string, number>();
   private heroDeadUntil = 0;
@@ -180,6 +182,7 @@ export class FrontierScene extends Phaser.Scene {
 
     this.healthBar = this.add.graphics().setDepth(60);
     this.corpsesVisual = this.add.graphics().setDepth(46);
+    this.rogueTrapsVisual = this.add.graphics().setDepth(46);
     this.groundItems = this.add.graphics().setDepth(44);
     this.statusVisuals = this.add.graphics().setDepth(47);
     this.telegraph = this.add.graphics().setDepth(46);
@@ -626,7 +629,8 @@ export class FrontierScene extends Phaser.Scene {
       const definition = Object.values(SKILLS)
         .flatMap(kit => Object.values(kit))
         .find(skill => skill.id === event.skillId) ?? getPaladinAbility(event.skillId)
-        ?? getMageSpell(event.skillId) ?? getNecroSpell(event.skillId);
+        ?? getMageSpell(event.skillId) ?? getNecroSpell(event.skillId)
+        ?? getRogueAbility(event.skillId);
       const ring = this.obtainImpact(event.x, event.y, 85);
       ring.lineStyle(4, definition?.color ?? 0xffddaa, 0.95).strokeCircle(0, 0, 18);
       this.tweens.add({
@@ -807,7 +811,8 @@ export class FrontierScene extends Phaser.Scene {
       : Math.floor(this.time.now / (visualPose === 'run' ? 95 : 150)) % PIXEL_ANIMATION_FRAMES;
     this.heroSprite.setFrame(pixelFrame(visualPose, heroFrame));
     this.heroSprite.setVisible(state.player.alive || this.time.now < this.heroDeadUntil);
-    this.heroSprite.setAlpha(this.time.now < this.heroHitUntil ? 0.6 : 1);
+    this.heroSprite.setAlpha(this.time.now < this.heroHitUntil ? 0.6
+      : (state.rogueStealthSeconds??0)>0 ? 0.62 : 1);
     this.heroSprite.setScale(animation === 'evading' ? 0.92 : 1);
     const ids = new Set(state.enemies.map(unit => unit.actor.id));
     for (const [id, sprite] of this.enemyGraphics) {
@@ -892,6 +897,13 @@ export class FrontierScene extends Phaser.Scene {
       this.corpsesVisual.strokeEllipse(corpse.x,corpse.y+10,28,11);
       this.corpsesVisual.fillStyle(0x477f69,0.2);
       this.corpsesVisual.fillEllipse(corpse.x,corpse.y+10,23,8);
+    }
+    this.rogueTrapsVisual.clear();
+    for (const trap of state.rogueTraps??[]){
+      this.rogueTrapsVisual.lineStyle(3,0x81c58a,0.88);
+      this.rogueTrapsVisual.strokeCircle(trap.x,trap.y,16);
+      this.rogueTrapsVisual.lineStyle(1,0xc2ef9b,0.38);
+      this.rogueTrapsVisual.strokeCircle(trap.x,trap.y,trap.radius);
     }
     this.healthBar.clear();
     this.telegraph.clear();

@@ -36,6 +36,7 @@
   import { PALADIN_EXTRA_IDS } from './game/skills/paladinKit';
   import { MAGE_EXTRA_IDS } from './game/skills/mageKit';
   import { NECRO_EXTRA_IDS } from './game/skills/necromancerKit';
+  import { ROGUE_EXTRA_IDS } from './game/skills/rogueKit';
   import { POTION_IDS, POTIONS } from './game/consumables/potionRules';
   import { xpRequiredForLevel } from './game/progression/progressionRules';
 
@@ -393,6 +394,16 @@
       if(id){
         const position=bridge.pointerPosition();
         bridge.command({type:'necroAbility',id,
+          targetId:view.selectedTargetId??view.enemy.id,
+          ...(position?{position}:{})});
+      }
+    } else if(view.classId==='ROGUE'
+      &&['SLOT_2','SLOT_3','SLOT_4','SLOT_5','SLOT_6'].includes(action)){
+      event.preventDefault();
+      const id=ROGUE_EXTRA_IDS[Number(action.slice(-1))-2];
+      if(id){
+        const position=bridge.pointerPosition();
+        bridge.command({type:'rogueAbility',id,
           targetId:view.selectedTargetId??view.enemy.id,
           ...(position?{position}:{})});
       }
