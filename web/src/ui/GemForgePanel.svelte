@@ -8,6 +8,8 @@
     type GemBaseId, type GemId
   } from '../game/gems/gemCatalog';
   import { quoteGemRecipe } from '../game/gems/gemRules';
+  import ItemArt from './ItemArt.svelte';
+  import GemArt from './GemArt.svelte';
 
   let { view, bridge }: {view:GameSnapshot; bridge:GameBridge} = $props();
 
@@ -73,7 +75,10 @@
     {#each GEM_BASES as base (base.id)}
       {@const first = (base.id+'.1') as GemId}
       <div class="gem-entry" data-gem-base={base.id}>
-        <strong>{$t('gems.names.'+base.id)}</strong>
+        <div class="gem-entry-heading">
+          <span class="gem-art-slot"><GemArt id={first} /></span>
+          <strong>{$t('gems.names.'+base.id)}</strong>
+        </div>
         <small>{$t('gems.tier')} 1 · {gemCost(base.id)}</small>
         <div class="gem-controls">
           <button disabled={!canForge(base.id)}
@@ -91,6 +96,7 @@
     {#each GEM_IDS as gemId (gemId)}
       {#if (view.gems?.[gemId]??0)>0}
         <div class="gem-wallet-item" data-gem-id={gemId}>
+          <span class="gem-art-slot"><GemArt id={gemId} /></span>
           <span>{name(gemId)}</span>
           <strong>{view.gems?.[gemId]}</strong>
           {#if tierOf(gemId)<3}
@@ -110,8 +116,11 @@
   <div class="socket-list">
     {#each targets as target (target.item.id)}
       <div class="socket-item" data-testid={'socket-item-'+target.item.id}>
-        <strong>{target.item.icon} {$t('item.base.'+target.item.templateId)}
-          <small>({$t('gems.categories.'+(socketCategory(target.item)??'armor'))})</small>
+        <strong class="socket-title">
+          <span class="socket-item-icon"><ItemArt item={target.item} /></span>
+          <span>{$t('item.base.'+target.item.templateId)}
+            <small>({$t('gems.categories.'+(socketCategory(target.item)??'armor'))})</small>
+          </span>
         </strong>
         {#if view.itemFlags?.[target.item.id]?.locked || view.itemFlags?.[target.item.id]?.favorite}
           <p class="gem-note">{$t('crafting.protected')}</p>
@@ -121,8 +130,9 @@
               <div class="socket-row" data-socket-index={index}>
                 <span class="socket-index">{$t('gems.socket')} {index+1}</span>
                 {#if isGemId(socket)}
-                  <span class="socket-filled">{name(socket)}
-                    <small>{bonusLabel(target.item,socket)}</small>
+                  <span class="socket-filled">
+                    <span class="gem-art-slot"><GemArt id={socket} /></span>
+                    <span>{name(socket)}<small>{bonusLabel(target.item,socket)}</small></span>
                   </span>
                   <button disabled={view.gold<6*tierOf(socket) || (view.gems?.[socket]??0)>=9999}
                     onclick={()=>remove(target,index)}>
@@ -155,10 +165,15 @@
   .gem-note{font-size:.75rem;color:#b5c1bd;line-height:1.5}
   .gem-catalog{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
   .gem-entry,.gem-wallet-item,.socket-item{background:#111d27;border:1px solid #465563;padding:10px}
-  .gem-entry{display:flex;flex-direction:column;gap:5px;font-size:.8rem}
+  .gem-entry{display:flex;flex-direction:column;gap:5px;font-size:.8rem;min-width:0}
+  .gem-entry-heading{display:flex;align-items:center;gap:7px;min-width:0}
+  .gem-entry-heading strong{min-width:0;overflow-wrap:anywhere}
+  .gem-art-slot,.socket-item-icon{width:32px;height:32px;flex:0 0 32px;display:flex;align-items:center;justify-content:center}
+  .socket-title{display:flex!important;align-items:center;gap:8px;min-width:0}
+  .socket-title>span:last-child{min-width:0;overflow-wrap:anywhere}
   .gem-entry strong,.socket-item strong{color:#e7d6b1}
   .gem-entry small,.socket-item small{font-size:.66rem;color:#afbcb8}
-  .gem-controls{display:flex;gap:7px;justify-content:space-between;align-items:center;margin-top:auto}
+  .gem-controls{display:flex;flex-wrap:wrap;gap:7px;justify-content:space-between;align-items:center;margin-top:auto}
   .gem-controls span{font-size:.72rem}
   .gem-wallet{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
   .gem-wallet-item{display:flex;gap:8px;align-items:center;font-size:.74rem;flex-wrap:wrap}
@@ -169,7 +184,7 @@
   .socket-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px;
     background:#1b2730;border:1px solid #36444e;font-size:.7rem}
   .socket-index{color:#d2a976}
-  .socket-filled{color:#eed398}
+  .socket-filled{display:flex;align-items:center;gap:7px;color:#eed398;min-width:0}
   .socket-filled small{display:block;color:#b4c3b9}
   button{font-size:.69rem;border:1px solid #8a7756;color:#eed9b4;
     background:#2a343c;padding:7px 9px}
