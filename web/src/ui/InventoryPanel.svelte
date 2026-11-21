@@ -442,5 +442,41 @@
   .inspect-placeholder{text-align:center;display:grid;place-items:center;min-height:220px;color:#99a8a7;font-size:.8rem;line-height:1.65;padding:16px}
   .placeholder-glyph{font:3rem Georgia,serif;color:#796c55}
   @media(max-width:950px){.inventory-layout{grid-template-columns:minmax(235px,.9fr) minmax(280px,1.1fr)}.item-inspector{grid-column:1/-1;max-height:none}.comparison-grid{grid-template-columns:1fr 1fr}}
-  @media(max-width:650px){.inventory-overlay{padding:4px}.inventory-window{max-height:99dvh}.inventory-header{padding:9px 12px}.inventory-layout{grid-template-columns:1fr;padding:12px;gap:18px}.equipment-grid{max-width:410px;margin:auto}.bag-grid{max-width:490px}.item-inspector{grid-column:auto}.help-toggle{padding:5px}.header-controls button{font-size:.65rem}}
+  /* Touch layout: the same full item inspector stays pinned while the player browses
+     the bag; no hover-only tooltip or duplicate comparison logic is necessary. */
+  @media(max-width:650px){
+    .inventory-overlay{padding:4px}
+    .inventory-window{max-height:99dvh}
+    .inventory-header{padding:9px 10px;gap:7px}
+    .kicker{display:none}
+    h2{font-size:clamp(1rem,4.5vw,1.3rem)}
+    .header-controls{flex-shrink:0;gap:5px}
+    .header-controls button{font-size:.65rem;min-height:40px;padding:6px 8px}
+    .inventory-layout{
+      grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;
+      align-content:start;padding:8px;gap:12px;overscroll-behavior:contain;
+    }
+    .item-inspector{
+      grid-column:1;order:-2;position:sticky;top:0;z-index:5;
+      max-height:clamp(170px,34dvh,300px);min-height:0;
+      padding:9px 11px;overflow-y:auto;overscroll-behavior:contain;
+      box-shadow:0 8px 22px #000b;
+    }
+    .item-inspector h3{margin:0 0 7px}
+    .comparison-grid{grid-template-columns:minmax(0,1fr);gap:7px}
+    .item-detail{gap:4px;padding:8px}
+    .detail-icon{font-size:1.5rem;margin:2px}
+    .item-property,.affix-line{font-size:.72rem}
+    .stat-deltas>div{grid-template-columns:minmax(78px,1fr) auto auto minmax(52px,auto);gap:4px}
+    .inspect-placeholder{min-height:90px;padding:8px}
+    .placeholder-glyph{font-size:1.5rem}
+    .backpack-section{order:-1}
+    .equipment-section{order:0}
+    .bag-grid{max-width:490px;margin:auto}
+    .bag-slot{aspect-ratio:1;min-height:40px}
+    .equipment-grid{max-width:410px;margin:auto;gap:6px}
+    .equipment-slot{aspect-ratio:1.35}
+    .inspector-actions button{min-height:38px}
+    .help-note{padding:7px 11px}
+  }
 </style>
