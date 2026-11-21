@@ -24,7 +24,7 @@ export interface SavedCharacterInfo {
 
 /** Pure catalog projection; invalid/forged records never appear in the UI. */
 export function summarizeSaveRecords(
-  entries: Iterable<readonly [IDBValidKey, unknown]>
+  entries: Iterable<readonly [unknown, unknown]>
 ): SavedCharacterInfo[] {
   const catalog = new Map<string, SavedCharacterInfo>();
   for (const [key, raw] of entries) {
@@ -187,6 +187,10 @@ export function saveGame(character: CharacterProgress): Promise<void> {
         if (!hasCanonical && keys.length + legacyExtra >= MAX_SAVED_CHARACTERS) {
           store.transaction.abort();
           return;
+        }
+        // The first new hero must not orphan an old v8–v11 single-slot save.
+        if (legacyId && !keys.includes(CHARACTER_PREFIX + legacyId)) {
+          store.put(activeRequest.result, CHARACTER_PREFIX + legacyId);
         }
         store.put(record, key);
         store.put(record, SLOT);
