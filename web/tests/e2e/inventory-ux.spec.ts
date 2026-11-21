@@ -185,3 +185,24 @@ test.describe('touch inventory item preview', () => {
     await expect(modal).toHaveCount(0);
   });
 });
+
+
+test('dragging a bag item highlights only the compatible equipment sockets', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await page.getByRole('button', { name: 'Browse wares' }).click();
+  const vendor = page.getByRole('dialog', { name: 'Merchant Bram' });
+  await vendor.getByRole('button', { name: 'Buy Studded War Belt' }).click();
+  await vendor.getByRole('button', { name: 'Leave' }).click();
+  await page.getByRole('button', { name: 'Inventory (I)' }).click();
+  const inventory = page.getByRole('dialog', { name: 'Inventory & Equipment' });
+  const belt = inventory.locator('.bag-slot.occupied').first();
+  await belt.evaluate(node => node.dispatchEvent(new DragEvent('dragstart', {
+    bubbles: true, dataTransfer: new DataTransfer()
+  })));
+  await expect(inventory.locator('[data-equipment-slot="BELT"]')).toHaveClass(/drop-valid/);
+  await expect(inventory.locator('[data-equipment-slot="HELMET"]')).not.toHaveClass(/drop-valid/);
+  await belt.evaluate(node => node.dispatchEvent(new DragEvent('dragend', { bubbles: true })));
+  await expect(inventory.locator('[data-equipment-slot="BELT"]')).not.toHaveClass(/drop-valid/);
+});
