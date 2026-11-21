@@ -405,7 +405,8 @@ const PREFIX_NAMES: Readonly<Record<string, PrefixName>> = Object.freeze({
   unyielding: adjective('Unyielding', 'Nezlomný', 'Nezlomná', 'Nezlomné'),
   channeling: adjective('Channeling', 'Soustředěný', 'Soustředěná', 'Soustředěné'),
   arcane: adjective('Arcane', 'Arkánní', 'Arkánní', 'Arkánní'),
-  summoning: adjective('Summoning', 'Vyvolávací', 'Vyvolávací', 'Vyvolávací')
+  summoning: adjective('Summoning', 'Vyvolávací', 'Vyvolávací', 'Vyvolávací'),
+  consecrated: adjective('Consecrated','Posvěcený','Posvěcená','Posvěcené')
 });
 
 const SUFFIX_NAMES: Readonly<Record<string, SuffixName>> = Object.freeze({
@@ -425,7 +426,8 @@ const SUFFIX_NAMES: Readonly<Record<string, SuffixName>> = Object.freeze({
   venom: { en: 'of Venom', cs: 'jedu' },
   mastery: { en: 'of Mastery', cs: 'mistrovství' },
   legion: { en: 'of the Legion', cs: 'legií' },
-  fortitude: { en: 'of Fortitude', cs: 'odolnosti' }
+  fortitude: { en: 'of Fortitude', cs: 'odolnosti' },
+  ofFaith: {en:'of Faith',cs:'víry'}
 });
 for (const label of Object.values(SUFFIX_NAMES)) Object.freeze(label);
 
