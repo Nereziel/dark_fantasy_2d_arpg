@@ -71,7 +71,9 @@ export function validOwnedSummons(value:unknown):value is readonly OwnedSummon[]
   const ids=new Set<string>();
   for(const s of value as OwnedSummon[]){
     if(!s||!ident(s.ownerId)||!ident(s.id)||ids.has(s.id)
-      ||s.id.indexOf('summon.'+s.ownerId+'.')!==0||!zone(s.zone)||!kind(s.kind)
+      ||s.id.indexOf('summon.'+s.ownerId+'.')!==0
+      ||!/^[1-9][0-9]{0,8}$/.test(s.id.slice(('summon.'+s.ownerId+'.').length))
+      ||!zone(s.zone)||!kind(s.kind)
       ||!point(s)||!finite(s.health)||s.health<=0
       ||!finite(s.maxHealth)||s.maxHealth<s.health||s.maxHealth>100000
       ||!finite(s.damage)||s.damage<0||s.damage>2000
