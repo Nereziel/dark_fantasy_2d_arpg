@@ -267,6 +267,7 @@ export type GameCommand =
   | { type: 'pickup'; id: string }
   | { type: 'equip'; index: number; slot?: EquipmentSlot }
   | { type: 'unequip'; slot: EquipmentSlot }
+  | { type: 'unequipTo'; slot: EquipmentSlot; index: number }
   | { type: 'swapInventory'; fromIndex: number; toIndex: number }
   | { type: 'sortInventory' }
   | { type: 'setItemFlag'; itemId: string; flag: 'locked' | 'favorite'; value: boolean }

@@ -7,6 +7,10 @@
     compact?: boolean;
   } = $props();
 
+  // The two projections may coexist while the fullscreen map is open.
+  let maskId = $derived(compact ? 'ar-fog-mini' : 'ar-fog-world');
+  let blurId = $derived(compact ? 'ar-fog-blur-mini' : 'ar-fog-blur-world');
+
   function markerColor(kind: MapMarkerKind): string {
     switch (kind) {
       case 'player': return '#f5e1ac';
@@ -23,14 +27,35 @@
 <div class="map-canvas" class:compact data-map-mode={projection.mode}>
   <svg viewBox={`${projection.viewport.x} ${projection.viewport.y} ${projection.viewport.width} ${projection.viewport.height}`}
     preserveAspectRatio="xMidYMid meet" role="img" aria-label={$t('map.title')}>
+    <defs>
+      <filter id={blurId} x="-8%" y="-8%" width="116%" height="116%">
+        <feGaussianBlur stdDeviation={compact ? 10 : 15} />
+      </filter>
+      <mask id={maskId} maskUnits="userSpaceOnUse"
+        x={projection.viewport.x} y={projection.viewport.y}
+        width={projection.viewport.width} height={projection.viewport.height}>
+        <rect x={projection.viewport.x} y={projection.viewport.y}
+          width={projection.viewport.width} height={projection.viewport.height} fill="black" />
+        <g filter={'url(#' + blurId + ')'}>
+          {#each projection.cells as cell (cell.id)}
+            {#if cell.visibility === 'discovered'}
+              <rect x={cell.x - 2} y={cell.y - 2} width={cell.width + 4}
+                height={cell.height + 4} fill="white" />
+            {/if}
+          {/each}
+        </g>
+      </mask>
+    </defs>
+    <!-- Unknown cells contain no visual terrain metadata; reveal has soft edges. -->
+    <rect x={projection.viewport.x} y={projection.viewport.y}
+      width={projection.viewport.width} height={projection.viewport.height} fill="#0b1117" />
     <rect x={projection.viewport.x} y={projection.viewport.y}
       width={projection.viewport.width} height={projection.viewport.height}
-      fill="#0c111b" />
+      fill="#2d3c35" mask={'url(#' + maskId + ')'} />
     {#each projection.cells as cell (cell.id)}
       <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height}
-        fill={cell.visibility === 'discovered' ? '#263a36' : '#10131b'}
-        stroke={cell.visibility === 'discovered' ? '#617160' : '#252d36'}
-        stroke-width="1.5" data-fog-cell={cell.id} data-fog={cell.visibility} />
+        fill="none" stroke="none"
+        data-fog-cell={cell.id} data-fog={cell.visibility} />
     {/each}
     {#each projection.markers as marker (marker.id)}
       <g data-map-marker={marker.id} data-marker-kind={marker.kind}>
@@ -70,7 +95,7 @@
     grid-template-rows: 1fr auto;
     width: 100%;
     min-height: 0;
-    background: #10171d;
+    background: #0b1117;
     border: 1px solid #766950;
     overflow: hidden;
   }
