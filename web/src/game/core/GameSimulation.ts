@@ -1842,7 +1842,8 @@ export class GameSimulation {
 
   /** Pure, authoritative candidate projection for the equipment comparison panel. */
   previewEquipment(index: number, targetSlot?: EquipmentSlot): { armor: number; damageMin: number;
-    damageMax: number; maxHealth: number } | null {
+    damageMax: number; maxHealth: number; critChance: number; attackSpeed: number;
+    blockChance: number; fireResist: number } | null {
     if (!Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return null;
     const candidate = planEquip(this.inventoryState(), index, targetSlot, this.inventoryRules());
     if (!candidate.ok) return null;
@@ -1852,7 +1853,11 @@ export class GameSimulation {
       armor: after.armor - before.armor,
       damageMin: after.damageMin - before.damageMin,
       damageMax: after.damageMax - before.damageMax,
-      maxHealth: after.maxHealth - before.maxHealth
+      maxHealth: after.maxHealth - before.maxHealth,
+      critChance: Number((after.critChance - before.critChance).toFixed(2)),
+      attackSpeed: Number((after.attackSpeed - before.attackSpeed).toFixed(2)),
+      blockChance: Number((after.blockChance - before.blockChance).toFixed(2)),
+      fireResist: Number((after.fireResist - before.fireResist).toFixed(2))
     };
   }
 
