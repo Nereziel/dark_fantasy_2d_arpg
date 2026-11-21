@@ -134,7 +134,7 @@ export function stepOwnedSummons(input:unknown,ctx:SummonTick):SummonStep|null{
     ||ctx.enemies.length>256)return null;
   const enemyIds=new Set<string>();
   for(const e of ctx.enemies){
-    if(!e||!ident(e.id)||!point(e)||typeof e.alive!=='boolean'
+    if(!e||!ident(e.id)||!point({x:e.x,y:e.y})||typeof e.alive!=='boolean'
       ||enemyIds.has(e.id))return null;
     enemyIds.add(e.id);
   }
