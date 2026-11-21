@@ -6,7 +6,7 @@
   import type { GameSnapshot } from './game/core/types';
   import { resolveKeyboardAction, rebindAction, type InputBinding, type InputAction } from './game/input/bindings';
   import { GAME_BINDINGS } from './game/input/gameBindings';
-  import { loadGame, saveGame } from './persistence/SaveRepository';
+  import { loadGame, saveGame, listCharacters, deleteCharacter, MAX_SAVED_CHARACTERS, type SavedCharacterInfo } from './persistence/SaveRepository';
   import { loadWorldProgress, saveWorldProgress } from './persistence/WorldProgressRepository';
   import type { WorldSessionProgress } from './game/core/types';
   import { CharacterAutosaver } from './persistence/CharacterAutosaver';
@@ -48,6 +48,33 @@
   let messageKey = $state('');
   let busy = $state(false);
   let selectedClass: ClassId = $state('WARRIOR');
+  let savedCharacters: SavedCharacterInfo[] = $state([]);
+  let selectedCharacterId: string | null = $state(null);
+  let pendingDeleteId: string | null = $state(null);
+
+  async function refreshCharacters(): Promise<void> {
+    const entries = await listCharacters();
+    savedCharacters = entries;
+    if (!selectedCharacterId || !entries.some(entry => entry.characterId === selectedCharacterId)) {
+      selectedCharacterId = entries[0]?.characterId ?? null;
+    }
+  }
+
+  async function removeSavedCharacter(id: string): Promise<void> {
+    if (busy || pendingDeleteId !== id) return;
+    busy = true;
+    try {
+      await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
+      await deleteCharacter(id);
+      pendingDeleteId = null;
+      await refreshCharacters();
+      messageKey = 'saveSlots.deleted';
+    } catch {
+      messageKey = 'status.saveError';
+    } finally {
+      busy = false;
+    }
+  }
   let inventoryOpen = $state(false);
   let characterOpen = $state(false);
   let talentsOpen = $state(false);
@@ -111,6 +138,7 @@
   }
 
   onMount(() => {
+    void refreshCharacters().catch(() => { messageKey = 'status.saveError'; });
     try {
       const raw = JSON.parse(window.localStorage.getItem(controlsStorage) ?? '[]');
       if (Array.isArray(raw) && raw.length <= 25) {
@@ -208,7 +236,7 @@
   }
 
   async function newGame(): Promise<void> {
-    if(busy)return;
+    if (busy || savedCharacters.length >= MAX_SAVED_CHARACTERS) return;
     busy=true;
     try {
       // Drain the previous hero's queued writes before changing the save slot.
@@ -230,6 +258,8 @@
         autosaver.saveNow(bridge.character()),
         ...(world?[worldAutosaver.saveNow(world)]:[])
       ]);
+      selectedCharacterId = bridge.character().characterId ?? 'hero';
+      await refreshCharacters();
     } catch {
       messageKey='status.saveError';
     } finally {
@@ -252,8 +282,10 @@
     inventoryOpen = false;
     characterOpen = false;
     bridge.command({ type: 'pause', value: true });
-    void autosaver.flush().catch(() => { messageKey = 'status.saveError'; });
-    void worldAutosaver.flush().catch(() => { messageKey = 'status.saveError'; });
+    void Promise.all([autosaver.flush(), worldAutosaver.flush()])
+      .then(() => refreshCharacters())
+      .catch(() => { messageKey = 'status.saveError'; });
+    pendingDeleteId = null;
     playing = false;
   }
   function togglePause(): void {
@@ -457,18 +489,22 @@
         ...(world ? [worldAutosaver.saveNow(world)] : [])
       ]);
       messageKey = 'status.saved';
+      await refreshCharacters();
     } catch {
       messageKey = 'status.saveError';
     } finally {
       busy = false;
     }
   }
-  async function load(): Promise<void> {
+  async function load(requestedId?: string): Promise<void> {
+    if (busy) return;
     busy = true;
     try {
       await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
-      const character=await loadGame();
-      const world=character ? await loadWorldProgress(character.characterId??'hero') : null;
+      const id = requestedId ?? (playing ? (bridge.character().characterId ?? 'hero')
+        : (selectedCharacterId ?? undefined));
+      const character = await loadGame(id);
+      const world = character ? await loadWorldProgress(character.characterId ?? 'hero') : null;
       if (character && bridge.restoreCharacter(character, world?.seed)) {
         if (world) bridge.restoreWorldProgress(world);
         messageKey = 'status.loaded';
@@ -485,6 +521,8 @@
         const currentWorld=boundWorldProgress();
         if (currentWorld) worldAutosaver.prime(currentWorld);
         playing = true;
+        selectedCharacterId = bridge.character().characterId ?? 'hero';
+        await refreshCharacters();
       } else {
         messageKey = 'status.emptySave';
       }
@@ -513,10 +551,51 @@
         <div class="ornament">◆ ─── ◆ ─── ◆</div>
         <p class="subtitle">{ $t('menu.subtitle') }</p>
         <CharacterSelect selected={selectedClass} choose={(id) => { selectedClass = id; }} />
+        <div class="saved-characters" aria-label={$t('saveSlots.title')}>
+          <div class="saved-characters-title">
+            <strong>{$t('saveSlots.title')}</strong>
+            <span>{savedCharacters.length}/{MAX_SAVED_CHARACTERS}</span>
+          </div>
+          {#if savedCharacters.length === 0}
+            <p class="saved-empty">{$t('saveSlots.empty')}</p>
+          {:else}
+            <div class="saved-character-list">
+              {#each savedCharacters as entry (entry.characterId)}
+                <div class="saved-character-row" data-saved-character={entry.characterId}>
+                  <button type="button" class="saved-select" class:chosen={selectedCharacterId === entry.characterId}
+                    aria-pressed={selectedCharacterId === entry.characterId} disabled={busy}
+                    onclick={() => { selectedCharacterId = entry.characterId; pendingDeleteId = null; }}>
+                    <strong>{$t('classes.' + entry.classId + '.name')}</strong>
+                    <span>{$t('saveSlots.level')} {entry.level}</span>
+                  </button>
+                  {#if pendingDeleteId === entry.characterId}
+                    <button type="button" class="saved-remove-confirm" disabled={busy}
+                      onclick={() => removeSavedCharacter(entry.characterId)}>
+                      {$t('saveSlots.confirmDelete')}
+                    </button>
+                    <button type="button" disabled={busy}
+                      onclick={() => { pendingDeleteId = null; }}>{$t('saveSlots.cancel')}</button>
+                  {:else}
+                    <button type="button" disabled={busy}
+                      aria-label={$t('saveSlots.delete') + ': ' + $t('classes.' + entry.classId + '.name')}
+                      onclick={() => { pendingDeleteId = entry.characterId; }}>
+                      {$t('saveSlots.delete')}
+                    </button>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
+          {#if savedCharacters.length >= MAX_SAVED_CHARACTERS}
+            <p class="saved-empty">{$t('saveSlots.full')}</p>
+          {/if}
+        </div>
         <div class="menu-actions">
-          <button class="primary" disabled={busy} onclick={newGame}>{$t('menu.start')}</button>
+          <button class="primary" disabled={busy || savedCharacters.length >= MAX_SAVED_CHARACTERS}
+            onclick={newGame}>{$t('menu.start')}</button>
           <button class="secondary" onclick={resume}>{$t('menu.continue')}</button>
-          <button class="secondary" disabled={busy} onclick={load}>{$t('menu.load')}</button>
+          <button class="secondary" disabled={busy}
+            onclick={() => load(selectedCharacterId ?? undefined)}>{$t('menu.load')}</button>
         </div>
         <p class="hint">{ $t('menu.help') }</p>
         <div class="language-choice">
@@ -662,7 +741,7 @@
             {#if (view.talentPoints ?? 0) > 0}<span class="quick-notice">{view.talentPoints}</span>{/if}</button>
           <button disabled={busy} onclick={save} aria-label={$t('menu.save')} title={$t('menu.save')}
             data-quick-action="save"><span aria-hidden="true">▣</span><span class="quick-key">S</span></button>
-          <button disabled={busy} onclick={load} aria-label={$t('menu.load')} title={$t('menu.load')}
+          <button disabled={busy} onclick={() => load()} aria-label={$t('menu.load')} title={$t('menu.load')}
             data-quick-action="load"><span aria-hidden="true">↺</span><span class="quick-key">L</span></button>
         </div>
       </div>
@@ -828,6 +907,22 @@
     .hud-right-column :global(.enemy-roster){max-height:110px}
     .hud-left-column :global(.quest-journal){padding:6px}
   }
+  .saved-characters { margin: 10px auto 14px; width: min(100%, 710px);
+    padding: 10px; border: 1px solid #665740; background: #101721e8; text-align: left; }
+  .saved-characters-title { display:flex; align-items:center; justify-content:space-between;
+    gap:10px; color:#e9c993; font-size:.85rem; margin-bottom:7px; }
+  .saved-character-list { display:grid; gap:5px; max-height:175px; overflow-y:auto; }
+  .saved-character-row { display:flex; align-items:stretch; gap:6px; min-width:0; }
+  .saved-character-row button { min-height:38px; padding:6px 9px; font-size:.72rem; }
+  .saved-character-row .saved-select { flex:1; display:flex; gap:8px; align-items:center;
+    justify-content:space-between; min-width:0; text-align:left; color:#e1d7c7; }
+  .saved-select.chosen { border-color:#ddbc82; background:#302a22; }
+  .saved-select span { color:#bdaf9b; flex-shrink:0; }
+  .saved-remove-confirm { color:#ffc2aa; border-color:#b36659; }
+  .saved-empty { margin:4px 0; color:#b9b4ad; font-size:.75rem; }
+  @media(max-width:560px){ .saved-characters { padding:7px; }
+    .saved-character-row button { padding:6px; }
+    .saved-character-list { max-height:155px; } }
   .respawn-destination { color: #d9bc86; margin: 12px 0; }
   .minimap-overlay {
     position: absolute;
