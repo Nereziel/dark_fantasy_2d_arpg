@@ -265,30 +265,49 @@
     "essence": "Essence",
     "soul": "Soul Power"
   },
+  "creation": {
+    "details": "Selected class details",
+    "strengths": "Strengths",
+    "resource": "Resource",
+    "equipment": "Starting equipment",
+    "overwriteWarning": "Creating a new hero replaces the current saved character and world progress."
+  },
   "classes": {
     "WARRIOR": {
       "name": "Warrior",
-      "desc": "A resilient fighter building rage in close combat."
+      "desc": "A resilient fighter building rage in close combat.",
+      "strengths": "Melee pressure and high durability",
+      "starter": "Broadsword and iron helm"
     },
     "PALADIN": {
       "name": "Paladin",
-      "desc": "A holy defender wielding faith and divine power."
+      "desc": "A holy defender wielding faith and divine power.",
+      "strengths": "Holy defense and close-range control",
+      "starter": "Mace and shield"
     },
     "MAGE": {
       "name": "Mage",
-      "desc": "An elemental caster who strikes from a safe distance."
+      "desc": "An elemental caster who strikes from a safe distance.",
+      "strengths": "Elemental ranged attacks and spellcasting",
+      "starter": "Wand and protective charm"
     },
     "ROGUE": {
       "name": "Rogue",
-      "desc": "A nimble assassin relying on agility and critical strikes."
+      "desc": "A nimble assassin relying on agility and critical strikes.",
+      "strengths": "High mobility and precision strikes",
+      "starter": "Dagger and leather boots"
     },
     "NECROMANCER": {
       "name": "Necromancer",
-      "desc": "Commands death and channels the essence of fallen foes."
+      "desc": "Commands death and channels the essence of fallen foes.",
+      "strengths": "Undead minions and weakening curses",
+      "starter": "Wand and bloodstone amulet"
     },
     "WARLOCK": {
       "name": "Warlock",
-      "desc": "A dark channeler wielding curses and soul power."
+      "desc": "A dark channeler wielding curses and soul power.",
+      "strengths": "Demon allies and lingering corruption",
+      "starter": "Wand and signet ring"
     }
   },
   "item": {
