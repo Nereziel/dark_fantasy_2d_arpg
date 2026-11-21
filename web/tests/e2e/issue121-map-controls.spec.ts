@@ -41,9 +41,13 @@ test('discovered terrain and soil roads render without exposing hidden POI', asy
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await expect(page.locator('[data-minimap="active"]')).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('Hero loaded');
   await page.keyboard.press('m');
-  await expect(page.getByTestId('world-map-dialog')
-    .locator('[data-fog="discovered"]')).toHaveCount(discoveredBefore);
+  const restoredMap = page.getByTestId('world-map-dialog');
+  await expect(restoredMap).toBeVisible();
+  await expect(restoredMap.locator('[data-fog="discovered"]'))
+    .toHaveCount(discoveredBefore);
 });
 
 test.describe('phone map controls', () => {
