@@ -374,3 +374,37 @@ test('stores a purchased item in the permanent camp stash and retrieves it after
   await expect(recovered).toContainText('Stash (0/24)');
   await expect(recovered).toContainText('Backpack (1/24)');
 });
+
+test('re-entering the game releases destroyed scene event listeners and keeps movement running', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  const canvas = page.locator('.phaser-container canvas');
+  await expect(canvas).toBeVisible();
+
+  // App reuses its GameBridge, but Svelte destroys and recreates the Phaser game.
+  await page.getByRole('button', { name: 'Main menu' }).click();
+  await expect(page.getByRole('button', { name: 'Enter the world' })).toBeVisible();
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await expect(canvas).toBeVisible();
+
+  // Potion VFX calls obtainImpact() via GameBridge.tick(). A stale listener
+  // used to call this.add.graphics() on the destroyed scene and crash here.
+  await page.locator('[data-potion-id="resistance"]').click();
+  await page.keyboard.press('q');
+  await expect(page.getByTestId('use-potion')).toContainText('0');
+
+  const bounds = await canvas.boundingBox();
+  expect(bounds).not.toBeNull();
+  const screen = page.locator('.game-screen');
+  const before = Number(await screen.getAttribute('data-player-x'));
+  await page.mouse.move(bounds!.x + bounds!.width * 0.61, bounds!.y + bounds!.height * 0.40);
+  await page.mouse.down();
+  await page.mouse.move(bounds!.x + bounds!.width * 0.77, bounds!.y + bounds!.height * 0.40, { steps: 8 });
+  await expect.poll(async () => Number(await screen.getAttribute('data-player-x')), { timeout: 5_000 })
+    .toBeGreaterThan(before + 12);
+  await page.mouse.up();
+  expect(errors).toEqual([]);
+});
