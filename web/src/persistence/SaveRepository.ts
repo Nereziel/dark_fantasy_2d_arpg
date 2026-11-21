@@ -39,7 +39,8 @@ export function summarizeSaveRecords(
     const info = { characterId: id, classId: character.classId,
       level: character.level, savedAt: record.savedAt! };
     const current = catalog.get(id);
-    if (!current || current.savedAt < info.savedAt) catalog.set(id, info);
+    if (!current || current.savedAt < info.savedAt
+      || (key === SLOT && current.savedAt === info.savedAt)) catalog.set(id, info);
   }
   return [...catalog.values()].sort((a, b) =>
     b.savedAt - a.savedAt || a.characterId.localeCompare(b.characterId));
@@ -210,19 +211,21 @@ export function loadGame(characterId?: string): Promise<CharacterProgress | null
       request.onsuccess = () => { setResult(readSaveRecord(request.result)); };
       return;
     }
-    const request = store.get(characterSaveKey(characterId)!);
-    request.onsuccess = () => {
-      const canonical = readSaveRecord(request.result);
-      if (canonical && (canonical.characterId ?? 'hero') === characterId) {
-        setResult(canonical);
+    // The active alias is authoritative for the currently selected hero.
+    // In addition to old single-slot saves, existing browser integrations may
+    // update this stable v11 key without touching the canonical catalog key.
+    const active = store.get(SLOT);
+    active.onsuccess = () => {
+      const candidate = readSaveRecord(active.result);
+      if (candidate && (candidate.characterId ?? 'hero') === characterId) {
+        setResult(candidate);
         return;
       }
-      // Migration-by-read: v8–v11 single-slot hero remains readable.
-      const legacy = store.get(SLOT);
-      legacy.onsuccess = () => {
-        const candidate = readSaveRecord(legacy.result);
-        setResult(candidate && (candidate.characterId ?? 'hero') === characterId
-          ? candidate : null);
+      const canonical = store.get(characterSaveKey(characterId)!);
+      canonical.onsuccess = () => {
+        const stored = readSaveRecord(canonical.result);
+        setResult(stored && (stored.characterId ?? 'hero') === characterId
+          ? stored : null);
       };
     };
   });
