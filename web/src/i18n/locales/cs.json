@@ -367,7 +367,15 @@
       "legion": "Legie",
       "fortitude": "Odolnosti",
       "consecrated": "Posvěcený",
-      "ofFaith": "Víry"
+      "ofFaith": "Víry",
+      "flamebound": "Ohnivý",
+      "frostwoven": "Mrazivý",
+      "stormtouched": "Bouřný",
+      "runecharged": "Runový",
+      "ofCinders": "Žhavých uhlíků",
+      "ofWinter": "Zimy",
+      "ofThunder": "Hromu",
+      "ofMysteries": "Tajemství"
     },
     "slot": {
       "HELMET": "Přilba",
@@ -499,6 +507,26 @@
     "smite": {
       "name": "Svatý trest",
       "desc": "Silný svatý útok na dálku, který nepřítele oslabí."
+    },
+    "chainLightning": {
+      "name": "Řetězový blesk",
+      "desc": "Blesk přeskočí na blízké viditelné nepřátele a krátce je omráčí."
+    },
+    "meteor": {
+      "name": "Meteor",
+      "desc": "Sešle ohnivý dopad do místa pod kurzorem a zapálí zasažené nepřátele."
+    },
+    "teleport": {
+      "name": "Teleport",
+      "desc": "Okamžitě přesune mága na volné místo po neblokované trase."
+    },
+    "arcaneBarrier": {
+      "name": "Arkanická bariéra",
+      "desc": "Spotřebuje Manu a vytvoří ochranný štít."
+    },
+    "blizzard": {
+      "name": "Ledová bouře",
+      "desc": "Vyvolá setrvalou mrazivou bouři, která zraňuje a zpomaluje nepřátele."
     }
   },
   "enemies": {
@@ -844,7 +872,11 @@
       "holyWarrior": "Svatý bojovník",
       "paladinGuardian": "Posvátný ochránce",
       "auraMaster": "Mistr aur",
-      "holyCaster": "Svatý mág"
+      "holyCaster": "Svatý mág",
+      "fire": "Oheň",
+      "frost": "Mráz",
+      "lightning": "Blesky",
+      "arcane": "Arkána"
     },
     "nodes": {
       "berserker": {
@@ -934,9 +966,60 @@
           "name": "Inkvizice",
           "description": "Za rank zvyšuje účinek Léčivého světla o 12 %."
         }
+      },
+      "mage": {
+        "ember": {
+          "name": "Žhavý uhlík",
+          "description": "Za rank zvyšuje poškození mágova kouzla o 4 %."
+        },
+        "pyromancy": {
+          "name": "Pyromancie",
+          "description": "Za rank prodlužuje hoření o 15 %."
+        },
+        "inferno": {
+          "name": "Pekelný žár",
+          "description": "Za rank zvětšuje plochu kouzel o 8 %."
+        },
+        "rime": {
+          "name": "Jinovatka",
+          "description": "Za rank zvyšuje zpomalení mrazem o 5 procentních bodů."
+        },
+        "frostbite": {
+          "name": "Mrazivý dotek",
+          "description": "Za rank prodlužuje ochlazení o 12 %."
+        },
+        "permafrost": {
+          "name": "Věčný mráz",
+          "description": "Za rank přidává 0,07 Many za sekundu."
+        },
+        "spark": {
+          "name": "Jiskra",
+          "description": "Za rank zvyšuje poškození řetězového blesku o 5 %."
+        },
+        "conduction": {
+          "name": "Vodivost",
+          "description": "Za rank přidává 2,5 procentního bodu k šanci na kritický zásah."
+        },
+        "tempest": {
+          "name": "Bouře",
+          "description": "Za rank přidává jeden přeskok Řetězového blesku."
+        },
+        "focus": {
+          "name": "Arkanické soustředění",
+          "description": "Za rank snižuje cenu dalších kouzel o 4 % Many."
+        },
+        "aegis": {
+          "name": "Arkanická ochrana",
+          "description": "Za rank přidává do arkanického štítu 7 % maximálního zdraví."
+        },
+        "transcendence": {
+          "name": "Transcendence",
+          "description": "Za rank zkracuje cooldown Teleportu o 7 %."
+        }
       }
     },
-    "paladinTitle": "Strom talentů paladina"
+    "paladinTitle": "Strom talentů paladina",
+    "mageTitle": "Strom talentů mága"
   },
   "skillModifiers": {
     "enhanced": "Změněno",

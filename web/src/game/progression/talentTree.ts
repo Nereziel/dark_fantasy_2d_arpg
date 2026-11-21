@@ -1,9 +1,11 @@
 // GPL-3.0-only — Prompt 30. Pure, reusable rank/branch/effect planner.
 // Gameplay/loot/character state remain exclusively authoritative in GameSimulation.
 import type { DerivedStats } from '../stats/deriveStats';
+import { MAGE_TALENT_TREE as MAGE_SCHOOLS, type MageTalentId } from '../skills/mageKit';
 
 export type TalentBranch = 'berserker' | 'guardian' | 'warlord'
-  | 'holyWarrior' | 'paladinGuardian' | 'auraMaster' | 'holyCaster';
+  | 'holyWarrior' | 'paladinGuardian' | 'auraMaster' | 'holyCaster'
+  | 'fire' | 'frost' | 'lightning' | 'arcane';
 export type WarriorTalentId =
   | 'berserker.battleFury' | 'berserker.bloodlust'
   | 'berserker.executioner' | 'berserker.lastStand'
@@ -15,7 +17,7 @@ export type PaladinTalentId = 'paladin.zeal' | 'paladin.righteousFire'
   | 'paladin.aegis' | 'paladin.bulwark'
   | 'paladin.hymn' | 'paladin.benediction'
   | 'paladin.prayer' | 'paladin.inquisition';
-export type TalentId = WarriorTalentId | PaladinTalentId;
+export type TalentId = WarriorTalentId | PaladinTalentId | MageTalentId;
 export type TalentRanks = Partial<Record<TalentId, number>>;
 
 export interface TalentBonuses {
@@ -40,6 +42,19 @@ export interface TalentBonuses {
   auraStrength: number;
   auraDuration: number;
   faithRegen: number;
+  /** Mage-only projections; they never affect Warrior or Paladin rank builds. */
+  spellPower: number;
+  burnDuration: number;
+  areaRadius: number;
+  coldSlow: number;
+  chillDuration: number;
+  manaRegen: number;
+  chainDamage: number;
+  chainCount: number;
+  lightningCrit: number;
+  manaEfficiency: number;
+  barrierStrength: number;
+  teleportCooldown: number;
 }
 export type TalentEffectKey = keyof TalentBonuses;
 export type TalentEffectKind = 'stat' | 'skill' | 'passive' | 'conditional';
@@ -54,7 +69,7 @@ export interface TalentPrerequisite {
 }
 export interface TalentDefinition {
   readonly id: TalentId;
-  readonly classId?: 'PALADIN';
+  readonly classId?: 'PALADIN' | 'MAGE';
   readonly branch: TalentBranch;
   readonly unlockLevel: number;
   readonly maxRank: number;
@@ -140,15 +155,31 @@ export const PALADIN_TALENT_TREE:readonly TalentDefinition[]=[
     effects:[{kind:'skill',key:'healBonus',perRank:0.12}]}
 ] as const;
 
-export const allTalentsForClass=(classId:unknown):readonly TalentDefinition[] =>
-  classId==='WARRIOR'?TALENT_TREE:classId==='PALADIN'?PALADIN_TALENT_TREE:[];
+/** The generic rank planner consumes Mage's four-school descriptor, avoiding a second economy. */
+export const MAGE_TALENT_TREE: readonly TalentDefinition[] = Object.freeze(
+  MAGE_SCHOOLS.map(node => Object.freeze({
+    id: node.id, classId: 'MAGE' as const, branch: node.school,
+    unlockLevel: node.minLevel, maxRank: node.maxRank,
+    prerequisites: node.requires.map(id => ({ id, minRank: 1 })),
+    effects: node.effects.map(effect => ({
+      kind: 'skill' as const, key: effect.key, perRank: effect.perRank
+    }))
+  }))
+);
 
-const byId = new Map([...TALENT_TREE,...PALADIN_TALENT_TREE].map(node => [node.id, node]));
+export const allTalentsForClass=(classId:unknown):readonly TalentDefinition[] =>
+  classId==='WARRIOR'?TALENT_TREE:classId==='PALADIN'?PALADIN_TALENT_TREE
+    :classId==='MAGE'?MAGE_TALENT_TREE:[];
+
+const byId = new Map([...TALENT_TREE,...PALADIN_TALENT_TREE,...MAGE_TALENT_TREE].map(node => [node.id, node]));
 const keys: readonly TalentEffectKey[] = [
   'armor','maxHealth','maxResource','resourceRegen','attackSpeed','blockChance',
   'critChance','rageGain','warCryDuration','warCryStrength','warCryRage',
   'stunDuration','shieldOnWarCryPercent','lowHealthDamageMultiplier',
-  'holyDamage','healBonus','shieldStrength','auraStrength','auraDuration','faithRegen'
+  'holyDamage','healBonus','shieldStrength','auraStrength','auraDuration','faithRegen',
+  'spellPower','burnDuration','areaRadius','coldSlow','chillDuration','manaRegen',
+  'chainDamage','chainCount','lightningCrit','manaEfficiency','barrierStrength',
+  'teleportCooldown'
 ];
 
 export function getTalent(id: unknown): TalentDefinition | null {
@@ -248,7 +279,7 @@ export function planRespecTalents(
 /** Pure additive effect projection. Simulator decides when conditional triggers fire. */
 export function projectTalentBonuses(ranks: Readonly<TalentRanks>): TalentBonuses {
   const values = Object.fromEntries(keys.map(key => [key,0])) as Record<TalentEffectKey,number>;
-  for (const node of [...TALENT_TREE,...PALADIN_TALENT_TREE]) {
+  for (const node of [...TALENT_TREE,...PALADIN_TALENT_TREE,...MAGE_TALENT_TREE]) {
     const rank = ranks[node.id] ?? 0;
     if (!Number.isSafeInteger(rank) || rank < 1 || rank > node.maxRank) continue;
     for (const effect of node.effects) values[effect.key] += effect.perRank * rank;
@@ -268,9 +299,9 @@ export function applyTalentStats(
     physicalResist: Math.round(100 * armor / (armor + 250)),
     maxHealth: base.maxHealth + bonuses.maxHealth,
     maxResource: base.maxResource + bonuses.maxResource,
-    resourceRegen: Number((base.resourceRegen + bonuses.resourceRegen + bonuses.faithRegen).toFixed(2)),
+    resourceRegen: Number((base.resourceRegen + bonuses.resourceRegen + bonuses.faithRegen + bonuses.manaRegen).toFixed(2)),
     attackSpeed: Number((base.attackSpeed + bonuses.attackSpeed).toFixed(2)),
     blockChance: Number(Math.min(60,base.blockChance + bonuses.blockChance).toFixed(1)),
-    critChance: Number(Math.min(75,base.critChance + bonuses.critChance).toFixed(1))
+    critChance: Number(Math.min(75,base.critChance + bonuses.critChance + bonuses.lightningCrit * 100).toFixed(1))
   };
 }

@@ -34,6 +34,7 @@
   import { townEntry, type TownEntry } from './game/world/townManifest';
   import { CLASSES, type ClassId } from './game/data/classes';
   import { PALADIN_EXTRA_IDS } from './game/skills/paladinKit';
+  import { MAGE_EXTRA_IDS } from './game/skills/mageKit';
   import { POTION_IDS, POTIONS } from './game/consumables/potionRules';
   import { xpRequiredForLevel } from './game/progression/progressionRules';
 
@@ -373,6 +374,17 @@
       const slotIndex=Number(action.slice(-1))-2;
       const id=PALADIN_EXTRA_IDS[slotIndex];
       if(id)bridge.command({type:'paladinAbility',id,targetId:view.selectedTargetId??view.enemy.id});
+    } else if (view.classId === 'MAGE'
+      && ['SLOT_2','SLOT_3','SLOT_4','SLOT_5','SLOT_6'].includes(action)) {
+      event.preventDefault();
+      const index = Number(action.slice(-1)) - 2;
+      const id = MAGE_EXTRA_IDS[index];
+      if (id) {
+        const position = bridge.pointerPosition();
+        bridge.command({ type: 'mageAbility', id,
+          targetId: view.selectedTargetId ?? view.enemy.id,
+          ...(position ? { position } : {}) });
+      }
     } else if (action === 'FORCE_MOVE' || action === 'PRIMARY') {
       const position = bridge.pointerPosition();
       if (!position) return;

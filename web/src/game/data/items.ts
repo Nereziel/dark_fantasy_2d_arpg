@@ -127,16 +127,22 @@ export function rollItemForBase(
       : base.category === 'armor' ? ['armor']
         : ['weapon', ...(['WAND','STAFF','SPELLBOOK'].includes(weaponType ?? '') ? ['caster']
           : ['BOW','CROSSBOW'].includes(weaponType ?? '') ? ['ranged'] : ['melee'])]) as
-    Array<'weapon' | 'armor' | 'jewelry' | 'shield' | 'caster' | 'ranged' | 'melee' | 'paladin'>;
+    Array<'weapon' | 'armor' | 'jewelry' | 'shield' | 'caster' | 'ranged' | 'melee' | 'paladin'
+      | 'mage.fire' | 'mage.frost' | 'mage.lightning' | 'mage.arcane'>;
   // Paladin-exclusive affixes are eligible on melee weapons only; other classes
   // keep their exact historical deterministic RNG progression.
   if (classId === 'PALADIN' && tags.includes('weapon') && tags.includes('melee'))
     tags.push('paladin');
+  // Only Mage caster equipment may roll school-specialized affixes.
+  if (classId === 'MAGE' && tags.includes('weapon') && tags.includes('caster'))
+    tags.push('mage.fire', 'mage.frost', 'mage.lightning', 'mage.arcane');
   // MYTHIC shares the top tier but retains its separate rarity and six-affix cap.
   const rolled = rollAffixes({
     rarity: rarity === 'MYTHIC' ? 'LEGENDARY' : rarity,
     itemLevel, tags,
-    ...(classId==='PALADIN'?{preferredStats:['strength','vitality','resourceRegen'] as const}:{})
+    ...(classId==='PALADIN'?{preferredStats:['strength','vitality','resourceRegen'] as const}
+      :classId==='MAGE'?{preferredStats:['intelligence','resourceRegen','fireDamage','skillRank'] as const}
+      :{})
   }, rng);
   const mult = RARITIES[rarity].mult;
   const socketCount = Math.min(base.maxSockets,

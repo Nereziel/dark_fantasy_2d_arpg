@@ -7,19 +7,29 @@
   import { POTION_IDS } from '../game/consumables/potionRules';
   import { WARRIOR_ABILITIES, type WarriorAbilityId } from '../game/skills/warriorKit';
   import { PALADIN_EXTRA_IDS, PALADIN_EXTRA_SKILLS, type PaladinAbilityId } from '../game/skills/paladinKit';
+  import { MAGE_EXTRA_IDS, MAGE_EXTRA_SPELLS, type MageExtraSpellId } from '../game/skills/mageKit';
   import { projectEquippedSkill } from '../game/skills/skillModifiers';
+  import { projectTalentBonuses } from '../game/progression/talentTree';
   const extraWarriorSkills = ['groundSlam', 'warCry', 'whirlwind', 'execute', 'basicAttack'] as const;
   const warriorShortcuts: Record<typeof extraWarriorSkills[number], string> = {
     groundSlam: '2', warCry: '3', whirlwind: '4', execute: '5', basicAttack: '6'
   };
 
   let { bridge, view }: { bridge: GameBridge; view: GameSnapshot } = $props();
+  let mageCostDiscount = $derived(projectTalentBonuses(view.talentRanks ?? {}).manaEfficiency);
 
   function castWarrior(id: WarriorAbilityId): void {
     bridge.command({ type: 'warriorAbility', id, targetId: view.selectedTargetId ?? view.enemy.id });
   }
   function castPaladin(id: PaladinAbilityId): void {
     bridge.command({type:'paladinAbility',id,targetId:view.selectedTargetId??view.enemy.id});
+  }
+
+  function castMage(id: MageExtraSpellId): void {
+    const position = bridge.pointerPosition();
+    bridge.command({ type: 'mageAbility', id,
+      targetId: view.selectedTargetId ?? view.enemy.id,
+      ...(position ? { position } : {}) });
   }
 
   function cast(slot: 'rmb' | 'slot1'): void {
@@ -105,6 +115,29 @@
           {#if remaining>0}
             <span class="skill-cooldown">{Math.ceil(remaining)}s</span>
           {/if}
+        </button>
+      {/each}
+    {/if}
+    {#if view.classId === 'MAGE'}
+      {#each MAGE_EXTRA_IDS as id,index (id)}
+        {@const skill = MAGE_EXTRA_SPELLS[id]}
+        {@const remaining = view.mageCooldowns?.[id] ?? 0}
+        {@const actualCost = Math.max(1, Math.ceil(skill.cost * (1 - mageCostDiscount)))}
+        <button
+          class="skill-button extra"
+          class:cooldown={remaining > 0}
+          data-mage-ability={id}
+          disabled={view.paused || !view.player.alive || remaining > 0 ||
+            !!view.classAction || view.resource + 0.001 < actualCost}
+          aria-label={$t('skills.'+id+'.name')}
+          title={$t('skills.'+id+'.desc')+' · '+actualCost+' '+$t('resource.mana')}
+          onclick={() => castMage(id)}
+        >
+          <span class="skill-shortcut">{index+2}</span>
+          <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
+          <span class="skill-title">{$t('skills.'+id+'.name')}</span>
+          <span class="skill-cost">{actualCost}</span>
+          {#if remaining > 0}<span class="skill-cooldown">{Math.ceil(remaining)}s</span>{/if}
         </button>
       {/each}
     {/if}

@@ -77,6 +77,8 @@ interface Point { readonly x: number; readonly y: number }
 interface Bounds { readonly width: number; readonly height: number }
 export interface MageCastContext {
   readonly mana: number;
+  /** Learned Arcane efficiency; reduced committed cost stays >=1. */
+  readonly manaDiscount?: number;
   readonly cooldowns: MageCooldowns;
   readonly origin: Point;
   /** World-space mouse coordinate for ground spells. */
@@ -158,8 +160,13 @@ export function planMageCast(id: unknown, input: unknown): MageCastDecision {
     || !validMageCooldowns(ctx.cooldowns)
     || !isPoint(ctx.origin) || !isBounds(ctx.bounds)
     || !within(ctx.origin, ctx.bounds)) return { ok: false, reason: 'invalid' };
+  if (ctx.manaDiscount !== undefined
+    && (typeof ctx.manaDiscount !== 'number' || !Number.isFinite(ctx.manaDiscount)
+      || ctx.manaDiscount < 0 || ctx.manaDiscount > 0.5))
+    return { ok: false, reason: 'invalid' };
   if ((ctx.cooldowns[spell.id] ?? 0) > 0.0001) return { ok: false, reason: 'cooldown' };
-  if (ctx.mana + 0.0001 < spell.cost) return { ok: false, reason: 'mana' };
+  const cost = Math.max(1, Math.ceil(spell.cost * (1 - (ctx.manaDiscount ?? 0))));
+  if (ctx.mana + 0.0001 < cost) return { ok: false, reason: 'mana' };
 
   let aim: SkillAim | null = null;
   if (spell.aimMode === 'SELF') {
@@ -187,7 +194,7 @@ export function planMageCast(id: unknown, input: unknown): MageCastDecision {
     ok: true,
     spell,
     aim,
-    manaAfter: ctx.mana - spell.cost,
+    manaAfter: ctx.mana - cost,
     cooldowns: { ...ctx.cooldowns, [spell.id]: spell.cooldown }
   };
 }

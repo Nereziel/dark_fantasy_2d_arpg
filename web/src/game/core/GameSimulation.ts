@@ -15,6 +15,10 @@ import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../
 import { PALADIN_EXTRA_SKILLS, getPaladinAbility, planPaladinCast,
   validPaladinCooldowns, advancePaladinCooldowns,
   type PaladinAbilityId, type PaladinCooldowns } from '../skills/paladinKit';
+import { getMageSpell, planMageCast, advanceMageCooldowns, validMageCooldowns,
+  type MageExtraSpellId, type MageCooldowns } from '../skills/mageKit';
+import { planMageChain, planMageTeleport, planMageBarrier, createMageZone,
+  stepMageZone, validMageZone, type MageTimedZone } from '../skills/mageCombatPlans';
 import { projectEquippedSkill, type SkillProjection } from '../skills/skillModifiers';
 import { canActivateWarriorSkill, spendAndStartCooldown, advanceWarriorCooldowns, applyWarriorRageDelta, type WarriorActivationRequest } from '../skills/warriorEconomy';
 import { startCombatTimeline, advanceCombatTimeline, cancelCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
@@ -43,7 +47,7 @@ import {
 } from '../enemies/miniBossRules';
 import { monsterActions, monsterAction, type MonsterAction } from '../enemies/monsterRuntime';
 import { getEnemyArchetype } from '../enemies/archetypeCatalog';
-import { ACTOR_RADIUS, canOccupy, findPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
+import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, findPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
   type WorldLayout
@@ -199,9 +203,14 @@ function validWaveBState(s: GameSnapshot): boolean {
       || (action.paladinAbilityId !== undefined
         && (s.classId !== 'PALADIN' || action.kind !== 'skill'
           || action.slot !== null || !getPaladinAbility(action.paladinAbilityId)))
+      || (action.mageAbilityId !== undefined
+        && (s.classId !== 'MAGE' || action.kind !== 'skill'
+          || action.slot !== null || !getMageSpell(action.mageAbilityId)))
+      || (action.paladinAbilityId !== undefined && action.mageAbilityId !== undefined)
       || (action.kind === 'basic'
         ? action.slot !== null || action.paladinAbilityId !== undefined
-        : action.paladinAbilityId !== undefined
+          || action.mageAbilityId !== undefined
+        : action.paladinAbilityId !== undefined || action.mageAbilityId !== undefined
           ? action.slot !== null : !isSkillSlot(action.slot))
       || typeof action.targetId !== 'string' && action.targetId !== null
       || (typeof action.targetId === 'string' && action.targetId.length > 128)
@@ -209,7 +218,9 @@ function validWaveBState(s: GameSnapshot): boolean {
       || timeline.actionId !== (action.kind === 'basic' ? 'basicAttack'
         : action.paladinAbilityId !== undefined
           ? getPaladinAbility(action.paladinAbilityId)?.id
-          : SKILLS[s.classId][action.slot as SkillSlot].id)
+          : action.mageAbilityId !== undefined
+            ? getMageSpell(action.mageAbilityId)?.id
+            : SKILLS[s.classId][action.slot as SkillSlot].id)
       || !Number.isSafeInteger(timeline.elapsedTicks) || timeline.elapsedTicks < 0
       || !Number.isSafeInteger(timeline.windupTicks) || timeline.windupTicks < 1
       || !Number.isSafeInteger(timeline.recoveryTicks) || timeline.recoveryTicks < 0
@@ -241,11 +252,14 @@ export class GameSimulation {
   private cooldowns: Cooldowns = emptyCooldowns();
   private warriorCooldowns: Partial<Record<WarriorAbilityId, number>> = {};
   private paladinCooldowns: PaladinCooldowns = {};
+  private mageCooldowns: MageCooldowns = {};
+  private mageZones: MageTimedZone[] = [];
   private warriorPending: { id: WarriorAbilityId; targetId: string | null } | null = null;
   private warriorAction: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null = null;
   private classAction: {
     kind: 'basic' | 'skill'; slot: SkillSlot | null; targetId: string | null;
     paladinAbilityId?: PaladinAbilityId;
+    mageAbilityId?: MageExtraSpellId;
     aim?: SkillAim; timeline: CombatTimelineState;
   } | null = null;
   private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
@@ -1070,6 +1084,8 @@ export class GameSimulation {
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
     this.paladinCooldowns = {};
+    this.mageCooldowns = {};
+    this.mageZones = [];
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
@@ -1461,6 +1477,11 @@ export class GameSimulation {
     if(command.type==='paladinAbility') {
       if(this.classId!=='PALADIN')return;
       this.requestPaladinAbility(command.id,command.targetId??null);
+      return;
+    }
+    if (command.type === 'mageAbility') {
+      if (this.classId !== 'MAGE') return;
+      this.requestMageAbility(command.id, command.targetId ?? null, command.position);
       return;
     }
     if (command.type === 'warriorAbility') {
@@ -2143,6 +2164,154 @@ export class GameSimulation {
     }
   }
 
+  /** Commit Mana and independent Mage cooldowns before the fixed hit frame. */
+  private requestMageAbility(id: MageExtraSpellId, targetId: string | null,
+    position?: Point): void {
+    if (!this.player.alive || this.paused || this.classId !== 'MAGE'
+      || this.classAction || this.warriorAction
+      || this.statusEffects.player.some(e => ['stunned', 'frozen', 'silenced'].includes(e.id))
+      || this.effects.player.some(e => e.id === 'stunned')) return;
+    const spell = getMageSpell(id);
+    if (!spell || (spell.kind === 'mobility' && this.immobilized)
+      || ((id === 'meteor' || id === 'blizzard') && this.mageZones.length >= 3)) return;
+    const target = targetId
+      ? this.units.find(u => u.actor.id === targetId && u.actor.alive)
+      : this.focusedUnit.actor.alive ? this.focusedUnit : undefined;
+    const bonuses = projectTalentBonuses(this.talentRanks);
+    const plan = planMageCast(id, {
+      mana: this.resource, manaDiscount: bonuses.manaEfficiency,
+      cooldowns: this.mageCooldowns, origin: this.player,
+      cursor: position ?? null, targetId: target?.actor.id ?? null,
+      targetPosition: target?.actor ?? null, targetAlive: !!target?.actor.alive,
+      destinationWalkable: !!(position && spell.kind === 'mobility'
+        && planMageTeleport(this.player, position, spell.range, this.world.obstacles)),
+      bounds: { width: WORLD_WIDTH, height: WORLD_HEIGHT }
+    });
+    if (!plan.ok) return;
+    this.resource = plan.manaAfter;
+    this.mageCooldowns = id === 'teleport'
+      ? { ...plan.cooldowns, teleport: Math.max(1,
+        spell.cooldown * (1 - bonuses.teleportCooldown)) }
+      : plan.cooldowns;
+    this.pendingSkill = null;
+    this.pendingAim = null;
+    this.attackTarget = null;
+    this.pickupTarget = null;
+    this.movePath = [];
+    const kind = spell.kind === 'mobility' ? 'dash'
+      : spell.kind === 'barrier' ? 'aura'
+      : spell.kind === 'area' ? 'nova' : 'strike';
+    const timeline = classSkillTimeline({
+      id: spell.id, icon: spell.icon, kind,
+      target: spell.aimMode === 'SELF' ? 'self' : 'enemy',
+      cost: spell.cost, cooldown: spell.cooldown,
+      range: spell.range, power: spell.power, color: spell.color,
+      duration: spell.duration
+    });
+    this.classAction = {
+      kind: 'skill', slot: null, mageAbilityId: id,
+      targetId: spell.aimMode === 'TARGET_ENTITY' ? target?.actor.id ?? null : null,
+      aim: plan.aim, timeline: startCombatTimeline(timeline).state
+    };
+    const p = plan.aim.mode === 'GROUND_POSITION' ? plan.aim.position
+      : target?.actor ?? this.player;
+    this.events.push({ type: 'cast', skillId: id, x: p.x, y: p.y });
+  }
+
+  /** Hit-frame Mage effects use the canonical typed-damage and status pipeline. */
+  private resolveMageImpact(id: MageExtraSpellId, targetId: string | null,
+    aim?: SkillAim): void {
+    if (this.classId !== 'MAGE' || !this.player.alive) return;
+    const spell = getMageSpell(id);
+    if (!spell) return;
+    const bonuses = projectTalentBonuses(this.talentRanks);
+    const roster = this.units.map(u => ({
+      id: u.actor.id, x: u.actor.x, y: u.actor.y, alive: u.actor.alive
+    }));
+    if (id === 'chainLightning' && targetId) {
+      for (const hit of planMageChain(this.player, targetId, roster, {
+        maxHits: Math.min(8, (spell.bounceCount ?? 3) + bonuses.chainCount),
+        hopRange: spell.bounceRange ?? 160,
+        maxRange: spell.range, obstacles: this.world.obstacles
+      })) {
+        const unit = this.units.find(u => u.actor.id === hit.id && u.actor.alive);
+        if (!unit) continue;
+        const dealt = this.applyDamage(spell.power * hit.multiplier
+          * (1 + bonuses.spellPower + bonuses.chainDamage), unit, 'lightning');
+        if (dealt > 0 && unit.actor.alive) {
+          this.applyCanonicalStatus('enemy', 'stunned', 'hero', 1, 0.45, unit);
+        }
+      }
+    } else if (id === 'meteor' && aim?.mode === 'GROUND_POSITION') {
+      const next = [1, 2, 3, 4].find(n =>
+        !this.mageZones.some(zone => zone.id === 'mage-zone-' + n));
+      if (!next) return;
+      const delay = spell.impactDelay ?? 0.85;
+      const zone = createMageZone('mage-zone-' + next, 'hero', aim.position,
+        spell.radius * (1 + bonuses.areaRadius), delay, delay, 'fire');
+      if (zone) this.mageZones.push(zone);
+    } else if (id === 'teleport' && aim?.mode === 'GROUND_POSITION') {
+      const destination = planMageTeleport(this.player, aim.position,
+        spell.range, this.world.obstacles);
+      if (!destination) return;
+      this.player.x = destination.x;
+      this.player.y = destination.y;
+      this.movePath = [];
+      this.attackTarget = null;
+      this.observeExploration();
+    } else if (id === 'arcaneBarrier') {
+      const barrier = planMageBarrier(this.player.maxHealth,
+        this.currentStats().willpower,
+        Math.min(1, (spell.shieldRatio ?? 0.25) + bonuses.barrierStrength));
+      if (barrier !== null) this.shield = Math.min(100000, this.shield + barrier);
+    } else if (id === 'blizzard' && aim?.mode === 'GROUND_POSITION') {
+      if (this.mageZones.length >= 3) return;
+      const next = [1, 2, 3, 4].find(n =>
+        !this.mageZones.some(zone => zone.id === 'mage-zone-' + n));
+      if (!next) return;
+      const zone = createMageZone('mage-zone-' + next, 'hero', aim.position,
+        spell.radius * (1 + bonuses.areaRadius), spell.duration,
+        spell.tickInterval ?? 0.75, 'frost');
+      if (zone) this.mageZones.push(zone);
+    }
+  }
+
+  /** Timed Blizzard pulses are deterministic, bounded and session-only. */
+  private tickMageZones(dt: number): void {
+    if (!this.mageZones.length) return;
+    const roster = this.units.map(u => ({
+      id: u.actor.id, x: u.actor.x, y: u.actor.y, alive: u.actor.alive
+    }));
+    const bonuses = projectTalentBonuses(this.talentRanks);
+    const stillActive: MageTimedZone[] = [];
+    for (const zone of this.mageZones) {
+      const result = stepMageZone(zone, dt, roster, this.world.obstacles);
+      if (!result) continue;
+      for (const ids of result.pulses) {
+        for (const enemyId of ids) {
+          const unit = this.units.find(u => u.actor.id === enemyId && u.actor.alive);
+          if (!unit) continue;
+          const fire = zone.element === 'fire';
+          const dealt = this.applyDamage((fire ? 2.7 : 0.48)
+            * (1 + bonuses.spellPower), unit, fire ? 'fire' : 'frost');
+          if (dealt > 0 && unit.actor.alive) {
+            if (fire) {
+              this.applyCanonicalStatus('enemy', 'burning', 'hero',
+                Math.max(3, 2 + this.currentStats().intelligence * 0.25),
+                4 * (1 + bonuses.burnDuration), unit);
+            } else {
+              this.applyCanonicalStatus('enemy', 'chilled', 'hero',
+                Math.min(0.8, 0.25 + bonuses.coldSlow),
+                1.1 * (1 + bonuses.chillDuration), unit);
+            }
+          }
+        }
+      }
+      if (result.zone) stillActive.push(result.zone);
+    }
+    this.mageZones = stillActive;
+  }
+
   private requestCast(slot: SkillSlot, aim?: SkillAim): void {
     if (this.warriorAction || this.classAction) return;
     const skill = SKILLS[this.classId][slot];
@@ -2446,6 +2615,8 @@ export class GameSimulation {
         }
       } else if (action.paladinAbilityId) {
         this.resolvePaladinImpact(action.paladinAbilityId,action.targetId);
+      } else if (action.mageAbilityId) {
+        this.resolveMageImpact(action.mageAbilityId, action.targetId, action.aim);
       } else if (action.slot) {
         this.resolveClassCast(action.slot, action.aim, action.targetId);
       }
@@ -2470,13 +2641,17 @@ export class GameSimulation {
     } else if (skill.kind === 'dash' && unit.actor.alive) {
       this.follow(this.player, unit.actor, skill.range, 1, 56);
     }
+    const mageBonuses = this.classId === 'MAGE'
+      ? projectTalentBonuses(this.talentRanks) : null;
     if (skill.id === 'fireball' && aim?.mode === 'GROUND_POSITION') {
       for (const target of [...this.aliveEnemies]) {
-        if (distance(aim.position, target.actor) > (skill.impactRadius ?? 66)) continue;
-        this.applyDamage(skill.power, target, 'fire');
+        if (distance(aim.position, target.actor) > (skill.impactRadius ?? 66)
+          * (1 + (mageBonuses?.areaRadius ?? 0))) continue;
+        this.applyDamage(skill.power * (1 + (mageBonuses?.spellPower ?? 0)), target, 'fire');
         if (target.actor.alive && skill.duration) {
           this.applyEffect('enemy', {
-            id: 'burning', remaining: skill.duration,
+            id: 'burning',
+            remaining: skill.duration * (1 + (mageBonuses?.burnDuration ?? 0)),
             magnitude: Math.max(3, Math.round(2 + this.currentStats().intelligence * 0.25)),
             tick: 0
           }, target);
@@ -2514,11 +2689,18 @@ export class GameSimulation {
     } else if (skill.kind === 'nova') {
       for (const target of [...this.aliveEnemies]) {
         const center = aim?.mode === 'AREA' ? aim.position : this.player;
-        if (distance(center, target.actor) > (skill.impactRadius ?? skill.range)) continue;
-        this.applyDamage(skill.power, target, this.skillDamageType(slot));
+        if (distance(center, target.actor) > (skill.impactRadius ?? skill.range)
+          * (1 + (mageBonuses?.areaRadius ?? 0))) continue;
+        this.applyDamage(skill.power * (1 + (mageBonuses?.spellPower ?? 0)),
+          target, this.skillDamageType(slot));
         if (target.actor.alive && skill.effect && skill.duration) {
           this.applyEffect('enemy',
-            { id: skill.effect, remaining: skill.duration, magnitude: 0, tick: 0 }, target);
+            { id: skill.effect,
+              remaining: skill.duration * (skill.id === 'frostNova'
+                ? (1 + (mageBonuses?.chillDuration ?? 0)) : 1),
+              magnitude: skill.id === 'frostNova'
+                ? 0.25 + (mageBonuses?.coldSlow ?? 0) : 0,
+              tick: 0 }, target);
           if (skill.id === 'frostNova' && distance(center, target.actor) <= 70) {
             this.applyCanonicalStatus('enemy', 'frozen', 'hero', 1, 1.2, target);
           }
@@ -2925,6 +3107,8 @@ export class GameSimulation {
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
     this.paladinCooldowns = {};
+    this.mageCooldowns = {};
+    this.mageZones = [];
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
@@ -2978,6 +3162,8 @@ export class GameSimulation {
       cooldowns: this.warriorCooldowns
     }, dt).cooldowns } as Partial<Record<WarriorAbilityId, number>>;
     this.paladinCooldowns=advancePaladinCooldowns(this.paladinCooldowns,dt);
+    this.mageCooldowns=advanceMageCooldowns(this.mageCooldowns,dt) ?? {};
+    this.tickMageZones(dt);
     this.warriorCooldowns.cleave = this.cooldowns.rmb;
     this.warriorCooldowns.charge = this.cooldowns.slot1;
     this.tickEffects(dt);
@@ -3596,6 +3782,8 @@ export class GameSimulation {
       cooldowns: { ...this.cooldowns },
       warriorCooldowns: { ...this.warriorCooldowns },
       paladinCooldowns: { ...this.paladinCooldowns },
+      mageCooldowns: { ...this.mageCooldowns },
+      mageZones: this.mageZones.map(z => ({ ...z, position: { ...z.position } })),
       warriorAction: this.warriorAction ? {
         ...this.warriorAction, timeline: { ...this.warriorAction.timeline }
       } : null,
@@ -3750,6 +3938,14 @@ export class GameSimulation {
       || !validEventSnapshot()
       || !validPaladinCooldowns(s.paladinCooldowns ?? {})
       || (s.classId!=='PALADIN' && Object.keys(s.paladinCooldowns ?? {}).length>0)
+      || !validMageCooldowns(s.mageCooldowns ?? {})
+      || (s.classId !== 'MAGE' && Object.keys(s.mageCooldowns ?? {}).length > 0)
+      || (s.mageZones !== undefined && (!Array.isArray(s.mageZones)
+        || s.mageZones.length > 3 || (s.classId !== 'MAGE' && s.mageZones.length > 0)
+        || s.mageZones.some(z => !validMageZone(z))
+        || new Set(s.mageZones.map(z => z.id)).size !== s.mageZones.length))
+      || (s.classAction?.mageAbilityId !== undefined
+        && !((s.mageCooldowns?.[s.classAction.mageAbilityId] ?? 0) > 0))
       || (s.classAction?.paladinAbilityId!==undefined
         && !((s.paladinCooldowns?.[s.classAction.paladinAbilityId] ?? 0)>0))
       || !validEnvironmentUsedIds(environmentUsed)
@@ -3972,6 +4168,8 @@ export class GameSimulation {
     this.cooldowns = { ...s.cooldowns };
     this.warriorCooldowns = s.warriorCooldowns ? { ...s.warriorCooldowns } : {};
     this.paladinCooldowns = s.paladinCooldowns ? { ...s.paladinCooldowns } : {};
+    this.mageCooldowns = s.mageCooldowns ? { ...s.mageCooldowns } : {};
+    this.mageZones = (s.mageZones ?? []).map(z => ({ ...z, position: { ...z.position } }));
     this.warriorAction = s.warriorAction ? {
       ...s.warriorAction, timeline: { ...s.warriorAction.timeline }
     } : null;
@@ -4048,6 +4246,8 @@ export class GameSimulation {
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
     this.paladinCooldowns = {};
+    this.mageCooldowns = {};
+    this.mageZones = [];
     this.warriorAction = null;
     this.classAction = null;
     this.warriorPending = null;

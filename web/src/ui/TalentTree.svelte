@@ -13,6 +13,7 @@
 
   let branches:readonly TalentBranch[]=$derived(view.classId==='PALADIN'
     ? ['holyWarrior','paladinGuardian','auraMaster','holyCaster']
+    : view.classId==='MAGE' ? ['fire','frost','lightning','arcane']
     : ['berserker','guardian','warlord']);
   let activeNodes=$derived(allTalentsForClass(view.classId));
   let invested = $derived(spentTalentPoints(view.talentRanks ?? {}));
@@ -26,7 +27,8 @@
     <header>
       <div>
         <div class="eyebrow">AETHER &amp; RUIN</div>
-        <h2>{$t(view.classId==='PALADIN' ? 'talents.paladinTitle' : 'talents.title')}</h2>
+        <h2>{$t(view.classId==='PALADIN' ? 'talents.paladinTitle'
+          : view.classId==='MAGE' ? 'talents.mageTitle' : 'talents.title')}</h2>
         <p>{$t('talents.available')}: <strong>{view.talentPoints ?? 0}</strong>
           · {$t('talents.invested')}: <strong>{invested}</strong>
           · {$t('hud.gold')}: <strong>{view.gold}</strong></p>
@@ -34,7 +36,7 @@
       <button class="close" aria-label={$t('inventory.close')} onclick={close}>✕</button>
     </header>
 
-    {#if view.classId !== 'WARRIOR' && view.classId !== 'PALADIN'}
+    {#if view.classId !== 'WARRIOR' && view.classId !== 'PALADIN' && view.classId !== 'MAGE'}
       <p class="notice">{$t('talents.warriorOnly')}</p>
     {:else}
       <div class="talent-columns">
