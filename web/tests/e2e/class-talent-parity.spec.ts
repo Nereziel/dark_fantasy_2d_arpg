@@ -78,11 +78,16 @@ for (const { id, title, nodes } of examples) {
     const reloaded = page.getByRole('dialog', { name: title });
     for (const talentId of nodes)
       await expect(reloaded.locator(`[data-talent-id="${talentId}"] .ranks`)).toHaveText('1/3');
+    // The header is correctly inert while the talent modal owns keyboard focus.
+    // Close, change locale with the normal accessible selector, then reopen.
+    await page.keyboard.press('Escape');
     await page.locator('#game-language').selectOption('cs');
-    await expect(reloaded).toContainText('Aktuální stupeň');
-    await reloaded.getByRole('button', { name: 'Přerozdělit talenty' }).click();
-    await expect(reloaded).toContainText('Volné talentové body: 3');
+    await page.getByRole('button', { name: 'Talenty' }).click();
+    const localized = page.getByRole('dialog', { name: /Strom talentů/ });
+    await expect(localized).toContainText('Aktuální stupeň');
+    await localized.getByRole('button', { name: 'Přerozdělit talenty' }).click();
+    await expect(localized).toContainText('Volné talentové body: 3');
     for (const talentId of nodes)
-      await expect(reloaded.locator(`[data-talent-id="${talentId}"] .ranks`)).toHaveText('0/3');
+      await expect(localized.locator(`[data-talent-id="${talentId}"] .ranks`)).toHaveText('0/3');
   });
 }
