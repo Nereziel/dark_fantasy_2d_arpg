@@ -11,11 +11,11 @@
     view: GameSnapshot; bridge: GameBridge; close: () => void
   } = $props();
 
-  let branches:readonly TalentBranch[]=$derived(view.classId==='PALADIN'
-    ? ['holyWarrior','paladinGuardian','auraMaster','holyCaster']
-    : view.classId==='MAGE' ? ['fire','frost','lightning','arcane']
-    : ['berserker','guardian','warlord']);
   let activeNodes=$derived(allTalentsForClass(view.classId));
+  // The tree is data-driven: every class contributes its own ordered branches.
+  let branches: readonly TalentBranch[]=$derived(
+    [...new Set(activeNodes.map(node => node.branch))]
+  );
   let invested = $derived(spentTalentPoints(view.talentRanks ?? {}));
   let price = $derived(respecGoldCost(view.level, view.talentRanks ?? {}));
   let canRespec = $derived(planRespecTalents(view.classId, view.level,
@@ -28,7 +28,11 @@
       <div>
         <div class="eyebrow">AETHER &amp; RUIN</div>
         <h2>{$t(view.classId==='PALADIN' ? 'talents.paladinTitle'
-          : view.classId==='MAGE' ? 'talents.mageTitle' : 'talents.title')}</h2>
+          : view.classId==='MAGE' ? 'talents.mageTitle'
+          : view.classId==='NECROMANCER' ? 'talents.necromancerTitle'
+          : view.classId==='ROGUE' ? 'talents.rogueTitle'
+          : view.classId==='WARLOCK' ? 'talents.warlockTitle'
+          : 'talents.title')}</h2>
         <p>{$t('talents.available')}: <strong>{view.talentPoints ?? 0}</strong>
           · {$t('talents.invested')}: <strong>{invested}</strong>
           · {$t('hud.gold')}: <strong>{view.gold}</strong></p>
@@ -36,10 +40,7 @@
       <button class="close" aria-label={$t('inventory.close')} onclick={close}>✕</button>
     </header>
 
-    {#if view.classId !== 'WARRIOR' && view.classId !== 'PALADIN' && view.classId !== 'MAGE'}
-      <p class="notice">{$t('talents.warriorOnly')}</p>
-    {:else}
-      <div class="talent-columns">
+    <div class="talent-columns">
         {#each branches as branch (branch)}
           <section aria-label={$t('talents.branches.' + branch)}>
             <h3>{$t('talents.branches.' + branch)}</h3>
@@ -53,6 +54,10 @@
                   <span class="ranks">{rank}/{talent.maxRank}</span>
                 </div>
                 <p>{$t('talents.nodes.' + talent.id + '.description')}</p>
+                <p class="talent-preview" data-testid={'talent-preview-' + talent.id}>
+                  {$t('talents.rankPreview')}: {rank}/{talent.maxRank}
+                  {#if rank < talent.maxRank} · {$t('talents.nextRank')} {rank + 1}{/if}
+                </p>
                 <div class="meta">
                   {$t('talents.unlockLevel')} {talent.unlockLevel}
                   {#if talent.prerequisites.length > 0}
@@ -83,7 +88,6 @@
           {$t('talents.respec')}
         </button>
       </footer>
-    {/if}
   </div>
 </div>
 
@@ -108,6 +112,7 @@
   article{padding:12px;margin-bottom:12px;background:#1a222c;border:1px solid #3f4650}
   article.invested{border-color:#b99a65;background:#242b31}
   .talent-heading{display:flex;gap:6px;justify-content:space-between;align-items:start;font-size:.88rem;color:#eed6af}
+  .talent-preview{font-size:.7rem;color:#a9c9bc;margin:5px 0;}
   .ranks{font-variant-numeric:tabular-nums;color:#f1bf75;font-size:.75rem}
   article p{font-size:.77rem;line-height:1.4;min-height:46px;color:#c0c5c5}
   .meta{font-size:.71rem;color:#bfae92;min-height:35px;margin-bottom:9px}
