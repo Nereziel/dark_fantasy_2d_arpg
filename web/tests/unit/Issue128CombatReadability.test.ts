@@ -143,3 +143,107 @@ describe('Issue 128: readable combat geometry from authoritative events', () => 
     }
   });
 });
+
+
+describe('Issue 128 stage 2B: authoritative miniboss footprints', () => {
+  const origin = Object.freeze({ x: 300, y: 400 });
+
+  it('projects the Morrow line as the exact full-range corridor, not a circle', () => {
+    const cue = planCombatReadability({
+      type: 'telegraph', threat: 'miniboss', shape: 'line',
+      position: { x: 400, y: 400 }, origin, range: 240, radius: 43,
+      durationSeconds: 0.85
+    });
+    expect(cue).toMatchObject({
+      kind: 'warning', ring: false, position: origin, radius: 43, durationMs: 850
+    });
+    expect(cue?.sector).toBeUndefined();
+    expect(cue?.polygon).toHaveLength(4);
+    expect(cue?.polygon).toEqual([
+      { x: 0, y: 43 }, { x: 240, y: 43 },
+      { x: 240, y: -43 }, { x: 0, y: -43 }
+    ]);
+    expect(cue?.segments.length).toBeGreaterThanOrEqual(4);
+    expect(cue?.segments.length).toBeLessThanOrEqual(16);
+  });
+
+  it('projects mini-boss cone side width as max(18, along*0.58)', () => {
+    const cue = planCombatReadability({
+      type: 'telegraph', threat: 'miniboss', shape: 'cone',
+      position: { x: 300, y: 500 }, origin, range: 130, radius: 95,
+      durationSeconds: 0.75
+    });
+    expect(cue).toMatchObject({
+      kind: 'warning', ring: false, position: origin, durationMs: 750
+    });
+    expect(cue?.sector).toBeUndefined();
+    expect(cue?.polygon).toHaveLength(6);
+    const poly = cue?.polygon ?? [];
+    // The first section is a constant-width 18px corridor, not a triangle.
+    expect(poly[0]).toMatchObject({ x: -18, y: 0 });
+    expect(poly[5]).toMatchObject({ x: 18, y: 0 });
+    expect(poly[1]?.x).toBeCloseTo(-18);
+    expect(poly[1]?.y).toBeCloseTo(18 / 0.58);
+    expect(poly[4]?.x).toBeCloseTo(18);
+    expect(poly[4]?.y).toBeCloseTo(18 / 0.58);
+    expect(poly[2]?.x).toBeCloseTo(-130 * 0.58);
+    expect(poly[2]?.y).toBeCloseTo(130);
+    expect(poly[3]?.x).toBeCloseTo(130 * 0.58);
+    expect(poly[3]?.y).toBeCloseTo(130);
+  });
+
+  it('preserves circular miniboss markers and rejects incomplete/stale direction data', () => {
+    const circle = planCombatReadability({
+      type: 'telegraph', threat: 'miniboss', shape: 'circle',
+      position: { x: 410, y: 390 }, radius: 82
+    });
+    expect(circle?.ring).toBe(true);
+    expect(circle?.polygon).toBeUndefined();
+
+    const invalid: CombatReadabilityInput[] = [
+      { type: 'telegraph', threat: 'miniboss', shape: 'line',
+        position: at, radius: 43, range: 240 },
+      { type: 'telegraph', threat: 'miniboss', shape: 'cone',
+        position: at, radius: 95, origin, range: -1 },
+      { type: 'telegraph', threat: 'miniboss', shape: 'line',
+        position: origin, origin, radius: 43, range: 240 },
+      { type: 'telegraph', threat: 'miniboss', shape: 'line',
+        position: at, origin: { x: NaN, y: 400 }, radius: 43, range: 240 },
+      { type: 'telegraph', threat: 'miniboss', shape: 'line',
+        position: at, origin, radius: 43, range: Infinity },
+      { type: 'telegraph', threat: 'miniboss', shape: 'cone',
+        position: at, origin, radius: 95, range: 1e8 },
+      { type: 'telegraph', threat: 'miniboss', shape: 'cone',
+        position: at, origin, radius: 95, range: 130, durationSeconds: NaN },
+      { type: 'telegraph', threat: 'boss', shape: 'line',
+        position: at, origin, radius: 95, range: 130 }
+    ];
+    for (const event of invalid) expect(planCombatReadability(event)).toBeNull();
+  });
+
+  it('is bounded and deterministic for 40 simultaneous miniboss warning plans', () => {
+    const inputs: CombatReadabilityInput[] = Array.from({ length: 40 }, (_, i) => ({
+      type: 'telegraph', threat: 'miniboss', shape: i % 2 ? 'cone' : 'line',
+      position: { x: 200 + i * 5, y: 160 },
+      origin: { x: 200 + i * 5, y: 100 },
+      range: 130 + i, radius: 55
+    }));
+    const before = JSON.stringify(inputs);
+    const cues = inputs.map(planCombatReadability);
+    expect(cues).toEqual(inputs.map(planCombatReadability));
+    expect(JSON.stringify(inputs)).toBe(before);
+    for (const cue of cues) {
+      expect(cue).not.toBeNull();
+      if (!cue) continue;
+      expect(cue.polygon?.length).toBeGreaterThanOrEqual(4);
+      expect(cue.polygon?.length).toBeLessThanOrEqual(8);
+      expect(cue.segments.length).toBeLessThanOrEqual(16);
+      expect(Object.isFrozen(cue)).toBe(true);
+      expect(Object.isFrozen(cue.polygon)).toBe(true);
+      for (const p of cue.polygon ?? []) {
+        expect(Object.isFrozen(p)).toBe(true);
+        expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true);
+      }
+    }
+  });
+});
