@@ -1040,8 +1040,12 @@ export class GameSimulation {
       const point = 'point' in action ? action.point : actor;
       const radius = 'radius' in action ? action.radius : 72;
       this.events.push({ type: 'miniBossCue', enemyId: actor.id, bossId: state.bossId,
-        kind: action.kind, ...('abilityId' in action ? {abilityId: action.abilityId} : {}),
-        x: point.x, y: point.y, radius, phase: result.state.phase });
+        kind: action.kind, ...('abilityId' in action ? { abilityId: action.abilityId } : {}),
+        x: point.x, y: point.y, radius, phase: result.state.phase,
+        ...((action.kind === 'telegraph' || action.kind === 'impact') ? {
+          shape: action.shape, range: action.range,
+          origin: { x: actor.x, y: actor.y }, durationSeconds: action.durationSeconds
+        } : {}) });
       if (action.kind === 'impact') {
         if (this.miniBossHit(unit, action)
           && (action.effect === 'damage' || action.effect === 'control'

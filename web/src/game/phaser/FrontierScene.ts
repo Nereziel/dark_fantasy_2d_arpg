@@ -525,6 +525,18 @@ export class FrontierScene extends Phaser.Scene {
       graphic.slice(0, 0, cue.radius, fromRadians, toRadians, false).strokePath();
       graphic.lineStyle(cue.strokeWidth, cue.color, 0.98);
       graphic.slice(0, 0, cue.radius, fromRadians, toRadians, false).strokePath();
+    } else if (cue.polygon && cue.polygon.length >= 3) {
+      // Shape is a projection of the simulation's line/cone hit predicate:
+      // exact forward range and (constant or widening) lateral half-width.
+      const vertices = cue.polygon;
+      graphic.beginPath();
+      graphic.moveTo(vertices[0]!.x, vertices[0]!.y);
+      for (const vertex of vertices.slice(1))
+        graphic.lineTo(vertex.x, vertex.y);
+      graphic.closePath();
+      graphic.fillStyle(cue.color, 0.1).fillPath();
+      graphic.lineStyle(cue.strokeWidth + 4, 0x08121c, 0.98).strokePath();
+      graphic.lineStyle(cue.strokeWidth, cue.color, 0.98).strokePath();
     }
     graphic.lineStyle(cue.strokeWidth + 4, 0x08121c, 0.96);
     for (const line of cue.segments)
@@ -537,8 +549,13 @@ export class FrontierScene extends Phaser.Scene {
       // A stationary readable mark, kept for the original warning duration.
       this.time.delayedCall(cue.durationMs, () => this.releaseImpact(graphic));
     } else {
-      this.tweens.add({ targets: graphic, alpha: 0, scaleX: 1.12, scaleY: 1.12,
-        duration: cue.durationMs, onComplete: () => this.releaseImpact(graphic) });
+      // Warning footprints must not grow during fades: enlarging the outline
+      // would display safe ground as if it were inside the hit area.
+      this.tweens.add({
+        targets: graphic, alpha: 0,
+        ...(cue.kind === 'warning' ? {} : { scaleX: 1.12, scaleY: 1.12 }),
+        duration: cue.durationMs, onComplete: () => this.releaseImpact(graphic)
+      });
     }
   }
 
@@ -650,10 +667,16 @@ export class FrontierScene extends Phaser.Scene {
       }
     } else if (event.type === 'miniBossCue') {
       if (event.kind === 'telegraph') {
-        this.showCombatReadability({
-          type: 'telegraph', threat: 'miniboss',
-          position: { x: event.x, y: event.y }, radius: event.radius
-        });
+        // Only the simulation can supply the footprint. An old event lacking
+        // the shape must not silently regress to a false circular warning.
+        if (event.shape) {
+          this.showCombatReadability({
+            type: 'telegraph', threat: 'miniboss',
+            position: { x: event.x, y: event.y }, radius: event.radius,
+            shape: event.shape, origin: event.origin, range: event.range,
+            durationSeconds: event.durationSeconds
+          });
+        }
       } else {
         const graphic = this.obtainImpact(event.x, event.y, 88);
         const color = event.kind === 'impact' ? 0xe16a67
