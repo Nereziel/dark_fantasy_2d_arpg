@@ -1,8 +1,12 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { _ as t, locale } from 'svelte-i18n';
   import type { GameSnapshot } from '../game/core/types';
   import type { GameBridge } from '../game/bridge/GameBridge';
-  import type { Item } from '../game/data/items';
+  import type { Item, RarityId } from '../game/data/items';
+  import ItemArt from './ItemArt.svelte';
+  import { normalizeGroundLootFilter, type GroundLootFilter,
+    type GroundLootCategory } from '../game/items/groundLootVisibility';
   import { RARITIES } from '../game/data/items';
   import { WEAPON_TYPES } from '../game/items/itemCatalog';
   import { itemDisplayName } from '../game/items/itemName';
@@ -28,6 +32,24 @@
   let dragged = $state<Source | null>(null);
   let dropHover = $state<Source | null>(null);
   let helpOpen = $state(false);
+  let placementMessage = $state('');
+  const groundFilterStorageKey = 'aether-ruin-ground-loot-filter-v1';
+  let lootFilter: GroundLootFilter = $state(bridge.groundLootFilter());
+  onMount(() => {
+    try {
+      const saved = window.localStorage.getItem(groundFilterStorageKey);
+      if (saved) {
+        lootFilter = normalizeGroundLootFilter(JSON.parse(saved));
+        bridge.setGroundLootFilter(lootFilter);
+      }
+    } catch { /* Invalid preferences never break inventory or save. */ }
+  });
+  function updateLootFilter(next: GroundLootFilter): void {
+    lootFilter = normalizeGroundLootFilter(next);
+    bridge.setGroundLootFilter(lootFilter);
+    try { window.localStorage.setItem(groundFilterStorageKey, JSON.stringify(lootFilter)); }
+    catch { /* Private browsing still permits session-only filters. */ }
+  }
   // A touch tap inspects. Reorganizing items requires the explicit mobile move action.
   let touchInput = $state(false);
   let moveArmed = $state(false);
@@ -70,9 +92,15 @@
     return itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId));
   }
   function equip(index: number, slot?: EquipmentSlot): void {
-    if (!view.inventory[index]) return;
+    const item = view.inventory[index];
+    if (!item) return;
+    if (bridge.previewEquipment(index, slot) === null) {
+      placementMessage = $t('inventory.invalidPlacement');
+      return;
+    }
     bridge.command({ type: 'equip', index, ...(slot ? { slot } : {}) });
-    selected = null;
+    selected = { kind: 'gear', slot: slot ?? item.slot };
+    placementMessage = '';
     moveArmed = false;
   }
   function unequip(slot: EquipmentSlot): void {
@@ -90,7 +118,10 @@
       selected = view.inventory[index] ? { kind: 'bag', index } : null;
       return;
     }
-    if (touchInput && moveArmed && selected && !canPlace({ kind: 'bag', index }, selected)) return;
+    if (touchInput && moveArmed && selected && !canPlace({ kind: 'bag', index }, selected)) {
+      placementMessage = $t('inventory.invalidPlacement'); return;
+    }
+    placementMessage = '';
     moveArmed = false;
     if (selected?.kind === 'bag' && selected.index !== index) {
       bridge.command({ type: 'swapInventory', fromIndex: selected.index, toIndex: index });
@@ -108,7 +139,10 @@
       selected = view.equipment[slot] ? { kind: 'gear', slot } : null;
       return;
     }
-    if (touchInput && moveArmed && selected && !canPlace({ kind: 'gear', slot }, selected)) return;
+    if (touchInput && moveArmed && selected && !canPlace({ kind: 'gear', slot }, selected)) {
+      placementMessage = $t('inventory.invalidPlacement'); return;
+    }
+    placementMessage = '';
     moveArmed = false;
     if (selected?.kind === 'bag') equip(selected.index, slot);
     else selected = view.equipment[slot] ? { kind: 'gear', slot } : null;
@@ -134,7 +168,8 @@
     const source = dragged;
     const valid = canPlace({ kind: 'bag', index }, source);
     clearDrag();
-    if (!valid) return;
+    if (!valid) { placementMessage = $t('inventory.invalidPlacement'); return; }
+    placementMessage = '';
     moveArmed = false;
     if (source.kind === 'bag' && source.index !== index) {
       bridge.command({ type: 'swapInventory', fromIndex: source.index, toIndex: index });
@@ -150,17 +185,22 @@
     const source = dragged;
     const valid = canPlace({ kind: 'gear', slot }, source);
     clearDrag();
-    if (!valid) return;
+    if (!valid) { placementMessage = $t('inventory.invalidPlacement'); return; }
+    placementMessage = '';
     moveArmed = false;
     if (source.kind === 'bag') equip(source.index, slot);
     selected = null;
   }
-  const stats: readonly { key: 'armor' | 'damageMin' | 'damageMax' | 'maxHealth'; label: string }[] = [
+  const stats = [
     { key: 'armor', label: 'stat.armor' },
     { key: 'damageMin', label: 'stat.damageMin' },
     { key: 'damageMax', label: 'stat.damageMax' },
-    { key: 'maxHealth', label: 'stat.maxHealth' }
-  ];
+    { key: 'maxHealth', label: 'stat.maxHealth' },
+    { key: 'critChance', label: 'stat.critChance' },
+    { key: 'attackSpeed', label: 'stat.attackSpeed' },
+    { key: 'blockChance', label: 'stat.blockChance' },
+    { key: 'fireResist', label: 'stat.fireResist' }
+  ] as const;
   function sign(value: number): string {
     return value > 0 ? '+' + value : String(value);
   }
