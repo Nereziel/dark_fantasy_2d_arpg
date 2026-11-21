@@ -1103,6 +1103,10 @@ export class GameSimulation {
     this.paladinCooldowns = {};
     this.mageCooldowns = {};
     this.mageZones = [];
+    this.necroCooldowns = {};
+    this.summons = [];
+    this.corpses = [];
+    this.nextSummonSequence = 1;
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
@@ -1192,7 +1196,15 @@ export class GameSimulation {
       this.warriorAction = null;
       this.classAction = null;
       this.holdPosition = false;
+      this.summons = [];
+      this.corpses = [];
+      this.necroCooldowns = {};
+      this.nextSummonSequence = 1;
       this.projectiles = [];
+      this.summons = [];
+      this.corpses = [];
+      this.necroCooldowns = {};
+      this.nextSummonSequence = 1;
       this.eliteQueue = [];
       this.movementSpeed = 0;
       this.accumulator = 0;
@@ -2480,6 +2492,12 @@ export class GameSimulation {
   private requestCast(slot: SkillSlot, aim?: SkillAim): void {
     if (this.warriorAction || this.classAction) return;
     const skill = SKILLS[this.classId][slot];
+    if (skill.id==='raiseSkeleton' && (this.summons.length>=5
+      || this.summons.filter(s=>s.kind==='skeleton').length>=4
+      || !createOwnedSummon({ownerId:this.player.id,kind:'skeleton',
+        zone:this.zone,sequence:this.nextSummonSequence,origin:this.player,
+        level:this.level,spellPower:1+this.currentStats().intelligence/90,
+        obstacles:this.world.obstacles})))return;
     if (this.classId === 'WARRIOR') {
       const targetId = aim?.mode === 'TARGET_ENTITY' ? aim.targetId
         : this.focusedUnit.actor.alive ? this.focusedUnit.actor.id : null;
@@ -2782,6 +2800,8 @@ export class GameSimulation {
         this.resolvePaladinImpact(action.paladinAbilityId,action.targetId);
       } else if (action.mageAbilityId) {
         this.resolveMageImpact(action.mageAbilityId, action.targetId, action.aim);
+      } else if (action.necroAbilityId) {
+        this.resolveNecroImpact(action.necroAbilityId,action.targetId,action.aim);
       } else if (action.slot) {
         this.resolveClassCast(action.slot, action.aim, action.targetId);
       }
@@ -2808,7 +2828,9 @@ export class GameSimulation {
     }
     const mageBonuses = this.classId === 'MAGE'
       ? projectTalentBonuses(this.talentRanks) : null;
-    if (skill.id === 'fireball' && aim?.mode === 'GROUND_POSITION') {
+    if (skill.id === 'raiseSkeleton' && this.classId === 'NECROMANCER') {
+      this.spawnNecroAlly('skeleton');
+    } else if (skill.id === 'fireball' && aim?.mode === 'GROUND_POSITION') {
       for (const target of [...this.aliveEnemies]) {
         if (distance(aim.position, target.actor) > (skill.impactRadius ?? 66)
           * (1 + (mageBonuses?.areaRadius ?? 0))) continue;
@@ -3274,6 +3296,10 @@ export class GameSimulation {
     this.paladinCooldowns = {};
     this.mageCooldowns = {};
     this.mageZones = [];
+    this.necroCooldowns = {};
+    this.summons = [];
+    this.corpses = [];
+    this.nextSummonSequence = 1;
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
@@ -3329,6 +3355,9 @@ export class GameSimulation {
     this.paladinCooldowns=advancePaladinCooldowns(this.paladinCooldowns,dt);
     this.mageCooldowns=advanceMageCooldowns(this.mageCooldowns,dt) ?? {};
     this.tickMageZones(dt);
+    this.necroCooldowns=advanceNecroCooldowns(this.necroCooldowns,dt)??{};
+    this.corpses=[...(stepCorpseTokens(this.corpses,dt)??[])];
+    this.tickOwnedSummons(dt);
     this.warriorCooldowns.cleave = this.cooldowns.rmb;
     this.warriorCooldowns.charge = this.cooldowns.slot1;
     this.tickEffects(dt);
@@ -3675,6 +3704,11 @@ export class GameSimulation {
         && plan.enemySpawns.some(spawn=>spawn.id===unit.actor.id));
     unit.actor.alive = false;
     unit.actor.health = 0;
+    if(this.classId==='NECROMANCER'
+      && unit.actor.type!=='crypt_lord'
+      && canOccupy(unit.actor,0,this.world.obstacles))
+      this.corpses=[...addCorpseToken(this.corpses,unit.actor.id,
+        this.zone,unit.actor)];
     if (unit.actor.id === 'crypt_lord-4' && this.hollowKing
       && !this.hollowKing.deathEmitted) {
       const state = this.hollowKing;
@@ -4413,6 +4447,10 @@ export class GameSimulation {
     this.paladinCooldowns = {};
     this.mageCooldowns = {};
     this.mageZones = [];
+    this.necroCooldowns = {};
+    this.summons = [];
+    this.corpses = [];
+    this.nextSummonSequence = 1;
     this.warriorAction = null;
     this.classAction = null;
     this.warriorPending = null;
