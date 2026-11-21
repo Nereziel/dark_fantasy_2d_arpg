@@ -501,7 +501,7 @@ export class GameSimulation {
     this.awardExperience(reward.xp);
     const itemId='world-event-'+this.world.seed+'-'+plan.id.replaceAll('.','_')+'-reward';
     const item=rollItemForBase(reward.itemBaseId,itemId,this.level,'UNCOMMON',
-      new SeededRng((this.world.seed ^ (plan.id==='wild.event.1' ? 0x9c13ab : 0x715de4))>>>0));
+      new SeededRng((this.world.seed ^ (plan.id==='wild.event.1' ? 0x9c13ab : 0x715de4))>>>0),this.classId);
     let grantedId:string|null=null;
     const ownedIds=new Set([...this.inventory,...this.stash,...this.stashTabs.flat(),
       ...Object.values(this.equipment),...this.groundLoot.map(loot=>loot.item)]
@@ -3424,7 +3424,7 @@ export class GameSimulation {
       const id = 'drop-' + this.kills + '-' + index;
       const item = rollItemForBase(
         roll.itemBaseId, 'drop-' + this.kills + '-item-' + index,
-        roll.itemLevel, roll.rarity, this.rng
+        roll.itemLevel, roll.rarity, this.rng, this.classId
       );
       if (!item) continue;
       this.groundLoot.push({ id, x: unit.actor.x + index * 16, y: unit.actor.y, item });
