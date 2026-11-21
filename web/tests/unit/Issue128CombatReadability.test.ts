@@ -246,7 +246,7 @@ describe('Issue 128 stage 2B: authoritative miniboss footprints', () => {
     const cues = inputs.map(planCombatReadability);
     expect(cues).toEqual(inputs.map(planCombatReadability));
     expect(JSON.stringify(inputs)).toBe(before);
-    for (const cue of cues) {
+    for (const [index, cue] of cues.entries()) {
       expect(cue).not.toBeNull();
       if (!cue) continue;
       expect(cue.polygon?.length).toBeGreaterThanOrEqual(4);
@@ -257,9 +257,8 @@ describe('Issue 128 stage 2B: authoritative miniboss footprints', () => {
       for (const p of cue.polygon ?? []) {
         expect(Object.isFrozen(p)).toBe(true);
         expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true);
-        expect(Math.hypot(p.x, p.y)).toBeLessThanOrEqual(cue.durationMs > 0
-          ? (inputs[cues.indexOf(cue)] as Extract<CombatReadabilityInput, { type: 'telegraph' }>).range! + 1e-8
-          : 400);
+        const range = (inputs[index] as Extract<CombatReadabilityInput, { type: 'telegraph' }>).range!;
+        expect(Math.hypot(p.x, p.y)).toBeLessThanOrEqual(range + 1e-8);
       }
     }
   });
