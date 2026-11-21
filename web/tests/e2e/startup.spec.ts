@@ -11,11 +11,11 @@ test('switches Czech/English in the menu and game without losing the scene', asy
   await expect(page.locator('.game-hud')).toBeVisible();
   await expect(page.locator('.phaser-container canvas')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Poražení nepřátelé')).toBeVisible();
-  await expect(page.locator('.enemy-name')).toHaveText('Přízrak');
+  await expect(page.locator('.enemy-roster')).toContainText('Přízrak');
 
   await page.locator('#game-language').selectOption('en');
   await expect(page.getByText('Enemies defeated')).toBeVisible();
-  await expect(page.locator('.enemy-name')).toHaveText('Wraith');
+  await expect(page.locator('.enemy-roster')).toContainText('Wraith');
   // The overworld can add deterministic optional enemies; roster cardinality is not fixed.
   const roster = page.locator('.enemy-roster button');
   await expect(roster.nth(2)).toBeVisible();
@@ -25,7 +25,7 @@ test('switches Czech/English in the menu and game without losing the scene', asy
   const skeleton = page.locator('.enemy-roster button').filter({ hasText: 'Skeleton Warrior' });
   await skeleton.click();
   await expect(skeleton).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('.enemy-name')).toHaveText('Skeleton Warrior');
+  await expect(page.locator('.enemy-roster button.targeted')).toContainText('Skeleton Warrior');
   await expect(page.locator('.game-hud')).toBeVisible();
 
   await page.getByRole('button', { name: 'Save' }).click();
