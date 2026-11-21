@@ -894,11 +894,19 @@
     "open": "Map",
     "close": "Close Map",
     "minimap": "Minimap",
-    "legend": "Explored terrain is green; undiscovered areas stay hidden. Activated waypoints allow fast travel when you stand near one. Press M to open the map.",
+    "legend": "Only explored terrain and real roads are shown. Dark areas are unknown; discover locations by travelling. Drag to pan, scroll or pinch to zoom.",
     "player": "Hero",
     "town": "Camp",
     "quest": "Quest",
-    "unknownQuest": "Unexplored quest destination"
+    "unknownQuest": "Unexplored quest destination",
+    "markerLegend": "Map marker key",
+    "dungeonEntrance": "Dungeon",
+    "waypoint": "Waypoint",
+    "controls": "Map view controls",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "center": "Center on hero",
+    "reset": "Show full map"
   },
   "miniBossNames": {
     "bandit_captain": "Bandit Captain",

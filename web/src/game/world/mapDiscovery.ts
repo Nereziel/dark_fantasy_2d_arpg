@@ -5,6 +5,7 @@
  */
 import type { Point } from '../core/types';
 import type { WildernessFeature } from './wildernessFeatures';
+import type { WildernessTerrainResult, TerrainId } from './wildernessTerrain';
 import { CAMP } from './generator';
 import { WORLD_HEIGHT, WORLD_WIDTH } from './navigation';
 
@@ -91,11 +92,15 @@ export interface MapProjectionOptions {
   /** View window at zoom 1, in world units; zoom crops around its center. */
   readonly viewport?: Readonly<MapViewport>;
   readonly zoom?: number;
+  /** Optional map camera center, clamped to the world. Never changes discovery. */
+  readonly center?: Readonly<Point>;
 }
 
 export interface MapFogCell extends MapViewport {
   readonly id: FogCellId;
   readonly visibility: FogVisibility;
+  /** Only set for already-discovered cells; never expose unknown terrain. */
+  readonly terrainId?: TerrainId;
 }
 
 export interface MapMarker {
@@ -114,7 +119,16 @@ export interface MapHiddenQuestHint {
   // Deliberately no featureId, location, approximate location or coordinates.
 }
 
+export interface MapVisibleRoad {
+  readonly id: string;
+  readonly cellId: FogCellId;
+  readonly from: Readonly<Point>;
+  readonly to: Readonly<Point>;
+  readonly width: number;
+}
+
 export interface MapProjection {
+  readonly roads?: readonly MapVisibleRoad[];
   readonly mode: 'world' | 'minimap';
   readonly zoom: number;
   readonly viewport: Readonly<MapViewport>;
@@ -521,7 +535,8 @@ export function projectMap(
   const mode = options.mode ?? 'world';
   const zoom = options.zoom ?? 1;
   if ((mode !== 'world' && mode !== 'minimap')
-    || typeof zoom !== 'number' || !Number.isFinite(zoom) || zoom < 0.5 || zoom > 8) {
+    || typeof zoom !== 'number' || !Number.isFinite(zoom) || zoom < 0.5 || zoom > 8
+    || (options.center !== undefined && !validPoint(options.center))) {
     return failed('invalidViewport');
   }
   const base: MapViewport = options.viewport ?? (mode === 'minimap'
@@ -534,9 +549,12 @@ export function projectMap(
   if (!validViewport(base)) return failed('invalidViewport');
   const width = Math.min(WORLD_WIDTH, base.width / zoom);
   const height = Math.min(WORLD_HEIGHT, base.height / zoom);
+  const focus = options.center ?? {
+    x: base.x + base.width / 2, y: base.y + base.height / 2
+  };
   const viewport = Object.freeze({
-    x: Math.max(0, Math.min(WORLD_WIDTH - width, base.x + base.width / 2 - width / 2)),
-    y: Math.max(0, Math.min(WORLD_HEIGHT - height, base.y + base.height / 2 - height / 2)),
+    x: Math.max(0, Math.min(WORLD_WIDTH - width, focus.x - width / 2)),
+    y: Math.max(0, Math.min(WORLD_HEIGHT - height, focus.y - height / 2)),
     width, height
   });
 
@@ -617,4 +635,80 @@ export function projectMap(
     mode, zoom, viewport, cells: Object.freeze(cells),
     markers: Object.freeze(markers), hints: Object.freeze(hints)
   }));
+}
+
+/** Line clipping never returns coordinates outside a discovered cell.
+ * No hidden road geometry is serialized into the UI projection, even if
+ * the full terrain generator already knows the undiscovered world.
+ */
+function clipRoadSegment(a: Readonly<Point>, b: Readonly<Point>,
+  rect: Readonly<MapViewport>): { from: Point; to: Point } | null {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  if (!Number.isFinite(dx) || !Number.isFinite(dy) || dx * dx + dy * dy < 0.01)
+    return null;
+  let first = 0, last = 1;
+  const p = [-dx, dx, -dy, dy];
+  const q = [
+    a.x - rect.x, rect.x + rect.width - a.x,
+    a.y - rect.y, rect.y + rect.height - a.y
+  ];
+  for (let i = 0; i < 4; i++) {
+    if (Math.abs(p[i]!) < 1e-9) {
+      if (q[i]! < 0) return null;
+    } else {
+      const ratio = q[i]! / p[i]!;
+      if (p[i]! < 0) first = Math.max(first, ratio);
+      else last = Math.min(last, ratio);
+      if (last <= first + 1e-9) return null;
+    }
+  }
+  const from = { x: a.x + dx * first, y: a.y + dy * first };
+  const to = { x: a.x + dx * last, y: a.y + dy * last };
+  return { from, to };
+}
+
+/** Pure, non-persistent presentation of real terrain over the discovered fog.
+ * The source world remains private to GameSimulation. All geometry leaving the
+ * simulator is intersected with observed cells, not merely hidden with SVG CSS.
+ * Existing map fingerprints / persisted cell identifiers stay untouched.
+ */
+export function projectVisibleTerrain(
+  projection: Readonly<MapProjection>, terrain: Readonly<WildernessTerrainResult>
+): MapProjection {
+  const visible = projection.cells.filter(cell => cell.visibility === 'discovered');
+  if (!visible.length) return Object.freeze({
+    ...projection, roads: Object.freeze([] as MapVisibleRoad[])
+  });
+  const tiles = new Map(terrain.tiles.map(tile => [tile.x + '/' + tile.y, tile]));
+  const cells = projection.cells.map(cell => {
+    if (cell.visibility !== 'discovered') return cell;
+    const tile = tiles.get(cell.x + '/' + cell.y);
+    if (!tile || tile.width !== cell.width || tile.height !== cell.height) return cell;
+    return Object.freeze({ ...cell, terrainId: tile.terrainId });
+  });
+  const roads: MapVisibleRoad[] = [];
+  for (const road of terrain.roads) {
+    if (!Array.isArray(road.points) || road.points.length > 4096
+      || !Number.isFinite(road.width) || road.width <= 0) continue;
+    for (let i = 1; i < road.points.length; i++) {
+      const start = road.points[i - 1]!, end = road.points[i]!;
+      for (const cell of visible) {
+        if (Math.max(start.x, end.x) < cell.x
+          || Math.min(start.x, end.x) > cell.x + cell.width
+          || Math.max(start.y, end.y) < cell.y
+          || Math.min(start.y, end.y) > cell.y + cell.height) continue;
+        const clipped = clipRoadSegment(start, end, cell);
+        if (!clipped) continue;
+        roads.push(Object.freeze({
+          id: road.id + '/' + i + '/' + cell.id,
+          cellId: cell.id,
+          from: Object.freeze(clipped.from), to: Object.freeze(clipped.to),
+          width: road.width
+        }));
+      }
+    }
+  }
+  return Object.freeze({
+    ...projection, cells: Object.freeze(cells), roads: Object.freeze(roads)
+  });
 }

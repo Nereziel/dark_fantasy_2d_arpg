@@ -87,8 +87,9 @@ import {
 } from '../world/chunkStreaming';
 import {
   createMapDiscovery, revealAtPosition, revealTravelSegment, activateMapWaypoint,
-  validateMapDiscovery, projectMap, type MapDiscoveryState, type MapWorldInput,
-  type MapProjection, type MapQuestHint
+  validateMapDiscovery, projectMap, projectVisibleTerrain,
+  type MapDiscoveryState, type MapWorldInput,
+  type MapProjection, type MapQuestHint, type MapProjectionOptions
 } from '../world/mapDiscovery';
 import {
   nearNpc, nearWarden, isNpcId, NPC_POSITIONS, NPC_INTERACT_RANGE,
@@ -345,6 +346,8 @@ export class GameSimulation {
   private worldFacts: WorldFactLedger | null = null;
   private mapWorld: MapWorldInput | null = null;
   private mapDiscovery: MapDiscoveryState | null = null;
+  /** Renderer-only seed geometry; never included in either persistence contract. */
+  private mapTerrain: WildernessRuntimeWorld['terrain'] | null = null;
   private pendingNpc: NpcId | null = null;
   private pendingTown: string | null = null;
   private pendingSkill: SkillSlot | null = null;
@@ -406,6 +409,7 @@ export class GameSimulation {
     this.worldFacts = createWorldFactLedger(index, 'hero');
     this.mapWorld = input;
     this.mapDiscovery = initial.value;
+    this.mapTerrain = world.terrain;
     this.worldEventPlans = planWorldEvents(world.layout.seed,world.layout,world.features);
     this.environmentPlan = planEnvironmentObjects(world.layout.seed,world.layout,world.features);
     this.pendingEnvironmentId = null;
@@ -438,7 +442,8 @@ export class GameSimulation {
   }
 
   /** Only discovered areas and markers ever cross into the UI-facing map projection. */
-  mapProjection(mode: 'world' | 'minimap' = 'world'): MapProjection | null {
+  mapProjection(mode: 'world' | 'minimap' = 'world',
+    options: Pick<MapProjectionOptions, 'zoom' | 'center'> = {}): MapProjection | null {
     if (!this.mapWorld || !this.mapDiscovery || this.zone !== 'wilderness') return null;
     const featureIdByQuest: Record<string, string> = {
       trail_of_black_ash: 'act1.corruption_site',
@@ -459,18 +464,22 @@ export class GameSimulation {
         presentationKey: 'map.quest'
       }];
     });
-    const result = projectMap(this.mapDiscovery, this.mapWorld, this.player, hints, { mode });
+    const result = projectMap(this.mapDiscovery, this.mapWorld, this.player, hints, { mode,
+      ...(mode === 'world' ? options : {})
+    });
     if (!result.ok) return null;
+    const projection = this.mapTerrain
+      ? projectVisibleTerrain(result.value, this.mapTerrain) : result.value;
     // A historic respawn shrine is also a travel waypoint when actually activated.
     // Derive this marker from the existing seed-scoped checkpoint fact; do not
     // expand mapWorld.waypoints (that would invalidate legacy map fingerprints).
     const shrine = this.activatedCheckpointIds.has('shrine.soul-shrine')
       ? waypointDefinition('shrine.soul-shrine') : null;
-    const box = result.value.viewport;
+    const box = projection.viewport;
     if (!shrine || shrine.position.x < box.x || shrine.position.y < box.y
       || shrine.position.x > box.x + box.width
-      || shrine.position.y > box.y + box.height) return result.value;
-    return { ...result.value, markers: [...result.value.markers, {
+      || shrine.position.y > box.y + box.height) return projection;
+    return { ...projection, markers: [...projection.markers, {
       id: shrine.id, kind: 'waypoint' as const, activated: true,
       position: { ...shrine.position }, presentationKey: shrine.nameKey
     }].sort((a,b) => a.id.localeCompare(b.id)) };

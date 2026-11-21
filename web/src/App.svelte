@@ -3,7 +3,7 @@
   import { _ as t, locale } from 'svelte-i18n';
   import { languageOptions, setLanguage, type Language } from './i18n';
   import { GameBridge } from './game/bridge/GameBridge';
-  import type { GameSnapshot } from './game/core/types';
+  import type { GameSnapshot, Point } from './game/core/types';
   import { resolveKeyboardAction, rebindAction, type InputBinding, type InputAction } from './game/input/bindings';
   import { GAME_BINDINGS } from './game/input/gameBindings';
   import { loadGame, saveGame, listCharacters, deleteCharacter, MAX_SAVED_CHARACTERS, type SavedCharacterInfo } from './persistence/SaveRepository';
@@ -82,9 +82,13 @@
   let talentsOpen = $state(false);
   let controlsOpen = $state(false);
   let mapOpen = $state(false);
+  let mapZoom = $state(1);
+  let mapCenter: Point | null = $state(null);
   let miniProjection = $derived(view.zone === 'wilderness' ? bridge.mapProjection('minimap') : null);
   let fullProjection = $derived(mapOpen && view.zone === 'wilderness'
-    ? bridge.mapProjection('world') : null);
+    ? bridge.mapProjection('world', {
+      zoom: mapZoom, ...(mapCenter ? { center: mapCenter } : {})
+    }) : null);
   let controlBindings: InputBinding[] = $state(GAME_BINDINGS.map(binding => ({ ...binding })));
   const controlsStorage = 'aether-ruin-controls-v1';
 
@@ -190,12 +194,42 @@
       || view.paused || inventoryOpen || characterOpen || talentsOpen || controlsOpen || dialogueOpen
       || tradeNpc !== null || townModal !== null) return;
     rememberModalOrigin(origin);
+    mapZoom = 1;
+    mapCenter = null;
     bridge.command({ type: 'pause', value: true });
     mapOpen = true;
   }
   function closeMap(): void {
     mapOpen = false;
     bridge.command({ type: 'pause', value: false });
+  }
+
+  /** Camera presentation only: dragging cannot move the hero or discover fog. */
+  function zoomMap(multiplier: number): void {
+    if (!mapOpen || !Number.isFinite(multiplier) || multiplier <= 0) return;
+    mapZoom = Number(Math.max(1, Math.min(4, mapZoom * multiplier)).toFixed(2));
+  }
+  function panMap(dx: number, dy: number): void {
+    if (!mapOpen || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    const viewport = fullProjection?.viewport;
+    if (!viewport) return;
+    const center = mapCenter ?? {
+      x: viewport.x + viewport.width / 2,
+      y: viewport.y + viewport.height / 2
+    };
+    mapCenter = {
+      x: Math.max(viewport.width / 2, Math.min(2200 - viewport.width / 2, center.x + dx)),
+      y: Math.max(viewport.height / 2, Math.min(1400 - viewport.height / 2, center.y + dy))
+    };
+  }
+  function centerMapOnPlayer(): void {
+    if (!mapOpen) return;
+    mapZoom = Math.max(2, mapZoom);
+    mapCenter = { x: view.player.x, y: view.player.y };
+  }
+  function resetMapView(): void {
+    mapZoom = 1;
+    mapCenter = null;
   }
 
   onMount(() => {
@@ -440,6 +474,22 @@
       if (event.code === 'Escape' || (!isTyping && event.code === 'KeyM')) {
         event.preventDefault();
         closeMap();
+      } else if (!isTyping) {
+        const arrows: Readonly<Record<string, readonly [number, number]>> = {
+          ArrowLeft: [-130, 0], ArrowRight: [130, 0],
+          ArrowUp: [0, -100], ArrowDown: [0, 100]
+        };
+        const shift = arrows[event.code];
+        if (shift) { event.preventDefault(); panMap(shift[0], shift[1]); }
+        else if (event.code === 'Equal' || event.code === 'NumpadAdd') {
+          event.preventDefault(); zoomMap(1.25);
+        } else if (event.code === 'Minus' || event.code === 'NumpadSubtract') {
+          event.preventDefault(); zoomMap(0.8);
+        } else if (event.code === 'KeyC') {
+          event.preventDefault(); centerMapOnPlayer();
+        } else if (event.code === 'KeyR') {
+          event.preventDefault(); resetMapView();
+        }
       }
       return;
     }
@@ -846,9 +896,29 @@
                 aria-label={$t('map.close')} title={$t('map.close')}
                 onclick={closeMap}><span aria-hidden="true">✕</span><span>{$t('map.close')}</span></button>
             </header>
-            <p class="world-map-legend">{$t('map.legend')}</p>
+            <div class="world-map-guide">
+              <p class="world-map-legend">{$t('map.legend')}</p>
+              <div class="world-map-key" aria-label={$t('map.markerLegend')}>
+                <span>◉ {$t('map.player')}</span>
+                <span>● {$t('map.town')}</span>
+                <span>◆ {$t('map.quest')}</span>
+                <span>▲ {$t('map.dungeonEntrance')}</span>
+                <span>◎ {$t('map.waypoint')}</span>
+              </div>
+            </div>
             <div class="world-map-content">
-              <WorldMapCanvas projection={fullProjection} />
+              <WorldMapCanvas projection={fullProjection} onPan={panMap} onZoom={zoomMap} />
+              <div class="world-map-toolbar" role="group" aria-label={$t('map.controls')}>
+                <button type="button" data-testid="map-zoom-in" title={$t('map.zoomIn')}
+                  aria-label={$t('map.zoomIn')} onclick={() => zoomMap(1.25)}>+</button>
+                <button type="button" data-testid="map-zoom-out" title={$t('map.zoomOut')}
+                  aria-label={$t('map.zoomOut')} disabled={mapZoom <= 1}
+                  onclick={() => zoomMap(0.8)}>−</button>
+                <button type="button" data-testid="map-center" title={$t('map.center')}
+                  aria-label={$t('map.center')} onclick={centerMapOnPlayer}>⊙</button>
+                <button type="button" data-testid="map-reset" title={$t('map.reset')}
+                  aria-label={$t('map.reset')} onclick={resetMapView}>⤢</button>
+              </div>
             </div>
             <div class="world-map-footer">
               <WaypointPanel {view} {bridge} />
@@ -1067,16 +1137,37 @@
   .world-map-header .map-close-button { display: flex; align-items: center; gap: 8px;
     border: 1px solid #b39563; background: #292b30; padding: 7px 11px;
     min-height: 40px; flex: 0 0 auto; font-size: .8rem; position: relative; z-index: 2; }
-  .world-map-legend { margin: 0; color: #c5b698; font-size: .75rem;
-    line-height: 1.4; max-height: 3.2em; overflow: hidden; }
-  .world-map-content { min-width: 0; min-height: 0; display: grid; overflow: hidden; }
+  .world-map-guide { display: flex; flex-wrap: wrap; align-items: center;
+    justify-content: space-between; gap: 4px 14px; min-width: 0; }
+  .world-map-legend { margin: 0; color: #c5b698; font-size: .72rem;
+    line-height: 1.35; max-width: 52ch; }
+  .world-map-key { display: flex; flex-wrap: wrap; gap: 4px 11px;
+    color: #e1d8c6; font-size: .7rem; }
+  .world-map-key span { white-space: nowrap; }
+  .world-map-content { position: relative; min-width: 0; min-height: 0;
+    display: grid; overflow: hidden; }
+  .world-map-toolbar {
+    position: absolute; top: 8px; right: 8px; z-index: 3;
+    display: flex; align-items: center; gap: 5px; padding: 4px;
+    background: #0b131be8; border: 1px solid #82725b; border-radius: 5px;
+  }
+  .world-map-toolbar button {
+    display: grid; place-items: center; min-width: 44px; min-height: 44px;
+    padding: 4px; color: #f2deb8; background: #26303b;
+    border: 1px solid #766b57; font-size: 1.25rem;
+    touch-action: manipulation;
+  }
+  .world-map-toolbar button:disabled { opacity: .4; cursor: default; }
   .world-map-content :global(.map-canvas) { width: 100%; height: 100%; min-height: 0; }
   .world-map-footer { max-height: min(180px, 23vh); min-height: 0; overflow-y: auto; }
   .world-map-footer :global(.travel-panel) { margin: 0; max-height: none; }
   @media (max-width: 700px) {
     .minimap-overlay { width: 145px; min-width: 0; right: 8px; top: 110px; }
     .world-map-card { width: 100%; height: 100%; }
-    .world-map-legend { font-size: .66rem; }
+    .world-map-legend { font-size: .65rem; }
+    .world-map-guide { max-height: 66px; overflow-y: auto; }
+    .world-map-key { font-size: .65rem; gap: 3px 8px; }
+    .world-map-toolbar { top: 5px; right: 5px; gap: 3px; padding: 3px; }
     .world-map-footer { max-height: min(138px, 22vh); }
     .world-map-header .map-close-button { padding: 5px 9px; }
   }
