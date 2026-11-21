@@ -27,8 +27,11 @@
   let hovered = $state<Source | null>(null);
   let dragged = $state<Source | null>(null);
   let helpOpen = $state(false);
+  // A touch tap inspects. Reorganizing items requires the explicit mobile move action.
+  let touchInput = $state(false);
+  let moveArmed = $state(false);
 
-  let displayed = $derived(hovered ?? selected);
+  let displayed = $derived(touchInput ? selected : (hovered ?? selected));
   let inspected = $derived.by((): Item | null => {
     if (!displayed) return null;
     return displayed.kind === 'bag' ? view.inventory[displayed.index] ?? null
@@ -49,17 +52,26 @@
     if (!view.inventory[index]) return;
     bridge.command({ type: 'equip', index, ...(slot ? { slot } : {}) });
     selected = null;
+    moveArmed = false;
   }
   function unequip(slot: EquipmentSlot): void {
     if (!view.equipment[slot]) return;
     bridge.command({ type: 'unequip', slot });
     selected = null;
+    moveArmed = false;
   }
   function flag(item: Item, kind: 'favorite' | 'locked'): void {
     bridge.command({ type: 'setItemFlag', itemId: item.id, flag: kind,
       value: !(view.itemFlags?.[item.id]?.[kind] ?? false) });
   }
   function pickBag(index: number): void {
+    if (touchInput && !moveArmed) {
+      selected = view.inventory[index] ? { kind: 'bag', index } : null;
+      return;
+    }
+    // An equipped item cannot be deposited into an occupied cell.
+    if (touchInput && selected?.kind === 'gear' && view.inventory[index]) return;
+    moveArmed = false;
     if (selected?.kind === 'bag' && selected.index !== index) {
       bridge.command({ type: 'swapInventory', fromIndex: selected.index, toIndex: index });
       selected = null;
@@ -72,10 +84,16 @@
     }
   }
   function pickGear(slot: EquipmentSlot): void {
+    if (touchInput && !moveArmed) {
+      selected = view.equipment[slot] ? { kind: 'gear', slot } : null;
+      return;
+    }
+    moveArmed = false;
     if (selected?.kind === 'bag') equip(selected.index, slot);
     else selected = view.equipment[slot] ? { kind: 'gear', slot } : null;
   }
   function startDrag(event: DragEvent, source: Source): void {
+    moveArmed = false;
     dragged = source;
     selected = source;
     if (event.dataTransfer) {
@@ -93,6 +111,7 @@
     event.preventDefault();
     const source = dragged;
     dragged = null;
+    moveArmed = false;
     if (source.kind === 'bag' && source.index !== index) {
       bridge.command({ type: 'swapInventory', fromIndex: source.index, toIndex: index });
     } else if (source.kind === 'gear') {
@@ -106,6 +125,7 @@
     event.preventDefault();
     const source = dragged;
     dragged = null;
+    moveArmed = false;
     if (source.kind === 'bag') equip(source.index, slot);
     selected = null;
   }
@@ -150,8 +170,8 @@
     {#if helpOpen}
       <p class="help-note">
         {$locale === 'cs'
-          ? 'Přetáhni předmět do slotu výbavy nebo do batohu. Dvojklik na předmět jej nasadí, dvojklik na výbavu jej sundá. Kliknutím vyber a druhým kliknutím přesuň. Najeď kurzorem pro porovnání.'
-          : 'Drag items into an equipment slot or another bag cell. Double-click to equip or unequip. Click once to select, then click the destination. Hover to compare stats.'}
+          ? 'Mobil: klepnutím zobrazíš statistiky, tlačítkem Přesunout klepnutím zvolíš cílový slot. Na počítači přetahuj předměty mezi batohem a výbavou, dvojklikem nasazuj nebo sundávej. Najeď myší pro porovnání.'
+          : 'Touch: tap an item to inspect it, then use Move by tap to choose a destination. Desktop: drag between bag and equipment, double-click to equip or unequip, or hover to compare.'}
       </p>
     {/if}
 
@@ -168,6 +188,7 @@
               style:border-color={item ? RARITIES[item.rarity].color : undefined}
               data-equipment-slot={slot}
               draggable={!!item}
+              onpointerdown={(event) => { touchInput = event.pointerType !== 'mouse'; }}
               ondragstart={(event) => startDrag(event, { kind: 'gear', slot })}
               ondragend={() => { dragged = null; }}
               ondragover={permitDrop}
@@ -176,7 +197,7 @@
               onpointerleave={() => { hovered = null; }}
               onfocus={() => { hovered = { kind: 'gear', slot }; }}
               onclick={() => pickGear(slot)}
-              ondblclick={() => unequip(slot)}
+              ondblclick={() => { if (!touchInput) unequip(slot); }}
               aria-label={$t('item.slot.' + slot) + (item ? ': ' + itemName(item) : ': ' + $t('inventory.empty'))}
               title={item ? itemName(item) : $t('inventory.empty')}>
               <span class="slot-label">{$t('item.slot.' + slot)}</span>
@@ -210,6 +231,7 @@
                 selected = null;
                 hovered = null;
                 dragged = null;
+                moveArmed = false;
               }}>
               <option value="ALL">{$t('inventory.all')}</option>
               {#each Object.keys(RARITIES) as rarity (rarity)}
@@ -234,6 +256,7 @@
               data-bag-index={index}
               disabled={filtered}
               draggable={!!item && !filtered}
+              onpointerdown={(event) => { touchInput = event.pointerType !== 'mouse'; }}
               ondragstart={(event) => { if (filtered) event.preventDefault(); else startDrag(event, { kind: 'bag', index }); }}
               ondragend={() => { dragged = null; }}
               ondragover={(event) => { if (!filtered) permitDrop(event); }}
@@ -242,8 +265,8 @@
               onpointerleave={() => { hovered = null; }}
               onfocus={() => { hovered = item && !filtered ? { kind: 'bag', index } : null; }}
               onclick={() => { if (!filtered) pickBag(index); }}
-              ondblclick={() => { if (item && !filtered) equip(index); }}
-              oncontextmenu={(event) => { if (item && !filtered) { event.preventDefault(); equip(index); } }}
+              ondblclick={() => { if (item && !filtered && !touchInput) equip(index); }}
+              oncontextmenu={(event) => { if (item && !filtered) { event.preventDefault(); if (!touchInput) equip(index); } }}
               aria-label={item ? itemName(item) : $t('inventory.empty')}
               title={item ? itemName(item) : $t('inventory.empty')}>
               {#if item}
@@ -259,7 +282,8 @@
           {/each}
         </div>
         <div class="bag-footer">
-          <span>{$locale === 'cs' ? 'Přetahování · dvojklik pro nasazení' : 'Drag & drop · double-click to equip'}</span>
+          <span class="desktop-hint">{$locale === 'cs' ? 'Přetahování · dvojklik pro nasazení' : 'Drag & drop · double-click to equip'}</span>
+          <span class="touch-hint">{$locale === 'cs' ? 'Klepni pro náhled · přesun přes tlačítko výše' : 'Tap to inspect · use Move by tap'}</span>
           {#if selected?.kind === 'bag'}
             <button onclick={() => { selected = null; }}>{$locale === 'cs' ? 'Zrušit výběr' : 'Clear selection'}</button>
           {/if}
@@ -270,6 +294,19 @@
         aria-label={$locale === 'cs' ? 'Porovnání výbavy' : 'Equipment comparison'}>
         <h3>{$t('inventory.comparison')}</h3>
         {#if inspected}
+          <div class="touch-move-bar">
+            <button type="button" aria-pressed={moveArmed}
+              onclick={() => { touchInput = true; moveArmed = !moveArmed; }}>
+              {$locale === 'cs'
+                ? (moveArmed ? 'Zrušit přesun' : 'Přesunout klepnutím')
+                : (moveArmed ? 'Cancel move' : 'Move by tap')}
+            </button>
+            {#if moveArmed}
+              <span role="status">{$locale === 'cs'
+                ? 'Klepni na cílový slot.'
+                : 'Tap the destination slot.'}</span>
+            {/if}
+          </div>
           <div class="comparison-grid">
             <section class="item-detail">
               <span class="detail-tag">{$locale === 'cs'
@@ -442,5 +479,48 @@
   .inspect-placeholder{text-align:center;display:grid;place-items:center;min-height:220px;color:#99a8a7;font-size:.8rem;line-height:1.65;padding:16px}
   .placeholder-glyph{font:3rem Georgia,serif;color:#796c55}
   @media(max-width:950px){.inventory-layout{grid-template-columns:minmax(235px,.9fr) minmax(280px,1.1fr)}.item-inspector{grid-column:1/-1;max-height:none}.comparison-grid{grid-template-columns:1fr 1fr}}
-  @media(max-width:650px){.inventory-overlay{padding:4px}.inventory-window{max-height:99dvh}.inventory-header{padding:9px 12px}.inventory-layout{grid-template-columns:1fr;padding:12px;gap:18px}.equipment-grid{max-width:410px;margin:auto}.bag-grid{max-width:490px}.item-inspector{grid-column:auto}.help-toggle{padding:5px}.header-controls button{font-size:.65rem}}
+  .touch-move-bar,.touch-hint{display:none}
+  /* Touch layout: the same full item inspector stays pinned while the player browses
+     the bag; no hover-only tooltip or duplicate comparison logic is necessary. */
+  @media(max-width:650px){
+    .inventory-overlay{padding:4px}
+    .inventory-window{max-height:99dvh}
+    .inventory-header{padding:9px 10px;gap:7px}
+    .kicker{display:none}
+    h2{font-size:clamp(1rem,4.5vw,1.3rem)}
+    .header-controls{flex-shrink:0;gap:5px}
+    .header-controls button{font-size:.65rem;min-height:40px;padding:6px 8px}
+    .inventory-layout{
+      grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;
+      align-content:start;padding:8px;gap:12px;overscroll-behavior:contain;
+    }
+    .item-inspector{
+      grid-column:1;order:-2;position:sticky;top:0;z-index:5;
+      max-height:clamp(170px,34dvh,300px);min-height:0;
+      padding:9px 11px;overflow-y:auto;overscroll-behavior:contain;
+      box-shadow:0 8px 22px #000b;
+    }
+    .item-inspector h3{margin:0 0 7px}
+    .touch-hint{display:inline}
+    .desktop-hint{display:none}
+    .touch-move-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px}
+    .touch-move-bar button{min-height:38px;padding:6px 10px;background:#46392a;border-color:#af8a58}
+    .touch-move-bar button[aria-pressed="true"]{background:#705032;color:#fff3dc}
+    .touch-move-bar span{font-size:.73rem;color:#ebd2a0}
+    .comparison-grid{grid-template-columns:minmax(0,1fr);gap:7px}
+    .item-detail{gap:4px;padding:8px}
+    .detail-icon{font-size:1.5rem;margin:2px}
+    .item-property,.affix-line{font-size:.72rem}
+    .stat-deltas>div{grid-template-columns:minmax(78px,1fr) auto auto minmax(52px,auto);gap:4px}
+    .inspect-placeholder{min-height:90px;padding:8px}
+    .placeholder-glyph{font-size:1.5rem}
+    .backpack-section{order:-1}
+    .equipment-section{order:0}
+    .bag-grid{max-width:490px;margin:auto}
+    .bag-slot{aspect-ratio:1;min-height:40px}
+    .equipment-grid{max-width:410px;margin:auto;gap:6px}
+    .equipment-slot{aspect-ratio:1.35}
+    .inspector-actions button{min-height:38px}
+    .help-note{padding:7px 11px}
+  }
 </style>
