@@ -11,6 +11,7 @@ import { itemDisplayName } from '../items/itemName';
 import { SKILLS } from '../skills/skills';
 import { getPaladinAbility } from '../skills/paladinKit';
 import { getMageSpell } from '../skills/mageKit';
+import { getNecroSpell } from '../skills/necromancerKit';
 import type { GameEvent, ZoneId, Point } from '../core/types';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
 import {
@@ -56,6 +57,9 @@ export class FrontierScene extends Phaser.Scene {
   private hero!: Phaser.GameObjects.Graphics;
   private heroSprite!: Phaser.GameObjects.Sprite;
   private readonly enemySprites = new Map<string, Phaser.GameObjects.Sprite>();
+  /** Friendly actors are never added to the hostile enemy roster. */
+  private readonly summonSprites = new Map<string, Phaser.GameObjects.Sprite>();
+  private corpsesVisual!: Phaser.GameObjects.Graphics;
   private readonly enemyPositions = new Map<string, Point>();
   private readonly enemyDeadUntil = new Map<string, number>();
   private heroDeadUntil = 0;
@@ -175,6 +179,7 @@ export class FrontierScene extends Phaser.Scene {
     this.heroSprite.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
 
     this.healthBar = this.add.graphics().setDepth(60);
+    this.corpsesVisual = this.add.graphics().setDepth(46);
     this.groundItems = this.add.graphics().setDepth(44);
     this.statusVisuals = this.add.graphics().setDepth(47);
     this.telegraph = this.add.graphics().setDepth(46);
@@ -204,6 +209,8 @@ export class FrontierScene extends Phaser.Scene {
       this.enemyGraphics.clear();
       for (const actor of this.enemySprites.values()) actor.destroy();
       this.enemySprites.clear();
+      for (const sprite of this.summonSprites.values()) sprite.destroy();
+      this.summonSprites.clear();
       this.enemyPositions.clear();
       this.enemyDeadUntil.clear();
       this.heroSprite.destroy();
@@ -619,7 +626,7 @@ export class FrontierScene extends Phaser.Scene {
       const definition = Object.values(SKILLS)
         .flatMap(kit => Object.values(kit))
         .find(skill => skill.id === event.skillId) ?? getPaladinAbility(event.skillId)
-        ?? getMageSpell(event.skillId);
+        ?? getMageSpell(event.skillId) ?? getNecroSpell(event.skillId);
       const ring = this.obtainImpact(event.x, event.y, 85);
       ring.lineStyle(4, definition?.color ?? 0xffddaa, 0.95).strokeCircle(0, 0, 18);
       this.tweens.add({
@@ -854,6 +861,38 @@ export class FrontierScene extends Phaser.Scene {
       this.enemyPositions.set(actor.id, { x: actor.x, y: actor.y });
     }
 
+    // Summon sprites are distinct friendly entities with their own stable IDs.
+    const allies=state.summons??[];
+    const activeSummons=new Set(allies.map(a=>a.id));
+    for(const [id,sprite] of this.summonSprites){
+      if(!activeSummons.has(id)){
+        sprite.destroy();
+        this.summonSprites.delete(id);
+      }
+    }
+    for(const summon of allies){
+      let sprite=this.summonSprites.get(summon.id);
+      if(!sprite){
+        const atlas=this.ensurePixelAtlas(summon.kind==='golem'?'crypt_lord':'skeleton');
+        sprite=this.add.sprite(summon.x,summon.y,atlas,pixelFrame('idle',0))
+          .setOrigin(0.5,0.9).setDepth(49.5)
+          .setTint(summon.kind==='golem'?0xa2d4b7:0x68d4ca);
+        sprite.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+        this.summonSprites.set(summon.id,sprite);
+      }
+      const moving=summon.targetId!==null;
+      sprite.setPosition(summon.x,summon.y)
+        .setFrame(pixelFrame(moving?'run':'idle',
+          Math.floor(this.time.now/(moving?110:170))%PIXEL_ANIMATION_FRAMES))
+        .setAlpha(summon.remaining<3?0.6:1);
+    }
+    this.corpsesVisual.clear();
+    for(const corpse of state.corpses??[]){
+      this.corpsesVisual.lineStyle(2,0x81c1a4,0.72);
+      this.corpsesVisual.strokeEllipse(corpse.x,corpse.y+10,28,11);
+      this.corpsesVisual.fillStyle(0x477f69,0.2);
+      this.corpsesVisual.fillEllipse(corpse.x,corpse.y+10,23,8);
+    }
     this.healthBar.clear();
     this.telegraph.clear();
     this.statusVisuals.clear();
