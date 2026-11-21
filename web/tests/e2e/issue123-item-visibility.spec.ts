@@ -69,7 +69,10 @@ test.describe('touch item preview and loot-label preferences', () => {
     const move = inspector.getByRole('button', { name: 'Move by tap' });
     await move.tap();
     await modal.locator('[data-equipment-slot="HELMET"]').tap();
-    await expect(inspector.getByRole('status')).toContainText('Cannot place here');
+    await expect(inspector.locator('.placement-error[role="status"]'))
+      .toContainText('Cannot place here');
+    await expect(modal.locator('[data-equipment-slot="HELMET"] svg[data-item-art="belt"]'))
+      .toHaveCount(0);
     await modal.locator('[data-equipment-slot="BELT"]').tap();
     await expect(modal.locator('[data-equipment-slot="BELT"] svg[data-item-art="belt"]')).toBeVisible();
     await modal.getByRole('button', { name: 'Close' }).tap();
