@@ -33,7 +33,7 @@ export function planRogueMultishot(from:Point,aim:Point,targets:readonly RogueTa
    ||!Number.isSafeInteger(maxHits)||maxHits<1||maxHits>12
    ||!obstaclesOk(walls)||!Array.isArray(targets)||targets.length>256)return [];
  const dx=(aim.x-from.x)/dist(from,aim),dy=(aim.y-from.y)/dist(from,aim);
- return targets.filter(e=>e&&owner(e.id)&&point(e)&&e.alive
+ return targets.filter(e=>e&&owner(e.id)&&point({x:e.x,y:e.y})&&e.alive
    &&dist(from,e)<=range&&dist(from,e)>0
    &&((e.x-from.x)*dx+(e.y-from.y)*dy)/dist(from,e)>=Math.cos(angle/2)
    &&hasLineOfSight(from,e,walls))
@@ -79,7 +79,7 @@ export function validRogueTraps(value:unknown):value is readonly RogueTrap[]{
    if(!trap||!owner(trap.ownerId)||!owner(trap.id)||ids.has(trap.id)
      ||!trap.id.startsWith('rogue-trap.'+trap.ownerId+'.')
      ||!/^[1-9][0-9]{0,8}$/.test(trap.id.slice(('rogue-trap.'+trap.ownerId+'.').length))
-     ||!zone(trap.zone)||!point(trap)
+     ||!zone(trap.zone)||!point({x:trap.x,y:trap.y})
      ||!finite(trap.remaining)||trap.remaining<=0||trap.remaining>18
      ||trap.radius!==58||trap.damage!==1.25)return false;
    ids.add(trap.id);
@@ -95,7 +95,7 @@ export function tickRogueTraps(input:unknown,dt:unknown,mapZone:unknown,
  const traps:RogueTrap[]=[],hits:{trapId:string;id:string;power:number}[]=[];
  for(const t of input){
    if(t.zone!==mapZone||t.remaining<=dt)continue;
-   const targets=enemies.filter(e=>e&&owner(e.id)&&point(e)&&e.alive
+   const targets=enemies.filter(e=>e&&owner(e.id)&&point({x:e.x,y:e.y})&&e.alive
      &&dist(t,e)<=t.radius&&hasLineOfSight(t,e,walls))
      .sort((a,b)=>dist(t,a)-dist(t,b)||a.id.localeCompare(b.id));
    if(targets.length){
