@@ -3,7 +3,7 @@
   import type { GameSnapshot } from '../game/core/types';
   import type { GameBridge } from '../game/bridge/GameBridge';
   import {
-    TALENT_TREE, canSpendTalent, planRespecTalents, respecGoldCost,
+    allTalentsForClass, canSpendTalent, planRespecTalents, respecGoldCost,
     spentTalentPoints, type TalentBranch
   } from '../game/progression/talentTree';
 
@@ -11,7 +11,10 @@
     view: GameSnapshot; bridge: GameBridge; close: () => void
   } = $props();
 
-  const branches: readonly TalentBranch[] = ['berserker', 'guardian', 'warlord'];
+  let branches:readonly TalentBranch[]=$derived(view.classId==='PALADIN'
+    ? ['holyWarrior','paladinGuardian','auraMaster','holyCaster']
+    : ['berserker','guardian','warlord']);
+  let activeNodes=$derived(allTalentsForClass(view.classId));
   let invested = $derived(spentTalentPoints(view.talentRanks ?? {}));
   let price = $derived(respecGoldCost(view.level, view.talentRanks ?? {}));
   let canRespec = $derived(planRespecTalents(view.classId, view.level,
@@ -23,7 +26,7 @@
     <header>
       <div>
         <div class="eyebrow">AETHER &amp; RUIN</div>
-        <h2>{$t('talents.title')}</h2>
+        <h2>{$t(view.classId==='PALADIN' ? 'talents.paladinTitle' : 'talents.title')}</h2>
         <p>{$t('talents.available')}: <strong>{view.talentPoints ?? 0}</strong>
           · {$t('talents.invested')}: <strong>{invested}</strong>
           · {$t('hud.gold')}: <strong>{view.gold}</strong></p>
@@ -31,14 +34,14 @@
       <button class="close" aria-label={$t('inventory.close')} onclick={close}>✕</button>
     </header>
 
-    {#if view.classId !== 'WARRIOR'}
+    {#if view.classId !== 'WARRIOR' && view.classId !== 'PALADIN'}
       <p class="notice">{$t('talents.warriorOnly')}</p>
     {:else}
       <div class="talent-columns">
         {#each branches as branch (branch)}
           <section aria-label={$t('talents.branches.' + branch)}>
             <h3>{$t('talents.branches.' + branch)}</h3>
-            {#each TALENT_TREE.filter(node => node.branch === branch) as talent (talent.id)}
+            {#each activeNodes.filter(node => node.branch === branch) as talent (talent.id)}
               {@const rank = view.talentRanks?.[talent.id] ?? 0}
               {@const check = canSpendTalent(view.classId, view.level,
                 view.talentPoints ?? 0, view.talentRanks ?? {}, talent.id)}
