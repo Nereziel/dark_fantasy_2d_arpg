@@ -649,12 +649,6 @@
         </div>
       </div>
 
-      {#if view.enemies.some(unit => unit.intent !== null) && !inventoryOpen}
-        <div class="danger-alert" role="status">
-          <strong>{$t('combat.warning')}</strong>
-          <span>{$t('combat.dodge')}</span>
-        </div>
-      {/if}
       {#if messageKey}
         <div class="toast" role="status">{$t(messageKey)}</div>
       {/if}
@@ -750,6 +744,7 @@
 </div>
 
 <style>
+
   /* Independent, scroll-safe HUD columns: no magic top:335px/508px offsets. */
   .hud-left-column,.hud-right-column {
     position:absolute;z-index:3;top:85px;bottom:195px;
@@ -790,8 +785,13 @@
   .hud-right-column :global(.enemy-roster){box-shadow:none;max-height:210px;overflow:auto}
   .hud-right-column :global(.event-panel){max-height:150px;overflow:auto}
   .hud-right-column :global(.dungeon-panel){max-height:180px;overflow:auto}
+  /* Seven-skill bars can occupy most of the screen width. Reserve their
+     vertical area at intermediate sizes so the side HUD never covers controls. */
+  @media (min-width:851px) and (max-width:1400px) {
+    .hud-left-column,.hud-right-column{bottom:clamp(300px,46vh,430px)}
+  }
   @media(max-width:850px){
-    .hud-left-column,.hud-right-column{top:72px;bottom:170px;gap:6px}
+    .hud-left-column,.hud-right-column{top:72px;bottom:max(380px,53vh);gap:6px}
     .hud-left-column{left:7px;width:clamp(132px,22vw,180px)}
     .hud-right-column{right:7px;width:clamp(132px,22vw,180px)}
     .hud-left-column :global(.world-guide){display:none}
@@ -799,7 +799,7 @@
     .hud-left-column :global(.camp-services button){font-size:.64rem;padding:5px 4px}
   }
   @media(max-width:560px){
-    .hud-left-column,.hud-right-column{top:64px;bottom:185px;gap:5px}
+    .hud-left-column,.hud-right-column{top:64px;bottom:max(415px,58vh);gap:5px}
     .hud-left-column{width:clamp(120px,30vw,148px);left:4px}
     .hud-right-column{width:clamp(120px,30vw,148px);right:4px}
     .hud-right-column :global(.enemy-roster){max-height:110px}
