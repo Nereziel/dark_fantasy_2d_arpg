@@ -70,7 +70,8 @@ describe('Prompt 39 — existing combat timeline and Faith authority',()=>{
     const enemy=sim.snapshot().enemies.find(x=>x.actor.alive)!;
     const near=sim.snapshot();
     // Position player in attack range without changing the existing encounter roster.
-    expect(sim.restore({...near,player:{...near.player,x:enemy.actor.x-35,y:enemy.actor.y}})).toBe(true);
+    // The enemy's own validated tile is guaranteed walkable by the world generator.
+    expect(sim.restore({...near,player:{...near.player,x:enemy.actor.x,y:enemy.actor.y}})).toBe(true);
     const before=sim.snapshot();
     sim.command({type:'paladinAbility',id:'holyStrike',targetId:enemy.actor.id});
     expect(sim.snapshot().resource).toBe(before.resource-PALADIN_EXTRA_SKILLS.holyStrike.cost);
@@ -84,15 +85,18 @@ describe('Prompt 39 — existing combat timeline and Faith authority',()=>{
     const used=struck.resource;
     sim.command({type:'paladinAbility',id:'holyStrike',targetId:enemy.actor.id});
     expect(sim.snapshot().resource).toBe(used);
-    tick(sim,100);
-    const far=sim.snapshot();
-    expect(sim.restore({...far,player:{...far.player,x:enemy.actor.x-150,y:enemy.actor.y},
-      resource:100})).toBe(true);
-    sim.command({type:'paladinAbility',id:'smite',targetId:enemy.actor.id});
-    expect(sim.snapshot().paladinCooldowns?.smite).toBeGreaterThan(0);
-    tick(sim,24);
-    expect(sim.snapshot().enemies.find(x=>x.actor.id===enemy.actor.id)?.actor.health)
-      .toBeLessThan(struck.enemies.find(x=>x.actor.id===enemy.actor.id)!.actor.health);
+    // Smite has its own clean battlefield so the first target's health,
+    // AI movement or previous combat cannot make the assertion flaky.
+    const smite=paladin();
+    const rangeStart=smite.snapshot();
+    const rangeTarget=rangeStart.enemies.find(x=>x.actor.alive)!;
+    expect(smite.restore({...rangeStart,player:{...rangeStart.player,
+      x:rangeTarget.actor.x,y:rangeTarget.actor.y}})).toBe(true);
+    smite.command({type:'paladinAbility',id:'smite',targetId:rangeTarget.actor.id});
+    expect(smite.snapshot().paladinCooldowns?.smite).toBeGreaterThan(0);
+    tick(smite,24);
+    expect(smite.snapshot().enemies.find(x=>x.actor.id===rangeTarget.actor.id)?.actor.health)
+      .toBeLessThan(rangeTarget.actor.health);
   });
   it('applies real Divine Shield, Healing Light and Holy Aura effects without duplicating Warrior actions',()=>{
     const shield=paladin();
