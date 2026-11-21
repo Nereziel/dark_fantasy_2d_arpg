@@ -71,6 +71,8 @@ export interface ActorSnapshot extends Point {
  * Entire world snapshots are temporary and never written to IndexedDB.
  */
 export interface CharacterProgress {
+  /** Stable identity for new heroes; absent on legacy v8–v11 saves. */
+  characterId?: string;
   classId: ClassId;
   level: number;
   xp: number;
@@ -127,6 +129,8 @@ export interface GameSnapshot {
   dungeonStage: 0 | 1;
   dungeonCleared: boolean;
   classId: ClassId;
+  /** Optional session identity; world facts are bound separately by persistence. */
+  characterId?: string;
   player: ActorSnapshot;
   /** Focused enemy for the existing HUD; authoritative enemy state is in enemies. */
   enemy: EnemySnapshot;
@@ -236,6 +240,7 @@ export interface GameSnapshot {
   status: GameStatus;
 }
 export type GameCommand =
+  | { type: 'createCharacter'; classId: ClassId; characterId: string; seed?: number }
   | { type: 'move'; destination: Point }
   | { type: 'holdPosition'; value: boolean }
   | { type: 'evade' }
