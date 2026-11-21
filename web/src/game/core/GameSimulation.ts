@@ -1523,29 +1523,29 @@ export class GameSimulation {
     }
     if(command.type==='paladinAbility') {
       if(this.classId!=='PALADIN')return;
-      this.requestPaladinAbility(command.id,command.targetId??null);
+      this.prioritizeSkill(() => this.requestPaladinAbility(command.id,command.targetId??null));
       return;
     }
     if (command.type === 'rogueAbility') {
       if (this.classId !== 'ROGUE') return;
-      this.requestRogueAbility(command.id,command.targetId??null,command.position);
+      this.prioritizeSkill(() => this.requestRogueAbility(command.id,command.targetId??null,command.position));
       return;
     }
     if (command.type === 'necroAbility') {
       if (this.classId !== 'NECROMANCER') return;
-      this.requestNecroAbility(command.id,command.targetId??null,command.position);
+      this.prioritizeSkill(() => this.requestNecroAbility(command.id,command.targetId??null,command.position));
       return;
     }
     if (command.type === 'mageAbility') {
       if (this.classId !== 'MAGE') return;
-      this.requestMageAbility(command.id, command.targetId ?? null, command.position);
+      this.prioritizeSkill(() => this.requestMageAbility(command.id, command.targetId ?? null, command.position));
       return;
     }
     if (command.type === 'warriorAbility') {
       if (this.classId !== 'WARRIOR' || !getWarriorAbility(command.id)) return;
       const unit = command.targetId === undefined ? this.focusedUnit
         : this.units.find(u => u.actor.alive && u.actor.id === command.targetId);
-      this.requestWarriorAbility(command.id, unit?.actor.id ?? null);
+      this.prioritizeSkill(() => this.requestWarriorAbility(command.id, unit?.actor.id ?? null));
       return;
     }
     if (command.type === 'cast') {
@@ -1557,7 +1557,7 @@ export class GameSimulation {
         if (!target) return;
         this.selectedTargetId = target.actor.id;
       }
-      this.requestCast(command.slot, command.aim);
+      this.prioritizeSkill(() => this.requestCast(command.slot, command.aim));
       return;
     }
     if (command.type === 'move') {
@@ -1913,6 +1913,30 @@ export class GameSimulation {
       silenced: this.statusEffects.player.some(e => e.id === 'silenced'),
       holdPosition: this.holdPosition, canMove: !this.immobilized
     };
+  }
+
+  /**
+   * A repeating basic attack is not a skill lock. A valid manual skill takes
+   * precedence over the unfinished basic hit frame; failed casts restore it.
+   * Keep the auto-attack target so it resumes after the skill timeline ends.
+   */
+  private prioritizeSkill(request: () => void): void {
+    const basicWarrior = this.warriorAction?.id === 'basicAttack' ? this.warriorAction : null;
+    const basicClass = this.classAction?.kind === 'basic' ? this.classAction : null;
+    if (!basicWarrior && !basicClass) {
+      request();
+      return;
+    }
+    const autoTarget = this.attackTarget;
+    if (basicWarrior) this.warriorAction = null;
+    if (basicClass) this.classAction = null;
+    request();
+    if (!this.warriorAction && !this.classAction && !this.warriorPending && !this.pendingSkill) {
+      // Rejected casts must not consume or cancel the ongoing basic swing.
+      if (basicWarrior) this.warriorAction = basicWarrior;
+      if (basicClass) this.classAction = basicClass;
+    }
+    this.attackTarget = autoTarget;
   }
 
   private requestWarriorAbility(id: WarriorAbilityId, targetId: string | null, aim?: SkillAim): void {

@@ -47,3 +47,27 @@ test('multi-tab stash transfers, filters and persists stable item IDs in charact
   await expect(recovered.locator('[data-stash-bag] [data-item-id]'))
     .toHaveAttribute('data-item-id', itemId!);
 });
+
+
+test('drag and drop moves protected-safe items across bag, stash and tabs', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await page.getByRole('button', { name: 'Browse wares' }).click();
+  const vendor = page.getByRole('dialog', { name: 'Merchant Bram' });
+  await vendor.getByRole('button', { name: 'Buy Studded War Belt' }).click();
+  await vendor.getByRole('button', { name: 'Leave' }).click();
+  await page.getByRole('button', { name: 'Open stash' }).click();
+  const stash = page.getByRole('dialog', { name: 'Camp Stash' });
+  const bag = stash.locator('[data-stash-bag]');
+  const stored = stash.locator('[data-stash-items]');
+  await bag.locator('[data-item-id]').dragTo(stored);
+  await expect(stored.locator('[data-item-id]')).toHaveCount(1);
+  await expect(bag.locator('[data-item-id]')).toHaveCount(0);
+  await stored.locator('[data-item-id]').dragTo(stash.locator('[data-stash-tab="2"]'));
+  await expect(stash.locator('[data-stash-tab="2"]')).toHaveAttribute('aria-selected', 'true');
+  await expect(stash.locator('[data-stash-items="2"] [data-item-id]')).toHaveCount(1);
+  await stash.locator('[data-stash-items="2"] [data-item-id]').dragTo(bag);
+  await expect(bag.locator('[data-item-id]')).toHaveCount(1);
+  await expect(stash.locator('[data-stash-items="2"] [data-item-id]')).toHaveCount(0);
+});
