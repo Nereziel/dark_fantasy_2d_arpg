@@ -43,7 +43,7 @@
       </dl>
     </div>
   </section>
-  <p class="save-warning">{$t('creation.overwriteWarning')}</p>
+  <p class="save-warning">{$t('creation.multiSlotHint')}</p>
 </section>
 
 <style>
