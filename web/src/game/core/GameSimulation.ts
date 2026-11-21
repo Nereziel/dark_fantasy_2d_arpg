@@ -1870,8 +1870,9 @@ export class GameSimulation {
   /** Single derived stat projection; talent effects never mutate equipment or DTOs. */
   private currentStats(equipment: Equipment = this.equipment, level = this.level) {
     const base = deriveStats(this.classId, equipment, level);
-    const stats=(this.classId==='WARRIOR'||this.classId==='PALADIN')
-      ? applyTalentStats(base,this.talentRanks) : base;
+    // Existing class talent ranks and new Necro/Rogue/Warlock stat projections
+    // all share this authoritative derived-stat path (no saved cache).
+    const stats=applyTalentStats(base,this.talentRanks);
     if(!this.shrineBlessings.length)return stats;
     return {...stats,
       armor:stats.armor+(this.hasShrineBlessing('armor')?30+level*2:0),
@@ -2285,15 +2286,20 @@ export class GameSimulation {
       || this.summons.length >= 5
       || this.summons.filter(s => s.kind === kind).length >= (kind === 'golem' ? 1 : 4))
       return false;
+    const talents = projectTalentBonuses(this.talentRanks);
     const next = createOwnedSummon({
       ownerId: this.player.id, kind, zone: this.zone,
       sequence: this.nextSummonSequence,
       origin: this.player, level: this.level,
-      spellPower: 1 + this.currentStats().intelligence / 90,
+      spellPower: (1 + this.currentStats().intelligence / 90)
+        * (1 + (kind === 'golem' ? talents.necroGolemPower : talents.necroSkeletonPower)),
       obstacles: this.world.obstacles
     });
     if (!next) return false;
-    this.summons.push(next);
+    const endurance = 1 + talents.necroSummonHealth;
+    this.summons.push({ ...next,
+      maxHealth: Math.round(next.maxHealth * endurance),
+      health: Math.round(next.health * endurance) });
     this.nextSummonSequence++;
     return true;
   }
@@ -2366,6 +2372,7 @@ export class GameSimulation {
     if(this.classId!=='ROGUE'||!this.player.alive)return;
     const skill=getRogueAbility(id);
     if(!skill)return;
+    const talents=projectTalentBonuses(this.talentRanks);
     if(id==='backstab'&&targetId){
       const enemy=this.units.find(u=>u.actor.alive&&u.actor.id===targetId);
       if(!enemy || distance(this.player,enemy.actor)>skill.range
@@ -2375,7 +2382,9 @@ export class GameSimulation {
         :{x:this.player.x-enemy.actor.x,y:this.player.y-enemy.actor.y};
       const bonus=planRogueBackstab(this.player,enemy.actor,face,
         this.rogueStealthSeconds>0);
-      this.applyDamage(skill.power*bonus*(this.equipment.MAIN_HAND?.weaponType==='DAGGER'
+      this.applyDamage(skill.power*bonus*(1+talents.rogueBackstabPower)
+        *(this.rogueStealthSeconds>0?1+talents.rogueStealthStrike:1)
+        *(this.equipment.MAIN_HAND?.weaponType==='DAGGER'
         ?1.22:1),enemy,'physical');
       this.rogueStealthSeconds=0;
     }else if(id==='multishot'&&aim?.mode==='GROUND_POSITION'){
@@ -2397,7 +2406,10 @@ export class GameSimulation {
       if(!destination)return;
       this.player.x=destination.x;this.player.y=destination.y;
       this.movePath=[];this.attackTarget=null;
-      this.rogueStealthSeconds=skill.duration;
+      this.rogueStealthSeconds=skill.duration+talents.rogueStealthDuration;
+      if(talents.rogueStepHaste>0)
+        this.applyCanonicalStatus('player','haste','hero',
+          talents.rogueStepHaste,2.5);
       this.observeExploration();
     }else if(id==='trap'&&aim?.mode==='GROUND_POSITION'){
       if(this.rogueTraps.length>=3)return;
@@ -2412,7 +2424,8 @@ export class GameSimulation {
           ||!hasLineOfSight(this.player,enemy.actor,this.world.obstacles))continue;
         const damage=this.applyDamage(skill.power,enemy,'physical');
         if(damage>0&&enemy.actor.alive)
-          this.applyCanonicalStatus('enemy','bleeding','hero',4,4,enemy);
+          this.applyCanonicalStatus('enemy','bleeding','hero',4,
+            4*(1+talents.rogueKnivesBleedDuration),enemy);
       }
       this.rogueStealthSeconds=0;
     }
@@ -2427,13 +2440,16 @@ export class GameSimulation {
         })),this.world.obstacles);
     if(!result){this.rogueTraps=[];return;}
     this.rogueTraps=[...result.traps];
+    const talents=projectTalentBonuses(this.talentRanks);
     for(const hit of result.hits){
       const enemy=this.units.find(u=>u.actor.alive&&u.actor.id===hit.id);
       if(!enemy)continue;
-      const dealt=this.applyDamage(hit.power,enemy,'poison');
+      const dealt=this.applyDamage(hit.power*(1+talents.rogueTrapDamage),enemy,'poison');
       if(dealt>0&&enemy.actor.alive){
-        this.applyCanonicalStatus('enemy','rooted','hero',1,1.2,enemy);
-        this.applyCanonicalStatus('enemy','poisoned','hero',3,4,enemy);
+        this.applyCanonicalStatus('enemy','rooted','hero',1,
+          1.2*(1+talents.rogueTrapRootDuration),enemy);
+        this.applyCanonicalStatus('enemy','poisoned','hero',3,
+          4*(1+talents.rogueTrapPoisonDuration),enemy);
       }
     }
   }
@@ -2502,6 +2518,7 @@ export class GameSimulation {
     aim?: SkillAim): void {
     const spell=getNecroSpell(id);
     if (!spell || this.classId !== 'NECROMANCER' || !this.player.alive)return;
+    const talents=projectTalentBonuses(this.talentRanks);
     if (id==='summonGolem'){
       this.spawnNecroAlly('golem');
     } else if (id==='corpseExplosion' && aim?.mode==='GROUND_POSITION'){
@@ -2512,11 +2529,12 @@ export class GameSimulation {
       if(!remaining)return;
       this.corpses=[...remaining];
       for(const enemy of [...this.aliveEnemies]){
-        if(distance(enemy.actor,corpse)>spell.radius
+        if(distance(enemy.actor,corpse)>spell.radius*(1+talents.necroCorpseRadius)
           || !hasLineOfSight(corpse,enemy.actor,this.world.obstacles))continue;
         const damage=this.applyDamage(spell.power,enemy,'shadow');
         if(damage>0&&enemy.actor.alive)
-          this.applyCanonicalStatus('enemy','poisoned','hero',3,3,enemy);
+          this.applyCanonicalStatus('enemy','poisoned','hero',
+            3*(1+talents.necroCorpsePoison),3,enemy);
       }
     } else if (id==='bloodDrain' && targetId){
       const target=this.units.find(u=>u.actor.id===targetId&&u.actor.alive);
@@ -2525,16 +2543,18 @@ export class GameSimulation {
       const damage=this.applyDamage(spell.power,target,'shadow');
       if(damage>0 && this.player.alive)
         this.player.health=resolveHealing(this.player.health,this.player.maxHealth,
-          Math.round(damage*0.65)).health;
+          Math.round(damage*(0.65+talents.necroDrainHeal))).health;
     } else if(id==='curse' && targetId){
       const target=this.units.find(u=>u.actor.id===targetId&&u.actor.alive);
       if(!target || distance(this.player,target.actor)>spell.range
         || !hasLineOfSight(this.player,target.actor,this.world.obstacles))return;
-      this.applyCanonicalStatus('enemy','cursed','hero',0.25,spell.duration,target);
-      this.applyCanonicalStatus('enemy','vulnerable','hero',0.12,spell.duration,target);
+      this.applyCanonicalStatus('enemy','cursed','hero',0.25,
+        spell.duration*(1+talents.necroCurseDuration),target);
+      this.applyCanonicalStatus('enemy','vulnerable','hero',0.12,
+        spell.duration*(1+talents.necroCurseDuration),target);
     } else if(id==='deathNova'){
       for(const enemy of [...this.aliveEnemies]){
-        if(distance(this.player,enemy.actor)>spell.radius
+        if(distance(this.player,enemy.actor)>spell.radius*(1+talents.necroNovaRadius)
           || !hasLineOfSight(this.player,enemy.actor,this.world.obstacles))continue;
         const damage=this.applyDamage(spell.power,enemy,'poison');
         if(damage>0&&enemy.actor.alive)
@@ -2595,20 +2615,28 @@ export class GameSimulation {
   private resolveWarlockImpact(id:WarlockExtraSpellId,targetId:string|null):void {
     const spell=getWarlockSpell(id);
     if(!spell||this.classId!=='WARLOCK'||!this.player.alive)return;
+    const talents=projectTalentBonuses(this.talentRanks);
     if(id==='demonSummoning'){
       if(this.summons.length>=3)return;
       const demon=createOwnedSummon({
         ownerId:this.player.id,kind:'demon',zone:this.zone,
         sequence:this.nextSummonSequence,origin:this.player,
-        level:this.level,spellPower:1+this.currentStats().intelligence/90,
+        level:this.level,spellPower:(1+this.currentStats().intelligence/90)
+          *(1+talents.warlockDemonPower),
         obstacles:this.world.obstacles
       });
-      if(demon){this.summons.push(demon);this.nextSummonSequence++;}
+      if(demon){
+        const endurance=1+talents.warlockDemonHealth;
+        this.summons.push({...demon,
+          maxHealth:Math.round(demon.maxHealth*endurance),
+          health:Math.round(demon.health*endurance)});
+        this.nextSummonSequence++;
+      }
       return;
     }
     if(id==='hellfire'){
       for(const enemy of [...this.aliveEnemies]){
-        if(distance(this.player,enemy.actor)>spell.radius
+        if(distance(this.player,enemy.actor)>spell.radius*(1+talents.warlockHellfireRadius)
           ||!hasLineOfSight(this.player,enemy.actor,this.world.obstacles))continue;
         const dealt=this.applyDamage(spell.power,enemy,'fire');
         if(dealt>0&&enemy.actor.alive)
@@ -2624,12 +2652,18 @@ export class GameSimulation {
     if(!target||distance(this.player,target.actor)>spell.range
       ||!hasLineOfSight(this.player,target.actor,this.world.obstacles))return;
     if(id==='shadowBolt'){
-      this.applyDamage(spell.power,target,'shadow');
+      const dealt=this.applyDamage(spell.power*(1+talents.warlockBoltDamage),target,'shadow');
+      if(dealt>0&&this.player.alive && talents.warlockBoltLeech>0)
+        this.player.health=resolveHealing(this.player.health,this.player.maxHealth,
+          Math.round(dealt*talents.warlockBoltLeech)).health;
     }else if(id==='corruption'){
-      this.applyCanonicalStatus('enemy','cursed','hero',0.22,spell.duration,target);
+      const duration=spell.duration*(1+talents.warlockCurseDuration);
+      this.applyCanonicalStatus('enemy','cursed','hero',
+        0.22+talents.warlockCurseWeakness,duration,target);
       this.applyCanonicalStatus('enemy','poisoned','hero',
-        Math.max(3,Math.round(2+this.currentStats().intelligence*0.19)),
-        spell.duration,target);
+        Math.max(3,Math.round(2+this.currentStats().intelligence*0.19))
+          *(1+talents.warlockPoisonDamage),
+        duration,target);
     }else if(id==='fear'){
       // Shared hard-control/cast-lock immunities apply equally to bosses and elites.
       this.applyCanonicalStatus('enemy','stunned','hero',1,spell.duration,target);
@@ -2653,7 +2687,14 @@ export class GameSimulation {
     this.summons=[...result.summons];
     for(const hit of result.hits){
       const target=this.units.find(u=>u.actor.id===hit.targetId&&u.actor.alive);
-      if(target)this.resolveEnemyDamage(hit.power,target,hit.type,hit.sourceId);
+      if(target){
+        const dealt=this.resolveEnemyDamage(hit.power,target,hit.type,hit.sourceId);
+        if(dealt>0 && hit.type==='shadow' && this.classId==='WARLOCK'){
+          const leech=projectTalentBonuses(this.talentRanks).warlockDemonLeech;
+          if(leech>0) this.player.health=resolveHealing(
+            this.player.health,this.player.maxHealth,Math.round(dealt*leech)).health;
+        }
+      }
     }
   }
 
@@ -3171,7 +3212,10 @@ export class GameSimulation {
       || skill.kind === 'dot' || skill.kind === 'drain') {
       const damage = unit.actor.alive && (aim?.mode !== 'DIRECTION'
         || distance(this.player, unit.actor) <= 75)
-        ? this.applyDamage(skill.power, unit, this.skillDamageType(slot)) : 0;
+        ? this.applyDamage(skill.power
+          *(this.classId==='NECROMANCER' && skill.id==='boneSpear'
+            ? 1+projectTalentBonuses(this.talentRanks).necroBoneDamage : 1),
+          unit, this.skillDamageType(slot)) : 0;
       if (skill.kind === 'drain' && this.player.alive) {
         this.player.health = resolveHealing(this.player.health, this.player.maxHealth, Math.ceil(damage * 0.65)).health;
       }

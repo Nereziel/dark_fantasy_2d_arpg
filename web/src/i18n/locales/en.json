@@ -957,7 +957,16 @@
       "fire": "Fire",
       "frost": "Frost",
       "lightning": "Lightning",
-      "arcane": "Arcane"
+      "arcane": "Arcane",
+      "bone": "Bone Magic",
+      "summoning": "Summoner",
+      "blood": "Blood Rituals",
+      "assassin": "Assassin",
+      "shadow": "Shadow",
+      "trapper": "Trapper",
+      "demonology": "Demonology",
+      "corruption": "Corruption",
+      "soul": "Soul Magic"
     },
     "nodes": {
       "berserker": {
@@ -1097,10 +1106,129 @@
           "name": "Transcendence",
           "description": "Reduce Teleport cooldown by 7% per rank."
         }
+      },
+      "necro": {
+        "boneSpear": {
+          "name": "Piercing Bones",
+          "description": "Bone Spear deals 11% more damage per rank."
+        },
+        "boneFracture": {
+          "name": "Bone Fracture",
+          "description": "Corpse Explosion reaches 10% farther per rank."
+        },
+        "corpseMastery": {
+          "name": "Corpse Mastery",
+          "description": "Corpse Explosion poison damage increases by 20% per rank."
+        },
+        "legion": {
+          "name": "Raised Legion",
+          "description": "Skeletons deal 14% more damage and grow stronger per rank."
+        },
+        "golemCore": {
+          "name": "Golem Core",
+          "description": "Your golem gains 14% more summoning power per rank."
+        },
+        "soulLink": {
+          "name": "Soul Link",
+          "description": "Skeletons and golems have 12% more maximum health per rank."
+        },
+        "bloodTithe": {
+          "name": "Blood Tithe",
+          "description": "Blood Drain heals an additional 9% of damage dealt per rank."
+        },
+        "crimsonCurse": {
+          "name": "Crimson Curse",
+          "description": "Curses and vulnerability last 15% longer per rank."
+        },
+        "plagueNova": {
+          "name": "Plague Nova",
+          "description": "Death Nova covers 9% more distance per rank."
+        }
+      },
+      "rogue": {
+        "precision": {
+          "name": "Assassin's Precision",
+          "description": "Gain 2 percentage points of critical chance per rank."
+        },
+        "execution": {
+          "name": "Execution",
+          "description": "Backstab deals 15% more damage per rank."
+        },
+        "hemorrhage": {
+          "name": "Hemorrhage",
+          "description": "Fan of Knives bleeding lasts 20% longer per rank."
+        },
+        "veil": {
+          "name": "Veil of Shadows",
+          "description": "Shadow Step grants 0.6 seconds more stealth per rank."
+        },
+        "ambush": {
+          "name": "Ambush",
+          "description": "Backstab deals another 15% damage per rank while stealthed."
+        },
+        "shadowHaste": {
+          "name": "Shadow Haste",
+          "description": "Shadow Step grants 4 percentage points of extra Haste per rank."
+        },
+        "venom": {
+          "name": "Venom Traps",
+          "description": "Traps deal 16% more poison damage per rank."
+        },
+        "binding": {
+          "name": "Binding Wires",
+          "description": "Enemies remain rooted by traps 20% longer per rank."
+        },
+        "serration": {
+          "name": "Serrated Trap",
+          "description": "Trap poison lasts 18% longer per rank."
+        }
+      },
+      "warlock": {
+        "abyssalPower": {
+          "name": "Abyssal Power",
+          "description": "Your demon gains 13% summoning power per rank."
+        },
+        "demonBlood": {
+          "name": "Demon Blood",
+          "description": "Your demon has 12% more maximum health per rank."
+        },
+        "soulPact": {
+          "name": "Soul Pact",
+          "description": "Demon hits restore 2.5% of dealt damage as your health per rank."
+        },
+        "blight": {
+          "name": "Blight",
+          "description": "Corruption poison damage increases by 16% per rank."
+        },
+        "hex": {
+          "name": "Lingering Hex",
+          "description": "Corruption curse lasts 14% longer per rank."
+        },
+        "torment": {
+          "name": "Torment",
+          "description": "Corruption's weakening curse grows by 4 percentage points per rank."
+        },
+        "shadowBolt": {
+          "name": "Shadow Bolt Mastery",
+          "description": "Shadow Bolt deals 13% more shadow damage per rank."
+        },
+        "hellfireReach": {
+          "name": "Hellfire Reach",
+          "description": "Hellfire radius expands 8% per rank."
+        },
+        "soulFeast": {
+          "name": "Soul Feast",
+          "description": "Shadow Bolt heals you for 7% of dealt damage per rank."
+        }
       }
     },
     "paladinTitle": "Paladin Talent Tree",
-    "mageTitle": "Mage Talent Tree"
+    "mageTitle": "Mage Talent Tree",
+    "necromancerTitle": "Necromancer Talent Tree",
+    "rogueTitle": "Rogue Talent Tree",
+    "warlockTitle": "Warlock Talent Tree",
+    "rankPreview": "Current rank",
+    "nextRank": "Next rank"
   },
   "skillModifiers": {
     "enhanced": "Enhanced",
