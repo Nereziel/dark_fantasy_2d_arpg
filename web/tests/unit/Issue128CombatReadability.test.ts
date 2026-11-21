@@ -21,6 +21,62 @@ describe('Issue 128: readable combat geometry from authoritative events', () => 
     }
   });
 
+  it('projects real boss cone sectors rather than a misleading circular danger ring', () => {
+    const radius = 108;
+    const angle = Math.PI / 6;
+    const arcDegrees = 85;
+    const cue = planCombatReadability({
+      type: 'telegraph', threat: 'boss', position: at, radius,
+      shape: 'cone', angleRadians: angle, arcDegrees
+    });
+    expect(cue?.ring).toBe(false);
+    expect(cue?.sector).toEqual({
+      fromRadians: angle - 85 * Math.PI / 360,
+      toRadians: angle + 85 * Math.PI / 360
+    });
+    expect(cue?.radius).toBe(radius);
+    expect(cue?.segments.length).toBeGreaterThan(8);
+    expect(cue?.segments.length).toBeLessThanOrEqual(20);
+    // Every mark is confined to its real sector, not outside the danger area.
+    for (const line of cue?.segments ?? []) {
+      for (const [x, y] of [[line.x1, line.y1], [line.x2, line.y2]]) {
+        const distance = Math.hypot(x, y);
+        expect(distance).toBeLessThanOrEqual(radius + 1e-8);
+        if (distance > 0.01) {
+          const deviation = Math.atan2(Math.sin(Math.atan2(y, x) - angle),
+            Math.cos(Math.atan2(y, x) - angle));
+          expect(Math.abs(deviation)).toBeLessThanOrEqual(arcDegrees * Math.PI / 360 + 1e-8);
+        }
+      }
+    }
+  });
+
+  it('supports the actual king cone attacks and does not invent missing geometry', () => {
+    for (const [radius, arcDegrees] of [[108,85],[112,35],[116,42]]) {
+      const cue = planCombatReadability({
+        type: 'telegraph', threat: 'boss', position: at, radius,
+        shape: 'cone', angleRadians: -2.4, arcDegrees
+      });
+      expect(cue?.sector?.toRadians).toBeCloseTo(-2.4 + arcDegrees * Math.PI / 360);
+      expect(cue?.ring).toBe(false);
+    }
+    const invalid: CombatReadabilityInput[] = [
+      { type: 'telegraph', threat: 'boss', position: at, radius: 108,
+        shape: 'cone', angleRadians: Infinity, arcDegrees: 85 },
+      { type: 'telegraph', threat: 'boss', position: at, radius: 108,
+        shape: 'cone', angleRadians: 0, arcDegrees: 0 },
+      { type: 'telegraph', threat: 'boss', position: at, radius: 108,
+        shape: 'cone', angleRadians: 0, arcDegrees: 361 },
+      { type: 'telegraph', threat: 'boss', position: at, radius: 108,
+        shape: 'cone' },
+      { type: 'telegraph', threat: 'boss', position: at, radius: 108,
+        shape: 'arc' as 'circle' }
+    ];
+    for (const value of invalid) expect(planCombatReadability(value)).toBeNull();
+    expect(planCombatReadability({ type: 'telegraph', threat: 'boss',
+      position: at, radius: 60, shape: 'circle' })?.ring).toBe(true);
+  });
+
   it('uses distinct silhouettes for crit, block and dodge; regular hits keep existing VFX', () => {
     const sample = (outcome: 'hit' | 'blocked' | 'dodged', critical = false, damage = 42) =>
       planCombatReadability({ type: 'impact', position: at, outcome, critical, damage });
