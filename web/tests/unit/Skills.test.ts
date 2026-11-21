@@ -96,20 +96,22 @@ describe('active skills for every class', () => {
     expect(finish.effects.enemy[0]?.remaining).toBeLessThan(start.effects.enemy[0]?.remaining);
   });
 
-  it('stores and reloads cooldowns and status effects without resetting the roll seed', () => {
+  it('stores and reloads summon ownership and cooldowns without resetting the roll seed', () => {
     const sim = new GameSimulation();
     sim.command({ type: 'reset', classId: 'NECROMANCER' });
     sim.command({ type: 'cast', slot: 'slot1' });
-    expect(advanceUntil(sim, () => sim.snapshot().effects.player.some(effect => effect.id === 'skeleton'))).toBe(true);
-    const before = sim.snapshot();
-    const saved = structuredClone(before);
-    expect(saved.effects.player[0]?.id).toBe('skeleton');
+    expect(advanceUntil(sim, () => (sim.snapshot().summons?.length ?? 0) > 0)).toBe(true);
+    const saved = structuredClone(sim.snapshot());
+    expect(saved.summons?.[0]).toMatchObject({ ownerId: 'hero', kind: 'skeleton' });
+    expect(saved.effects.player.some(effect => effect.id === 'skeleton')).toBe(false);
     sim.advance(800);
     expect(sim.restore(saved)).toBe(true);
     expect(sim.snapshot()).toEqual(saved);
     expect(sim.restore({ ...saved, cooldowns: { ...emptyCooldowns(), rmb: -1 } })).toBe(false);
+    expect(sim.restore({ ...saved, summons: [{ ...saved.summons![0]!, ownerId: 'forged' }] })).toBe(false);
     expect(sim.restore({ ...saved, effects: { ...saved.effects, player: [{ id: 'skeleton', remaining: 1000, magnitude: 1, tick: 0 }] } })).toBe(false);
     sim.command({ type: 'reset', classId: 'NECROMANCER' });
+    expect(sim.snapshot().summons).toEqual([]);
     expect(sim.snapshot().effects.player).toEqual([]);
   });
 });
