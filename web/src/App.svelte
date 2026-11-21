@@ -634,7 +634,7 @@
             aria-label={$t('talents.open') + (view.talentPoints ? ' (' + view.talentPoints + ')' : '')}
             title={$t('talents.open')}
             data-quick-action="talents"><span aria-hidden="true">✧</span><span class="quick-key">T</span>
-            {#if view.talentPoints > 0}<span class="quick-notice">{view.talentPoints}</span>{/if}</button>
+            {#if (view.talentPoints ?? 0) > 0}<span class="quick-notice">{view.talentPoints}</span>{/if}</button>
           <button disabled={busy} onclick={save} aria-label={$t('menu.save')} title={$t('menu.save')}
             data-quick-action="save"><span aria-hidden="true">▣</span><span class="quick-key">S</span></button>
           <button disabled={busy} onclick={load} aria-label={$t('menu.load')} title={$t('menu.load')}
