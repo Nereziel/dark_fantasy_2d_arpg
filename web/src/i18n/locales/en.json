@@ -458,7 +458,7 @@
     },
     "raiseSkeleton": {
       "name": "Raise Skeleton",
-      "desc": "Summon a temporary ally that attacks nearby enemies."
+      "desc": "Summon a real skeletal ally that follows and attacks nearby foes."
     },
     "lifeDrain": {
       "name": "Life Drain",
@@ -527,6 +527,26 @@
     "blizzard": {
       "name": "Blizzard",
       "desc": "Summon a lingering frost storm at the cursor, damaging and chilling enemies."
+    },
+    "corpseExplosion": {
+      "name": "Corpse Explosion",
+      "desc": "Detonate a nearby fresh corpse, harming and poisoning enemies in its radius."
+    },
+    "bloodDrain": {
+      "name": "Blood Drain",
+      "desc": "Drain an enemy's life through shadow magic and restore health from damage dealt."
+    },
+    "curse": {
+      "name": "Curse",
+      "desc": "Weaken an enemy and make it more vulnerable for six seconds."
+    },
+    "summonGolem": {
+      "name": "Summon Golem",
+      "desc": "Create a durable, level-scaled golem that follows and attacks enemies."
+    },
+    "deathNova": {
+      "name": "Death Nova",
+      "desc": "Blast nearby enemies with poisonous death magic."
     }
   },
   "enemies": {
@@ -1228,5 +1248,9 @@
       "hiddenWall": "A hidden passage has been revealed.",
       "lore": "You read the old chronicle."
     }
+  },
+  "necromancer": {
+    "minions": "Minions",
+    "corpses": "Corpses"
   }
 }

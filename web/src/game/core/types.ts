@@ -15,6 +15,8 @@ import type { WarriorAbilityId } from '../skills/warriorKit';
 import type { PaladinAbilityId, PaladinCooldowns } from '../skills/paladinKit';
 import type { MageExtraSpellId, MageCooldowns } from '../skills/mageKit';
 import type { MageTimedZone } from '../skills/mageCombatPlans';
+import type { NecroExtraSpellId, NecroCooldowns } from '../skills/necromancerKit';
+import type { OwnedSummon, CorpseToken } from '../summons/summonOwnership';
 import type { CombatTimelineState } from '../animation/combatTimeline';
 import type { StatusInstance } from '../status/statusRuntime';
 import type { StatusId } from '../status/statusDefinitions';
@@ -164,6 +166,11 @@ export interface GameSnapshot {
   /** Transient Mage class timers and active elemental fields. */
   mageCooldowns?: MageCooldowns;
   mageZones?: MageTimedZone[];
+  /** Owned allies and corpses are transient; never stored in character-only v11. */
+  summons?: OwnedSummon[];
+  corpses?: CorpseToken[];
+  nextSummonSequence?: number;
+  necroCooldowns?: NecroCooldowns;
   warriorAction?: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null;
   /** Transient hit-frame state of the other five classes, never persisted. */
   classAction?: {
@@ -172,6 +179,7 @@ export interface GameSnapshot {
     /** Paladin extra abilities reuse the canonical class timeline with a null slot. */
     paladinAbilityId?: PaladinAbilityId;
     mageAbilityId?: MageExtraSpellId;
+    necroAbilityId?: NecroExtraSpellId;
     targetId: string | null;
     aim?: SkillAim;
     timeline: CombatTimelineState;
@@ -224,6 +232,7 @@ export type GameCommand =
   | { type: 'warriorAbility'; id: WarriorAbilityId; targetId?: string }
   | { type: 'paladinAbility'; id: PaladinAbilityId; targetId?: string }
   | { type: 'mageAbility'; id: MageExtraSpellId; targetId?: string; position?: Point }
+  | { type: 'necroAbility'; id: NecroExtraSpellId; targetId?: string; position?: Point }
   | { type: 'interactNpc'; npcId: NpcId }
   | { type: 'interactTown'; entryId: string }
   | { type: 'travelWaypoint'; destinationId: WaypointId }

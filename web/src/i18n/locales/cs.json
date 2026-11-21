@@ -458,7 +458,7 @@
     },
     "raiseSkeleton": {
       "name": "Povolat kostlivce",
-      "desc": "Dočasně povolá pomocníka útočícího na blízké nepřátele."
+      "desc": "Přivolá skutečného kostlivého spojence, který tě následuje a bojuje."
     },
     "lifeDrain": {
       "name": "Vysátí života",
@@ -527,6 +527,26 @@
     "blizzard": {
       "name": "Ledová bouře",
       "desc": "Vyvolá setrvalou mrazivou bouři, která zraňuje a zpomaluje nepřátele."
+    },
+    "corpseExplosion": {
+      "name": "Výbuch mrtvoly",
+      "desc": "Odpálí blízkou čerstvou mrtvolu a otráví zasažené nepřátele."
+    },
+    "bloodDrain": {
+      "name": "Vysátí krve",
+      "desc": "Stínovým kouzlem zraní nepřítele a vrátí část poškození jako životy."
+    },
+    "curse": {
+      "name": "Kletba",
+      "desc": "Na šest sekund oslabí nepřítele a zvýší jeho zranitelnost."
+    },
+    "summonGolem": {
+      "name": "Povolat golema",
+      "desc": "Vyvolá odolného golema, který tě následuje a útočí na nepřátele."
+    },
+    "deathNova": {
+      "name": "Nova smrti",
+      "desc": "Otráví a zraní všechny blízké nepřátele."
     }
   },
   "enemies": {
@@ -1228,5 +1248,9 @@
       "hiddenWall": "Odhalil jsi skrytý průchod.",
       "lore": "Přečetl jsi dávnou kroniku."
     }
+  },
+  "necromancer": {
+    "minions": "Přisluhovači",
+    "corpses": "Mrtvoly"
   }
 }
