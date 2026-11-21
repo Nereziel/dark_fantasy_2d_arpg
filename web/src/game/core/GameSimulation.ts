@@ -17,6 +17,11 @@ import { PALADIN_EXTRA_SKILLS, getPaladinAbility, planPaladinCast,
   type PaladinAbilityId, type PaladinCooldowns } from '../skills/paladinKit';
 import { getMageSpell, planMageCast, advanceMageCooldowns, validMageCooldowns,
   type MageExtraSpellId, type MageCooldowns } from '../skills/mageKit';
+import { getRogueAbility, planRogueCast, validRogueCooldowns,
+  advanceRogueCooldowns, type RogueExtraAbilityId, type RogueCooldowns } from '../skills/rogueKit';
+import { planRogueMultishot, planRogueBackstab, planRogueStep,
+  createRogueTrap, tickRogueTraps, validRogueTraps,
+  type RogueTrap } from '../skills/rogueCombatPlans';
 import { getNecroSpell, planNecroCast, advanceNecroCooldowns, validNecroCooldowns,
   type NecroExtraSpellId, type NecroCooldowns } from '../skills/necromancerKit';
 import { createOwnedSummon, stepOwnedSummons, addCorpseToken, stepCorpseTokens,
@@ -214,13 +219,17 @@ function validWaveBState(s: GameSnapshot): boolean {
       || (action.necroAbilityId !== undefined
         && (s.classId !== 'NECROMANCER' || action.kind !== 'skill'
           || action.slot !== null || !getNecroSpell(action.necroAbilityId)))
-      || [action.paladinAbilityId,action.mageAbilityId,action.necroAbilityId]
+      || (action.rogueAbilityId !== undefined
+        && (s.classId !== 'ROGUE' || action.kind !== 'skill'
+          || action.slot !== null || !getRogueAbility(action.rogueAbilityId)))
+      || [action.paladinAbilityId,action.mageAbilityId,action.necroAbilityId,action.rogueAbilityId]
         .filter(id=>id!==undefined).length>1
       || (action.kind === 'basic'
         ? action.slot !== null || action.paladinAbilityId !== undefined
           || action.mageAbilityId !== undefined || action.necroAbilityId !== undefined
+          || action.rogueAbilityId !== undefined
         : action.paladinAbilityId !== undefined || action.mageAbilityId !== undefined
-          || action.necroAbilityId !== undefined
+          || action.necroAbilityId !== undefined || action.rogueAbilityId !== undefined
           ? action.slot !== null : !isSkillSlot(action.slot))
       || typeof action.targetId !== 'string' && action.targetId !== null
       || (typeof action.targetId === 'string' && action.targetId.length > 128)
@@ -232,7 +241,9 @@ function validWaveBState(s: GameSnapshot): boolean {
             ? getMageSpell(action.mageAbilityId)?.id
             : action.necroAbilityId !== undefined
               ? getNecroSpell(action.necroAbilityId)?.id
-              : SKILLS[s.classId][action.slot as SkillSlot].id)
+              : action.rogueAbilityId !== undefined
+                ? getRogueAbility(action.rogueAbilityId)?.id
+                : SKILLS[s.classId][action.slot as SkillSlot].id)
       || !Number.isSafeInteger(timeline.elapsedTicks) || timeline.elapsedTicks < 0
       || !Number.isSafeInteger(timeline.windupTicks) || timeline.windupTicks < 1
       || !Number.isSafeInteger(timeline.recoveryTicks) || timeline.recoveryTicks < 0
@@ -267,6 +278,10 @@ export class GameSimulation {
   private mageCooldowns: MageCooldowns = {};
   private mageZones: MageTimedZone[] = [];
   private necroCooldowns: NecroCooldowns = {};
+  private rogueCooldowns: RogueCooldowns = {};
+  private rogueStealthSeconds = 0;
+  private rogueTraps: RogueTrap[] = [];
+  private rogueNextTrapSequence = 1;
   private summons: OwnedSummon[] = [];
   private corpses: CorpseToken[] = [];
   private nextSummonSequence = 1;
@@ -277,6 +292,7 @@ export class GameSimulation {
     paladinAbilityId?: PaladinAbilityId;
     mageAbilityId?: MageExtraSpellId;
     necroAbilityId?: NecroExtraSpellId;
+    rogueAbilityId?: RogueExtraAbilityId;
     aim?: SkillAim; timeline: CombatTimelineState;
   } | null = null;
   private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
@@ -1501,6 +1517,11 @@ export class GameSimulation {
     if(command.type==='paladinAbility') {
       if(this.classId!=='PALADIN')return;
       this.requestPaladinAbility(command.id,command.targetId??null);
+      return;
+    }
+    if (command.type === 'rogueAbility') {
+      if (this.classId !== 'ROGUE') return;
+      this.requestRogueAbility(command.id,command.targetId??null,command.position);
       return;
     }
     if (command.type === 'necroAbility') {
