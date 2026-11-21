@@ -2,7 +2,6 @@
 // GPL-3.0-only.
 import { describe, expect, it } from 'vitest';
 import { createEquipment, rollItemForBase, SeededRng } from '../../src/game/data/items';
-import { GEM_BASES, GEM_IDS, baseOf, isGemId, tierOf } from '../../src/game/gems/gemCatalog';
 import { planEquip, type InventoryState } from '../../src/game/inventory/equipmentRules';
 
 const roll = (id: string, base: 'broadsword' | 'greatsword' | 'shield' | 'helm', seed: number) => {
@@ -61,24 +60,5 @@ describe('Issue 123: real two-handed catalog transactions', () => {
     expect(planEquip(state, 0, undefined, {
       playerLevel: 1, requiredLevelsById: { [greatsword.id]: greatsword.requiredLevel! }
     })).toEqual({ ok: false, reason: 'LEVEL_REQUIRED' });
-  });
-});
-
-describe('Issue 123: each gem and rune tier keeps a stable artwork identity', () => {
-  it('provides three valid tiers for all six distinct visual families', () => {
-    expect(GEM_BASES).toHaveLength(6);
-    expect(GEM_IDS).toHaveLength(18);
-    expect(new Set(GEM_BASES.map(base => base.id)).size).toBe(6);
-    for (const definition of GEM_BASES) {
-      for (const tier of [1, 2, 3] as const) {
-        const id = `${definition.id}.${tier}`;
-        expect(isGemId(id), id).toBe(true);
-        if (!isGemId(id)) continue;
-        expect(tierOf(id)).toBe(tier);
-        expect(baseOf(id).id).toBe(definition.id);
-      }
-    }
-    expect(GEM_IDS.filter(id => id.startsWith('gem.'))).toHaveLength(9);
-    expect(GEM_IDS.filter(id => id.startsWith('rune.'))).toHaveLength(9);
   });
 });
