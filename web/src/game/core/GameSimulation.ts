@@ -2529,6 +2529,100 @@ export class GameSimulation {
     }
   }
 
+  /** Warlock Soul Power, curses, controls and demons are simulation-owned. */
+  private requestWarlockAbility(id:WarlockExtraSpellId,targetId:string|null):void {
+    if(this.classId!=='WARLOCK'||this.paused||!this.player.alive
+      ||this.classAction||this.warriorAction
+      ||this.statusEffects.player.some(e=>
+        e.id==='stunned'||e.id==='frozen'||e.id==='silenced'))return;
+    const spell=getWarlockSpell(id);
+    if(!spell)return;
+    if(id==='demonSummoning' && (this.summons.length>=3
+      || !createOwnedSummon({
+        ownerId:this.player.id,kind:'demon',zone:this.zone,
+        sequence:this.nextSummonSequence,origin:this.player,
+        level:this.level,spellPower:1+this.currentStats().intelligence/90,
+        obstacles:this.world.obstacles
+      })))return;
+    const target=targetId
+      ? this.units.find(u=>u.actor.id===targetId&&u.actor.alive)
+      : this.focusedUnit.actor.alive?this.focusedUnit:undefined;
+    const plan=planWarlockCast(id,{
+      soul:this.resource,cooldowns:this.warlockCooldowns,origin:this.player,
+      targetId:target?.actor.id??null,targetPosition:target?.actor??null,
+      targetAlive:!!target?.actor.alive,
+      targetVisible:!!(target&&hasLineOfSight(this.player,target.actor,this.world.obstacles))
+    });
+    if(!plan.ok)return;
+    this.resource=plan.soulAfter;
+    this.warlockCooldowns=plan.cooldowns;
+    this.pendingSkill=null;
+    this.pendingAim=null;
+    this.attackTarget=null;
+    this.pickupTarget=null;
+    this.movePath=[];
+    const kind=spell.kind==='summon'?'summon':spell.kind==='nova'?'nova':
+      spell.kind==='bolt'?'strike':'dot';
+    const timeline=classSkillTimeline({
+      id:spell.id,icon:spell.icon,kind,
+      target:spell.aimMode==='SELF'?'self':'enemy',
+      cost:spell.cost,cooldown:spell.cooldown,range:spell.range,
+      power:spell.power,color:spell.color,duration:spell.duration
+    });
+    this.classAction={
+      kind:'skill',slot:null,warlockAbilityId:id,
+      targetId:spell.aimMode==='TARGET_ENTITY'?target?.actor.id??null:null,
+      aim:plan.aim,timeline:startCombatTimeline(timeline).state
+    };
+    const point=spell.aimMode==='TARGET_ENTITY'&&target?target.actor:this.player;
+    this.events.push({type:'cast',skillId:id,x:point.x,y:point.y});
+  }
+
+  private resolveWarlockImpact(id:WarlockExtraSpellId,targetId:string|null):void {
+    const spell=getWarlockSpell(id);
+    if(!spell||this.classId!=='WARLOCK'||!this.player.alive)return;
+    if(id==='demonSummoning'){
+      if(this.summons.length>=3)return;
+      const demon=createOwnedSummon({
+        ownerId:this.player.id,kind:'demon',zone:this.zone,
+        sequence:this.nextSummonSequence,origin:this.player,
+        level:this.level,spellPower:1+this.currentStats().intelligence/90,
+        obstacles:this.world.obstacles
+      });
+      if(demon){this.summons.push(demon);this.nextSummonSequence++;}
+      return;
+    }
+    if(id==='hellfire'){
+      for(const enemy of [...this.aliveEnemies]){
+        if(distance(this.player,enemy.actor)>spell.radius
+          ||!hasLineOfSight(this.player,enemy.actor,this.world.obstacles))continue;
+        const dealt=this.applyDamage(spell.power,enemy,'fire');
+        if(dealt>0&&enemy.actor.alive)
+          this.applyCanonicalStatus('enemy','burning','hero',
+            Math.max(3,Math.round(3+this.currentStats().intelligence*0.19)),
+            spell.duration,enemy);
+      }
+      return;
+    }
+    const target=targetId?this.units.find(u=>
+      u.actor.id===targetId&&u.actor.alive):undefined;
+    // Impact recheck prevents hits through walls, out of range, or on dead targets.
+    if(!target||distance(this.player,target.actor)>spell.range
+      ||!hasLineOfSight(this.player,target.actor,this.world.obstacles))return;
+    if(id==='shadowBolt'){
+      this.applyDamage(spell.power,target,'shadow');
+    }else if(id==='corruption'){
+      this.applyCanonicalStatus('enemy','cursed','hero',0.22,spell.duration,target);
+      this.applyCanonicalStatus('enemy','poisoned','hero',
+        Math.max(3,Math.round(2+this.currentStats().intelligence*0.19)),
+        spell.duration,target);
+    }else if(id==='fear'){
+      // Shared hard-control/cast-lock immunities apply equally to bosses and elites.
+      this.applyCanonicalStatus('enemy','stunned','hero',1,spell.duration,target);
+      this.applyCanonicalStatus('enemy','silenced','hero',1,spell.duration,target);
+    }
+  }
+
   /** Generic owned-allies tick: movement/selection pure, damage simulation-authoritative. */
   private tickOwnedSummons(dt:number):void{
     if(!this.summons.length)return;
