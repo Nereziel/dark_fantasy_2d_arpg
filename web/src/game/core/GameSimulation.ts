@@ -2235,6 +2235,144 @@ export class GameSimulation {
   }
 
   /** Validate and commit class Essence once before the timeline hit frame. */
+  /** Weapon stance is authoritative: bows/crossbows unlock true ranged basic attacks. */
+  private rogueRangedWeapon(): boolean {
+    return this.classId === 'ROGUE'
+      && (this.equipment.MAIN_HAND?.weaponType === 'BOW'
+        || this.equipment.MAIN_HAND?.weaponType === 'CROSSBOW');
+  }
+  private rogueAttackRange(): number {
+    return this.rogueRangedWeapon() ? 305 : CLASSES[this.classId].attackRange;
+  }
+
+  private requestRogueAbility(id:RogueExtraAbilityId,targetId:string|null,
+    cursor?:Point):void{
+    if(this.classId!=='ROGUE'||!this.player.alive||this.paused
+      ||this.classAction||this.warriorAction
+      ||this.statusEffects.player.some(x=>x.id==='stunned'||x.id==='frozen'
+        ||x.id==='silenced'))return;
+    const spell=getRogueAbility(id);
+    if(!spell || (spell.kind==='mobility'&&this.immobilized))return;
+    const target=targetId
+      ?this.units.find(u=>u.actor.alive&&u.actor.id===targetId)
+      :this.focusedUnit.actor.alive?this.focusedUnit:undefined;
+    const aimCursor=cursor??(id==='multishot'?target?.actor:
+      id==='trap'?{x:this.player.x+54,y:this.player.y}:undefined);
+    if(id==='trap' && (this.rogueTraps.length>=3
+      ||!aimCursor||!createRogueTrap('hero',this.rogueNextTrapSequence,
+        this.zone,aimCursor,this.world.obstacles)))return;
+    if(id==='shadowStep' && (!target
+      ||!planRogueStep(this.player,target.actor,spell.range,this.world.obstacles)))return;
+    const plan=planRogueCast(id,{
+      energy:this.resource,cooldowns:this.rogueCooldowns,origin:this.player,
+      targetId:target?.actor.id??null,targetPosition:target?.actor??null,
+      targetAlive:!!target?.actor.alive,
+      targetVisible:!!target&&hasLineOfSight(this.player,target.actor,this.world.obstacles),
+      cursor:aimCursor??null
+    });
+    if(!plan.ok)return;
+    this.resource=plan.energyAfter;
+    this.rogueCooldowns=plan.cooldowns;
+    this.pendingSkill=null;
+    this.pendingAim=null;
+    this.movePath=[];
+    this.pickupTarget=null;
+    this.attackTarget=null;
+    const kind=spell.kind==='mobility'?'dash':spell.kind==='nova'?'nova'
+      :spell.kind==='trap'?'summon':spell.kind==='volley'?'dot':'strike';
+    const timeline=classSkillTimeline({
+      id:spell.id,icon:spell.icon,kind,
+      target:spell.aimMode==='SELF'?'self':'enemy',
+      cost:spell.cost,cooldown:spell.cooldown,range:spell.range,
+      power:spell.power,color:spell.color,duration:spell.duration
+    });
+    this.classAction={
+      kind:'skill',slot:null,rogueAbilityId:id,
+      targetId:spell.aimMode==='TARGET_ENTITY'?target?.actor.id??null:null,
+      aim:plan.aim,timeline:startCombatTimeline(timeline).state
+    };
+    const position=plan.aim.mode==='GROUND_POSITION'?plan.aim.position:
+      target?.actor??this.player;
+    this.events.push({type:'cast',skillId:id,x:position.x,y:position.y});
+  }
+
+  private resolveRogueImpact(id:RogueExtraAbilityId,targetId:string|null,
+    aim?:SkillAim):void{
+    if(this.classId!=='ROGUE'||!this.player.alive)return;
+    const skill=getRogueAbility(id);
+    if(!skill)return;
+    if(id==='backstab'&&targetId){
+      const enemy=this.units.find(u=>u.actor.alive&&u.actor.id===targetId);
+      if(!enemy || distance(this.player,enemy.actor)>skill.range
+        || !hasLineOfSight(this.player,enemy.actor,this.world.obstacles))return;
+      const face=enemy.intent
+        ?{x:enemy.intent.x-enemy.actor.x,y:enemy.intent.y-enemy.actor.y}
+        :{x:this.player.x-enemy.actor.x,y:this.player.y-enemy.actor.y};
+      const bonus=planRogueBackstab(this.player,enemy.actor,face,
+        this.rogueStealthSeconds>0);
+      this.applyDamage(skill.power*bonus*(this.equipment.MAIN_HAND?.weaponType==='DAGGER'
+        ?1.22:1),enemy,'physical');
+      this.rogueStealthSeconds=0;
+    }else if(id==='multishot'&&aim?.mode==='GROUND_POSITION'){
+      const hits=planRogueMultishot(this.player,aim.position,
+        this.units.map(u=>({
+          id:u.actor.id,x:u.actor.x,y:u.actor.y,alive:u.actor.alive
+        })),skill.range,Math.PI/2,this.world.obstacles,5);
+      for(const hit of hits){
+        const enemy=this.units.find(u=>u.actor.alive&&u.actor.id===hit);
+        if(enemy)this.applyDamage(skill.power
+          *(this.rogueRangedWeapon()?1.25:0.85),enemy,'physical');
+      }
+      this.rogueStealthSeconds=0;
+    }else if(id==='shadowStep'&&targetId){
+      const enemy=this.units.find(u=>u.actor.alive&&u.actor.id===targetId);
+      if(!enemy)return;
+      const destination=planRogueStep(this.player,enemy.actor,skill.range,
+        this.world.obstacles);
+      if(!destination)return;
+      this.player.x=destination.x;this.player.y=destination.y;
+      this.movePath=[];this.attackTarget=null;
+      this.rogueStealthSeconds=skill.duration;
+      this.observeExploration();
+    }else if(id==='trap'&&aim?.mode==='GROUND_POSITION'){
+      if(this.rogueTraps.length>=3)return;
+      const next=createRogueTrap(this.player.id,this.rogueNextTrapSequence,
+        this.zone,aim.position,this.world.obstacles);
+      if(!next || distance(this.player,next)>skill.range)return;
+      this.rogueTraps.push(next);
+      this.rogueNextTrapSequence++;
+    }else if(id==='fanOfKnives'){
+      for(const enemy of [...this.aliveEnemies]){
+        if(distance(this.player,enemy.actor)>skill.radius
+          ||!hasLineOfSight(this.player,enemy.actor,this.world.obstacles))continue;
+        const damage=this.applyDamage(skill.power,enemy,'physical');
+        if(damage>0&&enemy.actor.alive)
+          this.applyCanonicalStatus('enemy','bleeding','hero',4,4,enemy);
+      }
+      this.rogueStealthSeconds=0;
+    }
+  }
+
+  private tickRogueTraps(dt:number):void{
+    if(!this.rogueTraps.length)return;
+    const result=tickRogueTraps(this.rogueTraps,dt,this.zone,
+      this.zone==='wilderness' && distance(this.player,this.world.camp)<=CAMP_RADIUS
+        ?[]:this.units.map(u=>({
+          id:u.actor.id,x:u.actor.x,y:u.actor.y,alive:u.actor.alive
+        })),this.world.obstacles);
+    if(!result){this.rogueTraps=[];return;}
+    this.rogueTraps=[...result.traps];
+    for(const hit of result.hits){
+      const enemy=this.units.find(u=>u.actor.alive&&u.actor.id===hit.id);
+      if(!enemy)continue;
+      const dealt=this.applyDamage(hit.power,enemy,'poison');
+      if(dealt>0&&enemy.actor.alive){
+        this.applyCanonicalStatus('enemy','rooted','hero',1,1.2,enemy);
+        this.applyCanonicalStatus('enemy','poisoned','hero',3,4,enemy);
+      }
+    }
+  }
+
   private requestNecroAbility(id: NecroExtraSpellId, targetId: string | null,
     position?: Point): void {
     if (this.classId !== 'NECROMANCER' || this.paused || !this.player.alive
