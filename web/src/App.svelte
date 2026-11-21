@@ -104,9 +104,10 @@
     } catch { /* Settings may be unavailable in private browsing. */ }
   }
 
-  function openControls(): void {
+  function openControls(origin?: HTMLElement): void {
     if (!playing || dialogueOpen || tradeNpc !== null || townModal !== null
       || inventoryOpen || characterOpen || talentsOpen) return;
+    rememberModalOrigin(origin);
     bridge.command({ type: 'pause', value: true });
     controlsOpen = true;
   }
@@ -127,10 +128,68 @@
     return progress ? {characterId:bridge.character().characterId??'hero',progress}:null;
   }
 
-  function openMap(): void {
+  /** A single active dialog owns keyboard focus. Underlying gameplay is inert. */
+  let focusOrigin: HTMLElement | null = null;
+  function rememberModalOrigin(element?: HTMLElement): void {
+    focusOrigin = element ?? (document.activeElement instanceof HTMLElement
+      ? document.activeElement : null);
+  }
+  let modalKind = $derived(!playing ? '' :
+    mapOpen ? 'map' : townModal !== null ? 'town' : tradeNpc !== null ? 'trade'
+    : controlsOpen ? 'controls' : dialogueOpen ? 'dialogue' : inventoryOpen ? 'inventory'
+    : characterOpen ? 'character' : talentsOpen ? 'talents'
+    : !view.player.alive ? 'death' : view.paused ? 'pause' : '');
+
+  $effect(() => {
+    const kind = modalKind;
+    if (!kind) return;
+    const dialog = document.querySelector<HTMLElement>('.game-screen [role="dialog"][aria-modal="true"]');
+    if (!dialog) return;
+    const origin = focusOrigin ?? (document.activeElement instanceof HTMLElement
+      ? document.activeElement : null);
+    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), ' +
+      'textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+    )).filter(element => element.getClientRects().length > 0 && !element.closest('[inert]'));
+    const preferred = dialog.querySelector<HTMLElement>(
+      '[data-testid="map-close"], .close-button, .trade-close, ' +
+      'button[aria-label="Close"], button[aria-label="Zavřít"], .controls-footer .primary'
+    );
+    queueMicrotask(() => {
+      if (!dialog.isConnected) return;
+      if (preferred && preferred.getClientRects().length) preferred.focus();
+      else focusable()[0]?.focus();
+    });
+    const trapTab = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) { event.preventDefault(); dialog.focus(); return; }
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && (document.activeElement === first
+        || !dialog.contains(document.activeElement))) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last
+        || !dialog.contains(document.activeElement))) {
+        event.preventDefault(); first.focus();
+      }
+    };
+    dialog.addEventListener('keydown', trapTab);
+    return () => {
+      dialog.removeEventListener('keydown', trapTab);
+      queueMicrotask(() => {
+        if (!document.querySelector('.game-screen [aria-modal="true"]') && origin?.isConnected) {
+          origin.focus();
+          focusOrigin = null;
+        }
+      });
+    };
+  });
+
+  function openMap(origin?: HTMLElement): void {
     if (!playing || mapOpen || view.zone !== 'wilderness' || !view.player.alive
       || view.paused || inventoryOpen || characterOpen || talentsOpen || controlsOpen || dialogueOpen
       || tradeNpc !== null || townModal !== null) return;
+    rememberModalOrigin(origin);
     bridge.command({ type: 'pause', value: true });
     mapOpen = true;
   }
@@ -174,6 +233,7 @@
       }
       if (event.type === 'zoneChanged' && playing) messageKey = '';
       if (event.type === 'townInteraction' && playing) {
+        rememberModalOrigin();
         townModal = townEntry(event.entryId);
         tradeNpc = null;
         dialogueOpen = false;
@@ -183,6 +243,7 @@
       if (event.type === 'townServiceUsed' && playing) messageKey = 'town.serviceSuccess';
       if (event.type === 'tradeRejected' && playing) messageKey = 'trade.error.' + event.reason;
       if (event.type === 'npcDialogue' && playing) {
+        rememberModalOrigin();
         inventoryOpen = false;
         if (event.npcId === WARDEN_ID) {
           dialogueOpen = true;
@@ -295,13 +356,17 @@
     pendingDeleteId = null;
     playing = false;
   }
-  function togglePause(): void {
+  function togglePause(origin?: HTMLElement): void {
     if (controlsOpen || mapOpen || talentsOpen) return;
-    if (!inventoryOpen && !characterOpen && !dialogueOpen && townModal === null && tradeNpc === null) bridge.command({ type: 'pause', value: !view.paused });
+    if (!inventoryOpen && !characterOpen && !dialogueOpen && townModal === null && tradeNpc === null) {
+      if (!view.paused) rememberModalOrigin(origin);
+      bridge.command({ type: 'pause', value: !view.paused });
+    }
   }
 
-  function openInventory(): void {
+  function openInventory(origin?: HTMLElement): void {
     if (dialogueOpen || tradeNpc !== null || townModal !== null || inventoryOpen || characterOpen || talentsOpen || view.paused || !view.player.alive) return;
+    rememberModalOrigin(origin);
     inventoryOpen = true;
     bridge.command({ type: 'pause', value: true });
   }
@@ -309,9 +374,10 @@
     inventoryOpen = false;
     bridge.command({ type: 'pause', value: false });
   }
-  function openCharacterSheet(): void {
+  function openCharacterSheet(origin?: HTMLElement): void {
     if (dialogueOpen || tradeNpc !== null || townModal !== null || inventoryOpen || characterOpen || talentsOpen ||
       view.paused || !view.player.alive) return;
+    rememberModalOrigin(origin);
     characterOpen = true;
     bridge.command({ type: 'pause', value: true });
   }
@@ -320,9 +386,10 @@
     bridge.command({ type: 'pause', value: false });
   }
 
-  function openTalents(): void {
+  function openTalents(origin?: HTMLElement): void {
     if (!playing || !view.player.alive || view.paused || inventoryOpen || characterOpen
       || controlsOpen || mapOpen || dialogueOpen || tradeNpc !== null || townModal !== null) return;
+    rememberModalOrigin(origin);
     talentsOpen = true;
     bridge.command({ type: 'pause', value: true });
   }
@@ -349,7 +416,16 @@
     bridge.command({ type: 'pause', value: false });
   }
   function handleKeydown(event: KeyboardEvent): void {
-    if (!playing || controlsOpen) return;
+    if (!playing) return;
+    if (controlsOpen) {
+      // Escape cancels an in-progress rebind inside ControlsPanel; otherwise
+      // it returns to the paused game without leaking input into Phaser.
+      if (event.code === 'Escape' && !document.querySelector('.controls-card .capture-hint')) {
+        event.preventDefault();
+        controlsOpen = false;
+      }
+      return;
+    }
     if (talentsOpen) {
       if (event.code === 'Escape') {
         event.preventDefault();
@@ -380,7 +456,7 @@
     if (action === 'MENU') {
       event.preventDefault();
       if (talentsOpen) closeTalents();
-      else if (dialogueOpen || tradeNpc !== null) closeDialogue();
+      else if (dialogueOpen || tradeNpc !== null || townModal !== null) closeDialogue();
       else if (inventoryOpen) closeInventory();
       else if (characterOpen) closeCharacterSheet();
       else togglePause();
@@ -627,7 +703,7 @@
       <GameViewport {bridge} />
       <div class="game-vignette" aria-hidden="true"></div>
 
-      <header class="game-header">
+      <header class="game-header" inert={modalKind !== ''}>
         <div class="brand-mark">AETHER <span>&amp;</span> RUIN</div>
         <div class="zone-name">{view.zone === 'crypt' ? $t('dungeon.name')
           : Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS
@@ -640,13 +716,13 @@
             {/each}
           </select>
           <button class="small-button" disabled={view.zone !== 'wilderness' || view.paused}
-            onclick={openMap}>{$t('map.open')}</button>
-          <button class="small-button" disabled={!view.player.alive} onclick={togglePause}>{view.paused ? $t('menu.resume') : $t('menu.paused')}</button>
+            onclick={(event) => openMap(event.currentTarget)}>{$t('map.open')}</button>
+          <button class="small-button" disabled={!view.player.alive} onclick={(event) => togglePause(event.currentTarget)}>{view.paused ? $t('menu.resume') : $t('menu.paused')}</button>
           <button class="small-button" onclick={menu}>{$t('menu.back')}</button>
         </div>
       </header>
 
-      <div class="hud-left-column" aria-label="Game information">
+      <div class="hud-left-column" aria-label="Game information" inert={modalKind !== ''}>
         <div class="world-guide" aria-live="polite">
         <div>{$t('controls.move')}</div>
         <div>{$t('controls.attack')}</div>
@@ -682,7 +758,7 @@
       {/if}
         <EnvironmentPanel {view} />
       </div>
-      <div class="hud-right-column" aria-label="Map and combat status">
+      <div class="hud-right-column" aria-label="Map and combat status" inert={modalKind !== ''}>
       {#if view.enemies.some(unit => unit.intent !== null) && !inventoryOpen}
         <div class="danger-alert" role="status">
           <strong>{$t('combat.warning')}</strong>
@@ -692,7 +768,7 @@
       {#if miniProjection}
         <div class="minimap-overlay" data-minimap="active">
           <WorldMapCanvas projection={miniProjection} compact />
-          <button onclick={openMap} disabled={view.paused} aria-label={$t('map.open')}>
+          <button onclick={(event) => openMap(event.currentTarget)} disabled={view.paused} aria-label={$t('map.open')}>
             {$t('map.open')} · M
           </button>
         </div>
@@ -727,7 +803,7 @@
         {/each}
       </aside>
       </div>
-      <div class="game-hud" data-testid="combat-dock">
+      <div class="game-hud" data-testid="combat-dock" inert={modalKind !== ''}>
         <div class="vital-panel">
           <div class="vital-top"><span>{$t('hud.health')}</span><strong>{view.player.health} / {view.player.maxHealth}</strong></div>
           <div class="health-track"><div class="health-fill" style:width={`${100 * view.player.health / view.player.maxHealth}%`}></div></div>
@@ -741,11 +817,11 @@
         </div>
         <SkillBar {bridge} {view} />
         <div class="hud-actions">
-          <button onclick={openInventory} aria-label={$t('inventory.open')} title={$t('inventory.open')}
+          <button onclick={(event) => openInventory(event.currentTarget)} aria-label={$t('inventory.open')} title={$t('inventory.open')}
             data-quick-action="inventory"><span aria-hidden="true">▦</span><span class="quick-key">I</span></button>
-          <button onclick={openCharacterSheet} aria-label={$t('character.open')} title={$t('character.open')}
+          <button onclick={(event) => openCharacterSheet(event.currentTarget)} aria-label={$t('character.open')} title={$t('character.open')}
             data-quick-action="character"><span aria-hidden="true">♙</span><span class="quick-key">C</span></button>
-          <button onclick={openTalents} disabled={!view.player.alive || view.paused}
+          <button onclick={(event) => openTalents(event.currentTarget)} disabled={!view.player.alive || view.paused}
             aria-label={$t('talents.open') + (view.talentPoints ? ' (' + view.talentPoints + ')' : '')}
             title={$t('talents.open')}
             data-quick-action="talents"><span aria-hidden="true">✧</span><span class="quick-key">T</span>
@@ -848,12 +924,12 @@
         </div>
       {:else if view.paused}
         <div class="modal-shield">
-          <section class="pause-card" aria-label={$t('menu.paused')}>
+          <div class="pause-card" role="dialog" aria-modal="true" aria-label={$t('menu.paused')}>
             <h2>{$t('menu.paused')}</h2>
-            <button class="primary" onclick={togglePause}>{$t('menu.resume')}</button>
-            <button class="secondary" onclick={openControls}>{$t('bindings.open')}</button>
+            <button class="primary" onclick={() => togglePause()}>{$t('menu.resume')}</button>
+            <button class="secondary" onclick={(event) => openControls(event.currentTarget)}>{$t('bindings.open')}</button>
             <button class="secondary" onclick={menu}>{$t('menu.back')}</button>
-          </section>
+          </div>
         </div>
       {/if}
     </main>
@@ -934,6 +1010,21 @@
   @media(max-width:560px){ .saved-characters { padding:7px; }
     .saved-character-row button { padding:6px; }
     .saved-character-list { max-height:155px; } }
+  /* Preserve a scrollable gap above the taller three-row phone dock. */
+  @media(max-width:650px) {
+    .hud-left-column,.hud-right-column {
+      top: max(59px,calc(env(safe-area-inset-top) + 56px));
+      bottom: min(49dvh,266px); gap:5px;
+    }
+    .hud-left-column {left:4px;width:clamp(115px,30vw,165px)}
+    .hud-right-column{right:4px;width:clamp(115px,30vw,165px)}
+    .hud-right-column :global(.enemy-roster){max-height:125px}
+    .hud-right-column .minimap-overlay{padding:3px}
+    .hud-left-column :global(.camp-services button){min-height:44px}
+  }
+  @media(max-height:480px) and (min-width:651px){
+    .hud-left-column,.hud-right-column{top:53px;bottom:145px}
+  }
   .respawn-destination { color: #d9bc86; margin: 12px 0; }
   .minimap-overlay {
     position: absolute;

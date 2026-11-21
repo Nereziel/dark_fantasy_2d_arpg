@@ -140,17 +140,65 @@ h1 span,.brand-mark span{color:#b88b59}
   .game-hud .vital-top { font-size:.59rem; }
   .game-hud .hud-details { font-size:.5rem; }
 }
+/* Mobile controls remain real touch targets: health, skills, and quick actions
+   have separate rows instead of squeezing actions into a 33px scroll rail. */
 @media(max-width:650px){
-  .game-hud { grid-template-columns:minmax(82px,104px) minmax(0,1fr) 33px;
-    width:calc(100% - 6px); gap:3px; padding:5px 4px; bottom:3px;
-    min-height:94px; max-height:28vh; }
-  .game-hud .vital-top { font-size:.51rem; flex-wrap:wrap; margin-bottom:3px; }
-  .game-hud .vital-panel { min-width:0; }
-  .game-hud .health-track { height:8px; }
+  .game-header { padding: max(4px,env(safe-area-inset-top)) 5px 7px; gap:5px; }
+  .top-actions { gap:3px; min-width:0; }
+  .top-actions .compact-select { min-width:48px; padding:4px 2px; }
+  .top-actions .small-button { min-height:44px; padding:5px 4px; font-size:.61rem; }
+  .game-hud {
+    display:grid;
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto auto auto;
+    align-items:stretch;
+    width:calc(100% - 6px); max-height:min(48dvh,252px);
+    min-height:0; gap:3px; padding:4px 5px;
+    bottom:max(3px,env(safe-area-inset-bottom));
+    overflow:hidden;
+  }
+  .game-hud .vital-panel { grid-column:1; grid-row:1; min-width:0; }
+  .game-hud .vital-top { font-size:.62rem; flex-wrap:nowrap; margin-bottom:2px; }
+  .game-hud .vital-panel .resource-label { margin-top:3px; margin-bottom:2px; }
+  .game-hud .health-track { height:7px; }
   .game-hud .resource-track { height:6px; }
+  .game-hud .experience-track { margin-top:3px; }
   .game-hud .hud-details { display:none; }
-  .game-hud .hud-actions { grid-template-columns:1fr; gap:2px; max-height:94px;
-    overflow-y:auto; scrollbar-width:none; }
-  .game-hud .hud-actions button { min-height:21px; padding:1px; font-size:.72rem; }
-  .game-hud .quick-key { display:none; }
+  .game-hud .skill-ui { grid-column:1; grid-row:2; min-width:0; }
+  .game-hud .skill-toolbar { justify-content:flex-start; overflow-x:auto; overflow-y:hidden;
+    scroll-snap-type:x proximity; scrollbar-width:thin; }
+  .game-hud .skill-toolbar .skill-button {
+    flex:1 0 44px; min-width:44px; max-width:88px; height:44px; min-height:44px;
+    scroll-snap-align:center;
+  }
+  .game-hud .potion-row button { flex:1 1 0; min-height:44px; padding:2px;
+    font-size:.58rem; touch-action:manipulation; }
+  .game-hud .hud-actions {
+    grid-column:1; grid-row:3;
+    display:grid; grid-template-columns:repeat(5,minmax(0,1fr));
+    gap:3px; max-height:none; overflow:visible;
+  }
+  .game-hud .hud-actions button {
+    min-width:0; min-height:44px; height:44px; padding:3px;
+    font-size:1rem; touch-action:manipulation;
+  }
+  .game-hud .quick-key { font-size:.55rem; display:block; }
+  .minimap-overlay button { min-height:44px; }
+}
+@media(max-width:420px){
+  .game-header .brand-mark { display:none; }
+  .game-header .top-actions { flex:1; justify-content:space-between; }
+  .game-header .top-actions .small-button { flex:1; min-width:0; }
+}
+/* Landscape phones retain the compact three-column dock, but with true 44px
+   actions: the extra width allows two rows instead of an inaccessible rail. */
+@media(max-height:480px) and (min-width:651px){
+  .game-header { padding:4px 10px; }
+  .game-hud {
+    grid-template-columns:minmax(118px,145px) minmax(0,1fr) minmax(140px,150px);
+    max-height:min(36dvh,155px); min-height:0; padding:5px;
+    bottom:max(3px,env(safe-area-inset-bottom));
+  }
+  .game-hud .hud-actions { grid-template-columns:repeat(3,minmax(44px,1fr)); gap:3px; }
+  .game-hud .hud-actions button { min-height:44px; padding:3px; }
 }

@@ -36,8 +36,14 @@ test('combat dock contains all seven skills, vitals and clickable actions withou
       expect(box.x + box.width).toBeLessThanOrEqual(outer.x + outer.width + 1);
       expect(box.y + box.height).toBeLessThanOrEqual(outer.y + outer.height + 1);
     }
-    expect(left.x + left.width).toBeLessThanOrEqual(center.x + 1);
-    expect(center.x + center.width).toBeLessThanOrEqual(right.x + 1);
+    if (viewport.width <= 650) {
+      // Touch devices use readable, independently tappable stacked rows.
+      expect(left.y + left.height).toBeLessThanOrEqual(center.y + 1);
+      expect(center.y + center.height).toBeLessThanOrEqual(right.y + 1);
+    } else {
+      expect(left.x + left.width).toBeLessThanOrEqual(center.x + 1);
+      expect(center.x + center.width).toBeLessThanOrEqual(right.x + 1);
+    }
     const buttons = dock.locator('.skill-button');
     const first = await buttons.first().boundingBox();
     const last = await buttons.last().boundingBox();
