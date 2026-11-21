@@ -3749,6 +3749,10 @@ export class GameSimulation {
       || !validMiniStates(s.miniBossStates)
       || !validEventSnapshot()
       || !validPaladinCooldowns(s.paladinCooldowns ?? {})
+      || (s.classId!=='PALADIN' && Object.keys(s.paladinCooldowns ?? {}).length>0)
+      || (s.classAction?.paladinAbilityId!==undefined
+        && !(typeof s.paladinCooldowns?.[s.classAction.paladinAbilityId]==='number'
+          && s.paladinCooldowns[s.classAction.paladinAbilityId]!>0))
       || !validEnvironmentUsedIds(environmentUsed)
       || !validShrineBlessings(s.environmentBlessings ?? [])
       || (s.environmentObjects !== undefined &&
