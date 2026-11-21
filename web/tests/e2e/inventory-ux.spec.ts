@@ -167,6 +167,20 @@ test.describe('touch inventory item preview', () => {
     await expect(inspector.locator('.item-detail').first()).toContainText('Studded War Belt');
     await expect(inspector.locator('.comparison-grid')).toBeVisible();
     await expect(inspector.getByTestId('item-stat-comparison')).toBeVisible();
+
+    // Touch first previews; moving requires an explicit action, and gear taps
+    // inspect equipped items rather than accidentally equipping selected bag gear.
+    const move = inspector.getByRole('button', { name: 'Move by tap' });
+    await expect(move).toBeVisible();
+    await move.tap();
+    await equipped.locator('[data-equipment-slot="BELT"]').tap();
+    await expect(equipped.locator('[data-equipment-slot="BELT"]')).toHaveClass(/has-item/);
+    await equipped.locator('[data-equipment-slot="BELT"]').tap();
+    await expect(inspector.locator('.item-detail').first()).toContainText('Studded War Belt');
+    await inspector.getByRole('button', { name: 'Move by tap' }).tap();
+    await bag.locator('[data-bag-index="17"]').tap();
+    await expect(bag.locator('[data-bag-index="17"]')).toHaveClass(/occupied/);
+
     await modal.getByRole('button', { name: 'Close' }).tap();
     await expect(modal).toHaveCount(0);
   });
