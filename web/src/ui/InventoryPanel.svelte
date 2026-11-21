@@ -204,7 +204,13 @@
         <div class="bag-toolbar">
           <label>
             {$t('inventory.filter')}
-            <select bind:value={rarityFilter} aria-label={$t('inventory.filter')}>
+            <select value={rarityFilter} aria-label={$t('inventory.filter')}
+              onchange={(event) => {
+                rarityFilter = event.currentTarget.value;
+                selected = null;
+                hovered = null;
+                dragged = null;
+              }}>
               <option value="ALL">{$t('inventory.all')}</option>
               {#each Object.keys(RARITIES) as rarity (rarity)}
                 <option value={rarity}>{$t('item.rarity.' + rarity)}</option>
@@ -217,28 +223,30 @@
         </div>
         <div class="bag-grid" role="group" aria-label={$t('inventory.bag')}>
           {#each view.inventory as item,index (index)}
+            {@const filtered = !!item && rarityFilter !== 'ALL' && item.rarity !== rarityFilter}
             <button type="button" class="bag-slot"
               class:occupied={!!item}
-              class:filtered-out={!!item && rarityFilter !== 'ALL' && item.rarity !== rarityFilter}
-              class:selected={selected?.kind === 'bag' && selected.index === index}
+              class:filtered-out={filtered}
+              class:selected={!filtered && selected?.kind === 'bag' && selected.index === index}
               class:favorite={!!(item && view.itemFlags?.[item.id]?.favorite)}
               class:locked={!!(item && view.itemFlags?.[item.id]?.locked)}
               style:border-color={item ? RARITIES[item.rarity].color : undefined}
               data-bag-index={index}
-              draggable={!!item}
-              ondragstart={(event) => startDrag(event, { kind: 'bag', index })}
+              disabled={filtered}
+              draggable={!!item && !filtered}
+              ondragstart={(event) => { if (filtered) event.preventDefault(); else startDrag(event, { kind: 'bag', index }); }}
               ondragend={() => { dragged = null; }}
-              ondragover={permitDrop}
-              ondrop={(event) => dropBag(event,index)}
-              onpointerenter={() => { hovered = item ? { kind: 'bag', index } : null; }}
+              ondragover={(event) => { if (!filtered) permitDrop(event); }}
+              ondrop={(event) => { if (!filtered) dropBag(event,index); }}
+              onpointerenter={() => { hovered = item && !filtered ? { kind: 'bag', index } : null; }}
               onpointerleave={() => { hovered = null; }}
-              onfocus={() => { hovered = item ? { kind: 'bag', index } : null; }}
-              onclick={() => pickBag(index)}
-              ondblclick={() => { if (item) equip(index); }}
-              oncontextmenu={(event) => { if (item) { event.preventDefault(); equip(index); } }}
+              onfocus={() => { hovered = item && !filtered ? { kind: 'bag', index } : null; }}
+              onclick={() => { if (!filtered) pickBag(index); }}
+              ondblclick={() => { if (item && !filtered) equip(index); }}
+              oncontextmenu={(event) => { if (item && !filtered) { event.preventDefault(); equip(index); } }}
               aria-label={item ? itemName(item) : $t('inventory.empty')}
               title={item ? itemName(item) : $t('inventory.empty')}>
-              {#if item && (rarityFilter === 'ALL' || item.rarity === rarityFilter)}
+              {#if item}
                 <span class="bag-item-icon">{item.icon}</span>
                 <span class="sr-only">{itemName(item)}</span>
                 <span class="item-level">{item.level}</span>
@@ -399,7 +407,7 @@
   .bag-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
   .bag-slot{position:relative;min-width:0;aspect-ratio:1/1.15;display:grid;place-items:center;padding:3px;border:1px solid #39434c;background:#101820}
   .bag-slot.occupied{background:radial-gradient(circle at 50% 30%,#26313a,#111820 75%)}
-  .bag-slot.filtered-out{opacity:.20}
+  .bag-slot.filtered-out{opacity:.35;filter:grayscale(.7);cursor:not-allowed}
   .bag-slot.favorite:before{content:' ';position:absolute;inset:2px;border:1px solid #efc87b80;pointer-events:none}
   .bag-item-icon{font:clamp(1.2rem,2vw,1.8rem) Georgia,serif;color:#ebd6b0;text-shadow:0 2px 7px #000}
   .item-level{position:absolute;bottom:2px;right:4px;font-size:.55rem;color:#a5bbbd}
@@ -433,6 +441,6 @@
   .inspector-actions .primary-action{border-color:#ba9361;background:#4b3a29}
   .inspect-placeholder{text-align:center;display:grid;place-items:center;min-height:220px;color:#99a8a7;font-size:.8rem;line-height:1.65;padding:16px}
   .placeholder-glyph{font:3rem Georgia,serif;color:#796c55}
-  @media(max-width:1080px){.inventory-layout{grid-template-columns:minmax(235px,.9fr) minmax(280px,1.1fr)}.item-inspector{grid-column:1/-1;max-height:none}.comparison-grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:950px){.inventory-layout{grid-template-columns:minmax(235px,.9fr) minmax(280px,1.1fr)}.item-inspector{grid-column:1/-1;max-height:none}.comparison-grid{grid-template-columns:1fr 1fr}}
   @media(max-width:650px){.inventory-overlay{padding:4px}.inventory-window{max-height:99dvh}.inventory-header{padding:9px 12px}.inventory-layout{grid-template-columns:1fr;padding:12px;gap:18px}.equipment-grid{max-width:410px;margin:auto}.bag-grid{max-width:490px}.item-inspector{grid-column:auto}.help-toggle{padding:5px}.header-controls button{font-size:.65rem}}
 </style>

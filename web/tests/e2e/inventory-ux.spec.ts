@@ -76,3 +76,44 @@ test('HUD columns and minimap fog stay clear of the seven-skill action bar', asy
     }
   }
 });
+
+test('inventory filter dims hidden items without disguising them as empty or movable', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await page.getByRole('button', { name: 'Browse wares' }).click();
+  const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
+  await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
+  await merchant.getByRole('button', { name: 'Leave' }).click();
+  await page.getByRole('button', { name: 'Inventory (I)' }).click();
+  const modal = page.getByRole('dialog', { name: 'Inventory & Equipment' });
+  const belt = modal.locator('.bag-slot.occupied').first();
+  await expect(belt.locator('.bag-item-icon')).toBeVisible();
+  await belt.click();
+
+  // A medium viewport can show equipped gear, backpack and comparison together.
+  const [gear, bag, inspector] = await Promise.all([
+    modal.locator('.equipment-section').boundingBox(),
+    modal.locator('.backpack-section').boundingBox(),
+    modal.getByTestId('item-inspector').boundingBox()
+  ]);
+  expect(gear && bag && inspector).toBeTruthy();
+  if (gear && bag && inspector) {
+    expect(gear.x + gear.width).toBeLessThanOrEqual(bag.x + 1);
+    expect(bag.x + bag.width).toBeLessThanOrEqual(inspector.x + 1);
+  }
+
+  await modal.locator('.bag-toolbar select').selectOption('MYTHIC');
+  const filtered = modal.locator('.bag-slot.occupied.filtered-out').first();
+  await expect(filtered).toBeVisible();
+  await expect(filtered.locator('.bag-item-icon')).toBeVisible();
+  await expect(filtered).toBeDisabled();
+  await expect(filtered).toHaveAttribute('draggable', 'false');
+  await expect(filtered).not.toHaveClass(/selected/);
+
+  await modal.locator('.bag-toolbar select').selectOption('ALL');
+  await expect(filtered).toHaveCount(0);
+  await expect(belt).toBeEnabled();
+  await expect(belt.locator('.bag-item-icon')).toBeVisible();
+});
