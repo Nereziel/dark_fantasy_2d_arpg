@@ -32,8 +32,7 @@ describe('Prompt 44 — character creation',()=>{
     expect(restored.restoreCharacter(loaded!,99)).toBe(true);
     expect(restored.character()).toEqual(permanent);
     expect(restored.snapshot().worldSeed).toBe(99);
-    expect(restored.snapshot().resource).toBe(CLASSES[id].resourceMax
-      ?restored.snapshot().stats.maxResource:0);
+    expect(restored.snapshot().resource).toBe(CLASSES[id].resourceInitial);
     expect(restored.snapshot().equipment).toEqual(initial.equipment);
   });
   it('binds a seed-scoped world record to its character, not to unrelated heroes',()=>{
