@@ -27,7 +27,7 @@ import type { WorldObject, WorldObjectId } from '../world/interactables';
 import type { EnvironmentObject, EnvironmentObjectId, EnvironmentKind, ShrineBlessing } from '../world/environmentInteractions';
 import type { MapDiscoveryState } from '../world/mapDiscovery';
 import type { CryptInteractable } from '../world/cryptTheme';
-import type { MiniBossState, MiniBossId } from '../enemies/miniBossRules';
+import type { MiniBossState, MiniBossId, MiniBossShape } from '../enemies/miniBossRules';
 import type { HollowKingState } from '../bosses/hollowKingPhases';
 import type { RespawnCheckpointId, RespawnDestination } from './deathRespawn';
 import type { TalentRanks, TalentId } from '../progression/talentTree';
@@ -304,7 +304,9 @@ export type GameEvent =
   | { type: 'hollowKingCue'; kind: string; x: number; y: number; radius: number;
       phase: number; ability?: string }
   | { type: 'miniBossCue'; enemyId: string; bossId: MiniBossId; kind: string;
-      abilityId?: string; x: number; y: number; radius: number; phase: number }
+      abilityId?: string; x: number; y: number; radius: number; phase: number;
+      /** Optional authoritative windup/impact footprint for renderer-only cues. */
+      shape?: MiniBossShape; range?: number; origin?: Point; durationSeconds?: number }
   | { type: 'defeat'; targetId: string; kills: number }
   | { type: 'loot'; id: string }
   | { type: 'pickup'; id: string }
