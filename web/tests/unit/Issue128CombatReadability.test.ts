@@ -158,11 +158,19 @@ describe('Issue 128 stage 2B: authoritative miniboss footprints', () => {
       kind: 'warning', ring: false, position: origin, radius: 43, durationMs: 850
     });
     expect(cue?.sector).toBeUndefined();
-    expect(cue?.polygon).toHaveLength(4);
-    expect(cue?.polygon).toEqual([
-      { x: 0, y: 43 }, { x: 240, y: 43 },
-      { x: 240, y: -43 }, { x: 0, y: -43 }
-    ]);
+    const poly = cue?.polygon ?? [];
+    expect(poly).toHaveLength(19);
+    expect(poly[0]).toEqual({ x: 0, y: 43 });
+    expect(poly[1]?.x).toBeCloseTo(Math.sqrt(240 ** 2 - 43 ** 2));
+    expect(poly[1]?.y).toBeCloseTo(43);
+    expect(poly[9]?.x).toBeCloseTo(240);
+    expect(poly[9]?.y).toBeCloseTo(0);
+    expect(poly[18]).toEqual({ x: 0, y: -43 });
+    // Corners outside the radial limit must NOT be falsely highlighted.
+    for (const p of poly) {
+      expect(Math.hypot(p.x, p.y)).toBeLessThanOrEqual(240 + 1e-8);
+      expect(Math.abs(p.y)).toBeLessThanOrEqual(43 + 1e-8);
+    }
     expect(cue?.segments.length).toBeGreaterThanOrEqual(4);
     expect(cue?.segments.length).toBeLessThanOrEqual(16);
   });
@@ -177,19 +185,25 @@ describe('Issue 128 stage 2B: authoritative miniboss footprints', () => {
       kind: 'warning', ring: false, position: origin, durationMs: 750
     });
     expect(cue?.sector).toBeUndefined();
-    expect(cue?.polygon).toHaveLength(6);
     const poly = cue?.polygon ?? [];
+    expect(poly).toHaveLength(21);
     // The first section is a constant-width 18px corridor, not a triangle.
     expect(poly[0]).toMatchObject({ x: -18, y: 0 });
-    expect(poly[5]).toMatchObject({ x: 18, y: 0 });
+    expect(poly[20]).toMatchObject({ x: 18, y: 0 });
     expect(poly[1]?.x).toBeCloseTo(-18);
     expect(poly[1]?.y).toBeCloseTo(18 / 0.58);
-    expect(poly[4]?.x).toBeCloseTo(18);
-    expect(poly[4]?.y).toBeCloseTo(18 / 0.58);
-    expect(poly[2]?.x).toBeCloseTo(-130 * 0.58);
-    expect(poly[2]?.y).toBeCloseTo(130);
-    expect(poly[3]?.x).toBeCloseTo(130 * 0.58);
-    expect(poly[3]?.y).toBeCloseTo(130);
+    expect(poly[19]?.x).toBeCloseTo(18);
+    expect(poly[19]?.y).toBeCloseTo(18 / 0.58);
+    const cross = 130 / Math.hypot(1, 0.58);
+    expect(poly[2]?.x).toBeCloseTo(-cross * 0.58);
+    expect(poly[2]?.y).toBeCloseTo(cross);
+    // The far tip reaches full range but has ZERO lateral width.
+    expect(poly[10]?.x).toBeCloseTo(0);
+    expect(poly[10]?.y).toBeCloseTo(130);
+    for (const p of poly) {
+      expect(Math.hypot(p.x, p.y)).toBeLessThanOrEqual(130 + 1e-8);
+      expect(Math.abs(p.x)).toBeLessThanOrEqual(Math.max(18, p.y * 0.58) + 1e-8);
+    }
   });
 
   it('preserves circular miniboss markers and rejects incomplete/stale direction data', () => {
@@ -236,13 +250,16 @@ describe('Issue 128 stage 2B: authoritative miniboss footprints', () => {
       expect(cue).not.toBeNull();
       if (!cue) continue;
       expect(cue.polygon?.length).toBeGreaterThanOrEqual(4);
-      expect(cue.polygon?.length).toBeLessThanOrEqual(8);
+      expect(cue.polygon?.length).toBeLessThanOrEqual(24);
       expect(cue.segments.length).toBeLessThanOrEqual(16);
       expect(Object.isFrozen(cue)).toBe(true);
       expect(Object.isFrozen(cue.polygon)).toBe(true);
       for (const p of cue.polygon ?? []) {
         expect(Object.isFrozen(p)).toBe(true);
         expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true);
+        expect(Math.hypot(p.x, p.y)).toBeLessThanOrEqual(cue.durationMs > 0
+          ? (inputs[cues.indexOf(cue)] as Extract<CombatReadabilityInput, { type: 'telegraph' }>).range! + 1e-8
+          : 400);
       }
     }
   });
