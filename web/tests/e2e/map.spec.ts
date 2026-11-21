@@ -17,7 +17,11 @@ test('world map and minimap conceal unvisited places, support localization and s
   await expect(map.locator('[data-fog="unexplored"]').first()).toBeVisible();
   await expect(map.locator('[data-map-marker="town.camp"]')).toHaveCount(1);
   await expect(map.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
+  // Full-screen map is modal: close it before interacting with the header behind it.
+  await dialog.getByTestId('map-close').click();
+  await expect(dialog).toHaveCount(0);
   await page.locator('#game-language').selectOption('cs');
+  await page.getByRole('button', { name: 'Mapa', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Mapa světa' })).toBeVisible();
 
   await page.keyboard.press('Escape');
