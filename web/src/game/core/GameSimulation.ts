@@ -1120,6 +1120,10 @@ export class GameSimulation {
     this.mageCooldowns = {};
     this.mageZones = [];
     this.necroCooldowns = {};
+    this.rogueCooldowns = {};
+    this.rogueStealthSeconds = 0;
+    this.rogueTraps = [];
+    this.rogueNextTrapSequence = 1;
     this.summons = [];
     this.corpses = [];
     this.nextSummonSequence = 1;
@@ -1216,6 +1220,8 @@ export class GameSimulation {
       // Ally scene changes do not reset spell cooldowns or stable ID clock.
       this.summons = [];
       this.corpses = [];
+      this.rogueTraps = [];
+      this.rogueStealthSeconds = 0;
       this.eliteQueue = [];
       this.movementSpeed = 0;
       this.accumulator = 0;
@@ -3100,6 +3106,10 @@ export class GameSimulation {
       this.accumulator = 0;
       this.shield = 0;
       this.projectiles = [];
+      this.rogueTraps = [];
+      this.rogueStealthSeconds = 0;
+      this.rogueCooldowns = {};
+      this.rogueNextTrapSequence = 1;
       this.eliteQueue = [];
       this.cryptArmedTraps.clear();
       this.statusEffects = { player: [], enemies: {} };
@@ -3462,6 +3472,8 @@ export class GameSimulation {
     // Dispose transient corpses and allies; preserve cooldown economy and IDs.
     this.summons = [];
     this.corpses = [];
+    this.rogueTraps = [];
+    this.rogueStealthSeconds = 0;
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
@@ -4150,6 +4162,10 @@ export class GameSimulation {
       mageCooldowns: { ...this.mageCooldowns },
       mageZones: this.mageZones.map(z => ({ ...z, position: { ...z.position } })),
       necroCooldowns: { ...this.necroCooldowns },
+      rogueCooldowns: { ...this.rogueCooldowns },
+      rogueStealthSeconds: this.rogueStealthSeconds,
+      rogueTraps: this.rogueTraps.map(trap=>({...trap})),
+      rogueNextTrapSequence: this.rogueNextTrapSequence,
       summons: this.summons.map(a => ({ ...a })),
       corpses: this.corpses.map(c => ({ ...c })),
       nextSummonSequence: this.nextSummonSequence,
@@ -4307,6 +4323,21 @@ export class GameSimulation {
       || !validEventSnapshot()
       || !validPaladinCooldowns(s.paladinCooldowns ?? {})
       || (s.classId!=='PALADIN' && Object.keys(s.paladinCooldowns ?? {}).length>0)
+      || !validRogueCooldowns(s.rogueCooldowns ?? {})
+      || (s.classId!=='ROGUE'
+        && (Object.keys(s.rogueCooldowns ?? {}).length>0
+          || (s.rogueTraps?.length??0)>0 || (s.rogueStealthSeconds??0)>0))
+      || !Number.isFinite(s.rogueStealthSeconds ?? 0)
+      || (s.rogueStealthSeconds??0)<0 || (s.rogueStealthSeconds??0)>3
+      || (!s.player.alive && (s.rogueStealthSeconds??0)>0)
+      || !validRogueTraps(s.rogueTraps ?? [])
+      || (s.rogueTraps??[]).some(t=>t.ownerId!=='hero'
+        || t.zone!==s.zone || !canOccupy(t,ACTOR_RADIUS,layout.obstacles))
+      || (s.rogueNextTrapSequence!==undefined
+        && (!Number.isSafeInteger(s.rogueNextTrapSequence)
+          || s.rogueNextTrapSequence<1 || s.rogueNextTrapSequence>100000001
+          || (s.rogueTraps??[]).some(t=>
+            Number(t.id.slice(t.id.lastIndexOf('.')+1))>=s.rogueNextTrapSequence!)))
       || !validNecroCooldowns(s.necroCooldowns ?? {})
       || (s.classId!=='NECROMANCER'
         && Object.keys(s.necroCooldowns ?? {}).length>0)
@@ -4561,6 +4592,10 @@ export class GameSimulation {
     this.mageCooldowns = s.mageCooldowns ? { ...s.mageCooldowns } : {};
     this.mageZones = (s.mageZones ?? []).map(z => ({ ...z, position: { ...z.position } }));
     this.necroCooldowns = { ...(s.necroCooldowns ?? {}) };
+    this.rogueCooldowns = { ...(s.rogueCooldowns ?? {}) };
+    this.rogueStealthSeconds = s.rogueStealthSeconds ?? 0;
+    this.rogueTraps = (s.rogueTraps??[]).map(t=>({...t}));
+    this.rogueNextTrapSequence = s.rogueNextTrapSequence??1;
     this.summons = (s.summons ?? []).map(a=>({...a}));
     this.corpses = (s.corpses ?? []).map(c=>({...c}));
     this.nextSummonSequence = s.nextSummonSequence ?? 1;
@@ -4643,6 +4678,10 @@ export class GameSimulation {
     this.mageCooldowns = {};
     this.mageZones = [];
     this.necroCooldowns = {};
+    this.rogueCooldowns = {};
+    this.rogueStealthSeconds = 0;
+    this.rogueTraps = [];
+    this.rogueNextTrapSequence = 1;
     this.summons = [];
     this.corpses = [];
     this.nextSummonSequence = 1;
