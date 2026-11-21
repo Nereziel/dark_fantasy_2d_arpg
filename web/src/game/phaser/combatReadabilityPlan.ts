@@ -131,25 +131,48 @@ function buildMinibossFootprint(
   const sideX = -fy, sideY = fx;
   const vertex = (along: number, sideways: number): ReadabilityPoint =>
     ({ x: fx * along + sideX * sideways, y: fy * along + sideY * sideways });
-  const polygon = shape === 'line'
-    ? [vertex(0, radius), vertex(range, radius),
-      vertex(range, -radius), vertex(0, -radius)]
-    : (() => {
-      const flat = Math.min(range, 18 / 0.58);
-      const width = Math.max(18, range * 0.58);
-      return flat === range
-        ? [vertex(0, 18), vertex(range, 18),
-          vertex(range, -18), vertex(0, -18)]
-        : [vertex(0, 18), vertex(flat, 18), vertex(range, width),
-          vertex(range, -width), vertex(flat, -18), vertex(0, -18)];
-    })();
+
+  // miniBossHit additionally rejects distance(player,boss) > range, even
+  // when the player is inside the rectangular or widening corridor. The true
+  // footprint is the intersection with a disc around the caster. Its far end
+  // is curved, not a full-width flat cap.
+  const floorEnd = 18 / 0.58;
+  const coneCrossover = range / Math.hypot(1, 0.58);
+  const arcStart = shape === 'line'
+    ? Math.sqrt(Math.max(0, range * range - radius * radius))
+    : coneCrossover >= floorEnd
+      ? coneCrossover : Math.sqrt(Math.max(0, range * range - 18 * 18));
+  const lateralWidth = (along: number): number => Math.min(
+    shape === 'line' ? radius : Math.max(18, along * 0.58),
+    Math.sqrt(Math.max(0, range * range - along * along))
+  );
+  const distances = [0];
+  // Include changes in the boundary function exactly. A straight chord
+  // across the kink could otherwise protrude outside the hit predicate.
+  if (shape === 'cone' && floorEnd < arcStart) distances.push(floorEnd);
+  if (arcStart > 0 && arcStart < range) distances.push(arcStart);
+  // Eight bounded segments approximate the radial arc from INSIDE the disc;
+  // no polygon edge may mark a location outside the authoritative hit zone.
+  for (let i = 1; i <= 8; i++) {
+    const along = arcStart + (range - arcStart) * i / 8;
+    if (along > distances[distances.length - 1]! + 1e-9)
+      distances.push(along);
+  }
+  if (distances[distances.length - 1]! < range) distances.push(range);
+  const upper = distances.map(along => vertex(along, lateralWidth(along)));
+  // Omit the repeated zero-width nose to keep a simple closed polygon.
+  const lower = distances.slice(0, -1).reverse().map(along =>
+    vertex(along, -lateralWidth(along)));
+  const polygon = [...upper, ...lower];
+
   // Graphic markings indicate forward direction even for monochrome display.
   const mid = vertex(range * 0.7, 0);
   const arrowStart = vertex(range * 0.49, 0);
   const arrowLeft = vertex(range * 0.57, 9);
   const arrowRight = vertex(range * 0.57, -9);
+  const root = vertex(range * 0.2, 0);
   const segments = [
-    segment(vertex(range * 0.2, 0).x, vertex(range * 0.2, 0).y, mid.x, mid.y),
+    segment(root.x, root.y, mid.x, mid.y),
     segment(arrowLeft.x, arrowLeft.y, mid.x, mid.y),
     segment(arrowRight.x, arrowRight.y, mid.x, mid.y),
     segment(arrowStart.x, arrowStart.y, mid.x, mid.y)
