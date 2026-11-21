@@ -909,7 +909,10 @@ export class FrontierScene extends Phaser.Scene {
     const visualPose = this.time.now < this.heroBlockUntil ? 'block'
       : this.time.now < this.heroHitUntil ? 'hit' : this.pixelPose(animation);
     const castTicks = state.warriorAction?.timeline ?? state.classAction?.timeline;
-    const heroFrame = castTicks && (visualPose === 'attack' || visualPose === 'cast'
+    const heroFrame = visualPose === 'hit' || visualPose === 'block'
+      // Reactions are event-driven, not synchronized to global idle-time modulo.
+      // Always show their readable contact silhouette during the short cue.
+      ? 2 : castTicks && (visualPose === 'attack' || visualPose === 'cast'
       || visualPose === 'channel')
       ? pixelTimelineFrame(castTicks)
       : Math.floor(this.time.now / (visualPose === 'run' ? 95 : 150)) % PIXEL_ANIMATION_FRAMES;
