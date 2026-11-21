@@ -2237,9 +2237,10 @@ export class GameSimulation {
   /** Validate and commit class Essence once before the timeline hit frame. */
   /** Weapon stance is authoritative: bows/crossbows unlock true ranged basic attacks. */
   private rogueRangedWeapon(): boolean {
-    return this.classId === 'ROGUE'
-      && (this.equipment.MAIN_HAND?.weaponType === 'BOW'
-        || this.equipment.MAIN_HAND?.weaponType === 'CROSSBOW');
+    const main=this.equipment.MAIN_HAND;
+    return this.classId === 'ROGUE' && !!main
+      && (main.weaponType === 'BOW' || main.weaponType === 'CROSSBOW'
+        || main.templateId==='bow' || main.templateId==='crossbow');
   }
   private rogueAttackRange(): number {
     return this.rogueRangedWeapon() ? 305 : CLASSES[this.classId].attackRange;
@@ -2784,7 +2785,7 @@ export class GameSimulation {
     const stats = this.currentStats();
     const rolled = stats.damageMin + this.rng.next() * (stats.damageMax - stats.damageMin);
     const primary = ['MAGE', 'NECROMANCER', 'WARLOCK'].includes(this.classId)
-      ? stats.intelligence : stats.strength;
+      ? stats.intelligence : this.classId==='ROGUE'?stats.dexterity:stats.strength;
     return this.resolveEnemyDamage(
       rolled, unit, type, 'hero',
       (1 + primary * 0.035) * Math.max(0, power)
@@ -2798,7 +2799,8 @@ export class GameSimulation {
   }
 
   private dealPlayerDamage(base: number, type: DamageType, sourceId: string): boolean {
-    if (!this.player.alive || this.respawnProtectionSeconds > 0) return false;
+    if (!this.player.alive || this.respawnProtectionSeconds > 0
+      || (this.classId==='ROGUE' && this.rogueStealthSeconds>0)) return false;
     const stats = this.currentStats();
     const resistance = type === 'fire' ? stats.fireResist
       : type === 'frost' ? stats.frostResist
@@ -2943,7 +2945,8 @@ export class GameSimulation {
       if (action.kind === 'basic') {
         const target = this.units.find(unit =>
           unit.actor.id === action.targetId && unit.actor.alive);
-        if (target && distance(this.player, target.actor) <= CLASSES[this.classId].attackRange + 10) {
+        if (target && distance(this.player, target.actor) <= this.rogueAttackRange() + 10
+          && hasLineOfSight(this.player,target.actor,this.world.obstacles)) {
           this.applyDamage(1, target);
           if (this.classId === 'PALADIN') {
             this.resource = Math.min(this.currentStats().maxResource,this.resource+5);
@@ -2958,6 +2961,8 @@ export class GameSimulation {
         this.resolveMageImpact(action.mageAbilityId, action.targetId, action.aim);
       } else if (action.necroAbilityId) {
         this.resolveNecroImpact(action.necroAbilityId,action.targetId,action.aim);
+      } else if (action.rogueAbilityId) {
+        this.resolveRogueImpact(action.rogueAbilityId,action.targetId,action.aim);
       } else if (action.slot) {
         this.resolveClassCast(action.slot, action.aim, action.targetId);
       }
@@ -2984,6 +2989,8 @@ export class GameSimulation {
     }
     const mageBonuses = this.classId === 'MAGE'
       ? projectTalentBonuses(this.talentRanks) : null;
+    if (this.classId==='ROGUE' && skill.id==='shadowDash' && aim?.mode==='DIRECTION')
+      this.rogueStealthSeconds=Math.max(this.rogueStealthSeconds,0.7);
     if (skill.id === 'raiseSkeleton' && this.classId === 'NECROMANCER') {
       this.spawnNecroAlly('skeleton');
     } else if (skill.id === 'fireball' && aim?.mode === 'GROUND_POSITION') {
@@ -3511,6 +3518,9 @@ export class GameSimulation {
     this.mageCooldowns=advanceMageCooldowns(this.mageCooldowns,dt) ?? {};
     this.tickMageZones(dt);
     this.necroCooldowns=advanceNecroCooldowns(this.necroCooldowns,dt)??{};
+    this.rogueCooldowns=advanceRogueCooldowns(this.rogueCooldowns,dt)??{};
+    this.rogueStealthSeconds=Math.max(0,this.rogueStealthSeconds-dt);
+    this.tickRogueTraps(dt);
     this.corpses=[...(stepCorpseTokens(this.corpses,dt)??[])];
     this.tickOwnedSummons(dt);
     this.warriorCooldowns.cleave = this.cooldowns.rmb;
@@ -3656,10 +3666,10 @@ export class GameSimulation {
       const target = this.units.find(unit => unit.actor.id === this.attackTarget && unit.actor.alive);
       if (!target) this.attackTarget = null;
       else if (distance(this.player, target.actor) >
-        (this.classId === 'WARRIOR' ? Math.min(60, definition.attackRange) : definition.attackRange)) {
+        (this.classId === 'WARRIOR' ? Math.min(60, definition.attackRange) : this.rogueAttackRange())) {
         if (!this.holdPosition) {
           const range = this.classId === 'WARRIOR'
-            ? Math.min(60, definition.attackRange) : definition.attackRange;
+            ? Math.min(60, definition.attackRange) : this.rogueAttackRange();
           const route = hasLineOfSight(this.player, target.actor, this.world.obstacles)
             ? [] : findPath(this.player, target.actor, ACTOR_RADIUS, this.world.obstacles);
           if (route.length > 0) {
@@ -3668,7 +3678,8 @@ export class GameSimulation {
             this.follow(this.player, target.actor, speed, dt, range - 4);
           }
         }
-      } else if (!this.immobilized && this.attackTimer <= 0) {
+      } else if (!this.immobilized && this.attackTimer <= 0
+        && hasLineOfSight(this.player,target.actor,this.world.obstacles)) {
         if (this.classId === 'WARRIOR') {
           // Repeated left-click attacks share the same hit-frame and Rage policy.
           this.requestWarriorAbility('basicAttack', target.actor.id);
