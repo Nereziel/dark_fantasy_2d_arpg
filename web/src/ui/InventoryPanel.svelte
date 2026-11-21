@@ -5,7 +5,7 @@
   import type { GameBridge } from '../game/bridge/GameBridge';
   import type { Item, RarityId } from '../game/data/items';
   import ItemArt from './ItemArt.svelte';
-  import { normalizeGroundLootFilter, type GroundLootFilter,
+  import { DEFAULT_GROUND_LOOT_FILTER, normalizeGroundLootFilter, type GroundLootFilter,
     type GroundLootCategory } from '../game/items/groundLootVisibility';
   import { RARITIES } from '../game/data/items';
   import { WEAPON_TYPES } from '../game/items/itemCatalog';
@@ -34,8 +34,9 @@
   let helpOpen = $state(false);
   let placementMessage = $state('');
   const groundFilterStorageKey = 'aether-ruin-ground-loot-filter-v1';
-  let lootFilter: GroundLootFilter = $state(bridge.groundLootFilter());
+  let lootFilter: GroundLootFilter = $state({ ...DEFAULT_GROUND_LOOT_FILTER });
   onMount(() => {
+    lootFilter = bridge.groundLootFilter();
     try {
       const saved = window.localStorage.getItem(groundFilterStorageKey);
       if (saved) {
