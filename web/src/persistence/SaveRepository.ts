@@ -2,6 +2,7 @@ import { GameSimulation } from '../game/core/GameSimulation';
 import type { CharacterProgress } from '../game/core/types';
 import { MAX_LEVEL } from '../game/progression/progressionRules';
 import { createEquipment } from '../game/data/items';
+import { isCharacterId } from '../game/creation/characterCreation';
 
 const DATABASE = 'aether-ruin-web';
 const STORE = 'saves';
@@ -31,7 +32,7 @@ export function validateCharacter(raw: unknown): CharacterProgress | null {
 export function createSaveRecord(raw: unknown, savedAt = Date.now()): SavedGame | null {
   const character = validateCharacter(raw);
   if (!character || !Number.isFinite(savedAt) || savedAt < 0) return null;
-  return { format: 11, characterId: 'hero', savedAt, character };
+  return { format: 11, characterId: character.characterId ?? 'hero', savedAt, character };
 }
 
 /**
@@ -64,7 +65,9 @@ export function migrateV9Character(raw: unknown): CharacterProgress | null {
 export function readSaveRecord(raw: unknown): CharacterProgress | null {
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as Partial<SavedGame>;
-  if (record.characterId !== 'hero') return null;
+  if (!isCharacterId(record.characterId)) return null;
+  const sameCharacter = (candidate: CharacterProgress | null) => candidate
+    && (candidate.characterId ?? 'hero') === record.characterId ? candidate : null;
   const format: unknown = (raw as { format?: unknown }).format;
   // V11 explicitly stores both stash and the complete story ledger.
   // Missing ledger must fail closed, never reset paid quest rewards.
@@ -73,7 +76,7 @@ export function readSaveRecord(raw: unknown): CharacterProgress | null {
       || !Object.hasOwn(record.character, 'stash')
       || !Array.isArray(record.character.stash)
       || !Object.hasOwn(record.character, 'questLedger')) return null;
-    return validateCharacter(record.character);
+    return sameCharacter(validateCharacter(record.character));
   }
   // V10 had a mandatory stash but only the historical first quest.
   // RestoreCharacter expands it to an Act I ledger without losing reward status.
@@ -81,10 +84,12 @@ export function readSaveRecord(raw: unknown): CharacterProgress | null {
     if (!record.character || typeof record.character !== 'object'
       || !Object.hasOwn(record.character, 'stash')
       || !Array.isArray(record.character.stash)) return null;
-    return validateCharacter(record.character);
+    return record.characterId === 'hero' ? sameCharacter(validateCharacter(record.character)) : null;
   }
-  if (format === 9) return migrateV9Character(record.character);
-  if (format === 8) return migrateV8Character(record.character);
+  if (format === 9) return record.characterId === 'hero'
+    ? sameCharacter(migrateV9Character(record.character)) : null;
+  if (format === 8) return record.characterId === 'hero'
+    ? sameCharacter(migrateV8Character(record.character)) : null;
   return null;
 }
 
