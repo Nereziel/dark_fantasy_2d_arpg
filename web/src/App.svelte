@@ -791,7 +791,7 @@
     .hud-left-column,.hud-right-column{bottom:clamp(300px,46vh,430px)}
   }
   @media(max-width:850px){
-    .hud-left-column,.hud-right-column{top:72px;bottom:max(340px,48vh);gap:6px}
+    .hud-left-column,.hud-right-column{top:72px;bottom:max(390px,54vh);gap:6px}
     .hud-left-column{left:7px;width:clamp(132px,22vw,180px)}
     .hud-right-column{right:7px;width:clamp(132px,22vw,180px)}
     .hud-left-column :global(.world-guide){display:none}
@@ -799,7 +799,7 @@
     .hud-left-column :global(.camp-services button){font-size:.64rem;padding:5px 4px}
   }
   @media(max-width:560px){
-    .hud-left-column,.hud-right-column{top:64px;bottom:max(350px,49vh);gap:5px}
+    .hud-left-column,.hud-right-column{top:64px;bottom:max(405px,56vh);gap:5px}
     .hud-left-column{width:clamp(120px,30vw,148px);left:4px}
     .hud-right-column{width:clamp(120px,30vw,148px);right:4px}
     .hud-right-column :global(.enemy-roster){max-height:110px}
