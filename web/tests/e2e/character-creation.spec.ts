@@ -14,7 +14,7 @@ test('Prompt 44 creates and reloads every class with stable hero identity, start
     await page.getByRole('button',{name:'Enter the world'}).click();
     await expect(page.locator('.hud-details')).toContainText(name+' · Level 1');
     const seed=await page.locator('.game-screen').getAttribute('data-world-seed');
-    const saved=await expect.poll(async()=>page.evaluate(async()=>{
+    await expect.poll(async()=>page.evaluate(async()=>{
       return await new Promise<{
         format:number;id:string;characterId:string;worldId:string;
         classId:string;level:number;xp:number;equipped:number;seed:number;
@@ -28,7 +28,7 @@ test('Prompt 44 creates and reloads every class with stable hero identity, start
           tx.oncomplete=()=>{
             db.close();
             const c=character.result,w=world.result;
-            resolve(c&&w?{
+            resolve(c&&w&&c.character?.characterId===w.characterId?{
               format:c.format,id:c.characterId,characterId:c.character?.characterId,
               worldId:w.characterId,classId:c.character?.classId,level:c.character?.level,
               xp:c.character?.xp,
@@ -39,7 +39,7 @@ test('Prompt 44 creates and reloads every class with stable hero identity, start
           tx.onerror=()=>{db.close();reject(tx.error);};
         };
       });
-    })).toMatchObject({format:11,level:1,xp:0});
+    })).toMatchObject({format:11,classId:name.toUpperCase(),level:1,xp:0});
     // Read the exact saved slot after the poll resolves.
     const record=await page.evaluate(async()=>{
       return await new Promise<{id:string;worldId:string;classId:string;equipped:number;seed:number}>((resolve,reject)=>{
