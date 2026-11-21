@@ -3,6 +3,7 @@
   import type { GameSnapshot } from '../game/core/types';
   import type { GameBridge } from '../game/bridge/GameBridge';
   import { itemDisplayName } from '../game/items/itemName';
+  import ItemArt from './ItemArt.svelte';
   import { RARITIES, type RarityId } from '../game/data/items';
   import { STASH_SIZE, STASH_TAB_COUNT, emptyStashTabs, projectStashItems,
     type StashCategory, type StashSort } from '../game/inventory/stashRules';
@@ -132,7 +133,10 @@
             draggable={!view.itemFlags?.[item.id]?.locked && !view.itemFlags?.[item.id]?.favorite}
             ondragstart={(event) => dragStart(event, { kind: 'bag', index, id: item.id })}
             ondragend={clearDrag}>
-            <span style:color={RARITIES[item.rarity].color}>{item.icon} {itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</span>
+            <span class="stash-item-ident" style:color={RARITIES[item.rarity].color}>
+              <span class="stash-art"><ItemArt {item} /></span>
+              <span class="stash-item-label">{itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</span>
+            </span>
             <button disabled={!hasFreeStash || !!view.itemFlags?.[item.id]?.locked || !!view.itemFlags?.[item.id]?.favorite}
               onclick={() => bridge.command({ type: 'stashDeposit', index, tab: activeTab })}>
               {$t('town.stashDeposit')}
@@ -196,7 +200,10 @@
         <div class="stash-row" role="group" aria-label={item.id} data-item-id={item.id} data-slot-index={index} draggable="true"
           ondragstart={(event) => dragStart(event, { kind: 'stash', tab: activeTab, index, id: item.id })}
           ondragend={clearDrag}>
-          <span style:color={RARITIES[item.rarity].color}>{item.icon} {itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</span>
+          <span class="stash-item-ident" style:color={RARITIES[item.rarity].color}>
+              <span class="stash-art"><ItemArt {item} /></span>
+              <span class="stash-item-label">{itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</span>
+            </span>
           <div class="stash-row-actions">
             <button disabled={!hasFreeBag}
               onclick={() => bridge.command({ type: 'stashWithdraw', index, tab: activeTab })}>
@@ -242,6 +249,9 @@
   .stash-row[draggable="true"]:active{cursor:grabbing}
   .stash-row[draggable="false"]{cursor:not-allowed}
   .stash-row span{font-size:.75rem;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .stash-item-ident{display:flex;flex:1 1 140px;align-items:center;gap:8px;min-width:0}
+  .stash-art{width:32px;height:32px;flex:0 0 32px}
+  .stash-item-label{min-width:0;white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
   .stash-row button,.stash-organize{white-space:nowrap;font-size:.72rem;border:1px solid #8b7a5f;background:#2d3137;color:#e7dac0;padding:7px;cursor:pointer}
   .stash-row button:disabled{opacity:.45;cursor:not-allowed}
   .stash-row-actions{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end}
@@ -251,5 +261,5 @@
   .stash-controls select,.stash-controls input{box-sizing:border-box;width:100%;min-width:0;color:#eee2c7;border:1px solid #675845;background:#17202a;padding:6px;font-size:.7rem}
   .stash-organize{margin-bottom:8px}
   .stash-empty,.stash-hint{color:#c4b8a6;font-size:.76rem}
-  @media(max-width:660px){.stash-columns{grid-template-columns:1fr}.stash-list{max-height:145px}.stash-tabs button{padding:7px 9px}.stash-controls label{min-width:105px}}
+  @media(max-width:660px){.stash-columns{grid-template-columns:1fr}.stash-list{max-height:145px}.stash-tabs button{padding:7px 9px}.stash-controls label{min-width:105px}.stash-row{flex-wrap:wrap}.stash-row-actions{margin-left:auto}}
 </style>
