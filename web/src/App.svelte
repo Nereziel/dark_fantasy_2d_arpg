@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { _ as t, locale } from 'svelte-i18n';
   import { languageOptions, setLanguage, type Language } from './i18n';
   import { GameBridge } from './game/bridge/GameBridge';
@@ -490,8 +490,9 @@
   async function save(): Promise<void> {
     if (busy) return;
     busy = true;
-    messageKey = ''; // Never let a previous success mask an in-flight write.
+    messageKey = 'status.saving'; // Visible pending state cannot be confused with old success.
     try {
+      await tick(); // Commit the saving label before awaiting IndexedDB transactions.
       const world = boundWorldProgress();
       await Promise.all([
         autosaver.saveNow(bridge.character()),
