@@ -159,6 +159,7 @@
     "combat": "Boj",
     "dead": "Smrt",
     "paused": "Pauza",
+    "saving": "Ukládání postavy…",
     "saved": "Postava uložena",
     "loaded": "Postava načtena – začíná nový svět",
     "saveError": "Uložení není dostupné",
@@ -270,7 +271,8 @@
     "strengths": "Přednosti",
     "resource": "Zdroj",
     "equipment": "Počáteční výbava",
-    "overwriteWarning": "Vytvoření nového hrdiny přepíše dosavadní uloženou postavu a její postup ve světě."
+    "overwriteWarning": "Vytvoření nového hrdiny přepíše dosavadní uloženou postavu a její postup ve světě.",
+    "multiSlotHint": "Noví hrdinové mají samostatné pozice. Stávající postavy zůstanou uložené."
   },
   "classes": {
     "WARRIOR": {
@@ -1318,5 +1320,15 @@
   "rogue": {
     "traps": "Pasti",
     "stealth": "Skrytí"
+  },
+  "saveSlots": {
+    "title": "Uložené postavy",
+    "empty": "Zatím žádné uložené postavy",
+    "level": "Úroveň",
+    "delete": "Smazat",
+    "confirmDelete": "Trvale smazat?",
+    "cancel": "Zrušit",
+    "deleted": "Uložená postava byla smazána",
+    "full": "Všechny pozice jsou obsazené. Před vytvořením další postavy jednu smaž."
   }
 }

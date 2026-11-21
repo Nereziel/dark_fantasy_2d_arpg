@@ -11,7 +11,7 @@ import { validEnvironmentUsedIds } from '../game/world/environmentInteractions';
  */
 const DATABASE = 'aether-ruin-web';
 const STORE = 'saves';
-const SLOT = 'world:first-character';
+const SLOT = 'world:first-character'; // Legacy last-active alias.
 const MAX_RECORD_BYTES = 120_000;
 
 interface WorldRecord {
@@ -83,15 +83,52 @@ function withStore<T>(mode: IDBTransactionMode,
   });
 }
 
+/** Canonical per-character world facts, separate from volatile world instances. */
+export function worldSaveKey(characterId: unknown): string | null {
+  return isCharacterId(characterId) ? 'world:character:' + characterId : null;
+}
+
 export async function saveWorldProgress(progress: WorldSessionProgress, characterId = 'hero'): Promise<void> {
   const record = createWorldRecord(progress, characterId);
-  if (!record) throw new RangeError('Invalid world-instance progress');
-  return withStore<void>('readwrite', store => { store.put(record, SLOT); });
+  const key = worldSaveKey(characterId);
+  if (!record || !key) throw new RangeError('Invalid world-instance progress');
+  // Both aliases are committed together, so changing characters never deletes
+  // their independently saved map discovery, waypoints or persistent facts.
+  return withStore<void>('readwrite', store => {
+    const previous = store.get(SLOT);
+    previous.onsuccess = () => {
+      const previousId: unknown = previous.result?.characterId;
+      const previousKey = worldSaveKey(previousId);
+      if (previousKey && previousKey !== key
+        && readWorldRecord(previous.result, previousId as string)) {
+        const current = store.get(previousKey);
+        current.onsuccess = () => {
+          if (!current.result) store.put(previous.result, previousKey);
+          store.put(record, key);
+          store.put(record, SLOT);
+        };
+      } else {
+        store.put(record, key);
+        store.put(record, SLOT);
+      }
+    };
+  });
 }
 
 export async function loadWorldProgress(characterId = 'hero'): Promise<WorldSessionProgress | null> {
+  const key = worldSaveKey(characterId);
+  if (!key) return null;
   return withStore<WorldSessionProgress | null>('readonly', (store, done) => {
-    const request = store.get(SLOT);
-    request.onsuccess = () => { done(readWorldRecord(request.result, characterId)); };
+    const request = store.get(key);
+    request.onsuccess = () => {
+      const canonical = readWorldRecord(request.result, characterId);
+      if (canonical) {
+        done(canonical);
+        return;
+      }
+      // Legacy worlds only used one key. Never restore another hero's record.
+      const legacy = store.get(SLOT);
+      legacy.onsuccess = () => { done(readWorldRecord(legacy.result, characterId)); };
+    };
   });
 }

@@ -159,6 +159,7 @@
     "combat": "Combat",
     "dead": "Dead",
     "paused": "Paused",
+    "saving": "Saving hero…",
     "saved": "Hero saved",
     "loaded": "Hero loaded — a fresh world awaits",
     "saveError": "Saving is unavailable",
@@ -270,7 +271,8 @@
     "strengths": "Strengths",
     "resource": "Resource",
     "equipment": "Starting equipment",
-    "overwriteWarning": "Creating a new hero replaces the current saved character and world progress."
+    "overwriteWarning": "Creating a new hero replaces the current saved character and world progress.",
+    "multiSlotHint": "New heroes have separate save slots. Your existing characters will be kept."
   },
   "classes": {
     "WARRIOR": {
@@ -1318,5 +1320,15 @@
   "rogue": {
     "traps": "Traps",
     "stealth": "Concealment"
+  },
+  "saveSlots": {
+    "title": "Saved heroes",
+    "empty": "No saved heroes yet",
+    "level": "Level",
+    "delete": "Delete",
+    "confirmDelete": "Delete permanently?",
+    "cancel": "Cancel",
+    "deleted": "Saved hero deleted",
+    "full": "All character slots are occupied. Delete one to create a new hero."
   }
 }

@@ -29,6 +29,34 @@ test('Q uses an authoritative combat potion, saves charges and refills at the ap
   await expect(vendor.locator('[data-potion-refill="resistance"]')).toContainText('1/1');
   await vendor.getByRole('button', { name: 'Leave' }).click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Hero saved');
+  // Both the active legacy alias and the canonical character slot must be
+  // committed before the browser navigates away.
+  const persistedCharges = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('aether-ruin-web', 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    return new Promise<[number, number]>((resolve, reject) => {
+      const tx = db.transaction('saves', 'readonly');
+      const store = tx.objectStore('saves');
+      const alias = store.get('first-character');
+      let canonical!: IDBRequest<any>;
+      alias.onsuccess = () => {
+        canonical = store.get('character:' + alias.result.characterId);
+      };
+      tx.oncomplete = () => {
+        db.close();
+        resolve([
+          alias.result.character.potionCharges?.resistance ?? 1,
+          canonical.result.character.potionCharges?.resistance ?? 1
+        ]);
+      };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  });
+  expect(persistedCharges).toEqual([1, 1]);
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
   await expect(page.locator('[data-potion-id="resistance"]')).toContainText('1');
