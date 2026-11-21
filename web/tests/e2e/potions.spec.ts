@@ -42,7 +42,7 @@ test('Q uses an authoritative combat potion, saves charges and refills at the ap
       const tx = db.transaction('saves', 'readonly');
       const store = tx.objectStore('saves');
       const alias = store.get('first-character');
-      let canonical: IDBRequest<any>;
+      let canonical!: IDBRequest<any>;
       alias.onsuccess = () => {
         canonical = store.get('character:' + alias.result.characterId);
       };
