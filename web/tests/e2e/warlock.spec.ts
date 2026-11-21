@@ -1,0 +1,21 @@
+import {test,expect} from '@playwright/test';
+
+test('Warlock exposes seven abilities, summons a real demon, and reloads without transient allies',async({page})=>{
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button',{name:/Warlock/}).click();
+  await page.getByRole('button',{name:'Enter the world'}).click();
+  const skills=page.locator('[data-warlock-ability]');
+  await expect(skills).toHaveCount(5);
+  await expect(page.locator('.skill-button')).toHaveCount(7);
+  await expect(page.getByTestId('warlock-demons')).toContainText('Demons: 0/3');
+  await page.locator('[data-warlock-ability="demonSummoning"]').click();
+  await expect(page.getByTestId('warlock-demons')).toContainText('Demons: 1/3');
+  await expect(page.locator('[data-warlock-ability="demonSummoning"]')).toBeDisabled();
+  await page.locator('#game-language').selectOption('cs');
+  await expect(page.getByTestId('warlock-demons')).toContainText('Démoni: 1/3');
+  await page.getByRole('button',{name:'Uložit'}).click();
+  await page.reload();
+  await page.getByRole('button',{name:'Načíst'}).click();
+  await expect(page.getByTestId('warlock-demons')).toContainText('Démoni: 0/3');
+});

@@ -37,6 +37,7 @@
   import { MAGE_EXTRA_IDS } from './game/skills/mageKit';
   import { NECRO_EXTRA_IDS } from './game/skills/necromancerKit';
   import { ROGUE_EXTRA_IDS } from './game/skills/rogueKit';
+  import { WARLOCK_EXTRA_IDS } from './game/skills/warlockKit';
   import { POTION_IDS, POTIONS } from './game/consumables/potionRules';
   import { xpRequiredForLevel } from './game/progression/progressionRules';
 
@@ -407,6 +408,12 @@
           targetId:view.selectedTargetId??view.enemy.id,
           ...(position?{position}:{})});
       }
+    } else if (view.classId === 'WARLOCK'
+      && ['SLOT_2','SLOT_3','SLOT_4','SLOT_5','SLOT_6'].includes(action)) {
+      event.preventDefault();
+      const id=WARLOCK_EXTRA_IDS[Number(action.slice(-1))-2];
+      if(id)bridge.command({type:'warlockAbility',id,
+        targetId:view.selectedTargetId??view.enemy.id});
     } else if (action === 'FORCE_MOVE' || action === 'PRIMARY') {
       const position = bridge.pointerPosition();
       if (!position) return;

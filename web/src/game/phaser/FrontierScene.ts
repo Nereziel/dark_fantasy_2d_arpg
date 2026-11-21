@@ -13,6 +13,7 @@ import { getPaladinAbility } from '../skills/paladinKit';
 import { getMageSpell } from '../skills/mageKit';
 import { getNecroSpell } from '../skills/necromancerKit';
 import { getRogueAbility } from '../skills/rogueKit';
+import { getWarlockSpell } from '../skills/warlockKit';
 import type { GameEvent, ZoneId, Point } from '../core/types';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
 import {
@@ -638,7 +639,7 @@ export class FrontierScene extends Phaser.Scene {
         .flatMap(kit => Object.values(kit))
         .find(skill => skill.id === event.skillId) ?? getPaladinAbility(event.skillId)
         ?? getMageSpell(event.skillId) ?? getNecroSpell(event.skillId)
-        ?? getRogueAbility(event.skillId);
+        ?? getRogueAbility(event.skillId) ?? getWarlockSpell(event.skillId);
       const ring = this.obtainImpact(event.x, event.y, 85);
       ring.lineStyle(4, definition?.color ?? 0xffddaa, 0.95).strokeCircle(0, 0, 18);
       this.tweens.add({
@@ -886,10 +887,12 @@ export class FrontierScene extends Phaser.Scene {
     for(const summon of allies){
       let sprite=this.summonSprites.get(summon.id);
       if(!sprite){
-        const atlas=this.ensurePixelAtlas(summon.kind==='golem'?'crypt_lord':'skeleton');
+        const atlas=this.ensurePixelAtlas(summon.kind==='golem'?'crypt_lord':
+          summon.kind==='demon'?'wraith':'skeleton');
         sprite=this.add.sprite(summon.x,summon.y,atlas,pixelFrame('idle',0))
           .setOrigin(0.5,0.9).setDepth(49.5)
-          .setTint(summon.kind==='golem'?0xa2d4b7:0x68d4ca);
+          .setTint(summon.kind==='golem'?0xa2d4b7:
+            summon.kind==='demon'?0xcb72d1:0x68d4ca);
         sprite.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
         this.summonSprites.set(summon.id,sprite);
       }

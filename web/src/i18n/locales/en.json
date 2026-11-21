@@ -468,6 +468,26 @@
       "name": "Soul Burn",
       "desc": "Curse an enemy with lingering soulfire damage."
     },
+    "shadowBolt": {
+      "name": "Shadow Bolt",
+      "desc": "Launch a shadow projectile at a visible enemy."
+    },
+    "demonSummoning": {
+      "name": "Demon Summoning",
+      "desc": "Summon a real demon ally. Command up to three demons at once."
+    },
+    "corruption": {
+      "name": "Corruption",
+      "desc": "Curse a target and inflict persistent poison damage."
+    },
+    "fear": {
+      "name": "Fear",
+      "desc": "Briefly incapacitate an enemy and silence its spells."
+    },
+    "hellfire": {
+      "name": "Hellfire",
+      "desc": "Blast nearby enemies with fire and apply burning damage over time."
+    },
     "basicAttack": {
       "name": "Basic Attack",
       "desc": "A melee hit that generates Rage when it connects."
@@ -1268,6 +1288,9 @@
       "hiddenWall": "A hidden passage has been revealed.",
       "lore": "You read the old chronicle."
     }
+  },
+  "warlock": {
+    "demons": "Demons"
   },
   "necromancer": {
     "minions": "Minions",

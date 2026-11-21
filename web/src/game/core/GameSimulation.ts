@@ -24,6 +24,8 @@ import { planRogueMultishot, planRogueBackstab, planRogueStep,
   type RogueTrap } from '../skills/rogueCombatPlans';
 import { getNecroSpell, planNecroCast, advanceNecroCooldowns, validNecroCooldowns,
   type NecroExtraSpellId, type NecroCooldowns } from '../skills/necromancerKit';
+import { getWarlockSpell, planWarlockCast, advanceWarlockCooldowns,
+  validWarlockCooldowns, type WarlockExtraSpellId, type WarlockCooldowns } from '../skills/warlockKit';
 import { createOwnedSummon, stepOwnedSummons, addCorpseToken, stepCorpseTokens,
   chooseCorpseToken, consumeCorpseToken, validOwnedSummons, validCorpseTokens,
   type OwnedSummon, type CorpseToken } from '../summons/summonOwnership';
@@ -222,14 +224,18 @@ function validWaveBState(s: GameSnapshot): boolean {
       || (action.rogueAbilityId !== undefined
         && (s.classId !== 'ROGUE' || action.kind !== 'skill'
           || action.slot !== null || !getRogueAbility(action.rogueAbilityId)))
-      || [action.paladinAbilityId,action.mageAbilityId,action.necroAbilityId,action.rogueAbilityId]
+      || (action.warlockAbilityId !== undefined
+        && (s.classId !== 'WARLOCK' || action.kind !== 'skill'
+          || action.slot !== null || !getWarlockSpell(action.warlockAbilityId)))
+      || [action.paladinAbilityId,action.mageAbilityId,action.necroAbilityId,action.rogueAbilityId,action.warlockAbilityId]
         .filter(id=>id!==undefined).length>1
       || (action.kind === 'basic'
         ? action.slot !== null || action.paladinAbilityId !== undefined
           || action.mageAbilityId !== undefined || action.necroAbilityId !== undefined
-          || action.rogueAbilityId !== undefined
+          || action.rogueAbilityId !== undefined || action.warlockAbilityId !== undefined
         : action.paladinAbilityId !== undefined || action.mageAbilityId !== undefined
           || action.necroAbilityId !== undefined || action.rogueAbilityId !== undefined
+          || action.warlockAbilityId !== undefined
           ? action.slot !== null : !isSkillSlot(action.slot))
       || typeof action.targetId !== 'string' && action.targetId !== null
       || (typeof action.targetId === 'string' && action.targetId.length > 128)
@@ -243,7 +249,9 @@ function validWaveBState(s: GameSnapshot): boolean {
               ? getNecroSpell(action.necroAbilityId)?.id
               : action.rogueAbilityId !== undefined
                 ? getRogueAbility(action.rogueAbilityId)?.id
-                : SKILLS[s.classId][action.slot as SkillSlot].id)
+                : action.warlockAbilityId !== undefined
+                  ? getWarlockSpell(action.warlockAbilityId)?.id
+                  : SKILLS[s.classId][action.slot as SkillSlot].id)
       || !Number.isSafeInteger(timeline.elapsedTicks) || timeline.elapsedTicks < 0
       || !Number.isSafeInteger(timeline.windupTicks) || timeline.windupTicks < 1
       || !Number.isSafeInteger(timeline.recoveryTicks) || timeline.recoveryTicks < 0
@@ -278,6 +286,7 @@ export class GameSimulation {
   private mageCooldowns: MageCooldowns = {};
   private mageZones: MageTimedZone[] = [];
   private necroCooldowns: NecroCooldowns = {};
+  private warlockCooldowns: WarlockCooldowns = {};
   private rogueCooldowns: RogueCooldowns = {};
   private rogueStealthSeconds = 0;
   private rogueTraps: RogueTrap[] = [];
@@ -293,6 +302,7 @@ export class GameSimulation {
     mageAbilityId?: MageExtraSpellId;
     necroAbilityId?: NecroExtraSpellId;
     rogueAbilityId?: RogueExtraAbilityId;
+    warlockAbilityId?: WarlockExtraSpellId;
     aim?: SkillAim; timeline: CombatTimelineState;
   } | null = null;
   private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
@@ -1120,6 +1130,7 @@ export class GameSimulation {
     this.mageCooldowns = {};
     this.mageZones = [];
     this.necroCooldowns = {};
+    this.warlockCooldowns = {};
     this.rogueCooldowns = {};
     this.rogueStealthSeconds = 0;
     this.rogueTraps = [];
@@ -1534,6 +1545,11 @@ export class GameSimulation {
     if (command.type === 'necroAbility') {
       if (this.classId !== 'NECROMANCER') return;
       this.prioritizeSkill(() => this.requestNecroAbility(command.id,command.targetId??null,command.position));
+      return;
+    }
+    if (command.type === 'warlockAbility') {
+      if (this.classId !== 'WARLOCK') return;
+      this.prioritizeSkill(() => this.requestWarlockAbility(command.id,command.targetId??null));
       return;
     }
     if (command.type === 'mageAbility') {
@@ -2513,6 +2529,100 @@ export class GameSimulation {
     }
   }
 
+  /** Warlock Soul Power, curses, controls and demons are simulation-owned. */
+  private requestWarlockAbility(id:WarlockExtraSpellId,targetId:string|null):void {
+    if(this.classId!=='WARLOCK'||this.paused||!this.player.alive
+      ||this.classAction||this.warriorAction
+      ||this.statusEffects.player.some(e=>
+        e.id==='stunned'||e.id==='frozen'||e.id==='silenced'))return;
+    const spell=getWarlockSpell(id);
+    if(!spell)return;
+    if(id==='demonSummoning' && (this.summons.length>=3
+      || !createOwnedSummon({
+        ownerId:this.player.id,kind:'demon',zone:this.zone,
+        sequence:this.nextSummonSequence,origin:this.player,
+        level:this.level,spellPower:1+this.currentStats().intelligence/90,
+        obstacles:this.world.obstacles
+      })))return;
+    const target=targetId
+      ? this.units.find(u=>u.actor.id===targetId&&u.actor.alive)
+      : this.focusedUnit.actor.alive?this.focusedUnit:undefined;
+    const plan=planWarlockCast(id,{
+      soul:this.resource,cooldowns:this.warlockCooldowns,origin:this.player,
+      targetId:target?.actor.id??null,targetPosition:target?.actor??null,
+      targetAlive:!!target?.actor.alive,
+      targetVisible:!!(target&&hasLineOfSight(this.player,target.actor,this.world.obstacles))
+    });
+    if(!plan.ok)return;
+    this.resource=plan.soulAfter;
+    this.warlockCooldowns=plan.cooldowns;
+    this.pendingSkill=null;
+    this.pendingAim=null;
+    this.attackTarget=null;
+    this.pickupTarget=null;
+    this.movePath=[];
+    const kind=spell.kind==='summon'?'summon':spell.kind==='nova'?'nova':
+      spell.kind==='bolt'?'strike':'dot';
+    const timeline=classSkillTimeline({
+      id:spell.id,icon:spell.icon,kind,
+      target:spell.aimMode==='SELF'?'self':'enemy',
+      cost:spell.cost,cooldown:spell.cooldown,range:spell.range,
+      power:spell.power,color:spell.color,duration:spell.duration
+    });
+    this.classAction={
+      kind:'skill',slot:null,warlockAbilityId:id,
+      targetId:spell.aimMode==='TARGET_ENTITY'?target?.actor.id??null:null,
+      aim:plan.aim,timeline:startCombatTimeline(timeline).state
+    };
+    const point=spell.aimMode==='TARGET_ENTITY'&&target?target.actor:this.player;
+    this.events.push({type:'cast',skillId:id,x:point.x,y:point.y});
+  }
+
+  private resolveWarlockImpact(id:WarlockExtraSpellId,targetId:string|null):void {
+    const spell=getWarlockSpell(id);
+    if(!spell||this.classId!=='WARLOCK'||!this.player.alive)return;
+    if(id==='demonSummoning'){
+      if(this.summons.length>=3)return;
+      const demon=createOwnedSummon({
+        ownerId:this.player.id,kind:'demon',zone:this.zone,
+        sequence:this.nextSummonSequence,origin:this.player,
+        level:this.level,spellPower:1+this.currentStats().intelligence/90,
+        obstacles:this.world.obstacles
+      });
+      if(demon){this.summons.push(demon);this.nextSummonSequence++;}
+      return;
+    }
+    if(id==='hellfire'){
+      for(const enemy of [...this.aliveEnemies]){
+        if(distance(this.player,enemy.actor)>spell.radius
+          ||!hasLineOfSight(this.player,enemy.actor,this.world.obstacles))continue;
+        const dealt=this.applyDamage(spell.power,enemy,'fire');
+        if(dealt>0&&enemy.actor.alive)
+          this.applyCanonicalStatus('enemy','burning','hero',
+            Math.max(3,Math.round(3+this.currentStats().intelligence*0.19)),
+            spell.duration,enemy);
+      }
+      return;
+    }
+    const target=targetId?this.units.find(u=>
+      u.actor.id===targetId&&u.actor.alive):undefined;
+    // Impact recheck prevents hits through walls, out of range, or on dead targets.
+    if(!target||distance(this.player,target.actor)>spell.range
+      ||!hasLineOfSight(this.player,target.actor,this.world.obstacles))return;
+    if(id==='shadowBolt'){
+      this.applyDamage(spell.power,target,'shadow');
+    }else if(id==='corruption'){
+      this.applyCanonicalStatus('enemy','cursed','hero',0.22,spell.duration,target);
+      this.applyCanonicalStatus('enemy','poisoned','hero',
+        Math.max(3,Math.round(2+this.currentStats().intelligence*0.19)),
+        spell.duration,target);
+    }else if(id==='fear'){
+      // Shared hard-control/cast-lock immunities apply equally to bosses and elites.
+      this.applyCanonicalStatus('enemy','stunned','hero',1,spell.duration,target);
+      this.applyCanonicalStatus('enemy','silenced','hero',1,spell.duration,target);
+    }
+  }
+
   /** Generic owned-allies tick: movement/selection pure, damage simulation-authoritative. */
   private tickOwnedSummons(dt:number):void{
     if(!this.summons.length)return;
@@ -2997,6 +3107,8 @@ export class GameSimulation {
         this.resolveNecroImpact(action.necroAbilityId,action.targetId,action.aim);
       } else if (action.rogueAbilityId) {
         this.resolveRogueImpact(action.rogueAbilityId,action.targetId,action.aim);
+      } else if (action.warlockAbilityId) {
+        this.resolveWarlockImpact(action.warlockAbilityId,action.targetId);
       } else if (action.slot) {
         this.resolveClassCast(action.slot, action.aim, action.targetId);
       }
@@ -3558,6 +3670,7 @@ export class GameSimulation {
     this.mageCooldowns=advanceMageCooldowns(this.mageCooldowns,dt) ?? {};
     this.tickMageZones(dt);
     this.necroCooldowns=advanceNecroCooldowns(this.necroCooldowns,dt)??{};
+    this.warlockCooldowns=advanceWarlockCooldowns(this.warlockCooldowns,dt)??{};
     this.rogueCooldowns=advanceRogueCooldowns(this.rogueCooldowns,dt)??{};
     this.rogueStealthSeconds=Math.max(0,this.rogueStealthSeconds-dt);
     this.tickRogueTraps(dt);
@@ -4190,6 +4303,7 @@ export class GameSimulation {
       mageCooldowns: { ...this.mageCooldowns },
       mageZones: this.mageZones.map(z => ({ ...z, position: { ...z.position } })),
       necroCooldowns: { ...this.necroCooldowns },
+      warlockCooldowns: { ...this.warlockCooldowns },
       rogueCooldowns: { ...this.rogueCooldowns },
       rogueStealthSeconds: this.rogueStealthSeconds,
       rogueTraps: this.rogueTraps.map(trap=>({...trap})),
@@ -4366,13 +4480,20 @@ export class GameSimulation {
           || s.rogueNextTrapSequence<1 || s.rogueNextTrapSequence>100000001
           || (s.rogueTraps??[]).some(t=>
             Number(t.id.slice(t.id.lastIndexOf('.')+1))>=s.rogueNextTrapSequence!)))
+      || !validWarlockCooldowns(s.warlockCooldowns ?? {})
+      || (s.classId!=='WARLOCK' && Object.keys(s.warlockCooldowns ?? {}).length>0)
       || !validNecroCooldowns(s.necroCooldowns ?? {})
       || (s.classId!=='NECROMANCER'
         && Object.keys(s.necroCooldowns ?? {}).length>0)
       || !validOwnedSummons(s.summons ?? [])
       || !validCorpseTokens(s.corpses ?? [])
-      || (s.classId!=='NECROMANCER'
-        && ((s.summons?.length??0)>0 || (s.corpses?.length??0)>0))
+      || (s.classId!=='NECROMANCER' && (s.corpses?.length??0)>0)
+      || (s.classId!=='NECROMANCER' && s.classId!=='WARLOCK'
+        && (s.summons?.length??0)>0)
+      || (s.classId==='WARLOCK' && ((s.summons??[]).length>3
+        || (s.summons??[]).some(a=>a.kind!=='demon')))
+      || (s.classId==='NECROMANCER'
+        && (s.summons??[]).some(a=>a.kind==='demon'))
       || (s.summons??[]).some(a=>a.ownerId!=='hero'||a.zone!==s.zone
         || !canOccupy(a,ACTOR_RADIUS,layout.obstacles)
         || !s.player.alive)
@@ -4393,6 +4514,8 @@ export class GameSimulation {
         || s.mageZones.length > 3 || (s.classId !== 'MAGE' && s.mageZones.length > 0)
         || s.mageZones.some(z => !validMageZone(z))
         || new Set(s.mageZones.map(z => z.id)).size !== s.mageZones.length))
+      || (s.classAction?.warlockAbilityId !== undefined
+        && !((s.warlockCooldowns?.[s.classAction.warlockAbilityId] ?? 0)>0))
       || (s.classAction?.mageAbilityId !== undefined
         && !((s.mageCooldowns?.[s.classAction.mageAbilityId] ?? 0) > 0))
       || (s.classAction?.paladinAbilityId!==undefined
@@ -4620,6 +4743,7 @@ export class GameSimulation {
     this.mageCooldowns = s.mageCooldowns ? { ...s.mageCooldowns } : {};
     this.mageZones = (s.mageZones ?? []).map(z => ({ ...z, position: { ...z.position } }));
     this.necroCooldowns = { ...(s.necroCooldowns ?? {}) };
+    this.warlockCooldowns = { ...(s.warlockCooldowns ?? {}) };
     this.rogueCooldowns = { ...(s.rogueCooldowns ?? {}) };
     this.rogueStealthSeconds = s.rogueStealthSeconds ?? 0;
     this.rogueTraps = (s.rogueTraps??[]).map(t=>({...t}));
@@ -4706,6 +4830,7 @@ export class GameSimulation {
     this.mageCooldowns = {};
     this.mageZones = [];
     this.necroCooldowns = {};
+    this.warlockCooldowns = {};
     this.rogueCooldowns = {};
     this.rogueStealthSeconds = 0;
     this.rogueTraps = [];

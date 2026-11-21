@@ -10,6 +10,7 @@
   import { MAGE_EXTRA_IDS, MAGE_EXTRA_SPELLS, type MageExtraSpellId } from '../game/skills/mageKit';
   import { NECRO_EXTRA_IDS, NECRO_EXTRA_SPELLS, type NecroExtraSpellId } from '../game/skills/necromancerKit';
   import { ROGUE_EXTRA_IDS, ROGUE_EXTRA_SKILLS, type RogueExtraAbilityId } from '../game/skills/rogueKit';
+  import { WARLOCK_EXTRA_IDS, WARLOCK_EXTRA_SPELLS, type WarlockExtraSpellId } from '../game/skills/warlockKit';
   import { projectEquippedSkill } from '../game/skills/skillModifiers';
   import { projectTalentBonuses } from '../game/progression/talentTree';
   const extraWarriorSkills = ['groundSlam', 'warCry', 'whirlwind', 'execute', 'basicAttack'] as const;
@@ -46,6 +47,10 @@
     bridge.command({type:'rogueAbility',id,
       targetId:view.selectedTargetId??view.enemy.id,
       ...(position?{position}:{})});
+  }
+  function castWarlock(id:WarlockExtraSpellId):void {
+    bridge.command({type:'warlockAbility',id,
+      targetId:view.selectedTargetId??view.enemy.id});
   }
   function cast(slot: 'rmb' | 'slot1'): void {
     const aim = bridge.skillAim(slot);
@@ -196,7 +201,33 @@
         </button>
       {/each}
     {/if}
+    {#if view.classId === 'WARLOCK'}
+      {#each WARLOCK_EXTRA_IDS as id,index (id)}
+        {@const skill = WARLOCK_EXTRA_SPELLS[id]}
+        {@const remaining = view.warlockCooldowns?.[id] ?? 0}
+        <button class="skill-button extra" class:cooldown={remaining>0}
+          data-warlock-ability={id}
+          disabled={view.paused || !view.player.alive || remaining>0
+            || !!view.classAction || view.resource + 0.001 < skill.cost
+            || id==='demonSummoning' && (view.summons??[]).length>=3}
+          aria-label={$t('skills.'+id+'.name')}
+          title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.soul')}
+          onclick={() => castWarlock(id)}>
+          <span class="skill-shortcut">{index+2}</span>
+          <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
+          <span class="skill-title">{$t('skills.'+id+'.name')}</span>
+          <span class="skill-cost">{skill.cost}</span>
+          {#if remaining>0}<span class="skill-cooldown">{Math.ceil(remaining)}s</span>{/if}
+        </button>
+      {/each}
+    {/if}
   </div>
+  {#if view.classId === 'WARLOCK'}
+    <div class="necro-minions" data-testid="warlock-demons"
+      aria-label={$t('warlock.demons')}>
+      {$t('warlock.demons')}: {(view.summons??[]).filter(s=>s.kind==='demon').length}/3
+    </div>
+  {/if}
   {#if view.classId === 'NECROMANCER'}
     <div class="necro-minions" data-testid="necromancer-minions"
       aria-label={$t('necromancer.minions')}>

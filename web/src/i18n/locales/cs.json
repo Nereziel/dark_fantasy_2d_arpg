@@ -468,6 +468,26 @@
       "name": "Žár duší",
       "desc": "Prokleje nepřítele plamenem, který jej dále spaluje."
     },
+    "shadowBolt": {
+      "name": "Stínový šíp",
+      "desc": "Vystřelí temný projektil, který poškodí viditelný cíl."
+    },
+    "demonSummoning": {
+      "name": "Povolání démona",
+      "desc": "Vyvolá skutečného démonického spojence. Najednou lze ovládat až tři démony."
+    },
+    "corruption": {
+      "name": "Korupce",
+      "desc": "Uvalí na cíl kletbu a dlouhodobé poškozování jedem."
+    },
+    "fear": {
+      "name": "Děs",
+      "desc": "Na krátkou dobu ochromí nepřítele a umlčí jeho kouzla."
+    },
+    "hellfire": {
+      "name": "Pekelný oheň",
+      "desc": "Zasáhne blízké nepřátele plamenem a způsobí hoření."
+    },
     "basicAttack": {
       "name": "Základní úder",
       "desc": "Úder zblízka, který při zásahu vytváří zuřivost."
@@ -1268,6 +1288,9 @@
       "hiddenWall": "Odhalil jsi skrytý průchod.",
       "lore": "Přečetl jsi dávnou kroniku."
     }
+  },
+  "warlock": {
+    "demons": "Démoni"
   },
   "necromancer": {
     "minions": "Přisluhovači",
