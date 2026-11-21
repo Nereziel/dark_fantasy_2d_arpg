@@ -6,6 +6,7 @@
   import { CLASSES } from '../game/data/classes';
   import { POTION_IDS } from '../game/consumables/potionRules';
   import { WARRIOR_ABILITIES, type WarriorAbilityId } from '../game/skills/warriorKit';
+  import { PALADIN_EXTRA_IDS, PALADIN_EXTRA_SKILLS, type PaladinAbilityId } from '../game/skills/paladinKit';
   import { projectEquippedSkill } from '../game/skills/skillModifiers';
   const extraWarriorSkills = ['groundSlam', 'warCry', 'whirlwind', 'execute', 'basicAttack'] as const;
   const warriorShortcuts: Record<typeof extraWarriorSkills[number], string> = {
@@ -16,6 +17,9 @@
 
   function castWarrior(id: WarriorAbilityId): void {
     bridge.command({ type: 'warriorAbility', id, targetId: view.selectedTargetId ?? view.enemy.id });
+  }
+  function castPaladin(id: PaladinAbilityId): void {
+    bridge.command({type:'paladinAbility',id,targetId:view.selectedTargetId??view.enemy.id});
   }
 
   function cast(slot: 'rmb' | 'slot1'): void {
@@ -77,6 +81,30 @@
           {/if}
           <span class="skill-cost">{ability.rageCost === 0 ? '—' : ability.rageCost}</span>
           {#if remaining > 0}<span class="skill-cooldown">{Math.ceil(remaining)}s</span>{/if}
+        </button>
+      {/each}
+    {/if}
+    {#if view.classId === 'PALADIN'}
+      {#each PALADIN_EXTRA_IDS as id,index (id)}
+        {@const skill=PALADIN_EXTRA_SKILLS[id]}
+        {@const remaining=view.paladinCooldowns?.[id]??0}
+        <button
+          class="skill-button extra"
+          class:cooldown={remaining>0}
+          data-paladin-ability={id}
+          disabled={view.paused || !view.player.alive || remaining>0 ||
+            !!view.classAction || view.resource + 0.001 < skill.cost}
+          aria-label={$t('skills.'+id+'.name')}
+          title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.faith')}
+          onclick={() => castPaladin(id)}
+        >
+          <span class="skill-shortcut">{index+2}</span>
+          <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
+          <span class="skill-title">{$t('skills.'+id+'.name')}</span>
+          <span class="skill-cost">{skill.cost}</span>
+          {#if remaining>0}
+            <span class="skill-cooldown">{Math.ceil(remaining)}s</span>
+          {/if}
         </button>
       {/each}
     {/if}
