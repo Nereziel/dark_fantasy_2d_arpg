@@ -1196,15 +1196,10 @@ export class GameSimulation {
       this.warriorAction = null;
       this.classAction = null;
       this.holdPosition = false;
-      this.summons = [];
-      this.corpses = [];
-      this.necroCooldowns = {};
-      this.nextSummonSequence = 1;
       this.projectiles = [];
+      // Ally scene changes do not reset spell cooldowns or stable ID clock.
       this.summons = [];
       this.corpses = [];
-      this.necroCooldowns = {};
-      this.nextSummonSequence = 1;
       this.eliteQueue = [];
       this.movementSpeed = 0;
       this.accumulator = 0;
@@ -3298,10 +3293,9 @@ export class GameSimulation {
     this.paladinCooldowns = {};
     this.mageCooldowns = {};
     this.mageZones = [];
-    this.necroCooldowns = {};
+    // Dispose transient corpses and allies; preserve cooldown economy and IDs.
     this.summons = [];
     this.corpses = [];
-    this.nextSummonSequence = 1;
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
