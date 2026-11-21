@@ -1197,9 +1197,37 @@ export class FrontierScene extends Phaser.Scene {
       g.fillStyle(palette[tile.terrainId] ?? 0x172222, 0.72 + tile.variant * 0.06);
       g.fillRect(tile.x, tile.y, tile.width, tile.height);
     }
+    // Paths are ground, not golden quest arrows. Small deterministic bends,
+    // soft soil edges and muted earth tones keep roads readable without UI-like lines.
     for (const segment of chunk.roads) {
-      g.lineStyle(segment.width, 0x665a42, 0.52)
-        .lineBetween(segment.from.x, segment.from.y, segment.to.x, segment.to.y);
+      const dx = segment.to.x - segment.from.x;
+      const dy = segment.to.y - segment.from.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 0.1) continue;
+      const points: Point[] = [];
+      const steps = Math.max(3, Math.ceil(length / 35));
+      const bend = Math.min(9, segment.width * 0.15);
+      const nx = -dy / length, ny = dx / length;
+      const phase = (segment.from.x * 0.019 + segment.to.y * 0.027) % 6.28;
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const offset = Math.sin(Math.PI * t) * Math.sin(t * 7.2 + phase) * bend;
+        points.push({
+          x: segment.from.x + dx * t + nx * offset,
+          y: segment.from.y + dy * t + ny * offset
+        });
+      }
+      for (const stroke of [
+        { width: segment.width + 8, color: 0x101711, alpha: 0.18 },
+        { width: segment.width, color: 0x483d32, alpha: 0.50 },
+        { width: segment.width * 0.70, color: 0x392f27, alpha: 0.36 }
+      ]) {
+        g.lineStyle(stroke.width, stroke.color, stroke.alpha);
+        g.beginPath();
+        g.moveTo(points[0]!.x, points[0]!.y);
+        for (const point of points.slice(1)) g.lineTo(point.x, point.y);
+        g.strokePath();
+      }
     }
     for (const wall of chunk.obstacles) {
       if (wall.id === 'shrine') continue;

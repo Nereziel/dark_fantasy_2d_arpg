@@ -531,7 +531,8 @@
         </div>
       </header>
 
-      <div class="world-guide" aria-live="polite">
+      <div class="hud-left-column" aria-label="Game information">
+        <div class="world-guide" aria-live="polite">
         <div>{$t('controls.move')}</div>
         <div>{$t('controls.attack')}</div>
         <div>{$t('controls.pickup')}</div>
@@ -541,14 +542,6 @@
         <div class="world-guide-sub">{$t('controls.hint')}</div>
       </div>
 
-      {#if miniProjection}
-        <div class="minimap-overlay" data-minimap="active">
-          <WorldMapCanvas projection={miniProjection} compact />
-          <button onclick={openMap} disabled={view.paused} aria-label={$t('map.open')}>
-            {$t('map.open')} · M
-          </button>
-        </div>
-      {/if}
       <QuestJournal {view} talk={talkToWarden} />
       {#if view.zone === 'wilderness' &&
         Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS + 40}
@@ -572,9 +565,25 @@
           </button>
         </div>
       {/if}
-      <DungeonPanel {view} {bridge} />
-      <WorldEventPanel {view} />
-      <EnvironmentPanel {view} />
+        <EnvironmentPanel {view} />
+      </div>
+      <div class="hud-right-column" aria-label="Map and combat status">
+      {#if view.enemies.some(unit => unit.intent !== null) && !inventoryOpen}
+        <div class="danger-alert" role="status">
+          <strong>{$t('combat.warning')}</strong>
+          <span>{$t('combat.dodge')}</span>
+        </div>
+      {/if}
+      {#if miniProjection}
+        <div class="minimap-overlay" data-minimap="active">
+          <WorldMapCanvas projection={miniProjection} compact />
+          <button onclick={openMap} disabled={view.paused} aria-label={$t('map.open')}>
+            {$t('map.open')} · M
+          </button>
+        </div>
+      {/if}
+        <WorldEventPanel {view} />
+        <DungeonPanel {view} {bridge} />
       <aside class="enemy-roster" aria-label={$t('hud.enemies')}>
         <div class="enemy-roster-title">{$t('hud.enemies')} · {view.enemies.filter(unit => unit.actor.alive).length}/{view.enemies.length} · {$t('hud.wave')} {view.wave + 1}</div>
         {#each view.enemies as unit (unit.actor.id)}
@@ -602,6 +611,7 @@
           </button>
         {/each}
       </aside>
+      </div>
       <SkillBar {bridge} {view} />
       <div class="game-hud">
         <div class="portrait"><span>✦</span></div>
@@ -639,12 +649,6 @@
         </div>
       </div>
 
-      {#if view.enemies.some(unit => unit.intent !== null) && !inventoryOpen}
-        <div class="danger-alert" role="status">
-          <strong>{$t('combat.warning')}</strong>
-          <span>{$t('combat.dodge')}</span>
-        </div>
-      {/if}
       {#if messageKey}
         <div class="toast" role="status">{$t(messageKey)}</div>
       {/if}
@@ -740,6 +744,67 @@
 </div>
 
 <style>
+
+  /* Independent, scroll-safe HUD columns: no magic top:335px/508px offsets. */
+  .hud-left-column,.hud-right-column {
+    position:absolute;z-index:3;top:85px;bottom:195px;
+    display:flex;flex-direction:column;align-items:stretch;gap:10px;
+    overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;
+    scrollbar-color:#6c5f49 #111920;
+    pointer-events:none;
+  }
+  .hud-left-column{left:16px;width:clamp(190px,18vw,260px)}
+  .hud-right-column{right:16px;width:clamp(180px,18vw,235px)}
+  .hud-left-column > :global(*),.hud-right-column > :global(*){pointer-events:auto}
+  .hud-left-column :global(.world-guide),
+  .hud-left-column :global(.quest-journal),
+  .hud-left-column :global(.camp-services),
+  .hud-left-column :global(.environment-panel),
+  .hud-right-column :global(.enemy-roster),
+  .hud-right-column :global(.event-panel),
+  .hud-right-column :global(.dungeon-panel){
+    position:relative;top:auto;right:auto;left:auto;bottom:auto;
+    width:100%;max-width:none;max-height:none;flex-shrink:0;margin:0;
+  }
+  .hud-left-column :global(.world-guide){padding:9px 12px;line-height:1.5}
+  .hud-left-column :global(.quest-journal){padding:10px}
+  .hud-left-column :global(.camp-services){padding:9px}
+  .hud-right-column .minimap-overlay{
+    position:relative;top:auto;right:auto;left:auto;width:100%;
+    min-width:0;flex-shrink:0;margin:0;
+  }
+  .hud-right-column :global(.danger-alert) {
+    position:relative;top:auto;right:auto;left:auto;width:100%;
+    flex-shrink:0;box-shadow:0 4px 12px #0006;padding:8px;
+    transform:none;pointer-events:none;
+  }
+  .game-screen :global(.toast) {
+    left:50%;right:auto;transform:translateX(-50%);max-width:min(390px,54vw);
+    text-align:center;
+  }
+  .hud-right-column :global(.enemy-roster){box-shadow:none;max-height:210px;overflow:auto}
+  .hud-right-column :global(.event-panel){max-height:150px;overflow:auto}
+  .hud-right-column :global(.dungeon-panel){max-height:180px;overflow:auto}
+  /* Seven-skill bars can occupy most of the screen width. Reserve their
+     vertical area at intermediate sizes so the side HUD never covers controls. */
+  @media (min-width:851px) and (max-width:1400px) {
+    .hud-left-column,.hud-right-column{bottom:clamp(300px,46vh,430px)}
+  }
+  @media(max-width:850px){
+    .hud-left-column,.hud-right-column{top:72px;bottom:max(390px,54vh);gap:6px}
+    .hud-left-column{left:7px;width:clamp(132px,22vw,180px)}
+    .hud-right-column{right:7px;width:clamp(132px,22vw,180px)}
+    .hud-left-column :global(.world-guide){display:none}
+    .hud-left-column :global(.camp-services){gap:3px}
+    .hud-left-column :global(.camp-services button){font-size:.64rem;padding:5px 4px}
+  }
+  @media(max-width:560px){
+    .hud-left-column,.hud-right-column{top:64px;bottom:max(405px,56vh);gap:5px}
+    .hud-left-column{width:clamp(120px,30vw,148px);left:4px}
+    .hud-right-column{width:clamp(120px,30vw,148px);right:4px}
+    .hud-right-column :global(.enemy-roster){max-height:110px}
+    .hud-left-column :global(.quest-journal){padding:6px}
+  }
   .respawn-destination { color: #d9bc86; margin: 12px 0; }
   .minimap-overlay {
     position: absolute;
