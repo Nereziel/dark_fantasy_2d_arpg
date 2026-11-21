@@ -272,7 +272,7 @@
               title={item ? itemName(item) : $t('inventory.empty')}>
               <span class="slot-label">{$t('item.slot.' + slot)}</span>
               <span class="slot-icon" style:color={item ? RARITIES[item.rarity].color : '#55616a'}>
-                {item ? item.icon : '◇'}
+                {#if item}<ItemArt {item} />{:else}<span aria-hidden="true">◇</span>{/if}
               </span>
               {#if item?.upgrades}<span class="slot-level">+{item.upgrades}</span>{/if}
             </button>
@@ -313,6 +313,36 @@
             {$t('inventory.sort')}
           </button>
         </div>
+        <div class="ground-loot-settings" data-testid="ground-loot-filter">
+          <strong>{$t('inventory.groundLootFilter')}</strong>
+          <label>
+            {$t('inventory.minRarity')}
+            <select aria-label={$t('inventory.minRarity')} value={lootFilter.minRarity}
+              onchange={event => updateLootFilter({ ...lootFilter,
+                minRarity: event.currentTarget.value as RarityId })}>
+              {#each Object.keys(RARITIES) as rarity (rarity)}
+                <option value={rarity}>{$t('item.rarity.' + rarity)}</option>
+              {/each}
+            </select>
+          </label>
+          <label>
+            {$t('inventory.itemCategory')}
+            <select aria-label={$t('inventory.itemCategory')} value={lootFilter.category}
+              onchange={event => updateLootFilter({ ...lootFilter,
+                category: event.currentTarget.value as GroundLootCategory })}>
+              <option value="all">{$t('inventory.lootAll')}</option>
+              <option value="weapons">{$t('inventory.lootWeapons')}</option>
+              <option value="armor">{$t('inventory.lootArmor')}</option>
+              <option value="accessories">{$t('inventory.lootAccessories')}</option>
+            </select>
+          </label>
+          <label class="favorite-filter">
+            <input type="checkbox" checked={lootFilter.alwaysShowFavorites}
+              onchange={event => updateLootFilter({ ...lootFilter,
+                alwaysShowFavorites: event.currentTarget.checked })} />
+            {$t('inventory.alwaysShowFavorites')}
+          </label>
+        </div>
         <div class="bag-grid" role="group" aria-label={$t('inventory.bag')}>
           {#each view.inventory as item,index (index)}
             {@const filtered = !!item && rarityFilter !== 'ALL' && item.rarity !== rarityFilter}
@@ -344,7 +374,9 @@
               aria-label={item ? itemName(item) : $t('inventory.empty')}
               title={item ? itemName(item) : $t('inventory.empty')}>
               {#if item}
-                <span class="bag-item-icon">{item.icon}</span>
+                <span class="bag-item-icon" style:color={RARITIES[item.rarity].color}>
+                  <ItemArt {item} />
+                </span>
                 <span class="sr-only">{itemName(item)}</span>
                 <span class="item-level">{item.level}</span>
                 {#if view.itemFlags?.[item.id]?.favorite}<span class="favorite-mark">★</span>{/if}
@@ -370,7 +402,7 @@
         {#if inspected}
           <div class="touch-move-bar">
             <button type="button" aria-pressed={moveArmed}
-              onclick={() => { touchInput = true; moveArmed = !moveArmed; }}>
+              onclick={() => { touchInput = true; placementMessage = ''; moveArmed = !moveArmed; }}>
               {$locale === 'cs'
                 ? (moveArmed ? 'Zrušit přesun' : 'Přesunout klepnutím')
                 : (moveArmed ? 'Cancel move' : 'Move by tap')}
@@ -381,12 +413,17 @@
                 : 'Tap the destination slot.'}</span>
             {/if}
           </div>
+          {#if placementMessage}
+            <p class="placement-error" role="status">{placementMessage}</p>
+          {/if}
           <div class="comparison-grid">
             <section class="item-detail">
               <span class="detail-tag">{$locale === 'cs'
                 ? (displayed?.kind === 'gear' ? 'NASAZENO' : 'V BATOHU')
                 : (displayed?.kind === 'gear' ? 'EQUIPPED' : 'IN BAG')}</span>
-              <span class="detail-icon" style:color={RARITIES[inspected.rarity].color}>{inspected.icon}</span>
+              <span class="detail-icon" style:color={RARITIES[inspected.rarity].color}>
+                <ItemArt item={inspected} detail />
+              </span>
               <strong class="item-title" style:color={RARITIES[inspected.rarity].color}>
                 {itemName(inspected)}
               </strong>
@@ -394,7 +431,12 @@
               <div class="item-property"><span>{$t('stat.damageMin')}–{$t('stat.damageMax')}</span><strong>{inspected.minDmg}–{inspected.maxDmg}</strong></div>
               <div class="item-property"><span>{$t('stat.armor')}</span><strong>{inspected.armor}</strong></div>
               <div class="item-property"><span>{$t('stat.blockChance')}</span><strong>{inspected.block}%</strong></div>
-              {#if inspected.twoHanded}<p>{$t('inventory.twoHanded')}</p>{/if}
+              {#if inspected.twoHanded}
+                <p>{$t('inventory.twoHanded')}</p>
+                {#if displayed?.kind === 'bag' && view.equipment.OFF_HAND}
+                  <p class="two-hand-warning">{$t('inventory.twoHandPreview')}</p>
+                {/if}
+              {/if}
               {#if inspected.sockets?.length}<p>◯ {inspected.sockets?.length}</p>{/if}
               {#if inspected.upgrades > 0}<p>{$t('trade.tempering')} +{inspected.upgrades}</p>{/if}
               {#if inspected.legendaryPower}<p>{$t('inventory.legendaryPower')}: +{inspected.legendaryPower.magnitude}</p>{/if}
@@ -405,7 +447,9 @@
             <section class="item-detail comparison-equipped">
               <span class="detail-tag">{$locale === 'cs' ? 'SROVNÁNÍ S NASAZENÝM' : 'CURRENT EQUIPMENT'}</span>
               {#if displayed?.kind === 'bag' && equippedItem}
-                <span class="detail-icon" style:color={RARITIES[equippedItem.rarity].color}>{equippedItem.icon}</span>
+                <span class="detail-icon" style:color={RARITIES[equippedItem.rarity].color}>
+                  <ItemArt item={equippedItem} detail />
+                </span>
                 <strong class="item-title" style:color={RARITIES[equippedItem.rarity].color}>{itemName(equippedItem)}</strong>
                 <span class="rarity-label">{$t('item.rarity.' + equippedItem.rarity)}</span>
                 <div class="item-property"><span>{$t('stat.damageMin')}–{$t('stat.damageMax')}</span><strong>{equippedItem.minDmg}–{equippedItem.maxDmg}</strong></div>
@@ -447,7 +491,7 @@
               {/if}
             </div>
             <div class="inspector-actions">
-              <button class="primary-action" onclick={() => equipInspected()}>
+              <button class="primary-action" disabled={!delta} onclick={() => equipInspected()}>
                 {$t('inventory.equip')}
               </button>
               {#if inspected.weaponType && WEAPON_TYPES[inspected.weaponType].canOffHand}
