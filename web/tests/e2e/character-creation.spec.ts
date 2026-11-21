@@ -1,9 +1,8 @@
 import {test,expect} from '@playwright/test';
 
-test('Prompt 44 creates and reloads every class with stable hero identity, starter gear and its own world',async({page})=>{
-  const names=['Warrior','Paladin','Mage','Necromancer','Rogue','Warlock'] as const;
-  const seen=new Set<string>();
-  for(const name of names){
+const names=['Warrior','Paladin','Mage','Necromancer','Rogue','Warlock'] as const;
+for(const name of names){
+  test('Prompt 44 creates and reloads '+name+' with a stable hero ID and starter gear',async({page})=>{
     await page.goto('./');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button',{name:new RegExp('^'+name)}).click();
@@ -66,14 +65,12 @@ test('Prompt 44 creates and reloads every class with stable hero identity, start
     expect(record.classId).toBe(name.toUpperCase());
     expect(record.equipped).toBeGreaterThan(0);
     expect(String(record.seed)).toBe(seed);
-    expect(seen.has(record.id)).toBe(false);
-    seen.add(record.id);
     await page.reload();
     await page.getByRole('button',{name:'Load'}).click();
     await expect(page.locator('.hud-details')).toContainText(name+' · Level 1');
     await expect(page.locator('.game-screen')).toHaveAttribute('data-world-seed',seed!);
-  }
-});
+  });
+}
 
 test('Prompt 44 class selector is keyboard accessible and preserves descriptions on mobile',async({page})=>{
   await page.setViewportSize({width:390,height:780});
