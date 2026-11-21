@@ -26,10 +26,27 @@
   let selected = $state<Source | null>(initialSelection());
   let hovered = $state<Source | null>(null);
   let dragged = $state<Source | null>(null);
+  let dropHover = $state<Source | null>(null);
   let helpOpen = $state(false);
   // A touch tap inspects. Reorganizing items requires the explicit mobile move action.
   let touchInput = $state(false);
   let moveArmed = $state(false);
+
+  let placementSource = $derived(dragged ?? (moveArmed ? selected : null));
+  function canPlace(target: Source, source: Source | null = placementSource): boolean {
+    if (!source) return false;
+    if (target.kind === 'gear') return source.kind === 'bag'
+      && !!view.inventory[source.index] && bridge.previewEquipment(source.index, target.slot) !== null;
+    if (source.kind === 'bag') return source.index !== target.index && !!view.inventory[source.index];
+    if (!view.equipment[source.slot]) return false;
+    return !view.inventory[target.index]
+      || bridge.previewEquipment(target.index, source.slot) !== null;
+  }
+  function isDropHover(target: Source): boolean {
+    return dropHover?.kind === target.kind && (target.kind === 'bag'
+      ? dropHover.index === target.index : dropHover.slot === target.slot);
+  }
+  function clearDrag(): void { dragged = null; dropHover = null; }
 
   let displayed = $derived(touchInput ? selected : (hovered ?? selected));
   let inspected = $derived.by((): Item | null => {
@@ -69,8 +86,7 @@
       selected = view.inventory[index] ? { kind: 'bag', index } : null;
       return;
     }
-    // An equipped item cannot be deposited into an occupied cell.
-    if (touchInput && selected?.kind === 'gear' && view.inventory[index]) return;
+    if (touchInput && moveArmed && selected && !canPlace({ kind: 'bag', index }, selected)) return;
     moveArmed = false;
     if (selected?.kind === 'bag' && selected.index !== index) {
       bridge.command({ type: 'swapInventory', fromIndex: selected.index, toIndex: index });
@@ -88,6 +104,7 @@
       selected = view.equipment[slot] ? { kind: 'gear', slot } : null;
       return;
     }
+    if (touchInput && moveArmed && selected && !canPlace({ kind: 'gear', slot }, selected)) return;
     moveArmed = false;
     if (selected?.kind === 'bag') equip(selected.index, slot);
     else selected = view.equipment[slot] ? { kind: 'gear', slot } : null;
@@ -101,16 +118,19 @@
       event.dataTransfer.setData('text/plain', 'aether-inventory');
     }
   }
-  function permitDrop(event: DragEvent): void {
+  function permitDrop(event: DragEvent, target: Source): void {
     if (!dragged) return;
     event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    dropHover = target;
+    if (event.dataTransfer) event.dataTransfer.dropEffect = canPlace(target, dragged) ? 'move' : 'none';
   }
   function dropBag(event: DragEvent, index: number): void {
     if (!dragged) return;
     event.preventDefault();
     const source = dragged;
-    dragged = null;
+    const valid = canPlace({ kind: 'bag', index }, source);
+    clearDrag();
+    if (!valid) return;
     moveArmed = false;
     if (source.kind === 'bag' && source.index !== index) {
       bridge.command({ type: 'swapInventory', fromIndex: source.index, toIndex: index });
@@ -124,7 +144,9 @@
     if (!dragged) return;
     event.preventDefault();
     const source = dragged;
-    dragged = null;
+    const valid = canPlace({ kind: 'gear', slot }, source);
+    clearDrag();
+    if (!valid) return;
     moveArmed = false;
     if (source.kind === 'bag') equip(source.index, slot);
     selected = null;
@@ -184,14 +206,18 @@
             <button type="button" class="equipment-slot"
               class:has-item={!!item}
               class:selected={selected?.kind === 'gear' && selected.slot === slot}
+               class:drop-valid={!!placementSource && canPlace({ kind: 'gear', slot })}
+               class:drop-hover-valid={!!placementSource && isDropHover({ kind: 'gear', slot }) && canPlace({ kind: 'gear', slot })}
+               class:drop-invalid={!!placementSource && isDropHover({ kind: 'gear', slot }) && !canPlace({ kind: 'gear', slot })}
               style:grid-area={slot}
               style:border-color={item ? RARITIES[item.rarity].color : undefined}
               data-equipment-slot={slot}
               draggable={!!item}
               onpointerdown={(event) => { touchInput = event.pointerType !== 'mouse'; }}
               ondragstart={(event) => startDrag(event, { kind: 'gear', slot })}
-              ondragend={() => { dragged = null; }}
-              ondragover={permitDrop}
+              ondragend={clearDrag}
+              ondragover={(event) => permitDrop(event, { kind: 'gear', slot })}
+               ondragleave={() => { if (isDropHover({ kind: 'gear', slot })) dropHover = null; }}
               ondrop={(event) => dropGear(event, slot)}
               onpointerenter={() => { hovered = { kind: 'gear', slot }; }}
               onpointerleave={() => { hovered = null; }}
@@ -252,14 +278,18 @@
               class:selected={!filtered && selected?.kind === 'bag' && selected.index === index}
               class:favorite={!!(item && view.itemFlags?.[item.id]?.favorite)}
               class:locked={!!(item && view.itemFlags?.[item.id]?.locked)}
+               class:drop-valid={!filtered && !!placementSource && canPlace({ kind: 'bag', index })}
+               class:drop-hover-valid={!filtered && !!placementSource && isDropHover({ kind: 'bag', index }) && canPlace({ kind: 'bag', index })}
+               class:drop-invalid={!!placementSource && isDropHover({ kind: 'bag', index }) && !canPlace({ kind: 'bag', index })}
               style:border-color={item ? RARITIES[item.rarity].color : undefined}
               data-bag-index={index}
               disabled={filtered}
               draggable={!!item && !filtered}
               onpointerdown={(event) => { touchInput = event.pointerType !== 'mouse'; }}
               ondragstart={(event) => { if (filtered) event.preventDefault(); else startDrag(event, { kind: 'bag', index }); }}
-              ondragend={() => { dragged = null; }}
-              ondragover={(event) => { if (!filtered) permitDrop(event); }}
+              ondragend={clearDrag}
+              ondragover={(event) => { if (!filtered) permitDrop(event, { kind: 'bag', index }); }}
+               ondragleave={() => { if (isDropHover({ kind: 'bag', index })) dropHover = null; }}
               ondrop={(event) => { if (!filtered) dropBag(event,index); }}
               onpointerenter={() => { hovered = item && !filtered ? { kind: 'bag', index } : null; }}
               onpointerleave={() => { hovered = null; }}
@@ -430,6 +460,9 @@
   .equipment-slot{position:relative;min-width:0;aspect-ratio:1.2;border:1px solid #45505a;background:radial-gradient(circle at center,#1c2930,#0a121a);padding:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
   .equipment-slot.has-item{background:radial-gradient(circle at center,#222d36,#131822)}
   .equipment-slot.selected,.bag-slot.selected{outline:2px solid #f0d199;outline-offset:1px}
+  .equipment-slot.drop-valid,.bag-slot.drop-valid{outline:2px solid #81cfa2;outline-offset:-3px;box-shadow:inset 0 0 13px #357b4c66,0 0 10px #5dbb8280}
+  .equipment-slot.drop-hover-valid,.bag-slot.drop-hover-valid{outline:3px solid #c2f7bc;outline-offset:-2px;background:#294636;box-shadow:0 0 18px #87e29d91}
+  .equipment-slot.drop-invalid,.bag-slot.drop-invalid{outline:2px dashed #d57e80;outline-offset:-3px;box-shadow:inset 0 0 9px #9a393944}
   .equipment-slot:focus-visible,.bag-slot:focus-visible{outline:2px solid #d8bf8d;outline-offset:1px}
   .slot-label{font-size:clamp(.55rem,.65vw,.7rem);color:#b4b3ae;text-align:center;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .slot-icon{font:clamp(1.3rem,2vw,2rem) Georgia,serif;line-height:1.1}
