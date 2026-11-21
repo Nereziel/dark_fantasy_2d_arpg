@@ -17,6 +17,11 @@ import { PALADIN_EXTRA_SKILLS, getPaladinAbility, planPaladinCast,
   type PaladinAbilityId, type PaladinCooldowns } from '../skills/paladinKit';
 import { getMageSpell, planMageCast, advanceMageCooldowns, validMageCooldowns,
   type MageExtraSpellId, type MageCooldowns } from '../skills/mageKit';
+import { getNecroSpell, planNecroCast, advanceNecroCooldowns, validNecroCooldowns,
+  type NecroExtraSpellId, type NecroCooldowns } from '../skills/necromancerKit';
+import { createOwnedSummon, stepOwnedSummons, addCorpseToken, stepCorpseTokens,
+  chooseCorpseToken, consumeCorpseToken, validOwnedSummons, validCorpseTokens,
+  type OwnedSummon, type CorpseToken } from '../summons/summonOwnership';
 import { planMageChain, planMageTeleport, planMageBarrier, createMageZone,
   stepMageZone, validMageZone, type MageTimedZone } from '../skills/mageCombatPlans';
 import { projectEquippedSkill, type SkillProjection } from '../skills/skillModifiers';
@@ -206,11 +211,16 @@ function validWaveBState(s: GameSnapshot): boolean {
       || (action.mageAbilityId !== undefined
         && (s.classId !== 'MAGE' || action.kind !== 'skill'
           || action.slot !== null || !getMageSpell(action.mageAbilityId)))
-      || (action.paladinAbilityId !== undefined && action.mageAbilityId !== undefined)
+      || (action.necroAbilityId !== undefined
+        && (s.classId !== 'NECROMANCER' || action.kind !== 'skill'
+          || action.slot !== null || !getNecroSpell(action.necroAbilityId)))
+      || [action.paladinAbilityId,action.mageAbilityId,action.necroAbilityId]
+        .filter(id=>id!==undefined).length>1
       || (action.kind === 'basic'
         ? action.slot !== null || action.paladinAbilityId !== undefined
-          || action.mageAbilityId !== undefined
+          || action.mageAbilityId !== undefined || action.necroAbilityId !== undefined
         : action.paladinAbilityId !== undefined || action.mageAbilityId !== undefined
+          || action.necroAbilityId !== undefined
           ? action.slot !== null : !isSkillSlot(action.slot))
       || typeof action.targetId !== 'string' && action.targetId !== null
       || (typeof action.targetId === 'string' && action.targetId.length > 128)
@@ -220,7 +230,9 @@ function validWaveBState(s: GameSnapshot): boolean {
           ? getPaladinAbility(action.paladinAbilityId)?.id
           : action.mageAbilityId !== undefined
             ? getMageSpell(action.mageAbilityId)?.id
-            : SKILLS[s.classId][action.slot as SkillSlot].id)
+            : action.necroAbilityId !== undefined
+              ? getNecroSpell(action.necroAbilityId)?.id
+              : SKILLS[s.classId][action.slot as SkillSlot].id)
       || !Number.isSafeInteger(timeline.elapsedTicks) || timeline.elapsedTicks < 0
       || !Number.isSafeInteger(timeline.windupTicks) || timeline.windupTicks < 1
       || !Number.isSafeInteger(timeline.recoveryTicks) || timeline.recoveryTicks < 0
@@ -254,12 +266,17 @@ export class GameSimulation {
   private paladinCooldowns: PaladinCooldowns = {};
   private mageCooldowns: MageCooldowns = {};
   private mageZones: MageTimedZone[] = [];
+  private necroCooldowns: NecroCooldowns = {};
+  private summons: OwnedSummon[] = [];
+  private corpses: CorpseToken[] = [];
+  private nextSummonSequence = 1;
   private warriorPending: { id: WarriorAbilityId; targetId: string | null } | null = null;
   private warriorAction: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null = null;
   private classAction: {
     kind: 'basic' | 'skill'; slot: SkillSlot | null; targetId: string | null;
     paladinAbilityId?: PaladinAbilityId;
     mageAbilityId?: MageExtraSpellId;
+    necroAbilityId?: NecroExtraSpellId;
     aim?: SkillAim; timeline: CombatTimelineState;
   } | null = null;
   private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
@@ -1477,6 +1494,11 @@ export class GameSimulation {
     if(command.type==='paladinAbility') {
       if(this.classId!=='PALADIN')return;
       this.requestPaladinAbility(command.id,command.targetId??null);
+      return;
+    }
+    if (command.type === 'necroAbility') {
+      if (this.classId !== 'NECROMANCER') return;
+      this.requestNecroAbility(command.id,command.targetId??null,command.position);
       return;
     }
     if (command.type === 'mageAbility') {
