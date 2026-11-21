@@ -1,5 +1,6 @@
 /** Item templates, rarities and affixes ported from the original ItemGenerator. */
 export { deriveStats } from '../stats/deriveStats';
+import type { ClassId } from './classes';
 import { ITEM_BASES, ITEM_RARITIES, WEAPON_TYPES, type WeaponType } from '../items/itemCatalog';
 import { rollAffixes, type AffixStat } from '../items/affixGeneration';
 import { isGemId } from '../gems/gemCatalog';
@@ -109,7 +110,8 @@ export function createEquipment(): Equipment {
 }
 /** One catalog-backed generator shared by kills, chests and curated boss rewards. */
 export function rollItemForBase(
-  templateId: string, instanceId: string, itemLevel: number, rarity: RarityId, rng: SeededRng
+  templateId: string, instanceId: string, itemLevel: number, rarity: RarityId, rng: SeededRng,
+  classId?: ClassId
 ): Item | null {
   const template = ITEM_TEMPLATES.find(entry => entry.id === templateId);
   const base = Object.hasOwn(ITEM_BASES, templateId)
@@ -125,11 +127,16 @@ export function rollItemForBase(
       : base.category === 'armor' ? ['armor']
         : ['weapon', ...(['WAND','STAFF','SPELLBOOK'].includes(weaponType ?? '') ? ['caster']
           : ['BOW','CROSSBOW'].includes(weaponType ?? '') ? ['ranged'] : ['melee'])]) as
-    Array<'weapon' | 'armor' | 'jewelry' | 'shield' | 'caster' | 'ranged' | 'melee'>;
+    Array<'weapon' | 'armor' | 'jewelry' | 'shield' | 'caster' | 'ranged' | 'melee' | 'paladin'>;
+  // Paladin-exclusive affixes are eligible on melee weapons only; other classes
+  // keep their exact historical deterministic RNG progression.
+  if (classId === 'PALADIN' && tags.includes('weapon') && tags.includes('melee'))
+    tags.push('paladin');
   // MYTHIC shares the top tier but retains its separate rarity and six-affix cap.
   const rolled = rollAffixes({
     rarity: rarity === 'MYTHIC' ? 'LEGENDARY' : rarity,
-    itemLevel, tags
+    itemLevel, tags,
+    ...(classId==='PALADIN'?{preferredStats:['strength','vitality','resourceRegen'] as const}:{})
   }, rng);
   const mult = RARITIES[rarity].mult;
   const socketCount = Math.min(base.maxSockets,

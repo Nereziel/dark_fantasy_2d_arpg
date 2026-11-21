@@ -365,7 +365,9 @@
       "venom": "Jedu",
       "mastery": "Mistrovství",
       "legion": "Legie",
-      "fortitude": "Odolnosti"
+      "fortitude": "Odolnosti",
+      "consecrated": "Posvěcený",
+      "ofFaith": "Víry"
     },
     "slot": {
       "HELMET": "Přilba",
@@ -477,6 +479,26 @@
     "execute": {
       "name": "Poprava",
       "desc": "Silný úder, který způsobí více poškození oslabeným nepřátelům."
+    },
+    "holyStrike": {
+      "name": "Svatý úder",
+      "desc": "Svatý úder zblízka, který při zásahu obnovuje Víru."
+    },
+    "divineShield": {
+      "name": "Božský štít",
+      "desc": "Vytvoří ochranný štít a na šest sekund posílí obranu."
+    },
+    "healingLight": {
+      "name": "Léčivé světlo",
+      "desc": "Spotřebuje Víru a obnoví zdraví. Talent léčitele účinek zesílí."
+    },
+    "holyAura": {
+      "name": "Svatá aura",
+      "desc": "Obnovuje zdraví, posiluje obranu a zraňuje blízké nepřátele."
+    },
+    "smite": {
+      "name": "Svatý trest",
+      "desc": "Silný svatý útok na dálku, který nepřítele oslabí."
     }
   },
   "enemies": {
@@ -775,8 +797,11 @@
     "brood_mother": "Matka roje",
     "corrupted_knight": "Zkažený rytíř"
   },
-  "miniBoss": { "phase": "Fáze" },
-  "boss": { "hollowKing": {
+  "miniBoss": {
+    "phase": "Fáze"
+  },
+  "boss": {
+    "hollowKing": {
       "name": "Dutý král",
       "phase1": "I. fáze — Královská čepel",
       "phase2": "II. fáze — Povstání mrtvých",
@@ -789,7 +814,8 @@
         "rune_storm": "Runová bouře",
         "kings_judgment": "Králův soud"
       }
-    } },
+    }
+  },
   "respawn": {
     "title": "Padl jsi",
     "description": "Boj byl přerušen. Vybavení, úroveň i postup úkolů zůstávají zachované.",
@@ -814,7 +840,11 @@
     "branches": {
       "berserker": "Berserker",
       "guardian": "Ochránce",
-      "warlord": "Vojevůdce"
+      "warlord": "Vojevůdce",
+      "holyWarrior": "Svatý bojovník",
+      "paladinGuardian": "Posvátný ochránce",
+      "auraMaster": "Mistr aur",
+      "holyCaster": "Svatý mág"
     },
     "nodes": {
       "berserker": {
@@ -870,8 +900,43 @@
           "name": "Velitel",
           "description": "Za rank posílí zrychlení a opevnění z válečného pokřiku o 6 procentních bodů."
         }
+      },
+      "paladin": {
+        "zeal": {
+          "name": "Horlivost",
+          "description": "Za rank zvyšuje svaté poškození o 8 %."
+        },
+        "righteousFire": {
+          "name": "Spravedlivý oheň",
+          "description": "Za rank přidává 1,6 procentního bodu ke kritickému zásahu."
+        },
+        "aegis": {
+          "name": "Egida",
+          "description": "Za rank přidává 13 bodů zbroje."
+        },
+        "bulwark": {
+          "name": "Hradba víry",
+          "description": "Za rank zesiluje Božský štít o 12 %."
+        },
+        "hymn": {
+          "name": "Hymna světla",
+          "description": "Za rank zesiluje účinky Svaté aury o 15 %."
+        },
+        "benediction": {
+          "name": "Požehnání",
+          "description": "Za rank prodlužuje Svatou auru o dvě sekundy."
+        },
+        "prayer": {
+          "name": "Modlitba víry",
+          "description": "Za rank zvyšuje obnovu Víry o 0,8 za sekundu."
+        },
+        "inquisition": {
+          "name": "Inkvizice",
+          "description": "Za rank zvyšuje účinek Léčivého světla o 12 %."
+        }
       }
-    }
+    },
+    "paladinTitle": "Strom talentů paladina"
   },
   "skillModifiers": {
     "enhanced": "Změněno",

@@ -9,7 +9,7 @@ export type AffixTier = 1 | 2 | 3 | 4 | 5 | 6;
 export type AffixLocale = 'cs' | 'en';
 export type ItemTag =
   | 'weapon' | 'armor' | 'jewelry' | 'shield'
-  | 'melee' | 'ranged' | 'caster' | 'minion';
+  | 'melee' | 'ranged' | 'caster' | 'minion' | 'paladin';
 
 export type AffixStat =
   | 'strength' | 'dexterity' | 'intelligence' | 'vitality'
@@ -105,7 +105,7 @@ const RARITY_RULES: Readonly<Record<AffixRarity, { readonly count: number; reado
   });
 
 const ITEM_TAGS: readonly ItemTag[] = Object.freeze([
-  'weapon', 'armor', 'jewelry', 'shield', 'melee', 'ranged', 'caster', 'minion'
+  'weapon', 'armor', 'jewelry', 'shield', 'melee', 'ranged', 'caster', 'minion', 'paladin'
 ]);
 const BASE_TAGS: readonly ItemTag[] = Object.freeze(['weapon', 'armor', 'jewelry', 'shield']);
 const AFFIX_STATS: readonly AffixStat[] = Object.freeze([
@@ -180,6 +180,9 @@ export const AFFIX_PREFIXES: readonly AffixDefinition[] = Object.freeze([
   }),
   prefix('summoning', 'summonDamage', 5, 2, 5, {
     minRarity: 'EPIC', minItemLevel: 36, requiredTags: ['minion'], special: true
+  }),
+  prefix('consecrated','resourceRegen',14,0.8,2.2,{
+    minItemLevel:12,requiredTags:['paladin','weapon','melee'],decimal:true
   })
 ]);
 
@@ -207,7 +210,10 @@ export const AFFIX_SUFFIXES: readonly AffixDefinition[] = Object.freeze([
   suffix('legion', 'summonDamage', 5, 2, 5, {
     minRarity: 'EPIC', minItemLevel: 36, requiredTags: ['minion'], special: true
   }),
-  suffix('fortitude', 'maxHealth', 9, 8, 18)
+  suffix('fortitude', 'maxHealth', 9, 8, 18),
+  suffix('ofFaith','skillRank',12,1,1,{
+    minRarity:'EPIC',minItemLevel:36,requiredTags:['paladin','weapon','melee'],special:true
+  })
 ]);
 
 const ALL_DEFINITIONS: readonly AffixDefinition[] = Object.freeze([
@@ -399,7 +405,8 @@ const PREFIX_NAMES: Readonly<Record<string, PrefixName>> = Object.freeze({
   unyielding: adjective('Unyielding', 'Nezlomný', 'Nezlomná', 'Nezlomné'),
   channeling: adjective('Channeling', 'Soustředěný', 'Soustředěná', 'Soustředěné'),
   arcane: adjective('Arcane', 'Arkánní', 'Arkánní', 'Arkánní'),
-  summoning: adjective('Summoning', 'Vyvolávací', 'Vyvolávací', 'Vyvolávací')
+  summoning: adjective('Summoning', 'Vyvolávací', 'Vyvolávací', 'Vyvolávací'),
+  consecrated: adjective('Consecrated','Posvěcený','Posvěcená','Posvěcené')
 });
 
 const SUFFIX_NAMES: Readonly<Record<string, SuffixName>> = Object.freeze({
@@ -419,7 +426,8 @@ const SUFFIX_NAMES: Readonly<Record<string, SuffixName>> = Object.freeze({
   venom: { en: 'of Venom', cs: 'jedu' },
   mastery: { en: 'of Mastery', cs: 'mistrovství' },
   legion: { en: 'of the Legion', cs: 'legií' },
-  fortitude: { en: 'of Fortitude', cs: 'odolnosti' }
+  fortitude: { en: 'of Fortitude', cs: 'odolnosti' },
+  ofFaith: {en:'of Faith',cs:'víry'}
 });
 for (const label of Object.values(SUFFIX_NAMES)) Object.freeze(label);
 

@@ -12,6 +12,9 @@ import { rollEliteModifiers, applyEliteStats, eliteOnHitPlan, eliteOnPeriodicPla
 import { moveToward, nextMoveSpeed } from '../entities/playerMovement';
 import { applyOrRefreshEffect } from '../status/effectStack';
 import { WARRIOR_ABILITIES, getWarriorAbility, type WarriorAbilityId } from '../skills/warriorKit';
+import { PALADIN_EXTRA_SKILLS, getPaladinAbility, planPaladinCast,
+  validPaladinCooldowns, advancePaladinCooldowns,
+  type PaladinAbilityId, type PaladinCooldowns } from '../skills/paladinKit';
 import { projectEquippedSkill, type SkillProjection } from '../skills/skillModifiers';
 import { canActivateWarriorSkill, spendAndStartCooldown, advanceWarriorCooldowns, applyWarriorRageDelta, type WarriorActivationRequest } from '../skills/warriorEconomy';
 import { startCombatTimeline, advanceCombatTimeline, cancelCombatTimeline, type CombatTimelineState } from '../animation/combatTimeline';
@@ -49,7 +52,7 @@ import { buildWilderness, type WildernessRuntimeWorld } from '../world/wildernes
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonRuntime';
 import {
   applyTalentStats, planSpendTalent, planRespecTalents, projectTalentBonuses,
-  validateTalentBuild, type TalentRanks, type WarriorTalentId
+  validateTalentBuild, type TalentRanks, type TalentId
 } from '../progression/talentTree';
 import { buildHollowKingRuntime } from '../bosses/hollowKingRuntime';
 import {
@@ -193,12 +196,20 @@ function validWaveBState(s: GameSnapshot): boolean {
     const action = s.classAction;
     const timeline = action.timeline;
     if (!timeline || s.classId === 'WARRIOR' || !['basic', 'skill'].includes(action.kind)
-      || (action.kind === 'basic' ? action.slot !== null : !isSkillSlot(action.slot))
+      || (action.paladinAbilityId !== undefined
+        && (s.classId !== 'PALADIN' || action.kind !== 'skill'
+          || action.slot !== null || !getPaladinAbility(action.paladinAbilityId)))
+      || (action.kind === 'basic'
+        ? action.slot !== null || action.paladinAbilityId !== undefined
+        : action.paladinAbilityId !== undefined
+          ? action.slot !== null : !isSkillSlot(action.slot))
       || typeof action.targetId !== 'string' && action.targetId !== null
       || (typeof action.targetId === 'string' && action.targetId.length > 128)
       || (action.aim !== undefined && !validTransientAim(action.aim))
       || timeline.actionId !== (action.kind === 'basic' ? 'basicAttack'
-        : SKILLS[s.classId][action.slot as SkillSlot].id)
+        : action.paladinAbilityId !== undefined
+          ? getPaladinAbility(action.paladinAbilityId)?.id
+          : SKILLS[s.classId][action.slot as SkillSlot].id)
       || !Number.isSafeInteger(timeline.elapsedTicks) || timeline.elapsedTicks < 0
       || !Number.isSafeInteger(timeline.windupTicks) || timeline.windupTicks < 1
       || !Number.isSafeInteger(timeline.recoveryTicks) || timeline.recoveryTicks < 0
@@ -229,10 +240,12 @@ export class GameSimulation {
   private rng = new SeededRng();
   private cooldowns: Cooldowns = emptyCooldowns();
   private warriorCooldowns: Partial<Record<WarriorAbilityId, number>> = {};
+  private paladinCooldowns: PaladinCooldowns = {};
   private warriorPending: { id: WarriorAbilityId; targetId: string | null } | null = null;
   private warriorAction: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null = null;
   private classAction: {
     kind: 'basic' | 'skill'; slot: SkillSlot | null; targetId: string | null;
+    paladinAbilityId?: PaladinAbilityId;
     aim?: SkillAim; timeline: CombatTimelineState;
   } | null = null;
   private statusEffects: { player: StatusInstance[]; enemies: Record<string, StatusInstance[]> } = { player: [], enemies: {} };
@@ -488,7 +501,7 @@ export class GameSimulation {
     this.awardExperience(reward.xp);
     const itemId='world-event-'+this.world.seed+'-'+plan.id.replaceAll('.','_')+'-reward';
     const item=rollItemForBase(reward.itemBaseId,itemId,this.level,'UNCOMMON',
-      new SeededRng((this.world.seed ^ (plan.id==='wild.event.1' ? 0x9c13ab : 0x715de4))>>>0));
+      new SeededRng((this.world.seed ^ (plan.id==='wild.event.1' ? 0x9c13ab : 0x715de4))>>>0),this.classId);
     let grantedId:string|null=null;
     const ownedIds=new Set([...this.inventory,...this.stash,...this.stashTabs.flat(),
       ...Object.values(this.equipment),...this.groundLoot.map(loot=>loot.item)]
@@ -1056,6 +1069,7 @@ export class GameSimulation {
     this.evadeCooldown = 0;
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
+    this.paladinCooldowns = {};
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
@@ -1444,6 +1458,11 @@ export class GameSimulation {
       }
       return;
     }
+    if(command.type==='paladinAbility') {
+      if(this.classId!=='PALADIN')return;
+      this.requestPaladinAbility(command.id,command.targetId??null);
+      return;
+    }
     if (command.type === 'warriorAbility') {
       if (this.classId !== 'WARRIOR' || !getWarriorAbility(command.id)) return;
       const unit = command.targetId === undefined ? this.focusedUnit
@@ -1740,7 +1759,8 @@ export class GameSimulation {
   /** Single derived stat projection; talent effects never mutate equipment or DTOs. */
   private currentStats(equipment: Equipment = this.equipment, level = this.level) {
     const base = deriveStats(this.classId, equipment, level);
-    const stats=this.classId==='WARRIOR' ? applyTalentStats(base,this.talentRanks) : base;
+    const stats=(this.classId==='WARRIOR'||this.classId==='PALADIN')
+      ? applyTalentStats(base,this.talentRanks) : base;
     if(!this.shrineBlessings.length)return stats;
     return {...stats,
       armor:stats.armor+(this.hasShrineBlessing('armor')?30+level*2:0),
@@ -1752,7 +1772,7 @@ export class GameSimulation {
   }
 
   /** Modal UI sends a request; only simulation checks/commits spent ranks. */
-  private spendTalent(id: WarriorTalentId): void {
+  private spendTalent(id: TalentId): void {
     if (!this.player.alive) return;
     const plan = planSpendTalent(this.classId, this.level, this.talentPoints,
       this.talentRanks, id);
@@ -2057,6 +2077,72 @@ export class GameSimulation {
     if (action.timeline.phase === 'complete' || action.timeline.phase === 'cancelled') this.warriorAction = null;
   }
 
+  /** Paladin actions reuse classCombatTiming and the canonical hit-frame resolver. */
+  private requestPaladinAbility(id:PaladinAbilityId,targetId:string|null):void {
+    if(!this.player.alive||this.paused||this.classId!=='PALADIN'
+      ||this.classAction||this.warriorAction
+      ||this.statusEffects.player.some(effect=>
+        ['stunned','frozen','silenced'].includes(effect.id))
+      ||this.effects.player.some(effect=>effect.id==='stunned'))return;
+    const ability=getPaladinAbility(id);
+    if(!ability)return;
+    const target=targetId
+      ? this.units.find(unit=>unit.actor.id===targetId && unit.actor.alive)
+      : ability.target==='enemy' ? this.focusedUnit : undefined;
+    const decision=planPaladinCast(id,this.resource,this.paladinCooldowns,
+      target?distance(this.player,target.actor):Infinity,!!target?.actor.alive);
+    if(!decision.ok)return;
+    this.resource=Math.max(0,this.resource-ability.cost);
+    this.paladinCooldowns={...this.paladinCooldowns,[id]:ability.cooldown};
+    this.pendingSkill=null;
+    this.pendingAim=null;
+    this.attackTarget=null;
+    this.pickupTarget=null;
+    this.movePath=[];
+    this.classAction={kind:'skill',slot:null,paladinAbilityId:id,
+      targetId:ability.target==='enemy'?target!.actor.id:null,
+      timeline:startCombatTimeline(classSkillTimeline(ability)).state};
+    const point=ability.target==='enemy'?target!.actor:this.player;
+    this.events.push({type:'cast',skillId:id,x:point.x,y:point.y});
+  }
+
+  /** All Holy damage, healing and shielding are resolved at the shared hit frame. */
+  private resolvePaladinImpact(id:PaladinAbilityId,targetId:string|null):void {
+    if(this.classId!=='PALADIN'||!this.player.alive)return;
+    const ability=getPaladinAbility(id);
+    if(!ability)return;
+    const bonuses=projectTalentBonuses(this.talentRanks);
+    const stats=this.currentStats();
+    if(id==='holyStrike'||id==='smite') {
+      const target=this.units.find(unit=>unit.actor.id===targetId && unit.actor.alive);
+      if(!target||distance(this.player,target.actor)>ability.range+16)return;
+      const applied=this.applyDamage(ability.power,target,'holy');
+      if(applied>0) {
+        if(id==='holyStrike')this.resource=Math.min(stats.maxResource,this.resource+10);
+        if(id==='smite'&&target.actor.alive)
+          this.applyCanonicalStatus('enemy','vulnerable','hero',0.18,4,target);
+      }
+    } else if(id==='divineShield') {
+      const amount=Math.round((58+this.level*9+stats.willpower*2)
+        *(1+bonuses.shieldStrength));
+      this.shield=Math.min(100000,this.shield+amount);
+      this.applyCanonicalStatus('player','fortified','hero',0.24,6);
+    } else if(id==='healingLight') {
+      const amount=Math.round((56+this.level*6+stats.willpower*2)
+        *(1+bonuses.healBonus));
+      this.player.health=resolveHealing(this.player.health,this.player.maxHealth,amount).health;
+    } else if(id==='holyAura') {
+      const duration=(ability.duration??12)+bonuses.auraDuration;
+      this.applyCanonicalStatus('player','regeneration','hero',
+        6*(1+bonuses.auraStrength),duration);
+      this.applyCanonicalStatus('player','fortified','hero',0.10,duration);
+      for(const unit of [...this.aliveEnemies]) {
+        if(distance(this.player,unit.actor)>ability.range)continue;
+        this.applyDamage(ability.power*(1+bonuses.auraStrength),unit,'holy');
+      }
+    }
+  }
+
   private requestCast(slot: SkillSlot, aim?: SkillAim): void {
     if (this.warriorAction || this.classAction) return;
     const skill = SKILLS[this.classId][slot];
@@ -2195,7 +2281,10 @@ export class GameSimulation {
       rolled, unit, type, 'hero',
       (1 + primary * 0.035) * Math.max(0, power)
         * (this.classId === 'WARRIOR' && this.player.health <= this.player.maxHealth * 0.4
-          ? 1 + projectTalentBonuses(this.talentRanks).lowHealthDamageMultiplier : 1),
+          ? 1 + projectTalentBonuses(this.talentRanks).lowHealthDamageMultiplier : 1)
+        * (this.classId === 'PALADIN' && type === 'holy'
+          ? 1 + projectTalentBonuses(this.talentRanks).holyDamage
+            + stats.skillRank*0.04 : 1),
       stats.critChance
     );
   }
@@ -2348,10 +2437,15 @@ export class GameSimulation {
           unit.actor.id === action.targetId && unit.actor.alive);
         if (target && distance(this.player, target.actor) <= CLASSES[this.classId].attackRange + 10) {
           this.applyDamage(1, target);
+          if (this.classId === 'PALADIN') {
+            this.resource = Math.min(this.currentStats().maxResource,this.resource+5);
+          }
           if (this.classId === 'NECROMANCER' || this.classId === 'WARLOCK') {
             this.resource = Math.min(CLASSES[this.classId].resourceMax, this.resource + 8);
           }
         }
+      } else if (action.paladinAbilityId) {
+        this.resolvePaladinImpact(action.paladinAbilityId,action.targetId);
       } else if (action.slot) {
         this.resolveClassCast(action.slot, action.aim, action.targetId);
       }
@@ -2830,6 +2924,7 @@ export class GameSimulation {
     this.effects = emptyEffects();
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
+    this.paladinCooldowns = {};
     this.warriorPending = null;
     this.warriorAction = null;
     this.classAction = null;
@@ -2882,6 +2977,7 @@ export class GameSimulation {
       rage: this.resource, maxRage: this.currentStats().maxResource,
       cooldowns: this.warriorCooldowns
     }, dt).cooldowns } as Partial<Record<WarriorAbilityId, number>>;
+    this.paladinCooldowns=advancePaladinCooldowns(this.paladinCooldowns,dt);
     this.warriorCooldowns.cleave = this.cooldowns.rmb;
     this.warriorCooldowns.charge = this.cooldowns.slot1;
     this.tickEffects(dt);
@@ -3328,7 +3424,7 @@ export class GameSimulation {
       const id = 'drop-' + this.kills + '-' + index;
       const item = rollItemForBase(
         roll.itemBaseId, 'drop-' + this.kills + '-item-' + index,
-        roll.itemLevel, roll.rarity, this.rng
+        roll.itemLevel, roll.rarity, this.rng, this.classId
       );
       if (!item) continue;
       this.groundLoot.push({ id, x: unit.actor.x + index * 16, y: unit.actor.y, item });
@@ -3499,6 +3595,7 @@ export class GameSimulation {
       rngState: this.rng.state,
       cooldowns: { ...this.cooldowns },
       warriorCooldowns: { ...this.warriorCooldowns },
+      paladinCooldowns: { ...this.paladinCooldowns },
       warriorAction: this.warriorAction ? {
         ...this.warriorAction, timeline: { ...this.warriorAction.timeline }
       } : null,
@@ -3651,6 +3748,10 @@ export class GameSimulation {
       || !validHollowAdds(s.hollowKingAddActorIds)
       || !validMiniStates(s.miniBossStates)
       || !validEventSnapshot()
+      || !validPaladinCooldowns(s.paladinCooldowns ?? {})
+      || (s.classId!=='PALADIN' && Object.keys(s.paladinCooldowns ?? {}).length>0)
+      || (s.classAction?.paladinAbilityId!==undefined
+        && !((s.paladinCooldowns?.[s.classAction.paladinAbilityId] ?? 0)>0))
       || !validEnvironmentUsedIds(environmentUsed)
       || !validShrineBlessings(s.environmentBlessings ?? [])
       || (s.environmentObjects !== undefined &&
@@ -3870,6 +3971,7 @@ export class GameSimulation {
     this.rng = new SeededRng(s.rngState);
     this.cooldowns = { ...s.cooldowns };
     this.warriorCooldowns = s.warriorCooldowns ? { ...s.warriorCooldowns } : {};
+    this.paladinCooldowns = s.paladinCooldowns ? { ...s.paladinCooldowns } : {};
     this.warriorAction = s.warriorAction ? {
       ...s.warriorAction, timeline: { ...s.warriorAction.timeline }
     } : null;
@@ -3945,6 +4047,7 @@ export class GameSimulation {
     this.rng = new SeededRng(seed === 0 ? 0x49ac127b : ((seed ^ 0x49ac127b) >>> 0));
     this.cooldowns = emptyCooldowns();
     this.warriorCooldowns = {};
+    this.paladinCooldowns = {};
     this.warriorAction = null;
     this.classAction = null;
     this.warriorPending = null;
