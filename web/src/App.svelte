@@ -488,7 +488,9 @@
     bridge.command({ type: 'holdPosition', value: false });
   }
   async function save(): Promise<void> {
+    if (busy) return;
     busy = true;
+    messageKey = ''; // Never let a previous success mask an in-flight write.
     try {
       const world = boundWorldProgress();
       await Promise.all([
