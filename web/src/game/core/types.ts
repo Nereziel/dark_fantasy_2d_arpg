@@ -12,6 +12,7 @@ import type { ShopOfferId } from '../trade/commerce';
 import type { DamageType } from '../combat/typedDamage';
 import type { SkillAim } from '../input/skillAiming';
 import type { WarriorAbilityId } from '../skills/warriorKit';
+import type { PaladinAbilityId, PaladinCooldowns } from '../skills/paladinKit';
 import type { CombatTimelineState } from '../animation/combatTimeline';
 import type { StatusInstance } from '../status/statusRuntime';
 import type { StatusId } from '../status/statusDefinitions';
@@ -22,7 +23,7 @@ import type { CryptInteractable } from '../world/cryptTheme';
 import type { MiniBossState, MiniBossId } from '../enemies/miniBossRules';
 import type { HollowKingState } from '../bosses/hollowKingPhases';
 import type { RespawnCheckpointId, RespawnDestination } from './deathRespawn';
-import type { TalentRanks, WarriorTalentId } from '../progression/talentTree';
+import type { TalentRanks, TalentId } from '../progression/talentTree';
 import type { WorldFactLedger } from '../world/chunkStreaming';
 import type { Materials, CraftKind } from '../crafting/craftingRules';
 import type { GemAction, GemWallet } from '../gems/gemRules';
@@ -156,11 +157,15 @@ export interface GameSnapshot {
   cooldowns: Cooldowns;
   /** Runtime Warrior actions and status effects are never part of CharacterProgress. */
   warriorCooldowns?: Partial<Record<WarriorAbilityId, number>>;
+  /** Independent Paladin timers; never serialized to CharacterProgress v11. */
+  paladinCooldowns?: PaladinCooldowns;
   warriorAction?: { id: WarriorAbilityId; targetId: string | null; aim?: SkillAim; timeline: CombatTimelineState; hitCount: number } | null;
   /** Transient hit-frame state of the other five classes, never persisted. */
   classAction?: {
     kind: 'basic' | 'skill';
     slot: SkillSlot | null;
+    /** Paladin extra abilities reuse the canonical class timeline with a null slot. */
+    paladinAbilityId?: PaladinAbilityId;
     targetId: string | null;
     aim?: SkillAim;
     timeline: CombatTimelineState;
@@ -211,6 +216,7 @@ export type GameCommand =
   | { type: 'attack'; targetId: string }
   | { type: 'cast'; slot: SkillSlot; targetId?: string; aim?: SkillAim }
   | { type: 'warriorAbility'; id: WarriorAbilityId; targetId?: string }
+  | { type: 'paladinAbility'; id: PaladinAbilityId; targetId?: string }
   | { type: 'interactNpc'; npcId: NpcId }
   | { type: 'interactTown'; entryId: string }
   | { type: 'travelWaypoint'; destinationId: WaypointId }
@@ -242,7 +248,7 @@ export type GameCommand =
   | { type: 'dropInventory'; index: number }
   | { type: 'pause'; value: boolean }
   | { type: 'respawn' }
-  | { type: 'spendTalent'; id: WarriorTalentId }
+  | { type: 'spendTalent'; id: TalentId }
   | { type: 'respecTalents' }
   | { type: 'reset'; classId?: ClassId; seed?: number };
 
@@ -267,7 +273,7 @@ export type GameEvent =
   | { type: 'loot'; id: string }
   | { type: 'pickup'; id: string }
   | { type: 'levelUp'; level: number }
-  | { type: 'talentSpent'; id: WarriorTalentId; rank: number }
+  | { type: 'talentSpent'; id: TalentId; rank: number }
   | { type: 'talentsRespecced'; goldSpent: number }
   | { type: 'craftCompleted'; kind: CraftKind; itemId: string; goldSpent: number }
   | { type: 'gemTransacted'; action: GemAction['type']; gemId: GemId;
