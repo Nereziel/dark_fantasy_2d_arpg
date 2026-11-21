@@ -11,6 +11,13 @@ test('forges a Ruby from naturally salvaged material and persists the gem wallet
   await page.getByRole('button',{name:'Visit blacksmith'}).click();
   const smith=page.getByRole('dialog',{name:'Blacksmith Odan'});
   await expect(smith).toContainText('Gems and Runes');
+  // Catalog previews cover every original gem/rune family.
+  await expect(smith.locator('.gem-catalog svg[data-gem-art]')).toHaveCount(6);
+  for (const family of ['gem.ruby','gem.sapphire','gem.emerald',
+    'rune.ash','rune.ward','rune.focus']) {
+    await expect(smith.locator(`[data-gem-base="${family}"] svg[data-gem-art="${family}"]`))
+      .toBeVisible();
+  }
   await expect(smith.locator('[data-gem-base="gem.ruby"]').getByRole('button',{name:'Forge'})).toBeDisabled();
   const belt=smith.locator('[data-craft-id^="trade-belt-"]');
   await belt.getByRole('button',{name:/Salvage/}).click();
@@ -18,6 +25,8 @@ test('forges a Ruby from naturally salvaged material and persists the gem wallet
   await smith.locator('[data-gem-base="gem.ruby"]').getByRole('button',{name:'Forge'}).click();
   await expect(smith.locator('[data-gem-id="gem.ruby.1"]')).toContainText('Ruby');
   await expect(smith.locator('[data-gem-id="gem.ruby.1"] strong')).toHaveText('1');
+  await expect(smith.locator('[data-gem-id="gem.ruby.1"] svg[data-gem-art="gem.ruby"][data-gem-tier="1"]'))
+    .toBeVisible();
   await smith.getByRole('button',{name:'Leave'}).click();
   await page.getByRole('button',{name:'Save'}).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
@@ -77,6 +86,7 @@ test('inserts gem into a real socket, saves the socket and extracts stone at the
   await expect(belt).toContainText('Empty');
   await belt.getByRole('button',{name:'Insert Ruby Tier 1'}).click();
   await expect(belt).toContainText('Ruby Tier 1');
+  await expect(belt.locator('svg[data-gem-art="gem.ruby"][data-gem-tier="1"]')).toBeVisible();
   await expect(belt).toContainText('+3 fire resistance');
   await expect(smith.locator('[data-gem-id="gem.ruby.1"]')).toHaveCount(0);
   await smith.getByRole('button',{name:'Leave'}).click();
