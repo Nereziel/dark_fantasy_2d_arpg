@@ -170,8 +170,8 @@
     {#if helpOpen}
       <p class="help-note">
         {$locale === 'cs'
-          ? 'Přetáhni předmět do slotu výbavy nebo do batohu. Dvojklik na předmět jej nasadí, dvojklik na výbavu jej sundá. Kliknutím vyber a druhým kliknutím přesuň. Najeď kurzorem pro porovnání.'
-          : 'Drag items into an equipment slot or another bag cell. Double-click to equip or unequip. Click once to select, then click the destination. Hover to compare stats.'}
+          ? 'Mobil: klepnutím zobrazíš statistiky, tlačítkem Přesunout klepnutím zvolíš cílový slot. Na počítači přetahuj předměty mezi batohem a výbavou, dvojklikem nasazuj nebo sundávej. Najeď myší pro porovnání.'
+          : 'Touch: tap an item to inspect it, then use Move by tap to choose a destination. Desktop: drag between bag and equipment, double-click to equip or unequip, or hover to compare.'}
       </p>
     {/if}
 
@@ -266,7 +266,7 @@
               onfocus={() => { hovered = item && !filtered ? { kind: 'bag', index } : null; }}
               onclick={() => { if (!filtered) pickBag(index); }}
               ondblclick={() => { if (item && !filtered && !touchInput) equip(index); }}
-              oncontextmenu={(event) => { if (item && !filtered) { event.preventDefault(); equip(index); } }}
+              oncontextmenu={(event) => { if (item && !filtered) { event.preventDefault(); if (!touchInput) equip(index); } }}
               aria-label={item ? itemName(item) : $t('inventory.empty')}
               title={item ? itemName(item) : $t('inventory.empty')}>
               {#if item}
@@ -282,7 +282,8 @@
           {/each}
         </div>
         <div class="bag-footer">
-          <span>{$locale === 'cs' ? 'Přetahování · dvojklik pro nasazení' : 'Drag & drop · double-click to equip'}</span>
+          <span class="desktop-hint">{$locale === 'cs' ? 'Přetahování · dvojklik pro nasazení' : 'Drag & drop · double-click to equip'}</span>
+          <span class="touch-hint">{$locale === 'cs' ? 'Klepni pro náhled · přesun přes tlačítko výše' : 'Tap to inspect · use Move by tap'}</span>
           {#if selected?.kind === 'bag'}
             <button onclick={() => { selected = null; }}>{$locale === 'cs' ? 'Zrušit výběr' : 'Clear selection'}</button>
           {/if}
@@ -478,7 +479,7 @@
   .inspect-placeholder{text-align:center;display:grid;place-items:center;min-height:220px;color:#99a8a7;font-size:.8rem;line-height:1.65;padding:16px}
   .placeholder-glyph{font:3rem Georgia,serif;color:#796c55}
   @media(max-width:950px){.inventory-layout{grid-template-columns:minmax(235px,.9fr) minmax(280px,1.1fr)}.item-inspector{grid-column:1/-1;max-height:none}.comparison-grid{grid-template-columns:1fr 1fr}}
-  .touch-move-bar{display:none}
+  .touch-move-bar,.touch-hint{display:none}
   /* Touch layout: the same full item inspector stays pinned while the player browses
      the bag; no hover-only tooltip or duplicate comparison logic is necessary. */
   @media(max-width:650px){
@@ -500,6 +501,8 @@
       box-shadow:0 8px 22px #000b;
     }
     .item-inspector h3{margin:0 0 7px}
+    .touch-hint{display:inline}
+    .desktop-hint{display:none}
     .touch-move-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px}
     .touch-move-bar button{min-height:38px;padding:6px 10px;background:#46392a;border-color:#af8a58}
     .touch-move-bar button[aria-pressed="true"]{background:#705032;color:#fff3dc}
