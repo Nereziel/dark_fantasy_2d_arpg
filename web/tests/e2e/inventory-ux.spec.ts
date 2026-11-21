@@ -53,7 +53,9 @@ test('HUD columns and minimap fog stay clear of the seven-skill action bar', asy
     expect(a.y + a.height).toBeLessThanOrEqual(b.y + 1);
     expect(c.y + c.height).toBeLessThanOrEqual(d.y + 1);
   }
-  await expect(mini.locator('svg mask')).toHaveCount(1);
+  // Exact discovered-only clipping replaces the old blurred fog mask.
+  await expect(mini.locator('svg clipPath')).toHaveCount(1);
+  await expect(mini.locator('svg feGaussianBlur')).toHaveCount(0);
   await expect(mini.locator('[data-fog-cell]').first()).toHaveAttribute('stroke', 'none');
   const leftColumn = page.locator('.hud-left-column');
   const rightColumn = page.locator('.hud-right-column');
