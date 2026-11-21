@@ -196,12 +196,20 @@ function validWaveBState(s: GameSnapshot): boolean {
     const action = s.classAction;
     const timeline = action.timeline;
     if (!timeline || s.classId === 'WARRIOR' || !['basic', 'skill'].includes(action.kind)
-      || (action.kind === 'basic' ? action.slot !== null : !isSkillSlot(action.slot))
+      || (action.paladinAbilityId !== undefined
+        && (s.classId !== 'PALADIN' || action.kind !== 'skill'
+          || action.slot !== null || !getPaladinAbility(action.paladinAbilityId)))
+      || (action.kind === 'basic'
+        ? action.slot !== null || action.paladinAbilityId !== undefined
+        : action.paladinAbilityId !== undefined
+          ? action.slot !== null : !isSkillSlot(action.slot))
       || typeof action.targetId !== 'string' && action.targetId !== null
       || (typeof action.targetId === 'string' && action.targetId.length > 128)
       || (action.aim !== undefined && !validTransientAim(action.aim))
       || timeline.actionId !== (action.kind === 'basic' ? 'basicAttack'
-        : SKILLS[s.classId][action.slot as SkillSlot].id)
+        : action.paladinAbilityId !== undefined
+          ? getPaladinAbility(action.paladinAbilityId)?.id
+          : SKILLS[s.classId][action.slot as SkillSlot].id)
       || !Number.isSafeInteger(timeline.elapsedTicks) || timeline.elapsedTicks < 0
       || !Number.isSafeInteger(timeline.windupTicks) || timeline.windupTicks < 1
       || !Number.isSafeInteger(timeline.recoveryTicks) || timeline.recoveryTicks < 0
@@ -1450,6 +1458,11 @@ export class GameSimulation {
       }
       return;
     }
+    if(command.type==='paladinAbility') {
+      if(this.classId!=='PALADIN')return;
+      this.requestPaladinAbility(command.id,command.targetId??null);
+      return;
+    }
     if (command.type === 'warriorAbility') {
       if (this.classId !== 'WARRIOR' || !getWarriorAbility(command.id)) return;
       const unit = command.targetId === undefined ? this.focusedUnit
@@ -2064,6 +2077,72 @@ export class GameSimulation {
     if (action.timeline.phase === 'complete' || action.timeline.phase === 'cancelled') this.warriorAction = null;
   }
 
+  /** Paladin actions reuse classCombatTiming and the canonical hit-frame resolver. */
+  private requestPaladinAbility(id:PaladinAbilityId,targetId:string|null):void {
+    if(!this.player.alive||this.paused||this.classId!=='PALADIN'
+      ||this.classAction||this.warriorAction
+      ||this.statusEffects.player.some(effect=>
+        ['stunned','frozen','silenced'].includes(effect.id))
+      ||this.effects.player.some(effect=>effect.id==='stunned'))return;
+    const ability=getPaladinAbility(id);
+    if(!ability)return;
+    const target=targetId
+      ? this.units.find(unit=>unit.actor.id===targetId && unit.actor.alive)
+      : ability.target==='enemy' ? this.focusedUnit : undefined;
+    const decision=planPaladinCast(id,this.resource,this.paladinCooldowns,
+      target?distance(this.player,target.actor):Infinity,!!target?.actor.alive);
+    if(!decision.ok)return;
+    this.resource=Math.max(0,this.resource-ability.cost);
+    this.paladinCooldowns={...this.paladinCooldowns,[id]:ability.cooldown};
+    this.pendingSkill=null;
+    this.pendingAim=null;
+    this.attackTarget=null;
+    this.pickupTarget=null;
+    this.movePath=[];
+    this.classAction={kind:'skill',slot:null,paladinAbilityId:id,
+      targetId:ability.target==='enemy'?target!.actor.id:null,
+      timeline:startCombatTimeline(classSkillTimeline(ability)).state};
+    const point=ability.target==='enemy'?target!.actor:this.player;
+    this.events.push({type:'cast',skillId:id,x:point.x,y:point.y});
+  }
+
+  /** All Holy damage, healing and shielding are resolved at the shared hit frame. */
+  private resolvePaladinImpact(id:PaladinAbilityId,targetId:string|null):void {
+    if(this.classId!=='PALADIN'||!this.player.alive)return;
+    const ability=getPaladinAbility(id);
+    if(!ability)return;
+    const bonuses=projectTalentBonuses(this.talentRanks);
+    const stats=this.currentStats();
+    if(id==='holyStrike'||id==='smite') {
+      const target=this.units.find(unit=>unit.actor.id===targetId && unit.actor.alive);
+      if(!target||distance(this.player,target.actor)>ability.range+16)return;
+      const applied=this.applyDamage(ability.power,target,'holy');
+      if(applied>0) {
+        if(id==='holyStrike')this.resource=Math.min(stats.maxResource,this.resource+10);
+        if(id==='smite'&&target.actor.alive)
+          this.applyCanonicalStatus('enemy','vulnerable','hero',0.18,4,target);
+      }
+    } else if(id==='divineShield') {
+      const amount=Math.round((58+this.level*9+stats.willpower*2)
+        *(1+bonuses.shieldStrength));
+      this.shield=Math.min(100000,this.shield+amount);
+      this.applyCanonicalStatus('player','fortified','hero',0.24,6);
+    } else if(id==='healingLight') {
+      const amount=Math.round((56+this.level*6+stats.willpower*2)
+        *(1+bonuses.healBonus));
+      this.player.health=resolveHealing(this.player.health,this.player.maxHealth,amount).health;
+    } else if(id==='holyAura') {
+      const duration=(ability.duration??12)+bonuses.auraDuration;
+      this.applyCanonicalStatus('player','regeneration','hero',
+        6*(1+bonuses.auraStrength),duration);
+      this.applyCanonicalStatus('player','fortified','hero',0.10,duration);
+      for(const unit of [...this.aliveEnemies]) {
+        if(distance(this.player,unit.actor)>ability.range)continue;
+        this.applyDamage(ability.power*(1+bonuses.auraStrength),unit,'holy');
+      }
+    }
+  }
+
   private requestCast(slot: SkillSlot, aim?: SkillAim): void {
     if (this.warriorAction || this.classAction) return;
     const skill = SKILLS[this.classId][slot];
@@ -2202,7 +2281,10 @@ export class GameSimulation {
       rolled, unit, type, 'hero',
       (1 + primary * 0.035) * Math.max(0, power)
         * (this.classId === 'WARRIOR' && this.player.health <= this.player.maxHealth * 0.4
-          ? 1 + projectTalentBonuses(this.talentRanks).lowHealthDamageMultiplier : 1),
+          ? 1 + projectTalentBonuses(this.talentRanks).lowHealthDamageMultiplier : 1)
+        * (this.classId === 'PALADIN' && type === 'holy'
+          ? 1 + projectTalentBonuses(this.talentRanks).holyDamage
+            + stats.skillRank*0.04 : 1),
       stats.critChance
     );
   }
@@ -2355,10 +2437,15 @@ export class GameSimulation {
           unit.actor.id === action.targetId && unit.actor.alive);
         if (target && distance(this.player, target.actor) <= CLASSES[this.classId].attackRange + 10) {
           this.applyDamage(1, target);
+          if (this.classId === 'PALADIN') {
+            this.resource = Math.min(this.currentStats().maxResource,this.resource+5);
+          }
           if (this.classId === 'NECROMANCER' || this.classId === 'WARLOCK') {
             this.resource = Math.min(CLASSES[this.classId].resourceMax, this.resource + 8);
           }
         }
+      } else if (action.paladinAbilityId) {
+        this.resolvePaladinImpact(action.paladinAbilityId,action.targetId);
       } else if (action.slot) {
         this.resolveClassCast(action.slot, action.aim, action.targetId);
       }
