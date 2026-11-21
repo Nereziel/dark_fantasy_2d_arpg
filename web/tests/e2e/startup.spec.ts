@@ -16,8 +16,12 @@ test('switches Czech/English in the menu and game without losing the scene', asy
   await page.locator('#game-language').selectOption('en');
   await expect(page.getByText('Enemies defeated')).toBeVisible();
   await expect(page.locator('.enemy-name')).toHaveText('Wraith');
-  await expect(page.locator('.enemy-roster button')).toHaveCount(3);
-  await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
+  // The overworld can add deterministic optional enemies; roster cardinality is not fixed.
+  const roster = page.locator('.enemy-roster button');
+  await expect(roster.nth(2)).toBeVisible();
+  const rosterCount = await roster.count();
+  expect(rosterCount).toBeGreaterThanOrEqual(3);
+  await expect(page.locator('.enemy-roster-title')).toContainText(`${rosterCount}/${rosterCount}`);
   const skeleton = page.locator('.enemy-roster button').filter({ hasText: 'Skeleton Warrior' });
   await skeleton.click();
   await expect(skeleton).toHaveAttribute('aria-pressed', 'true');
