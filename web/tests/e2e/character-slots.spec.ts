@@ -70,7 +70,7 @@ test('legacy single-slot hero and its world are preserved when a new hero is cre
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await createHero(page, 'WARRIOR');
-  const originalId = await expect.poll(async () => page.evaluate(async () => {
+  await expect.poll(async () => page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const req = indexedDB.open('aether-ruin-web', 1);
       req.onsuccess = () => resolve(req.result);
