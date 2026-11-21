@@ -74,11 +74,12 @@ export class GameBridge implements GameStateReader {
   }
 
   command(command: GameCommand): void {
-    if (command.type === 'reset' || command.type === 'respawn' || command.type === 'travelWaypoint') {
+    if (command.type === 'reset' || command.type === 'createCharacter'
+      || command.type === 'respawn' || command.type === 'travelWaypoint') {
       this.pointerWorld = null;
       this.pointerEnemy = null;
     }
-    this.simulation.command(command.type === 'reset'
+    this.simulation.command(command.type === 'reset' || command.type === 'createCharacter'
       ? { ...command, seed: command.seed ?? newSessionSeed() }
       : command);
     this.emit();
