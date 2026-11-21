@@ -2187,6 +2187,149 @@ export class GameSimulation {
   }
 
   /** Commit Mana and independent Mage cooldowns before the fixed hit frame. */
+  /** Allocate stable ally IDs. This remains session-owned, never character save. */
+  private spawnNecroAlly(kind: 'skeleton' | 'golem'): boolean {
+    if (this.classId !== 'NECROMANCER' || !this.player.alive
+      || this.summons.length >= 5
+      || this.summons.filter(s => s.kind === kind).length >= (kind === 'golem' ? 1 : 4))
+      return false;
+    const next = createOwnedSummon({
+      ownerId: this.player.id, kind, zone: this.zone,
+      sequence: this.nextSummonSequence,
+      origin: this.player, level: this.level,
+      spellPower: 1 + this.currentStats().intelligence / 90,
+      obstacles: this.world.obstacles
+    });
+    if (!next) return false;
+    this.summons.push(next);
+    this.nextSummonSequence++;
+    return true;
+  }
+
+  /** Validate and commit class Essence once before the timeline hit frame. */
+  private requestNecroAbility(id: NecroExtraSpellId, targetId: string | null,
+    position?: Point): void {
+    if (this.classId !== 'NECROMANCER' || this.paused || !this.player.alive
+      || this.classAction || this.warriorAction
+      || this.statusEffects.player.some(e =>
+        e.id === 'stunned' || e.id === 'frozen' || e.id === 'silenced')) return;
+    const spell = getNecroSpell(id);
+    if (!spell) return;
+    if (id === 'summonGolem' && (this.summons.length >= 5
+      || this.summons.some(s => s.kind === 'golem')
+      || !createOwnedSummon({
+        ownerId:this.player.id,kind:'golem',zone:this.zone,
+        sequence:this.nextSummonSequence,origin:this.player,
+        level:this.level,spellPower:1+this.currentStats().intelligence/90,
+        obstacles:this.world.obstacles
+      }))) return;
+    const target = targetId
+      ? this.units.find(u => u.actor.id === targetId && u.actor.alive)
+      : this.focusedUnit.actor.alive ? this.focusedUnit : undefined;
+    const cursor = position ?? (id === 'corpseExplosion'
+      ? chooseCorpseToken(this.corpses,this.zone,this.player,300) ?? null : null);
+    const corpse = id === 'corpseExplosion' && cursor
+      ? chooseCorpseToken(this.corpses,this.zone,cursor,90) : null;
+    const plan = planNecroCast(id, {
+      essence:this.resource,cooldowns:this.necroCooldowns,
+      origin:this.player,targetId:target?.actor.id??null,
+      targetPosition:target?.actor??null,targetAlive:!!target?.actor.alive,
+      targetVisible:!!(target && hasLineOfSight(this.player,target.actor,this.world.obstacles)),
+      corpseAvailable:!!corpse && distance(this.player,corpse) <= spell.range
+        && hasLineOfSight(this.player,corpse,this.world.obstacles),
+      cursor:cursor ? {x:cursor.x,y:cursor.y} : null
+    });
+    if (!plan.ok) return;
+    this.resource=plan.essenceAfter;
+    this.necroCooldowns=plan.cooldowns;
+    this.pendingSkill=null;
+    this.pendingAim=null;
+    this.attackTarget=null;
+    this.pickupTarget=null;
+    this.movePath=[];
+    const kind = spell.kind === 'summon' ? 'summon'
+      : spell.kind === 'nova' || spell.kind === 'corpse' ? 'nova'
+      : spell.kind === 'drain' ? 'drain' : 'dot';
+    const timeline=classSkillTimeline({
+      id:spell.id,icon:spell.icon,kind,
+      target: spell.aimMode === 'SELF' ? 'self' : 'enemy',
+      cost:spell.cost,cooldown:spell.cooldown,range:spell.range,
+      power:spell.power,color:spell.color,duration:spell.duration
+    });
+    this.classAction={
+      kind:'skill',slot:null,necroAbilityId:id,
+      targetId:spell.aimMode==='TARGET_ENTITY'?target?.actor.id??null:null,
+      aim:plan.aim,timeline:startCombatTimeline(timeline).state
+    };
+    const p=plan.aim.mode==='GROUND_POSITION'?plan.aim.position:
+      target?.actor??this.player;
+    this.events.push({type:'cast',skillId:id,x:p.x,y:p.y});
+  }
+
+  /** One-shot hit-frame skill effects, never corpse-triggered bonus XP or loot. */
+  private resolveNecroImpact(id: NecroExtraSpellId, targetId: string | null,
+    aim?: SkillAim): void {
+    const spell=getNecroSpell(id);
+    if (!spell || this.classId !== 'NECROMANCER' || !this.player.alive)return;
+    if (id==='summonGolem'){
+      this.spawnNecroAlly('golem');
+    } else if (id==='corpseExplosion' && aim?.mode==='GROUND_POSITION'){
+      const corpse=chooseCorpseToken(this.corpses,this.zone,aim.position,90);
+      if(!corpse || distance(this.player,corpse)>spell.range
+        || !hasLineOfSight(this.player,corpse,this.world.obstacles)) return;
+      const remaining=consumeCorpseToken(this.corpses,corpse.enemyId);
+      if(!remaining)return;
+      this.corpses=[...remaining];
+      for(const enemy of [...this.aliveEnemies]){
+        if(distance(enemy.actor,corpse)>spell.radius
+          || !hasLineOfSight(corpse,enemy.actor,this.world.obstacles))continue;
+        const damage=this.applyDamage(spell.power,enemy,'shadow');
+        if(damage>0&&enemy.actor.alive)
+          this.applyCanonicalStatus('enemy','poisoned','hero',3,3,enemy);
+      }
+    } else if (id==='bloodDrain' && targetId){
+      const target=this.units.find(u=>u.actor.id===targetId&&u.actor.alive);
+      if(!target || distance(this.player,target.actor)>spell.range
+        || !hasLineOfSight(this.player,target.actor,this.world.obstacles))return;
+      const damage=this.applyDamage(spell.power,target,'shadow');
+      if(damage>0 && this.player.alive)
+        this.player.health=resolveHealing(this.player.health,this.player.maxHealth,
+          Math.round(damage*0.65)).health;
+    } else if(id==='curse' && targetId){
+      const target=this.units.find(u=>u.actor.id===targetId&&u.actor.alive);
+      if(!target || distance(this.player,target.actor)>spell.range
+        || !hasLineOfSight(this.player,target.actor,this.world.obstacles))return;
+      this.applyCanonicalStatus('enemy','cursed','hero',0.25,spell.duration,target);
+      this.applyCanonicalStatus('enemy','vulnerable','hero',0.12,spell.duration,target);
+    } else if(id==='deathNova'){
+      for(const enemy of [...this.aliveEnemies]){
+        if(distance(this.player,enemy.actor)>spell.radius
+          || !hasLineOfSight(this.player,enemy.actor,this.world.obstacles))continue;
+        const damage=this.applyDamage(spell.power,enemy,'poison');
+        if(damage>0&&enemy.actor.alive)
+          this.applyCanonicalStatus('enemy','poisoned','hero',4,spell.duration,enemy);
+      }
+    }
+  }
+
+  /** Generic owned-allies tick: movement/selection pure, damage simulation-authoritative. */
+  private tickOwnedSummons(dt:number):void{
+    if(!this.summons.length)return;
+    const result=stepOwnedSummons(this.summons,{
+      dt,ownerId:this.player.id,ownerPosition:this.player,
+      ownerAlive:this.player.alive,zone:this.zone,
+      enemies:this.units.map(u=>({
+        id:u.actor.id,x:u.actor.x,y:u.actor.y,alive:u.actor.alive
+      })),obstacles:this.world.obstacles
+    });
+    if(!result){this.summons=[];return;}
+    this.summons=[...result.summons];
+    for(const hit of result.hits){
+      const target=this.units.find(u=>u.actor.id===hit.targetId&&u.actor.alive);
+      if(target)this.resolveEnemyDamage(hit.power,target,hit.type,hit.sourceId);
+    }
+  }
+
   private requestMageAbility(id: MageExtraSpellId, targetId: string | null,
     position?: Point): void {
     if (!this.player.alive || this.paused || this.classId !== 'MAGE'
