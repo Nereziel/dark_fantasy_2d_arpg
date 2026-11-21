@@ -32,10 +32,11 @@ test('inventory is compact, compares on hover, and drag-drops gear both ways', a
   await modal.getByRole('button', { name: 'Close' }).click();
 });
 
-test('HUD columns and minimap fog do not stack over each other', async ({ page }) => {
+test('HUD columns and minimap fog stay clear of the seven-skill action bar', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: /Paladin/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const mini = page.locator('.minimap-overlay');
   const enemies = page.locator('.enemy-roster');
@@ -54,7 +55,24 @@ test('HUD columns and minimap fog do not stack over each other', async ({ page }
   }
   await expect(mini.locator('svg mask')).toHaveCount(1);
   await expect(mini.locator('[data-fog-cell]').first()).toHaveAttribute('stroke', 'none');
-  await page.setViewportSize({ width: 740, height: 720 });
-  await expect(mini).toBeVisible();
-  await expect(enemies).toBeVisible();
+  const leftColumn = page.locator('.hud-left-column');
+  const rightColumn = page.locator('.hud-right-column');
+  const skillbar = page.locator('.skill-ui');
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 740, height: 720 },
+    { width: 560, height: 720 }
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(mini).toBeVisible();
+    await expect(enemies).toBeVisible();
+    const skill = await skillbar.boundingBox();
+    const left = await leftColumn.boundingBox();
+    const right = await rightColumn.boundingBox();
+    expect(skill && left && right).toBeTruthy();
+    if (skill && left && right) {
+      expect(left.y + left.height).toBeLessThanOrEqual(skill.y + 1);
+      expect(right.y + right.height).toBeLessThanOrEqual(skill.y + 1);
+    }
+  }
 });
