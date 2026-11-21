@@ -159,6 +159,7 @@
     "combat": "Combat",
     "dead": "Dead",
     "paused": "Paused",
+    "saving": "Saving hero…",
     "saved": "Hero saved",
     "loaded": "Hero loaded — a fresh world awaits",
     "saveError": "Saving is unavailable",
