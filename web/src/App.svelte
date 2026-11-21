@@ -51,6 +51,7 @@
   let savedCharacters: SavedCharacterInfo[] = $state([]);
   let selectedCharacterId: string | null = $state(null);
   let pendingDeleteId: string | null = $state(null);
+  let activeSessionDeleted = $state(false);
 
   async function refreshCharacters(): Promise<void> {
     const entries = await listCharacters();
@@ -66,6 +67,7 @@
     try {
       await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
       await deleteCharacter(id);
+      if ((bridge.character().characterId ?? 'hero') === id) activeSessionDeleted = true;
       pendingDeleteId = null;
       await refreshCharacters();
       messageKey = 'saveSlots.deleted';
@@ -259,6 +261,7 @@
         ...(world?[worldAutosaver.saveNow(world)]:[])
       ]);
       selectedCharacterId = bridge.character().characterId ?? 'hero';
+      activeSessionDeleted = false;
       await refreshCharacters();
     } catch {
       messageKey='status.saveError';
@@ -267,6 +270,10 @@
     }
   }
   function resume(): void {
+    if (activeSessionDeleted) {
+      messageKey = 'status.emptySave';
+      return;
+    }
     bridge.command({ type: 'pause', value: false });
     playing = true;
   }
@@ -522,6 +529,7 @@
         if (currentWorld) worldAutosaver.prime(currentWorld);
         playing = true;
         selectedCharacterId = bridge.character().characterId ?? 'hero';
+        activeSessionDeleted = false;
         await refreshCharacters();
       } else {
         messageKey = 'status.emptySave';
@@ -593,7 +601,7 @@
         <div class="menu-actions">
           <button class="primary" disabled={busy || savedCharacters.length >= MAX_SAVED_CHARACTERS}
             onclick={newGame}>{$t('menu.start')}</button>
-          <button class="secondary" onclick={resume}>{$t('menu.continue')}</button>
+          <button class="secondary" disabled={busy || activeSessionDeleted} onclick={resume}>{$t('menu.continue')}</button>
           <button class="secondary" disabled={busy}
             onclick={() => load(selectedCharacterId ?? undefined)}>{$t('menu.load')}</button>
         </div>
