@@ -122,7 +122,6 @@
     gap:16px;flex-wrap:wrap;padding-top:13px;font-size:.8rem}
   footer strong{color:#f0c787}
   footer button{padding:8px 14px}
-  .notice{padding:18px;color:#d0b68e}
   @media(max-width:770px){.talent-dialog{padding:10px}.talent-columns{grid-template-columns:1fr}
     article p,.meta{min-height:0}}
 </style>
