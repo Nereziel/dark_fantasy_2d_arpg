@@ -159,6 +159,7 @@
     "combat": "Boj",
     "dead": "Smrt",
     "paused": "Pauza",
+    "saving": "Ukládání postavy…",
     "saved": "Postava uložena",
     "loaded": "Postava načtena – začíná nový svět",
     "saveError": "Uložení není dostupné",
