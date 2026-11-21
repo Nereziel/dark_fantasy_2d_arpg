@@ -22,10 +22,16 @@ export type CombatReadabilityInput =
       threat: 'boss' | 'miniboss' | 'trap';
       position: ReadabilityPoint;
       radius: number;
-      /** Authoritative Hollow King sector; omission means a circular warning. */
-      shape?: 'circle' | 'cone';
+      /** Hollow King uses an angular cone; minibosses use a directed hit corridor. */
+      shape?: 'circle' | 'cone' | 'line';
       angleRadians?: number;
       arcDegrees?: number;
+      /** Miniboss actor position at the authoritative telegraph event. */
+      origin?: ReadabilityPoint;
+      /** Exact forward range (distinct from half-width radius for a miniboss). */
+      range?: number;
+      /** Presentation duration from the authoritative ability windup. */
+      durationSeconds?: number;
     }>
   | Readonly<{
       type: 'impact';
@@ -46,6 +52,8 @@ export interface CombatReadabilityCue {
   readonly ring: boolean;
   /** Exclusive with ring; world-accurate cone boundaries in radians. */
   readonly sector?: Readonly<{ fromRadians: number; toRadians: number }>;
+  /** Miniboss line/cone footprint, coordinates relative to the cue position. */
+  readonly polygon?: readonly ReadabilityPoint[];
   /** Distinct outlined geometry, readable without relying only on hue or text. */
   readonly segments: readonly ReadabilityLine[];
 }
@@ -107,6 +115,48 @@ function buildCone(radius: number, fromRadians: number, toRadians: number): Read
   return lines;
 }
 
+/** Mini-boss strike geometry must mirror GameSimulation.miniBossHit.
+ * A line is a rectangular corridor. A miniboss cone widens by exactly
+ * max(18, along * 0.58) from the boss toward the locked aim point.
+ * Both footprints are visual only, not alternative hit calculations.
+ */
+function buildMinibossFootprint(
+  shape: 'line' | 'cone', radius: number, range: number,
+  origin: ReadabilityPoint, aim: ReadabilityPoint
+): { polygon: ReadabilityPoint[]; segments: ReadabilityLine[] } | null {
+  const dx = aim.x - origin.x, dy = aim.y - origin.y;
+  const length = Math.hypot(dx, dy);
+  if (!Number.isFinite(length) || length < 1) return null;
+  const fx = dx / length, fy = dy / length;
+  const sideX = -fy, sideY = fx;
+  const vertex = (along: number, sideways: number): ReadabilityPoint =>
+    ({ x: fx * along + sideX * sideways, y: fy * along + sideY * sideways });
+  const polygon = shape === 'line'
+    ? [vertex(0, radius), vertex(range, radius),
+      vertex(range, -radius), vertex(0, -radius)]
+    : (() => {
+      const flat = Math.min(range, 18 / 0.58);
+      const width = Math.max(18, range * 0.58);
+      return flat === range
+        ? [vertex(0, 18), vertex(range, 18),
+          vertex(range, -18), vertex(0, -18)]
+        : [vertex(0, 18), vertex(flat, 18), vertex(range, width),
+          vertex(range, -width), vertex(flat, -18), vertex(0, -18)];
+    })();
+  // Graphic markings indicate forward direction even for monochrome display.
+  const mid = vertex(range * 0.7, 0);
+  const arrowStart = vertex(range * 0.49, 0);
+  const arrowLeft = vertex(range * 0.57, 9);
+  const arrowRight = vertex(range * 0.57, -9);
+  const segments = [
+    segment(vertex(range * 0.2, 0).x, vertex(range * 0.2, 0).y, mid.x, mid.y),
+    segment(arrowLeft.x, arrowLeft.y, mid.x, mid.y),
+    segment(arrowRight.x, arrowRight.y, mid.x, mid.y),
+    segment(arrowStart.x, arrowStart.y, mid.x, mid.y)
+  ];
+  return { polygon, segments };
+}
+
 function buildCritical(): ReadabilityLine[] {
   const lines: ReadabilityLine[] = [];
   for (let i = 0; i < 8; i++) {
@@ -150,12 +200,14 @@ function makeCue(
   strokeWidth: number,
   ring: boolean,
   lines: ReadabilityLine[],
-  sector?: Readonly<{ fromRadians: number; toRadians: number }>
+  sector?: Readonly<{ fromRadians: number; toRadians: number }>,
+  polygon?: readonly ReadabilityPoint[]
 ): CombatReadabilityCue {
   return Object.freeze({
     kind, position: point(position), radius, durationMs,
     color, strokeWidth, ring,
     ...(sector ? { sector: Object.freeze({ ...sector }) } : {}),
+    ...(polygon ? { polygon: Object.freeze(polygon.map(value => point(value))) } : {}),
     segments: Object.freeze(lines)
   });
 }
@@ -174,15 +226,33 @@ export function planCombatReadability(
       return null;
     if (!Number.isFinite(event.radius) || event.radius <= 0) return null;
     const shape = event.shape ?? 'circle';
-    if (shape !== 'circle' && shape !== 'cone') return null;
-    if (shape === 'cone' && (!Number.isFinite(event.angleRadians)
+    if (shape !== 'circle' && shape !== 'cone' && shape !== 'line') return null;
+    if (event.durationSeconds !== undefined
+      && (!Number.isFinite(event.durationSeconds) || event.durationSeconds <= 0
+        || event.durationSeconds > 2.5)) return null;
+    const isMinibossFootprint = event.threat === 'miniboss'
+      && (shape === 'line' || shape === 'cone');
+    if (shape === 'line' && !isMinibossFootprint) return null;
+    if (shape === 'cone' && !isMinibossFootprint && (!Number.isFinite(event.angleRadians)
       || Math.abs(event.angleRadians!) > Math.PI
       || !Number.isFinite(event.arcDegrees) || event.arcDegrees! <= 0
       || event.arcDegrees! > 360)) return null;
     const radius = Math.max(18, Math.min(140, event.radius));
-    const durationMs = event.threat === 'boss' ? 700 : event.threat === 'miniboss' ? 800 : 850;
+    const durationMs = event.durationSeconds === undefined
+      ? event.threat === 'boss' ? 700 : event.threat === 'miniboss' ? 800 : 850
+      : Math.round(event.durationSeconds * 1000);
     const color = event.threat === 'boss' ? 0xfbe0a7 : event.threat === 'miniboss'
       ? 0xffd19b : 0xf4d8b0;
+    if (isMinibossFootprint) {
+      if (!finitePoint(event.origin) || !Number.isFinite(event.range)
+        || event.range! <= 0 || event.range! > 400
+        || event.radius > 140) return null;
+      const footprint = buildMinibossFootprint(shape as 'line' | 'cone',
+        radius, event.range!, event.origin, event.position);
+      if (!footprint) return null;
+      return makeCue('warning', event.origin, radius, durationMs,
+        color, 4, false, footprint.segments, undefined, footprint.polygon);
+    }
     if (shape === 'cone') {
       const halfArc = event.arcDegrees! * Math.PI / 360;
       const sector = Object.freeze({
