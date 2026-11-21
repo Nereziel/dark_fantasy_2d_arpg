@@ -21,7 +21,7 @@ test('world map and minimap conceal unvisited places, support localization and s
   await dialog.getByTestId('map-close').click();
   await expect(dialog).toHaveCount(0);
   await page.locator('#game-language').selectOption('cs');
-  await page.getByRole('button', { name: 'Mapa', exact: true }).click();
+  await page.locator('.game-header').getByRole('button', { name: 'Mapa', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Mapa světa' })).toBeVisible();
 
   await page.keyboard.press('Escape');
