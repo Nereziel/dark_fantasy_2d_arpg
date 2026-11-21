@@ -38,7 +38,7 @@ describe('Issue #121 — terrain visibility, stable fog and camera projection', 
       .every(c => c.terrainId === undefined)).toBe(true);
     const visible = new Map(map.cells.filter(c => c.visibility === 'discovered')
       .map(c => [c.id, c]));
-    for (const road of map.roads) {
+    for (const road of map.roads ?? []) {
       const cell = visible.get(road.cellId);
       expect(cell).toBeDefined();
       if (!cell) continue;
