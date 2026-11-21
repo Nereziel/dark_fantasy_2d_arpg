@@ -93,7 +93,7 @@ test.describe('touch item preview and loot-label preferences', () => {
     await filter.getByLabel('Item type').selectOption('accessories');
     await filter.getByLabel('Always show favorites').uncheck();
     await expect(modal.locator('.bag-slot.occupied')).toHaveCount(1);
-    await expect(modal.locator('svg[data-item-art="belt"]')).toBeVisible();
+    await expect(modal.locator('.bag-slot.occupied svg[data-item-art="belt"]')).toBeVisible();
     const saved = await page.evaluate(() => localStorage.getItem('aether-ruin-ground-loot-filter-v1'));
     expect(JSON.parse(saved!)).toEqual({
       minRarity: 'MYTHIC', category: 'accessories', alwaysShowFavorites: false
