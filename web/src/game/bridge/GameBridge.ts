@@ -6,7 +6,7 @@ import { GAME_BINDINGS } from '../input/gameBindings';
 import type { InputBinding } from '../input/bindings';
 import { SKILLS, type SkillSlot } from '../skills/skills';
 import type { CharacterProgress, GameCommand, GameEvent, GameSnapshot, GameStateReader, Point, WorldSessionProgress } from '../core/types';
-import type { MapProjection } from '../world/mapDiscovery';
+import type { MapProjection, MapProjectionOptions } from '../world/mapDiscovery';
 
 /** UI-facing presentation adapter; game state is owned by the simulation. */
 export class GameBridge implements GameStateReader {
@@ -43,8 +43,9 @@ export class GameBridge implements GameStateReader {
   snapshot(): GameSnapshot { return this.simulation.snapshot(); }
   character(): CharacterProgress { return this.simulation.character(); }
   worldProgress(): WorldSessionProgress | null { return this.simulation.worldProgress(); }
-  mapProjection(mode: 'world' | 'minimap' = 'world'): MapProjection | null {
-    return this.simulation.mapProjection(mode);
+  mapProjection(mode: 'world' | 'minimap' = 'world',
+    options: Pick<MapProjectionOptions, 'zoom' | 'center'> = {}): MapProjection | null {
+    return this.simulation.mapProjection(mode, options);
   }
   restoreWorldProgress(progress: WorldSessionProgress): boolean {
     const restored = this.simulation.restoreWorldProgress(progress);
