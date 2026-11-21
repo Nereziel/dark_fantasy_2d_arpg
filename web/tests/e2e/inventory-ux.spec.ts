@@ -117,3 +117,57 @@ test('inventory filter dims hidden items without disguising them as empty or mov
   await expect(belt).toBeEnabled();
   await expect(belt.locator('.bag-item-icon')).toBeVisible();
 });
+
+test.describe('touch inventory item preview', () => {
+  test.use({ hasTouch: true });
+
+  test('mobile keeps the item inspection and equipped comparison accessible above the bag', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 740 });
+    await page.goto('./');
+    await page.locator('#menu-language').selectOption('en');
+    await page.getByRole('button', { name: 'Enter the world' }).click();
+    await page.getByRole('button', { name: 'Browse wares' }).click();
+    const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
+    await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
+    await merchant.getByRole('button', { name: 'Leave' }).click();
+    await page.getByRole('button', { name: 'Inventory (I)' }).click();
+
+    const modal = page.getByRole('dialog', { name: 'Inventory & Equipment' });
+    const inspector = modal.getByTestId('item-inspector');
+    const bag = modal.locator('.backpack-section');
+    const equipped = modal.locator('.equipment-section');
+    const scroller = modal.locator('.inventory-layout');
+    await expect(inspector.locator('.item-detail').first()).toContainText('Studded War Belt');
+
+    for (const viewport of [
+      { width: 390, height: 740 },
+      { width: 360, height: 640 },
+      { width: 320, height: 568 }
+    ]) {
+      await page.setViewportSize(viewport);
+      const [previewBox, bagBox, gearBox, headerBox] = await Promise.all([
+        inspector.boundingBox(), bag.boundingBox(), equipped.boundingBox(),
+        modal.locator('.inventory-header').boundingBox()
+      ]);
+      expect(previewBox && bagBox && gearBox && headerBox).toBeTruthy();
+      if (previewBox && bagBox && gearBox && headerBox) {
+        expect(previewBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height - 1);
+        expect(previewBox.y + previewBox.height).toBeLessThanOrEqual(bagBox.y + 1);
+        expect(bagBox.y + bagBox.height).toBeLessThanOrEqual(gearBox.y + 1);
+        expect(previewBox.x + previewBox.width).toBeLessThanOrEqual(viewport.width + 1);
+      }
+      await expect(inspector).toBeInViewport({ ratio: 0.75 });
+      await scroller.evaluate(element => { element.scrollTop = element.scrollHeight; });
+      await expect(inspector).toBeInViewport({ ratio: 0.75 });
+      await scroller.evaluate(element => { element.scrollTop = 0; });
+    }
+
+    // Inspect by touch, without relying on hover, or scrolling past equipment.
+    await bag.locator('.bag-slot.occupied').first().tap();
+    await expect(inspector.locator('.item-detail').first()).toContainText('Studded War Belt');
+    await expect(inspector.locator('.comparison-grid')).toBeVisible();
+    await expect(inspector.getByTestId('item-stat-comparison')).toBeVisible();
+    await modal.getByRole('button', { name: 'Close' }).tap();
+    await expect(modal).toHaveCount(0);
+  });
+});
