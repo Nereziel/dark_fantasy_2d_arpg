@@ -78,7 +78,7 @@ test('casts a Paladin ability and localizes effects without restarting the game'
   await expect(page.getByRole('button', { name: 'Posvěcená půda' })).toBeEnabled();
   await expect(page.locator('.effect-chip.beneficial')).toHaveCount(0);
   // Seeded optional encounters can add an extra hostile actor to the initial pack.
-  await expect(page.locator('.enemy-roster-title')).toContainText(/[34]\\/[34]/);
+  await expect(page.locator('.enemy-roster-title')).toContainText(new RegExp('[34]/[34]'));
 });
 
 test('retains character-only save v11 and resumes separate seed-scoped world record', async ({ page }) => {
