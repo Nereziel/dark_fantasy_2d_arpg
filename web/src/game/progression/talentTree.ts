@@ -5,7 +5,10 @@ import { MAGE_TALENT_TREE as MAGE_SCHOOLS, type MageTalentId } from '../skills/m
 
 export type TalentBranch = 'berserker' | 'guardian' | 'warlord'
   | 'holyWarrior' | 'paladinGuardian' | 'auraMaster' | 'holyCaster'
-  | 'fire' | 'frost' | 'lightning' | 'arcane';
+  | 'fire' | 'frost' | 'lightning' | 'arcane'
+  | 'bone' | 'summoning' | 'blood'
+  | 'assassin' | 'shadow' | 'trapper'
+  | 'demonology' | 'corruption' | 'soul';
 export type WarriorTalentId =
   | 'berserker.battleFury' | 'berserker.bloodlust'
   | 'berserker.executioner' | 'berserker.lastStand'
@@ -17,7 +20,20 @@ export type PaladinTalentId = 'paladin.zeal' | 'paladin.righteousFire'
   | 'paladin.aegis' | 'paladin.bulwark'
   | 'paladin.hymn' | 'paladin.benediction'
   | 'paladin.prayer' | 'paladin.inquisition';
-export type TalentId = WarriorTalentId | PaladinTalentId | MageTalentId;
+export type NecromancerTalentId =
+  | 'necro.boneSpear' | 'necro.boneFracture' | 'necro.corpseMastery'
+  | 'necro.legion' | 'necro.golemCore' | 'necro.soulLink'
+  | 'necro.bloodTithe' | 'necro.crimsonCurse' | 'necro.plagueNova';
+export type RogueTalentId =
+  | 'rogue.precision' | 'rogue.execution' | 'rogue.hemorrhage'
+  | 'rogue.veil' | 'rogue.ambush' | 'rogue.shadowHaste'
+  | 'rogue.venom' | 'rogue.binding' | 'rogue.serration';
+export type WarlockTalentId =
+  | 'warlock.abyssalPower' | 'warlock.demonBlood' | 'warlock.soulPact'
+  | 'warlock.blight' | 'warlock.hex' | 'warlock.torment'
+  | 'warlock.shadowBolt' | 'warlock.hellfireReach' | 'warlock.soulFeast';
+export type TalentId = WarriorTalentId | PaladinTalentId | MageTalentId
+  | NecromancerTalentId | RogueTalentId | WarlockTalentId;
 export type TalentRanks = Partial<Record<TalentId, number>>;
 
 export interface TalentBonuses {
@@ -55,6 +71,33 @@ export interface TalentBonuses {
   manaEfficiency: number;
   barrierStrength: number;
   teleportCooldown: number;
+  /** Class-specific authoritative modifiers applied by simulation at cast/hit frame. */
+  necroBoneDamage: number;
+  necroCorpseRadius: number;
+  necroCorpsePoison: number;
+  necroSkeletonPower: number;
+  necroGolemPower: number;
+  necroSummonHealth: number;
+  necroDrainHeal: number;
+  necroCurseDuration: number;
+  necroNovaRadius: number;
+  rogueBackstabPower: number;
+  rogueKnivesBleedDuration: number;
+  rogueStealthDuration: number;
+  rogueStealthStrike: number;
+  rogueStepHaste: number;
+  rogueTrapDamage: number;
+  rogueTrapRootDuration: number;
+  rogueTrapPoisonDuration: number;
+  warlockDemonPower: number;
+  warlockDemonHealth: number;
+  warlockDemonLeech: number;
+  warlockPoisonDamage: number;
+  warlockCurseDuration: number;
+  warlockCurseWeakness: number;
+  warlockBoltDamage: number;
+  warlockHellfireRadius: number;
+  warlockBoltLeech: number;
 }
 export type TalentEffectKey = keyof TalentBonuses;
 export type TalentEffectKind = 'stat' | 'skill' | 'passive' | 'conditional';
@@ -69,7 +112,7 @@ export interface TalentPrerequisite {
 }
 export interface TalentDefinition {
   readonly id: TalentId;
-  readonly classId?: 'PALADIN' | 'MAGE';
+  readonly classId?: 'PALADIN' | 'MAGE' | 'NECROMANCER' | 'ROGUE' | 'WARLOCK';
   readonly branch: TalentBranch;
   readonly unlockLevel: number;
   readonly maxRank: number;
@@ -167,11 +210,111 @@ export const MAGE_TALENT_TREE: readonly TalentDefinition[] = Object.freeze(
   }))
 );
 
+/** Additional classes use identical level gates, rank validation and v11 save schema.
+ * Effects are projected here, but committed only by GameSimulation on real events. */
+export const NECROMANCER_TALENT_TREE: readonly TalentDefinition[] = [
+  { id: 'necro.boneSpear', classId: 'NECROMANCER', branch: 'bone',
+    unlockLevel: 5, maxRank: 3, prerequisites: [],
+    effects: [{ kind: 'skill', key: 'necroBoneDamage', perRank: 0.11 }] },
+  { id: 'necro.boneFracture', classId: 'NECROMANCER', branch: 'bone',
+    unlockLevel: 10, maxRank: 3, prerequisites: [{ id: 'necro.boneSpear', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'necroCorpseRadius', perRank: 0.1 }] },
+  { id: 'necro.corpseMastery', classId: 'NECROMANCER', branch: 'bone',
+    unlockLevel: 15, maxRank: 3, prerequisites: [{ id: 'necro.boneFracture', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'necroCorpsePoison', perRank: 0.2 }] },
+  { id: 'necro.legion', classId: 'NECROMANCER', branch: 'summoning',
+    unlockLevel: 5, maxRank: 3, prerequisites: [],
+    effects: [{ kind: 'skill', key: 'necroSkeletonPower', perRank: 0.14 }] },
+  { id: 'necro.golemCore', classId: 'NECROMANCER', branch: 'summoning',
+    unlockLevel: 10, maxRank: 3, prerequisites: [{ id: 'necro.legion', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'necroGolemPower', perRank: 0.14 }] },
+  { id: 'necro.soulLink', classId: 'NECROMANCER', branch: 'summoning',
+    unlockLevel: 15, maxRank: 3, prerequisites: [{ id: 'necro.golemCore', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'necroSummonHealth', perRank: 0.12 }] },
+  { id: 'necro.bloodTithe', classId: 'NECROMANCER', branch: 'blood',
+    unlockLevel: 5, maxRank: 3, prerequisites: [],
+    effects: [{ kind: 'skill', key: 'necroDrainHeal', perRank: 0.09 }] },
+  { id: 'necro.crimsonCurse', classId: 'NECROMANCER', branch: 'blood',
+    unlockLevel: 10, maxRank: 3, prerequisites: [{ id: 'necro.bloodTithe', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'necroCurseDuration', perRank: 0.15 }] },
+  { id: 'necro.plagueNova', classId: 'NECROMANCER', branch: 'blood',
+    unlockLevel: 15, maxRank: 3, prerequisites: [{ id: 'necro.crimsonCurse', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'necroNovaRadius', perRank: 0.09 }] }
+] as const;
+
+export const ROGUE_TALENT_TREE: readonly TalentDefinition[] = [
+  { id: 'rogue.precision', classId: 'ROGUE', branch: 'assassin',
+    unlockLevel: 5, maxRank: 3, prerequisites: [],
+    effects: [{ kind: 'stat', key: 'critChance', perRank: 2 }] },
+  { id: 'rogue.execution', classId: 'ROGUE', branch: 'assassin',
+    unlockLevel: 10, maxRank: 3, prerequisites: [{ id: 'rogue.precision', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'rogueBackstabPower', perRank: 0.15 }] },
+  { id: 'rogue.hemorrhage', classId: 'ROGUE', branch: 'assassin',
+    unlockLevel: 15, maxRank: 3, prerequisites: [{ id: 'rogue.execution', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'rogueKnivesBleedDuration', perRank: 0.2 }] },
+  { id: 'rogue.veil', classId: 'ROGUE', branch: 'shadow',
+    unlockLevel: 5, maxRank: 3, prerequisites: [],
+    effects: [{ kind: 'skill', key: 'rogueStealthDuration', perRank: 0.6 }] },
+  { id: 'rogue.ambush', classId: 'ROGUE', branch: 'shadow',
+    unlockLevel: 10, maxRank: 3, prerequisites: [{ id: 'rogue.veil', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'rogueStealthStrike', perRank: 0.15 }] },
+  { id: 'rogue.shadowHaste', classId: 'ROGUE', branch: 'shadow',
+    unlockLevel: 15, maxRank: 3, prerequisites: [{ id: 'rogue.ambush', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'rogueStepHaste', perRank: 0.04 }] },
+  { id: 'rogue.venom', classId: 'ROGUE', branch: 'trapper',
+    unlockLevel: 5, maxRank: 3, prerequisites: [],
+    effects: [{ kind: 'skill', key: 'rogueTrapDamage', perRank: 0.16 }] },
+  { id: 'rogue.binding', classId: 'ROGUE', branch: 'trapper',
+    unlockLevel: 10, maxRank: 3, prerequisites: [{ id: 'rogue.venom', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'rogueTrapRootDuration', perRank: 0.2 }] },
+  { id: 'rogue.serration', classId: 'ROGUE', branch: 'trapper',
+    unlockLevel: 15, maxRank: 3, prerequisites: [{ id: 'rogue.binding', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'rogueTrapPoisonDuration', perRank: 0.18 }] }
+] as const;
+
+export const WARLOCK_TALENT_TREE: readonly TalentDefinition[] = [
+  { id: 'warlock.abyssalPower', classId: 'WARLOCK', branch: 'demonology',
+    unlockLevel: 5, maxRank: 3, prerequisites: [],
+    effects: [{ kind: 'skill', key: 'warlockDemonPower', perRank: 0.13 }] },
+  { id: 'warlock.demonBlood', classId: 'WARLOCK', branch: 'demonology',
+    unlockLevel: 10, maxRank: 3, prerequisites: [{ id: 'warlock.abyssalPower', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'warlockDemonHealth', perRank: 0.12 }] },
+  { id: 'warlock.soulPact', classId: 'WARLOCK', branch: 'demonology',
+    unlockLevel: 15, maxRank: 3, prerequisites: [{ id: 'warlock.demonBlood', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'warlockDemonLeech', perRank: 0.025 }] },
+  { id: 'warlock.blight', classId: 'WARLOCK', branch: 'corruption',
+    unlockLevel: 5, maxRank: 3, prerequisites: [],
+    effects: [{ kind: 'skill', key: 'warlockPoisonDamage', perRank: 0.16 }] },
+  { id: 'warlock.hex', classId: 'WARLOCK', branch: 'corruption',
+    unlockLevel: 10, maxRank: 3, prerequisites: [{ id: 'warlock.blight', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'warlockCurseDuration', perRank: 0.14 }] },
+  { id: 'warlock.torment', classId: 'WARLOCK', branch: 'corruption',
+    unlockLevel: 15, maxRank: 3, prerequisites: [{ id: 'warlock.hex', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'warlockCurseWeakness', perRank: 0.04 }] },
+  { id: 'warlock.shadowBolt', classId: 'WARLOCK', branch: 'soul',
+    unlockLevel: 5, maxRank: 3, prerequisites: [],
+    effects: [{ kind: 'skill', key: 'warlockBoltDamage', perRank: 0.13 }] },
+  { id: 'warlock.hellfireReach', classId: 'WARLOCK', branch: 'soul',
+    unlockLevel: 10, maxRank: 3, prerequisites: [{ id: 'warlock.shadowBolt', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'warlockHellfireRadius', perRank: 0.08 }] },
+  { id: 'warlock.soulFeast', classId: 'WARLOCK', branch: 'soul',
+    unlockLevel: 15, maxRank: 3, prerequisites: [{ id: 'warlock.hellfireReach', minRank: 1 }],
+    effects: [{ kind: 'skill', key: 'warlockBoltLeech', perRank: 0.07 }] }
+] as const;
+
+
 export const allTalentsForClass=(classId:unknown):readonly TalentDefinition[] =>
   classId==='WARRIOR'?TALENT_TREE:classId==='PALADIN'?PALADIN_TALENT_TREE
-    :classId==='MAGE'?MAGE_TALENT_TREE:[];
+    :classId==='MAGE'?MAGE_TALENT_TREE
+    :classId==='NECROMANCER'?NECROMANCER_TALENT_TREE
+    :classId==='ROGUE'?ROGUE_TALENT_TREE
+    :classId==='WARLOCK'?WARLOCK_TALENT_TREE:[];
 
-const byId = new Map([...TALENT_TREE,...PALADIN_TALENT_TREE,...MAGE_TALENT_TREE].map(node => [node.id, node]));
+const TALENT_CATALOG: readonly TalentDefinition[] = [
+  ...TALENT_TREE, ...PALADIN_TALENT_TREE, ...MAGE_TALENT_TREE,
+  ...NECROMANCER_TALENT_TREE, ...ROGUE_TALENT_TREE, ...WARLOCK_TALENT_TREE
+];
+const byId = new Map(TALENT_CATALOG.map(node => [node.id, node]));
 const keys: readonly TalentEffectKey[] = [
   'armor','maxHealth','maxResource','resourceRegen','attackSpeed','blockChance',
   'critChance','rageGain','warCryDuration','warCryStrength','warCryRage',
@@ -179,7 +322,15 @@ const keys: readonly TalentEffectKey[] = [
   'holyDamage','healBonus','shieldStrength','auraStrength','auraDuration','faithRegen',
   'spellPower','burnDuration','areaRadius','coldSlow','chillDuration','manaRegen',
   'chainDamage','chainCount','lightningCrit','manaEfficiency','barrierStrength',
-  'teleportCooldown'
+  'teleportCooldown',
+  'necroBoneDamage','necroCorpseRadius','necroCorpsePoison','necroSkeletonPower',
+  'necroGolemPower','necroSummonHealth','necroDrainHeal','necroCurseDuration',
+  'necroNovaRadius','rogueBackstabPower','rogueKnivesBleedDuration',
+  'rogueStealthDuration','rogueStealthStrike','rogueStepHaste','rogueTrapDamage',
+  'rogueTrapRootDuration','rogueTrapPoisonDuration','warlockDemonPower',
+  'warlockDemonHealth','warlockDemonLeech','warlockPoisonDamage',
+  'warlockCurseDuration','warlockCurseWeakness','warlockBoltDamage',
+  'warlockHellfireRadius','warlockBoltLeech'
 ];
 
 export function getTalent(id: unknown): TalentDefinition | null {
@@ -279,7 +430,7 @@ export function planRespecTalents(
 /** Pure additive effect projection. Simulator decides when conditional triggers fire. */
 export function projectTalentBonuses(ranks: Readonly<TalentRanks>): TalentBonuses {
   const values = Object.fromEntries(keys.map(key => [key,0])) as Record<TalentEffectKey,number>;
-  for (const node of [...TALENT_TREE,...PALADIN_TALENT_TREE,...MAGE_TALENT_TREE]) {
+  for (const node of TALENT_CATALOG) {
     const rank = ranks[node.id] ?? 0;
     if (!Number.isSafeInteger(rank) || rank < 1 || rank > node.maxRank) continue;
     for (const effect of node.effects) values[effect.key] += effect.perRank * rank;
