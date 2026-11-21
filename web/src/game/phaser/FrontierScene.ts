@@ -200,14 +200,20 @@ export class FrontierScene extends Phaser.Scene {
     this.input.on('pointerup', this.onPointerRelease, this);
     this.input.on('gameout', this.onPointerCancel, this);
     const unsubscribeEvents = this.bridge.onEvent(event => this.onGameEvent(event));
+    // Game.destroy() emits DESTROY without necessarily emitting SHUTDOWN. The
+    // bridge survives menu -> game transitions, so stale scene listeners must
+    // be detached before Phaser nulls the old GameObjectFactory display list.
+    const onDestroy = () => unsubscribeEvents();
+    this.events.once(Phaser.Scenes.Events.DESTROY, onDestroy);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      unsubscribeEvents();
+      this.events.off(Phaser.Scenes.Events.DESTROY, onDestroy);
       this.input.off('pointerdown', this.onWorldClick, this);
       this.input.off('pointermove', this.onPointerHover, this);
       this.input.off('pointerup', this.onPointerRelease, this);
       this.input.off('gameout', this.onPointerCancel, this);
       this.heldMovement.release();
-      this.game.canvas.style.cursor = 'default';
-      unsubscribeEvents();
+      if (this.game.canvas) this.game.canvas.style.cursor = 'default';
       for (const actor of this.enemyGraphics.values()) actor.destroy();
       this.enemyGraphics.clear();
       for (const actor of this.enemySprites.values()) actor.destroy();
@@ -512,6 +518,8 @@ export class FrontierScene extends Phaser.Scene {
   }
 
   private onGameEvent(event: GameEvent): void {
+    // An event during shutdown must never recreate graphics on a dead scene.
+    if (!this.sys.isActive()) return;
     if(event.type==='environmentInteracted') {
       const visual=this.obtainImpact(event.x,event.y,86);
       const shrine=event.kind==='shrine';
