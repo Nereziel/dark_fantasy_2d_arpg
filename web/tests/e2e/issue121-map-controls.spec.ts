@@ -27,7 +27,7 @@ test('discovered terrain and soil roads render without exposing hidden POI', asy
   await expect(map.locator('svg')).not.toHaveAttribute('data-map-viewport', afterZoom!);
 
   await dialog.getByTestId('map-center').click();
-  await expect(map.locator('svg')).toHaveAttribute('data-map-viewport', /^0,0,1[0-9]{3},[0-9]{3}$/);
+  await expect(map.locator('svg')).toHaveAttribute('data-map-viewport', /^0,[0-9]+,1100,700$/);
   await dialog.getByTestId('map-reset').click();
   await expect(map).toHaveAttribute('data-map-zoom', '1.00');
   await expect(map.locator('svg')).toHaveAttribute('data-map-viewport', '0,0,2200,1400');
