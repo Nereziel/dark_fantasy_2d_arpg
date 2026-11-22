@@ -1476,5 +1476,22 @@
     "cancel": "Cancel",
     "deleted": "Saved hero deleted",
     "full": "All character slots are occupied. Delete one to create a new hero."
+  },
+  "visualSettings": {
+    "title": "Display and accessibility",
+    "open": "Display & accessibility",
+    "close": "Close",
+    "description": "These preferences are saved in this browser, separate from your hero and world.",
+    "motion": "Motion animations",
+    "motionSystem": "Follow system setting",
+    "motionReduced": "Reduce motion",
+    "motionFull": "Full animations",
+    "shake": "Camera shake",
+    "off": "Off",
+    "half": "Half",
+    "full": "Full",
+    "uiScale": "Interface size",
+    "floatingText": "Floating damage text",
+    "highContrast": "High contrast"
   }
 }
