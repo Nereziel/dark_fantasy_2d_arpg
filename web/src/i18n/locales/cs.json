@@ -832,14 +832,14 @@
   "bindings": {
     "title": "Nastavení ovládání",
     "open": "Ovládání",
-    "help": "Vyber akci, pak stiskni klávesu nebo tlačítko myši. Escape zruší přemapování.",
+    "help": "Vyber akci a stiskni klávesu s Ctrl, Alt nebo Shift. Samostatný modifikátor přiřadíš jeho uvolněním. Escape přemapování zruší.",
     "press": "Čekám na vstup",
     "pressShort": "Stiskni…",
     "change": "Změnit",
     "reset": "Výchozí ovládání",
     "swapMouse": "Prohodit hlavní a vedlejší tlačítko myši",
     "close": "Zpět",
-    "reserved": "Některé vyhrazené schopnosti a budoucí panely ještě nejsou aktivní. Ovládání se ukládá v zařízení, odděleně od postavy.",
+    "reserved": "Systémové zkratky prohlížeče, kombinace Meta a Ctrl+Alt (AltGr) nelze přiřadit. Budoucí panely nejsou aktivní. Ovládání se ukládá do zařízení.",
     "CONFLICT": "Tato klávesa nebo tlačítko již má jinou akci.",
     "INVALID": "Tato klávesa nebo tlačítko není podporované.",
     "actions": {
