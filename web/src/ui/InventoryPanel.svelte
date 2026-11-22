@@ -58,10 +58,15 @@
   let placementSource = $derived(dragged ?? (moveArmed ? selected : null));
   function canPlace(target: Source, source: Source | null = placementSource): boolean {
     if (!source) return false;
-    if (target.kind === 'gear') return source.kind === 'bag'
-      && !!view.inventory[source.index] && bridge.previewEquipment(source.index, target.slot) !== null;
-    if (source.kind === 'bag') return source.index !== target.index && !!view.inventory[source.index];
-    if (!view.equipment[source.slot]) return false;
+    if (source.kind === 'bag') {
+      if (!view.inventory[source.index]) return false;
+      return target.kind === 'bag'
+        ? source.index !== target.index
+        : bridge.previewEquipment(source.index, target.slot) !== null;
+    }
+    if (!view.equipment[source.slot] || target.kind !== 'bag') return false;
+    // On an occupied destination, the incoming bag item must actually fit the
+    // old equipment slot. Otherwise only a vacant bag cell is a valid drop.
     return !view.inventory[target.index]
       || bridge.previewEquipment(target.index, source.slot) !== null;
   }
@@ -92,22 +97,65 @@
   function itemName(item: Item): string {
     return itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId));
   }
+  /** One path for HTML5 drag, explicit click-to-move and the equip button.
+   * The game simulation remains authoritative; never patch the Svelte view. */
+  function moveItem(source: Source, target: Source): boolean {
+    const item = source.kind === 'bag' ? view.inventory[source.index]
+      : view.equipment[source.slot];
+    if (!item || !canPlace(target, source)) {
+      placementMessage = $t('inventory.invalidPlacement');
+      return false;
+    }
+    if (source.kind === 'bag' && target.kind === 'gear') {
+      bridge.command({ type: 'equip', index: source.index, slot: target.slot });
+    } else if (source.kind === 'bag' && target.kind === 'bag') {
+      bridge.command({ type: 'swapInventory',
+        fromIndex: source.index, toIndex: target.index });
+    } else if (source.kind === 'gear' && target.kind === 'bag') {
+      if (view.inventory[target.index]) {
+        // A compatible bag item replaces the gear; the old equipped item
+        // returns to this exact bag cell via the atomic equip transaction.
+        bridge.command({ type: 'equip', index: target.index, slot: source.slot });
+      } else {
+        bridge.command({ type: 'unequipTo', slot: source.slot, index: target.index });
+      }
+    } else {
+      placementMessage = $t('inventory.invalidPlacement');
+      return false;
+    }
+
+    const latest = bridge.snapshot();
+    const destination = target.kind === 'bag' ? latest.inventory[target.index]
+      : latest.equipment[target.slot];
+    if (destination?.id !== item.id) {
+      placementMessage = $t('inventory.invalidPlacement');
+      return false;
+    }
+    selected = target;
+    hovered = null;
+    moveArmed = false;
+    placementMessage = '';
+    return true;
+  }
   function equip(index: number, slot?: EquipmentSlot): void {
     const item = view.inventory[index];
     if (!item) return;
-    if (bridge.previewEquipment(index, slot) === null) {
+    const targetSlot = slot ?? (item.slot === 'RING_1' && view.equipment.RING_1
+      && !view.equipment.RING_2 ? 'RING_2' : item.slot);
+    moveItem({ kind: 'bag', index }, { kind: 'gear', slot: targetSlot });
+  }
+  function unequip(slot: EquipmentSlot): void {
+    const item = view.equipment[slot];
+    if (!item) return;
+    bridge.command({ type: 'unequip', slot });
+    const index = bridge.snapshot().inventory.findIndex(candidate => candidate?.id === item.id);
+    if (index < 0 || bridge.snapshot().equipment[slot]) {
       placementMessage = $t('inventory.invalidPlacement');
       return;
     }
-    bridge.command({ type: 'equip', index, ...(slot ? { slot } : {}) });
-    selected = { kind: 'gear', slot: slot ?? item.slot };
+    selected = { kind: 'bag', index };
+    hovered = null;
     placementMessage = '';
-    moveArmed = false;
-  }
-  function unequip(slot: EquipmentSlot): void {
-    if (!view.equipment[slot]) return;
-    bridge.command({ type: 'unequip', slot });
-    selected = null;
     moveArmed = false;
   }
   function flag(item: Item, kind: 'favorite' | 'locked'): void {
@@ -115,43 +163,34 @@
       value: !(view.itemFlags?.[item.id]?.[kind] ?? false) });
   }
   function pickBag(index: number): void {
-    if (touchInput && !moveArmed) {
-      selected = view.inventory[index] ? { kind: 'bag', index } : null;
+    const target: Source = { kind: 'bag', index };
+    if (moveArmed && selected) {
+      moveItem(selected, target);
       return;
     }
-    if (touchInput && moveArmed && selected && !canPlace({ kind: 'bag', index }, selected)) {
-      placementMessage = $t('inventory.invalidPlacement'); return;
-    }
+    // A single click always inspects. Never silently swap the previously
+    // selected bag item when the player merely clicks a different cell.
+    selected = view.inventory[index] ? target : null;
+    hovered = null;
     placementMessage = '';
-    moveArmed = false;
-    if (selected?.kind === 'bag' && selected.index !== index) {
-      bridge.command({ type: 'swapInventory', fromIndex: selected.index, toIndex: index });
-      selected = null;
-    } else if (selected?.kind === 'gear') {
-      if (view.inventory[index]) equip(index, selected.slot);
-      else bridge.command({ type: 'unequipTo', slot: selected.slot, index });
-      selected = null;
-    } else {
-      selected = view.inventory[index] ? { kind: 'bag', index } : null;
-    }
   }
   function pickGear(slot: EquipmentSlot): void {
-    if (touchInput && !moveArmed) {
-      selected = view.equipment[slot] ? { kind: 'gear', slot } : null;
+    const target: Source = { kind: 'gear', slot };
+    if (moveArmed && selected) {
+      moveItem(selected, target);
       return;
     }
-    if (touchInput && moveArmed && selected && !canPlace({ kind: 'gear', slot }, selected)) {
-      placementMessage = $t('inventory.invalidPlacement'); return;
-    }
+    // The equip button, double-click, drag or explicit move mode performs
+    // mutations. A normal click must not accidentally equip a bag item.
+    selected = view.equipment[slot] ? target : null;
+    hovered = null;
     placementMessage = '';
-    moveArmed = false;
-    if (selected?.kind === 'bag') equip(selected.index, slot);
-    else selected = view.equipment[slot] ? { kind: 'gear', slot } : null;
   }
   function startDrag(event: DragEvent, source: Source): void {
     moveArmed = false;
     dragged = source;
     selected = source;
+    hovered = null;
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData('text/plain', 'aether-inventory');
@@ -167,30 +206,15 @@
     if (!dragged) return;
     event.preventDefault();
     const source = dragged;
-    const valid = canPlace({ kind: 'bag', index }, source);
     clearDrag();
-    if (!valid) { placementMessage = $t('inventory.invalidPlacement'); return; }
-    placementMessage = '';
-    moveArmed = false;
-    if (source.kind === 'bag' && source.index !== index) {
-      bridge.command({ type: 'swapInventory', fromIndex: source.index, toIndex: index });
-    } else if (source.kind === 'gear') {
-      if (view.inventory[index]) equip(index, source.slot);
-      else bridge.command({ type: 'unequipTo', slot: source.slot, index });
-    }
-    selected = null;
+    moveItem(source, { kind: 'bag', index });
   }
   function dropGear(event: DragEvent, slot: EquipmentSlot): void {
     if (!dragged) return;
     event.preventDefault();
     const source = dragged;
-    const valid = canPlace({ kind: 'gear', slot }, source);
     clearDrag();
-    if (!valid) { placementMessage = $t('inventory.invalidPlacement'); return; }
-    placementMessage = '';
-    moveArmed = false;
-    if (source.kind === 'bag') equip(source.index, slot);
-    selected = null;
+    moveItem(source, { kind: 'gear', slot });
   }
   const stats = [
     { key: 'armor', label: 'stat.armor' },
@@ -389,7 +413,7 @@
           {/each}
         </div>
         <div class="bag-footer">
-          <span class="desktop-hint">{$locale === 'cs' ? 'Přetahování · dvojklik pro nasazení' : 'Drag & drop · double-click to equip'}</span>
+          <span class="desktop-hint">{$locale === 'cs' ? 'Kliknutím zobrazíš detail · dvojklik nebo přetažení přesune předmět' : 'Click to inspect · double-click or drag to move gear'}</span>
           <span class="touch-hint">{$locale === 'cs' ? 'Klepni pro náhled · přesun přes tlačítko výše' : 'Tap to inspect · use Move by tap'}</span>
           {#if selected?.kind === 'bag'}
             <button onclick={() => { selected = null; }}>{$locale === 'cs' ? 'Zrušit výběr' : 'Clear selection'}</button>
@@ -403,15 +427,15 @@
         {#if inspected}
           <div class="touch-move-bar">
             <button type="button" aria-pressed={moveArmed}
-              onclick={() => { touchInput = true; placementMessage = ''; moveArmed = !moveArmed; }}>
+              onclick={() => { placementMessage = ''; hovered = null; moveArmed = !moveArmed; }}>
               {$locale === 'cs'
-                ? (moveArmed ? 'Zrušit přesun' : 'Přesunout klepnutím')
-                : (moveArmed ? 'Cancel move' : 'Move by tap')}
+                ? (moveArmed ? 'Zrušit přesun' : (touchInput ? 'Přesunout klepnutím' : 'Přesunout kliknutím'))
+                : (moveArmed ? 'Cancel move' : (touchInput ? 'Move by tap' : 'Move by click'))}
             </button>
             {#if moveArmed}
               <span role="status">{$locale === 'cs'
-                ? 'Klepni na cílový slot.'
-                : 'Tap the destination slot.'}</span>
+                ? 'Vyber cílový slot.'
+                : 'Select the destination slot.'}</span>
             {/if}
           </div>
           {#if placementMessage}
@@ -616,7 +640,11 @@
   .inspect-placeholder{text-align:center;display:grid;place-items:center;min-height:220px;color:#99a8a7;font-size:.8rem;line-height:1.65;padding:16px}
   .placeholder-glyph{font:3rem Georgia,serif;color:#796c55}
   @media(max-width:950px){.inventory-layout{grid-template-columns:minmax(235px,.9fr) minmax(280px,1.1fr)}.item-inspector{grid-column:1/-1;max-height:none}.comparison-grid{grid-template-columns:1fr 1fr}}
-  .touch-move-bar,.touch-hint{display:none}
+  .touch-hint{display:none}
+  .touch-move-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px}
+  .touch-move-bar button{min-height:40px;padding:6px 10px;background:#46392a;border:1px solid #af8a58;color:#f3e6ce}
+  .touch-move-bar button[aria-pressed="true"]{background:#705032;color:#fff3dc}
+  .touch-move-bar span{font-size:.73rem;color:#ebd2a0}
   /* Touch layout: the same full item inspector stays pinned while the player browses
      the bag; no hover-only tooltip or duplicate comparison logic is necessary. */
   @media(max-width:650px){
