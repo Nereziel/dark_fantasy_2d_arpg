@@ -64,7 +64,7 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
 
     // Ordinary player healing, without overriding health or pausing combat.
     const hp = (await page.locator('.vital-top').first().innerText())
-      .match(/(\\d+)\\s*\\/\\s*(\\d+)/);
+      .match(/(\d+)\s*\/\s*(\d+)/);
     if (hp && Number(hp[1]) / Number(hp[2]) < 0.68) {
       const healing = page.locator('[data-paladin-ability="healingLight"]');
       if (await healing.isEnabled()) await healing.click();
