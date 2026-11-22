@@ -4,10 +4,14 @@
  */
 import type { GameEvent } from '../core/types';
 import type { QuestStatus } from '../quests/firstQuest';
+import type { GameSnapshot } from '../core/types';
+import { ACT_I_STORY_QUEST_IDS, type ActIStoryQuestId } from '../quests/actIQuestChain';
+import { xpRequiredForLevel } from '../progression/progressionRules';
 
 export type OnboardingStep =
   | 'warden' | 'move' | 'attack' | 'loot' | 'equip'
-  | 'objective' | 'return' | 'followup' | 'dungeon';
+  | 'objective' | 'return' | 'followup' | 'dungeon'
+  | 'story' | 'storyReturn' | 'talent';
 
 export interface OnboardingEvidence {
   moved: boolean;
@@ -25,7 +29,43 @@ export interface OnboardingProgress {
 export type OnboardingContext = {
   questStatus: QuestStatus;
   zone: 'wilderness' | 'crypt';
+  /** Only a quest currently active/ready in the authoritative ledger. */
+  storyQuestId?: ActIStoryQuestId | null;
+  storyQuestStatus?: 'active' | 'ready' | null;
+  talentPoints?: number;
+  level?: number;
+  xp?: number;
+  xpRequired?: number;
 };
+
+/**
+ * The UI gets only existing campaign ledger state. Never derive a marker
+ * or next quest from the static story order or undiscovered world data.
+ */
+export function onboardingContextFromSnapshot(
+  view: Pick<GameSnapshot,
+    'quest' | 'zone' | 'questLedger' | 'level' | 'xp' | 'talentPoints'>
+): OnboardingContext {
+  const story = view.quest.status === 'completed'
+    ? view.questLedger?.quests.find(entry =>
+      (entry.status === 'active' || entry.status === 'ready')
+      && ACT_I_STORY_QUEST_IDS.some(id => id === entry.questId))
+    : undefined;
+  const level = Number.isSafeInteger(view.level) && view.level >= 1 && view.level <= 100
+    ? view.level : 1;
+  const xpRequired = xpRequiredForLevel(level);
+  const xp = Number.isSafeInteger(view.xp) && view.xp >= 0
+    && (xpRequired === 0 ? view.xp === 0 : view.xp < xpRequired) ? view.xp : 0;
+  return {
+    questStatus: view.quest.status,
+    zone: view.zone,
+    storyQuestId: story?.questId as ActIStoryQuestId | undefined,
+    storyQuestStatus: story?.status as 'active' | 'ready' | undefined,
+    talentPoints: Number.isSafeInteger(view.talentPoints) && view.talentPoints >= 0
+      ? view.talentPoints : 0,
+    level, xp, xpRequired
+  };
+}
 const SEQUENCE: readonly (keyof OnboardingEvidence)[] = [
   'moved', 'attacked', 'pickedUp', 'equipped'
 ];
@@ -85,7 +125,13 @@ export function getOnboardingStep(
   if (context.zone === 'crypt') return 'dungeon';
   if (context.questStatus === 'available') return 'warden';
   if (context.questStatus === 'ready') return 'return';
-  if (context.questStatus === 'completed') return 'followup';
+  if (Number.isSafeInteger(context.talentPoints) && (context.talentPoints ?? 0) > 0)
+    return 'talent';
+  if (context.questStatus === 'completed') {
+    if (context.storyQuestId && context.storyQuestStatus === 'ready') return 'storyReturn';
+    if (context.storyQuestId && context.storyQuestStatus === 'active') return 'story';
+    return 'followup';
+  }
   return HINTS[tipIndex(progress)] ?? 'objective';
 }
 

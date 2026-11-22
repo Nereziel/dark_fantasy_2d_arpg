@@ -5,8 +5,10 @@
     getOnboardingStep, type OnboardingProgress, type OnboardingContext
   } from '../game/ui/onboardingGuide';
   import { shortcutHint } from '../game/ui/shortcutHints';
+  import { ACT_I_QUEST_CATALOG } from '../game/quests/actIQuestChain';
 
-  let { progress, context, bindings, next, skip, show, restart }: {
+  let { progress, context, bindings, next, skip, show, restart,
+    onMap, onTalents, onWarden }: {
     progress: OnboardingProgress;
     context: OnboardingContext;
     bindings: readonly InputBinding[];
@@ -14,8 +16,14 @@
     skip: () => void;
     show: () => void;
     restart: () => void;
+    onMap: (origin?: HTMLElement) => void;
+    onTalents: (origin?: HTMLElement) => void;
+    onWarden: () => void;
   } = $props();
   const step = $derived(getOnboardingStep(progress, context));
+  const storyDefinition = $derived(context.storyQuestId
+    ? ACT_I_QUEST_CATALOG.quests.find(q => q.id === context.storyQuestId)
+    : null);
 </script>
 
 <aside class="first-play-guide" data-testid="onboarding-guide"
@@ -32,10 +40,32 @@
         primary: shortcutHint(bindings, 'PRIMARY'),
         secondary: shortcutHint(bindings, 'SECONDARY'),
         inventory: shortcutHint(bindings, 'INVENTORY'),
-        potion: shortcutHint(bindings, 'POTION')
+        potion: shortcutHint(bindings, 'POTION'),
+        talents: shortcutHint(bindings, 'TALENTS'),
+        points: context.talentPoints ?? 0,
+        objective: storyDefinition ? $t(storyDefinition.objectiveKey) : ''
       } })}
     </p>
+    {#if (step === 'story' || step === 'storyReturn' || step === 'talent'
+      || step === 'followup') && (context.xpRequired ?? 0) > 0}
+      <p class="guide-progress" data-testid="onboarding-xp">
+        {$t('onboarding.progress', { values: {
+          level: context.level ?? 1, xp: context.xp ?? 0, xpRequired: context.xpRequired ?? 0
+        } })}
+      </p>
+    {/if}
     <div class="guide-buttons">
+      {#if step === 'story'}
+        <button type="button" onclick={(event) => onMap(event.currentTarget)}>
+          {$t('onboarding.openMap')}
+        </button>
+      {:else if step === 'storyReturn'}
+        <button type="button" onclick={onWarden}>{$t('npc.talk')}</button>
+      {:else if step === 'talent'}
+        <button type="button" onclick={(event) => onTalents(event.currentTarget)}>
+          {$t('onboarding.openTalents')}
+        </button>
+      {/if}
       {#if context.questStatus === 'active' && context.zone === 'wilderness'
         && step !== 'objective'}
         <button type="button" onclick={next}>{$t('onboarding.next')}</button>
@@ -60,6 +90,7 @@
     letter-spacing:.025em;
   }
   .guide-text { font-size:.7rem; line-height:1.38; margin:6px 0 8px; }
+  .guide-progress { font-size:.65rem; color:#b9d0c2; margin:0 0 7px; }
   .guide-buttons { display:flex;flex-wrap:wrap;gap:4px; }
   .guide-buttons button,.guide-show {
     flex:1 1 auto; min-width:0;

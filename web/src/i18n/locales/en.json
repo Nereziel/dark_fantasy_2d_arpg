@@ -832,6 +832,9 @@
   "nearbyLoot": {"title":"Nearby loot","pickup":"Pick up"},
   "onboarding": {
     "title": "First steps",
+    "openMap": "View discovered map",
+    "openTalents": "Open talents",
+    "progress": "Level {level} · XP {xp}/{xpRequired}",
     "show": "Show tips",
     "skip": "Hide tips",
     "next": "Next tip",
@@ -844,7 +847,10 @@
       "equip": "Open inventory ({inventory}), inspect an item against equipped gear, then equip or drag it into a valid slot.",
       "objective": "Follow the current quest in the journal. Consult only discovered areas on the map. Potion: {potion}.",
       "return": "Your first objective is ready. Return to Warden Vesna to report and collect the reward.",
-      "followup": "Your first quest is complete. Check the journal and speak with Vesna for your next objective.",
+      "followup": "The first quest is complete. Check the active objective in your journal.",
+    "story": "Current objective: {objective}. Use your map to check discovered terrain; unexplored locations stay hidden.",
+    "storyReturn": "Your report is ready. Return to Warden Vesna to continue.",
+    "talent": "You have {points} unspent talent point(s). Open Talents ({talents}) to choose an upgrade; your quest will remain active.",
       "dungeon": "You reached the crypt. Follow your current quest and discovered paths; use your skills and potions."
     }
   },
