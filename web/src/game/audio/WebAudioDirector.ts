@@ -82,6 +82,9 @@ export class WebAudioDirector {
   }
 
   setZone(zone: ZoneId): void {
+    // GameBridge emits HUD snapshots at 8 Hz. Avoid accumulating endless
+    // AudioParam automation events when the zone has not actually changed.
+    if (this.zone === zone) return;
     this.zone = zone;
     const now = this.ctx?.currentTime ?? 0;
     for (const entry of this.background) {
