@@ -829,6 +829,7 @@
       "utility": "Ostatní vlastnosti"
     }
   },
+  "nearbyLoot": {"title":"Blízká kořist","pickup":"Sebrat"},
   "onboarding": {
     "title": "První kroky",
     "show": "Zobrazit rady",

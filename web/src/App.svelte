@@ -39,6 +39,7 @@
     observeOnboardingEvent, observeOnboardingSnapshot, type OnboardingProgress
   } from './game/ui/onboardingGuide';
   import QuestJournal from './ui/QuestJournal.svelte';
+  import NearbyLootPanel from './ui/NearbyLootPanel.svelte';
   import WorldMapCanvas from './ui/WorldMapCanvas.svelte';
   import WorldEventPanel from './ui/WorldEventPanel.svelte';
   import EnvironmentPanel from './ui/EnvironmentPanel.svelte';
@@ -1004,6 +1005,9 @@
         <div class="world-guide-sub">{$t('controls.hint')}</div>
       </div>
 
+      {#if modalKind === '' && view.player.alive && !view.paused}
+        <NearbyLootPanel {view} {bridge} />
+      {/if}
       {#if modalKind === '' && view.player.alive && !view.paused}
         <OnboardingGuide progress={onboardingProgress}
           context={{ questStatus: view.quest.status, zone: view.zone }}
