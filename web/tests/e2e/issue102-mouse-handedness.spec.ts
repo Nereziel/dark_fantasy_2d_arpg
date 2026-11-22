@@ -40,7 +40,10 @@ test('primary and secondary mouse bindings swap atomically and persist across re
   }));
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
-  await page.mouse.click(box!.x + box!.width / 2 + 155,
+  // Camp spawn is west of the camera center on desktop. Clicking far to the
+  // right overlaps the first encounter (enemy context => attack), so choose
+  // nearby open ground away from NPCs and the procedurally seeded encounter.
+  await page.mouse.click(box!.x + box!.width / 2 - 80,
     box!.y + box!.height / 2 + 75, { button: 'right' });
   // Playwright executes locator.evaluate in the browser: pass the origin as an
   // explicit argument rather than capturing the test runner's local variable.
