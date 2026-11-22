@@ -829,6 +829,7 @@
       "utility": "Utility"
     }
   },
+  "nearbyLoot": {"title":"Nearby loot","pickup":"Pick up"},
   "onboarding": {
     "title": "First steps",
     "show": "Show tips",
