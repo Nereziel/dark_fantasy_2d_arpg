@@ -45,8 +45,59 @@ async function keepFighting(page: Page, until: number, timeoutMs: number): Promi
     await activeQuestCount(page) + '/3 kills; target ' + until);
 }
 
+/** Follow the ordinary world canvas from the finished first quest to Act I's next
+ * exploration objective. No debug bridge, state mutation or feature teleport. */
+async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void> {
+  const game = page.locator('.game-screen');
+  const canvas = page.locator('.phaser-container canvas');
+  const journal = page.locator('.quest-journal');
+  const deadline = Date.now() + timeoutMs;
+  let stalled = 0;
+  while (Date.now() < deadline) {
+    if ((await journal.innerText()).includes('The Blighted Pack')) return;
+    if (await page.getByTestId('death-overlay').count()) {
+      throw new Error('Natural Act I exploration: hero died en route to the corruption site');
+    }
+    const x = Number(await game.getAttribute('data-player-x'));
+    const y = Number(await game.getAttribute('data-player-y'));
+    expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
+
+    // Ordinary player healing, without overriding health or pausing combat.
+    const hp = (await page.locator('.vital-top').first().innerText())
+      .match(/(\\d+)\\s*\\/\\s*(\\d+)/);
+    if (hp && Number(hp[1]) / Number(hp[2]) < 0.68) {
+      const healing = page.locator('[data-paladin-ability="healingLight"]');
+      if (await healing.isEnabled()) await healing.click();
+      else {
+        const potion = page.getByTestId('use-potion');
+        if (await potion.isEnabled()) await potion.click();
+      }
+    }
+
+    const rect = await canvas.boundingBox();
+    if (!rect) throw new Error('Phaser canvas missing during story exploration');
+    // The camera follows the hero. Short, onscreen FORCE_MOVE steps avoid
+    // targeting hostiles accidentally; this is the default middle-mouse action.
+    const aimX = 0.5 + Math.max(-0.13, Math.min(0.13, (1550 - x) / 950));
+    const aimY = 0.5 + Math.max(-0.13, Math.min(0.13, (280 - y) / 950));
+    await page.mouse.click(rect.x + rect.width * aimX,
+      rect.y + rect.height * aimY, { button: 'middle' });
+    await page.waitForTimeout(1200);
+    const nextX = Number(await game.getAttribute('data-player-x'));
+    const nextY = Number(await game.getAttribute('data-player-y'));
+    stalled = Math.hypot(nextX - x, nextY - y) < 6 ? stalled + 1 : 0;
+    if (stalled >= 5) throw new Error(
+      'Natural Act I movement stalled near ' + nextX + ',' + nextY
+    );
+  }
+  throw new Error('Natural Act I exploration timed out at (' +
+    await game.getAttribute('data-player-x') + ',' +
+    await game.getAttribute('data-player-y') + '), objective: ' +
+    await journal.innerText());
+}
+
 test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, equip, turn-in', async ({ page }) => {
-  test.setTimeout(125_000);
+  test.setTimeout(230_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
@@ -178,6 +229,15 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(guide).toHaveAttribute('data-guide-step', 'story');
   await expect(guide).toContainText('Investigate the corruption site');
   await expect(guide.getByTestId('onboarding-xp')).toContainText(/Level \d+ · XP \d+\/\d+/);
+  // Continue using actual player movement after loading the genuine quest save.
+  // The corruption-site discovery must grant its reward exactly once and
+  // automatically activate the next story quest, not a second Vesna turn-in.
+  await walkToCorruptionSite(page, 95_000);
+  await expect(page.locator('.quest-journal')).toContainText('The Blighted Pack');
+  await expect(page.locator('.quest-journal')).toContainText('Defeat three corrupted boars');
+  await expect(game).toHaveAttribute('data-zone', 'wilderness');
+  await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
+
 });
 
 test.describe('touch input', () => {
