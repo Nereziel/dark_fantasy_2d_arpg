@@ -7,6 +7,7 @@ test('Issue #125: new player gets an optional, quest-aware first-play guide', as
   const guide = page.getByTestId('onboarding-guide');
   await expect(guide).toBeVisible();
   await expect(guide).toHaveAttribute('data-guide-step', 'warden');
+  await expect(page.getByTestId('story-inspect-evidence')).toHaveCount(0);
   await expect(guide).toContainText('Vesna');
   await expect(guide.getByRole('button', { name: 'Open talents' })).toHaveCount(0);
   await expect(guide.getByRole('button', { name: 'View discovered map' })).toHaveCount(0);
@@ -18,6 +19,7 @@ test('Issue #125: new player gets an optional, quest-aware first-play guide', as
   await dialog.getByRole('button', { name: 'Accept quest' }).click();
   await dialog.getByRole('button', { name: 'Leave' }).click();
   await expect(guide).toHaveAttribute('data-guide-step', 'move');
+  await expect(page.getByTestId('story-inspect-evidence')).toHaveCount(0);
   await guide.getByRole('button', { name: 'Next tip' }).click();
   await expect(guide).toHaveAttribute('data-guide-step', 'attack');
 
