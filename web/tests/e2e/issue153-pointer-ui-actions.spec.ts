@@ -68,7 +68,7 @@ test('mouse-mapped menu opens pause and resumes without world input', async ({ p
   await expect(menu.locator('code')).toHaveText('Mouse 2');
   await controls.getByRole('button', { name: 'Back' }).click();
   // Escape was intentionally unbound; the native resume button still works.
-  await page.getByRole('button', { name: 'Resume' }).click();
+  await page.getByRole('dialog', { name: 'Paused' }).getByRole('button', { name: 'Resume' }).click();
   const rect = await canvas.boundingBox();
   expect(rect).not.toBeNull();
   await page.mouse.click(rect!.x + rect!.width / 2 - 80,
