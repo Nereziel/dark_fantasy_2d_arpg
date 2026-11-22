@@ -82,3 +82,36 @@ test('desktop click-to-move fallback supports both directions without accidental
   await original.click();
   await expect(empty).toHaveClass(/occupied/);
 });
+
+test('clicking two different bag items does not swap them until Move by click is armed', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await page.getByRole('button', { name: 'Browse wares' }).click();
+  const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
+  const belt = merchant.getByRole('button', { name: 'Buy Studded War Belt' });
+  await belt.click();
+  await belt.click(); // 2 × 32 gold from the actual starting 75 gold
+  await merchant.getByRole('button', { name: 'Leave' }).click();
+  await page.getByRole('button', { name: 'Inventory (I)' }).click();
+  const inventory = page.getByRole('dialog', { name: 'Inventory & Equipment' });
+  const first = inventory.locator('[data-bag-index="0"]');
+  const second = inventory.locator('[data-bag-index="1"]');
+  const firstId = await first.getAttribute('data-item-id');
+  const secondId = await second.getAttribute('data-item-id');
+  expect(firstId).toBeTruthy();
+  expect(secondId).toBeTruthy();
+  expect(secondId).not.toBe(firstId);
+
+  await first.click();
+  await second.click();
+  await expect(first).toHaveAttribute('data-item-id', firstId!);
+  await expect(second).toHaveAttribute('data-item-id', secondId!);
+
+  await inventory.getByTestId('item-inspector')
+    .getByRole('button', { name: 'Move by click' }).click();
+  await expect(first).toHaveClass(/drop-valid/);
+  await first.click();
+  await expect(first).toHaveAttribute('data-item-id', secondId!);
+  await expect(second).toHaveAttribute('data-item-id', firstId!);
+});
