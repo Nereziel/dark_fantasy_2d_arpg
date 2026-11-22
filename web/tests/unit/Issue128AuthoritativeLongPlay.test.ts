@@ -11,9 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
-import { PACK_SIZE, packTypesForWave } from '../../src/game/enemies/enemies';
-import { ACTOR_RADIUS, canOccupy } from '../../src/game/world/navigation';
-import { buildWilderness } from '../../src/game/world/wildernessRuntime';
+import { PACK_SIZE } from '../../src/game/enemies/enemies';
 import type { GameEvent } from '../../src/game/core/types';
 
 describe('Issue 128: authoritative 33-enemy long-play across regular waves', () => {
@@ -54,66 +52,9 @@ describe('Issue 128: authoritative 33-enemy long-play across regular waves', () 
       const target = living[0]!.actor;
       // Like an automated checkpoint between encounters. No enemy data,
       // cooldowns, combat damage, kill ledger, XP or wave counter is forged.
-      const baselineValid = sim.restore(state);
-      if (!baselineValid) {
-        const variants = {
-          noLoot: { ...state, groundLoot: [] },
-          noWarriorAction: { ...state, warriorAction: null },
-          noStatusEffects: { ...state, statusEffects: { player: [], enemies: {} } },
-          noPlayerEffects: { ...state, effects: { ...state.effects, player: [] } },
-          noElites: { ...state, enemies: state.enemies.map(unit => ({
-            ...unit, elite: undefined
-          })) },
-          zeroResource: { ...state, resource: 0 },
-          noSelection: { ...state, selectedTargetId: null },
-          noWarriorCooldowns: { ...state, warriorCooldowns: {} },
-          noEventView: { ...state, worldEvents: undefined },
-          noMapDiscovery: { ...state, mapDiscovery: undefined },
-          noWorldFacts: { ...state, worldFacts: undefined },
-          noMapOrWorldFacts: { ...state, mapDiscovery: undefined, worldFacts: undefined },
-          noEnvironment: { ...state, environmentObjects: undefined },
-          noEnvironmentBlessings: { ...state, environmentBlessings: undefined },
-          noProjectiles: { ...state, projectiles: [] },
-          noDungeonProps: { ...state, cryptInteractables: undefined },
-          noMinibossStates: { ...state, miniBossStates: undefined },
-          noPotions: { ...state, potions: undefined },
-          noAllOptionalWorld: {
-            ...state, mapDiscovery: undefined, worldFacts: undefined,
-            worldEvents: undefined, environmentObjects: undefined,
-            miniBossStates: undefined, cryptInteractables: undefined,
-            activatedCheckpointIds: undefined, respawnAt: undefined
-          }
-        };
-        const probes = Object.fromEntries(
-          Object.entries(variants).map(([key, value]) =>
-            [key, sim.restore(value as typeof state)])
-        );
-        expect(baselineValid,
-          'baseline save invalid after wave ' + state.wave + ' target ' + target.id
-            + ': ' + JSON.stringify({
-              player: state.player, level: state.level, xp: state.xp,
-              resource: state.resource, maxResource: state.stats.maxResource,
-              heroAction: state.warriorAction,
-              statusEffects: state.statusEffects,
-              enemies: state.enemies.map(unit => ({
-                id: unit.actor.id, pos: [unit.actor.x, unit.actor.y],
-                alive: unit.actor.alive, intent: unit.intent,
-                abilities: unit.abilityCooldowns, elite: unit.elite
-              })),
-              loot: state.groundLoot.map(loot => ({ id: loot.id, item: loot.item.id })),
-              quest: state.quest, worldEvents: state.worldEvents,
-              actorOccupancy: state.enemies.map(unit => ({
-                id: unit.actor.id,
-                occupy: canOccupy(unit.actor, ACTOR_RADIUS,
-                  buildWilderness(state.worldSeed).layout.obstacles)
-              })),
-              playerOccupancy: canOccupy(state.player, ACTOR_RADIUS,
-                buildWilderness(state.worldSeed).layout.obstacles),
-              expectedRoster: packTypesForWave(state.wave),
-              probes
-            }).slice(0, 5500)
-        ).toBe(true);
-      }
+      expect(sim.restore(state),
+        'simulated snapshot must restore without mutation after wave ' + state.wave
+      ).toBe(true);
       const checkpoint = {
         ...state, player: { ...state.player, x: target.x, y: target.y,
           health: state.player.maxHealth }
