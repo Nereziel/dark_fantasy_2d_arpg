@@ -390,7 +390,7 @@ export class FrontierScene extends Phaser.Scene {
     if (dispatchCombatAction(
       this.bridge, action, context.kind === 'ENEMY' ? context.id : undefined
     )) {
-      this.heldMovement.release();
+      // A simultaneous held move must not be cancelled by casting a skill.
       return;
     }
     if (action !== 'PRIMARY' && action !== 'FORCE_MOVE') return;
