@@ -4,12 +4,16 @@
   import { QUEST_REQUIRED_KILLS, FIRST_QUEST_ID } from '../game/quests/firstQuest';
   import { ACT_I_QUEST_CATALOG } from '../game/quests/actIQuestChain';
   import { storyNeedsWardenTurnIn } from '../game/ui/onboardingGuide';
+  import { activeStoryRegionHint } from '../game/ui/storyRegionHints';
 
   let { view, talk, inspectEvidence }: { view: GameSnapshot; talk: () => void; inspectEvidence: () => void } = $props();
   const storyState = $derived(view.questLedger?.quests.find(quest =>
     quest.questId !== FIRST_QUEST_ID && (quest.status === 'active' || quest.status === 'ready')) ?? null);
   const storyDefinition = $derived(ACT_I_QUEST_CATALOG.quests.find(quest =>
     quest.id === storyState?.questId) ?? null);
+  const regionHintKey = $derived(activeStoryRegionHint(
+    storyState?.questId, storyState?.status
+  ));
   const currentObjective = $derived(storyDefinition?.objectives[0] ?? null);
   const objectiveCount = $derived(currentObjective && storyState
     ? storyState.counters[currentObjective.id] ?? 0 : 0);
@@ -26,6 +30,9 @@
       {/if}
     </div>
     <div class="quest-progress">{$t(storyDefinition.descriptionKey)}</div>
+    {#if regionHintKey}
+      <div class="quest-region" data-testid="story-region-hint">{$t(regionHintKey)}</div>
+    {/if}
     {#if storyState.status === 'ready' && storyNeedsWardenTurnIn(storyState.questId)}
       <div class="quest-ready">{$t('quest.actI.returnToVesna')}</div>
     {/if}
@@ -61,6 +68,7 @@
   strong{display:block;font-family:Georgia,serif;color:#e6d3ad;font-size:.95rem;margin-bottom:8px}
   .quest-progress{font-size:.71rem;line-height:1.5;color:#c9c8bb}
   .quest-ready{font-size:.7rem;color:#e4b879;margin-top:6px}
+  .quest-region{font-size:.69rem;line-height:1.45;color:#c7b594;margin-top:8px;border-top:1px solid #514735;padding-top:7px}
   .quest-talk{padding:7px 10px;width:100%;margin-top:10px;border:1px solid #8a7556;background:#29303a;font-size:.7rem}
   .quest-inspect{display:block;width:100%;min-height:44px;margin-top:10px;padding:9px 12px;border:1px solid #c2a36b;background:#3c352c;color:#f4dfb0;font-size:.79rem;cursor:pointer}
   .quest-inspect:focus-visible{outline:2px solid #f4dfb0;outline-offset:2px}

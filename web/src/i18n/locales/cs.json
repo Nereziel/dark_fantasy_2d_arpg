@@ -778,6 +778,13 @@
         "accept": "Přijmout hlášení",
         "turnIn": "Odevzdat hlášení"
       },
+      "regionTrail": "Po stopách černého popela se vydej do severovýchodní divočiny.",
+      "regionBoars": "Nakažené šelmy hledej v jihovýchodní divočině.",
+      "regionGraves": "Staré náhrobky hledej daleko na východ od města.",
+      "regionMorrow": "Strážce hřbitova hledej jižně od opuštěných hrobů.",
+      "regionSeal": "Po dalších stopách pátrej jihozápadně od hřbitova.",
+      "regionCrypt": "Od nalezeného důkazu sleduj stezku na severozápad ke staré bráně krypty.",
+      "regionReport": "Vrať se na západ do města a promluv si s Vesnou.",
       "returnToVesna": "Vrať se ke strážkyni Vesně a přijmi odměnu.",
       "inspectEvidence": "Prozkoumat důkaz",
       "nextUnlocked": "Akt I dokončen. Další kapitola je odemčená."

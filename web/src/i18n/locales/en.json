@@ -778,6 +778,13 @@
         "accept": "Prepare the report",
         "turnIn": "Deliver the report"
       },
+      "regionTrail": "Look for traces of black ash in the northeastern wilderness.",
+      "regionBoars": "Search the southeastern wilds for the corrupted beasts.",
+      "regionGraves": "Seek old headstones far to the east of the town.",
+      "regionMorrow": "Search south of the abandoned graveyard for its guardian.",
+      "regionSeal": "Follow the clues southwest of the graveyard.",
+      "regionCrypt": "Follow the trail northwest from the evidence toward the old crypt gate.",
+      "regionReport": "Return west to the town and speak with Vesna.",
       "returnToVesna": "Return to Warden Vesna and claim the reward.",
       "inspectEvidence": "Inspect the evidence",
       "nextUnlocked": "Act I complete. The next chapter is unlocked."
