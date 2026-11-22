@@ -14,9 +14,11 @@ test('bag click only inspects; equipping, unequipping and dragging preserve the 
   await merchant.getByRole('button', { name: 'Leave' }).click();
   await page.getByRole('button', { name: 'Inventory (I)' }).click();
   const inventory = page.getByRole('dialog', { name: 'Inventory & Equipment' });
-  const belt = inventory.locator('.bag-slot.occupied').first();
-  const index = await belt.getAttribute('data-bag-index');
+  const index = await inventory.locator('.bag-slot.occupied').first()
+    .getAttribute('data-bag-index');
   expect(index).not.toBeNull();
+  // Keep a stable cell locator after equipping removes its occupied class.
+  const belt = inventory.locator('[data-bag-index="' + index + '"]');
   const empty = inventory.locator('[data-bag-index="17"]');
   const gear = inventory.locator('[data-equipment-slot="BELT"]');
   const inspector = inventory.getByTestId('item-inspector');
