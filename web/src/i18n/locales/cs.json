@@ -1476,5 +1476,22 @@
     "cancel": "Zrušit",
     "deleted": "Uložená postava byla smazána",
     "full": "Všechny pozice jsou obsazené. Před vytvořením další postavy jednu smaž."
+  },
+  "visualSettings": {
+    "title": "Nastavení zobrazení a přístupnosti",
+    "open": "Zobrazení a přístupnost",
+    "close": "Zavřít",
+    "description": "Volby se ukládají v tomto prohlížeči, odděleně od postavy a světa.",
+    "motion": "Pohybové animace",
+    "motionSystem": "Podle nastavení systému",
+    "motionReduced": "Omezit pohyb",
+    "motionFull": "Plné animace",
+    "shake": "Otřesy kamery",
+    "off": "Vypnuto",
+    "half": "Poloviční",
+    "full": "Plné",
+    "uiScale": "Velikost rozhraní",
+    "floatingText": "Plovoucí text poškození",
+    "highContrast": "Vysoký kontrast"
   }
 }
