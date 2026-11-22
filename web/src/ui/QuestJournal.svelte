@@ -5,7 +5,7 @@
   import { ACT_I_QUEST_CATALOG } from '../game/quests/actIQuestChain';
   import { storyNeedsWardenTurnIn } from '../game/ui/onboardingGuide';
 
-  let { view, talk }: { view: GameSnapshot; talk: () => void } = $props();
+  let { view, talk, inspectEvidence }: { view: GameSnapshot; talk: () => void; inspectEvidence: () => void } = $props();
   const storyState = $derived(view.questLedger?.quests.find(quest =>
     quest.questId !== FIRST_QUEST_ID && (quest.status === 'active' || quest.status === 'ready')) ?? null);
   const storyDefinition = $derived(ACT_I_QUEST_CATALOG.quests.find(quest =>
@@ -44,6 +44,10 @@
       <div class="quest-ready">{$t('quest.ashes.readyHint')}</div>
     {/if}
   {/if}
+  {#if view.canInspectStoryEvidence}
+    <button type="button" class="quest-inspect" data-testid="story-inspect-evidence"
+      onclick={inspectEvidence}>{$t('quest.actI.inspectEvidence')}</button>
+  {/if}
   <button class="quest-talk" disabled={!view.player.alive || view.paused || view.zone !== 'wilderness'} onclick={talk}>
     {$t('npc.talk')}
   </button>
@@ -58,6 +62,8 @@
   .quest-progress{font-size:.71rem;line-height:1.5;color:#c9c8bb}
   .quest-ready{font-size:.7rem;color:#e4b879;margin-top:6px}
   .quest-talk{padding:7px 10px;width:100%;margin-top:10px;border:1px solid #8a7556;background:#29303a;font-size:.7rem}
+  .quest-inspect{display:block;width:100%;min-height:44px;margin-top:10px;padding:9px 12px;border:1px solid #c2a36b;background:#3c352c;color:#f4dfb0;font-size:.79rem;cursor:pointer}
+  .quest-inspect:focus-visible{outline:2px solid #f4dfb0;outline-offset:2px}
   @media(max-width:720px){.quest-journal{top:315px;left:10px;width:185px;max-width:47vw;padding:7px}
     .quest-journal strong{font-size:.75rem}.quest-progress,.quest-talk{font-size:.61rem}}
 </style>

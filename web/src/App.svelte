@@ -1015,7 +1015,8 @@
           skip={skipGuide} show={showGuide} restart={resetGuide}
           onMap={openMap} onTalents={openTalents} onWarden={talkToWarden} />
       {/if}
-      <QuestJournal {view} talk={talkToWarden} />
+      <QuestJournal {view} talk={talkToWarden}
+        inspectEvidence={() => bridge.command({ type: 'inspectStoryEvidence' })} />
       {#if view.zone === 'wilderness' &&
         Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS + 40}
         <div class="camp-services" aria-label={$t('trade.campServices')}>

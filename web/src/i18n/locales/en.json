@@ -779,6 +779,7 @@
         "turnIn": "Deliver the report"
       },
       "returnToVesna": "Return to Warden Vesna and claim the reward.",
+      "inspectEvidence": "Inspect the evidence",
       "nextUnlocked": "Act I complete. The next chapter is unlocked."
     }
   },
