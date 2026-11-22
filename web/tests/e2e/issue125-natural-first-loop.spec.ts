@@ -143,8 +143,13 @@ test.describe('touch input', () => {
   const bounds = await button.boundingBox();
   expect(bounds).not.toBeNull();
   expect(bounds!.height).toBeGreaterThanOrEqual(43);
+  const lootId = await button.getAttribute('data-loot-id');
+  expect(lootId).not.toBeNull();
   await button.tap();
-  await expect(button).toHaveCount(0, { timeout: 12_000 });
+  // Another drop may immediately become the new first button. Assert the
+  // original item ID was collected, not that the nearest-list is empty.
+  await expect(loot.locator('[data-loot-id="' + lootId + '"]'))
+    .toHaveCount(0, { timeout: 12_000 });
   await page.locator('[data-quick-action="inventory"]').tap();
   await expect(page.getByRole('dialog', { name: 'Inventář a výbava' })).toBeVisible();
 });
