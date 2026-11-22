@@ -148,7 +148,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Hero saved');
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
   await expect(guide.getByTestId('onboarding-xp')).toHaveText(progressBeforeSave);
