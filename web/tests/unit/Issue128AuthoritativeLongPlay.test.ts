@@ -86,7 +86,7 @@ describe('Issue 128: authoritative 33-enemy long-play across regular waves', () 
               loot: state.groundLoot.map(loot => ({ id: loot.id, item: loot.item.id })),
               quest: state.quest, worldEvents: state.worldEvents,
               probes
-            })).slice(0, 5500)
+            }).slice(0, 5500)
         ).toBe(true);
       }
       const checkpoint = {
