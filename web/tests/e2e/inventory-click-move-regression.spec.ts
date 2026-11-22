@@ -117,3 +117,43 @@ test('clicking two different bag items does not swap them until Move by click is
   await expect(first).toHaveAttribute('data-item-id', secondId!);
   await expect(second).toHaveAttribute('data-item-id', firstId!);
 });
+
+test.describe('landscape touch equipment management', () => {
+  test.use({ hasTouch: true });
+
+  test('740×390 touchscreen can equip and return gear without HTML5 drag', async ({ page }) => {
+    // A mobile in landscape is wider than the old 650px CSS cutoff.
+    // Move by tap was hidden there even though touch input cannot reliably
+    // use native HTML5 draggable buttons.
+    await page.setViewportSize({ width: 740, height: 390 });
+    await page.goto('./');
+    await page.locator('#menu-language').selectOption('en');
+    await page.getByRole('button', { name: 'Enter the world' }).tap();
+    await page.getByRole('button', { name: 'Browse wares' }).tap();
+    const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
+    await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).tap();
+    await merchant.getByRole('button', { name: 'Leave' }).tap();
+    await page.locator('[data-quick-action="inventory"]').tap();
+
+    const inventory = page.getByRole('dialog', { name: 'Inventory & Equipment' });
+    const gear = inventory.locator('[data-equipment-slot="BELT"]');
+    const bag = inventory.locator('.bag-slot.occupied').first();
+    const target = inventory.locator('[data-bag-index="17"]');
+    const move = inventory.getByTestId('item-inspector')
+      .getByRole('button', { name: 'Move by tap' });
+    await bag.tap();
+    await expect(move).toBeVisible();
+    await move.tap();
+    await expect(gear).toHaveClass(/drop-valid/);
+    await gear.tap();
+    await expect(gear).toHaveClass(/has-item/);
+
+    await gear.tap();
+    await expect(move).toBeVisible();
+    await move.tap();
+    await expect(target).toHaveClass(/drop-valid/);
+    await target.tap();
+    await expect(gear).not.toHaveClass(/has-item/);
+    await expect(target).toHaveClass(/occupied/);
+  });
+});
