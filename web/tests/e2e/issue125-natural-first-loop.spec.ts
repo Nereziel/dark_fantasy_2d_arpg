@@ -141,7 +141,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await inventory.locator('.close-button').click();
 
   const progressBeforeSave = await guide.getByTestId('onboarding-xp').innerText();
-  const hudBeforeSave = await page.locator('.hud-details').innerText();
+  const hudBeforeSave = await page.locator('.hud-details span').allTextContents();
   const objectiveBeforeSave = await page.locator('.quest-journal').innerText();
   expect(await game.getAttribute('data-zone')).toBe('wilderness');
   await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
@@ -151,7 +151,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
   await expect(guide.getByTestId('onboarding-xp')).toHaveText(progressBeforeSave);
-  await expect(page.locator('.hud-details')).toHaveText(hudBeforeSave);
+  await expect(page.locator('.hud-details span')).toHaveText(hudBeforeSave);
   await expect(page.locator('.quest-journal')).toHaveText(objectiveBeforeSave);
   await page.locator('[data-quick-action="inventory"]').click();
   const gearAfterSave = await inventory.locator('.equipment-slot.has-item')
