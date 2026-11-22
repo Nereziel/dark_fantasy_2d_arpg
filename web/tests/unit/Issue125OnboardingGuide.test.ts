@@ -56,9 +56,10 @@ describe('Issue #125: first-play guide is a read-only projection of the tutorial
     expect(getOnboardingStep(moved, current('available'))).toBe('warden');
     expect(getOnboardingStep(moved, current('ready'))).toBe('return');
     expect(moved.tip).toBe(1);
-    const after = Array.from({ length: 30 }).reduce(
-      progress => nextOnboardingTip(progress, current('active')), p
-    );
+    let after = p;
+    for (let i = 0; i < 30; i++) {
+      after = nextOnboardingTip(after, current('active'));
+    }
     expect(after.tip).toBe(4);
     expect(getOnboardingStep(after, current('active'))).toBe('objective');
     expect(p.tip).toBe(0);
