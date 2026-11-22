@@ -8,6 +8,8 @@ test('Issue #125: new player gets an optional, quest-aware first-play guide', as
   await expect(guide).toBeVisible();
   await expect(guide).toHaveAttribute('data-guide-step', 'warden');
   await expect(guide).toContainText('Vesna');
+  await expect(guide.getByRole('button', { name: 'Open talents' })).toHaveCount(0);
+  await expect(guide.getByRole('button', { name: 'View discovered map' })).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Speak to the warden' }).click();
   const dialog = page.getByRole('dialog', { name: 'Warden Vesna' });

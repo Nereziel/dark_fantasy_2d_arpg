@@ -832,6 +832,9 @@
   "nearbyLoot": {"title":"Blízká kořist","pickup":"Sebrat"},
   "onboarding": {
     "title": "První kroky",
+    "openMap": "Zobrazit objevenou mapu",
+    "openTalents": "Otevřít talenty",
+    "progress": "Úroveň {level} · ZB {xp}/{xpRequired}",
     "show": "Zobrazit rady",
     "skip": "Skrýt rady",
     "next": "Další rada",
@@ -844,7 +847,10 @@
       "equip": "Otevři inventář ({inventory}), porovnej vybavení a předmět nasaď nebo přetáhni do platného slotu.",
       "objective": "Sleduj aktuální úkol v deníku. Na mapě používej jen objevené oblasti. Lektvar: {potion}.",
       "return": "První úkol je připravený k odevzdání. Vrať se ke strážkyni Vesně pro odměnu.",
-      "followup": "První úkol je splněn. Zkontroluj deník a pro další úkol promluv s Vesnou.",
+      "followup": "První úkol je splněný. Sleduj aktuální cíl v deníku.",
+    "story": "Aktuální cíl: {objective}. Na mapě si prohlédni objevené oblasti; neprozkoumaná místa zůstávají skrytá.",
+    "storyReturn": "Zpráva je připravená. Vrať se ke strážkyni Vesně a pokračuj.",
+    "talent": "Máš {points} nevyužitých talentových bodů. Otevři Talenty ({talents}) a vyber si vylepšení; úkol zůstane aktivní.",
       "dungeon": "Dorazil jsi do krypty. Sleduj úkol a objevené cesty, využívej schopnosti a lektvary."
     }
   },

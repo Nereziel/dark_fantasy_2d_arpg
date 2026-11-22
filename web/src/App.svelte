@@ -36,7 +36,8 @@
   import {
     freshOnboarding, onboardingStorageKey, parseOnboarding,
     getOnboardingStep, nextOnboardingTip, skipOnboarding, resumeOnboarding,
-    observeOnboardingEvent, observeOnboardingSnapshot, type OnboardingProgress
+    observeOnboardingEvent, observeOnboardingSnapshot, onboardingContextFromSnapshot,
+    type OnboardingProgress
   } from './game/ui/onboardingGuide';
   import QuestJournal from './ui/QuestJournal.svelte';
   import NearbyLootPanel from './ui/NearbyLootPanel.svelte';
@@ -63,6 +64,7 @@
   const audio = new WebAudioDirector();
   let playing = $state(false);
   let view: GameSnapshot = $state(bridge.snapshot());
+  let liveOnboardingContext = $derived(onboardingContextFromSnapshot(view));
   let onboardingProgress: OnboardingProgress = $state(freshOnboarding());
   let onboardingCharacterId: string | null = null;
   let onboardingOrigin: Point | null = null;
@@ -99,9 +101,7 @@
   }
 
   function advanceOnboarding(): void {
-    storeOnboarding(nextOnboardingTip(onboardingProgress, {
-      questStatus: view.quest.status, zone: view.zone
-    }));
+    storeOnboarding(nextOnboardingTip(onboardingProgress, liveOnboardingContext));
   }
   function skipGuide(): void { storeOnboarding(skipOnboarding(onboardingProgress)); }
   function showGuide(): void { storeOnboarding(resumeOnboarding(onboardingProgress)); }
@@ -1010,9 +1010,10 @@
       {/if}
       {#if modalKind === '' && view.player.alive && !view.paused}
         <OnboardingGuide progress={onboardingProgress}
-          context={{ questStatus: view.quest.status, zone: view.zone }}
+          context={liveOnboardingContext}
           bindings={controlBindings} next={advanceOnboarding}
-          skip={skipGuide} show={showGuide} restart={resetGuide} />
+          skip={skipGuide} show={showGuide} restart={resetGuide}
+          onMap={openMap} onTalents={openTalents} onWarden={talkToWarden} />
       {/if}
       <QuestJournal {view} talk={talkToWarden} />
       {#if view.zone === 'wilderness' &&
