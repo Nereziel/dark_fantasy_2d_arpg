@@ -48,7 +48,7 @@ import {
   type ActiveEffect, type ActiveEffects, type Cooldowns, type SkillSlot
 } from '../skills/skills';
 import {
-  ENEMY_DEFINITIONS, PACK_SIZE, createPack, createCryptPack, validEnemyType, validIntent,
+  ENEMY_DEFINITIONS, PACK_SIZE, createPack, createBlightedPack, createCryptPack, validEnemyType, validIntent,
   packTypesForWave, enemyArchetype,
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
@@ -3788,10 +3788,13 @@ export class GameSimulation {
       if (this.zone === 'wilderness') {
         this.respawnTimer -= dt;
         if (this.respawnTimer <= 0) {
-          this.wave = this.questStatus('blighted_pack') === 'active'
+          const huntingBoars = this.questStatus('blighted_pack') === 'active';
+          this.wave = huntingBoars
             ? (this.wave < 3 ? 3 : this.wave + (4 - ((this.wave - 3) % 4)))
             : this.wave + 1;
-          this.units = createPack(this.wave, this.level, this.world.encounterPositions);
+          this.units = huntingBoars
+            ? createBlightedPack(this.wave, this.level, this.world.encounterPositions)
+            : createPack(this.wave, this.level, this.world.encounterPositions);
           // The preceding pack can include a temporary mini-boss. A normal
           // respawn replaces the entire roster, so its obsolete AI state must
           // not survive without the matching actor: restore() correctly
@@ -4543,6 +4546,21 @@ export class GameSimulation {
         }))) : [];
       return JSON.stringify(s.worldEvents)===JSON.stringify(expected);
     };
+    // A dedicated hunt wave may outlive the objective: the third boar kill
+    // activates the next quest while the dead boar actors are still present.
+    // Accept only the entire canonical three-boar pack with stable wave IDs,
+    // never a forged mixture of normal wave mobs and story boars.
+    const blightedProgress = s?.questLedger?.quests?.find(entry =>
+      entry?.questId === 'blighted_pack');
+    const storyBoarPack = s?.zone === 'wilderness' && s.wave >= 3
+      && (s.wave - 3) % 4 === 0
+      && (blightedProgress?.status === 'active'
+        || blightedProgress?.status === 'ready'
+        || blightedProgress?.status === 'completed')
+      && Array.isArray(s.enemies) && s.enemies.length >= PACK_SIZE
+      && s.enemies.slice(0, PACK_SIZE).every(unit =>
+        unit?.actor?.type === 'corruptedBoar');
+
     const validDungeonIds = (ids: unknown, known: readonly string[]): boolean =>
       ids === undefined || (Array.isArray(ids) && ids.length <= 128
         && ids.every(id => typeof id === 'string' && known.includes(id))
@@ -4716,7 +4734,8 @@ export class GameSimulation {
                 && unit.summoned !== true
               : unit.summoned === true
                 && (unit.actor.type === 'skeleton' || unit.actor.type === 'spider'))
-            : unit.actor.type === packTypesForWave(s.wave)[index])
+            : (unit.actor.type === packTypesForWave(s.wave)[index]
+              || (storyBoarPack && unit.actor.type === 'corruptedBoar')))
         && validActor(unit.actor, index >= PACK_SIZE
           ? (activeEventPlan?.enemySpawns.some(spawn=>spawn.id===unit.actor.id)
              || (MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId) && s.zone === 'wilderness')
