@@ -270,14 +270,30 @@ test('new input mappings evade on Space and toggle pause on Escape', async ({ pa
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const game = page.locator('.game-screen');
-  const x = Number(await game.getAttribute('data-player-x'));
+  const beforeEvade = await game.evaluate(element => ({
+    x: Number(element.getAttribute('data-player-x')),
+    y: Number(element.getAttribute('data-player-y'))
+  }));
   await page.keyboard.press('Space');
-  await expect.poll(async () => Number(await game.getAttribute('data-player-x')))
-    .toBeGreaterThan(x + 50);
-  const afterEvade = Number(await game.getAttribute('data-player-x'));
+  // Evade intentionally moves AWAY from the nearest enemy, which can be on
+  // either side of the hero for procedurally seeded wilderness layouts.
+  // Test authoritative displacement, not a hardcoded +X direction.
+  await expect.poll(async () => {
+    const after = await game.evaluate(element => ({
+      x: Number(element.getAttribute('data-player-x')),
+      y: Number(element.getAttribute('data-player-y'))
+    }));
+    return Math.hypot(after.x - beforeEvade.x, after.y - beforeEvade.y);
+  }).toBeGreaterThan(50);
+  const afterEvade = await game.evaluate(element => ({
+    x: Number(element.getAttribute('data-player-x')),
+    y: Number(element.getAttribute('data-player-y'))
+  }));
   await page.keyboard.press('Space');
-  await expect.poll(async () => Number(await game.getAttribute('data-player-x')))
-    .toBe(afterEvade);
+  await expect.poll(async () => game.evaluate(element => ({
+    x: Number(element.getAttribute('data-player-x')),
+    y: Number(element.getAttribute('data-player-y'))
+  }))).toEqual(afterEvade);
   await page.keyboard.press('Escape');
   await expect(page.locator('.modal-shield')).toBeVisible();
   await page.keyboard.press('Escape');
