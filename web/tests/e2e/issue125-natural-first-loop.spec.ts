@@ -168,6 +168,10 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await guide.getByRole('button', { name: 'View discovered map' }).click();
   const map = page.getByTestId('world-map-dialog');
   await expect(map).toBeVisible();
+  // Optional discoveries are permitted when the hero actually passed near
+  // them. Record the *discovered set*, not an invalid zero-marker assumption.
+  const optionalBeforeSave = await map.locator('[data-marker-kind="optionalPoi"]')
+    .evaluateAll(nodes => nodes.map(node => node.getAttribute('data-map-marker')).sort());
   await map.getByTestId('map-close').click();
   await expect(guide).toHaveAttribute('data-guide-step', 'story');
 
@@ -221,7 +225,9 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await guide.getByRole('button', { name: 'View discovered map' }).click();
   await expect(map).toBeVisible();
   await expect(map.locator('[data-fog="unexplored"]').first()).toBeVisible();
-  await expect(map.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
+  const optionalAfterLoad = await map.locator('[data-marker-kind="optionalPoi"]')
+    .evaluateAll(nodes => nodes.map(node => node.getAttribute('data-map-marker')).sort());
+  expect(optionalAfterLoad).toEqual(optionalBeforeSave);
   await map.getByTestId('map-close').click();
   // Turn-in immediately starts the next genuine Act I objective;
   // the journal correctly replaces the completed starter quest.
