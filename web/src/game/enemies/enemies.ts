@@ -163,6 +163,24 @@ export function createPack(wave: number, level: number, positions: readonly Poin
   });
 }
 
+/** A complete, quest-specific boar encounter, without changing ordinary wave
+ * rosters or unique enemy IDs. Every spawn uses the already-validated canonical
+ * encounter positions and retains the standard cooldown/XP/drop pipeline.
+ */
+export function createBlightedPack(
+  wave: number, level: number, positions: readonly Point[] = PACK_POSITIONS
+): EnemyUnit[] {
+  const definition = ENEMY_DEFINITIONS.corruptedBoar;
+  const health = definition.health + Math.max(0, level - 1) * 12;
+  return createPack(wave, level, positions).map((unit, index) => ({
+    ...unit,
+    actor: {
+      ...unit.actor, id: `corruptedBoar-${wave * PACK_SIZE + index + 1}`,
+      type: 'corruptedBoar', health, maxHealth: health
+    }
+  }));
+}
+
 /**
  * Crypt has a guard encounter followed by a boss and two retainers.
  * IDs match the normal per-wave contract, but the boss is unique to the crypt.
