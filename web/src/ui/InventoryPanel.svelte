@@ -9,6 +9,7 @@
     type GroundLootCategory } from '../game/items/groundLootVisibility';
   import { RARITIES } from '../game/data/items';
   import { WEAPON_TYPES } from '../game/items/itemCatalog';
+  import type { InventoryError } from '../game/inventory/equipmentRules';
   import { itemDisplayName } from '../game/items/itemName';
 
   let { view, bridge, close }: { view: GameSnapshot; bridge: GameBridge; close: () => void } = $props();
@@ -93,6 +94,32 @@
   let equippedItem = $derived(comparedSlot ? view.equipment[comparedSlot] : null);
   let delta = $derived(displayed?.kind === 'bag'
     ? bridge.previewEquipment(displayed.index) : null);
+  // The failure comes from the exact equip transaction planner, including
+  // item-instance level and two-hand/offhand rules, not guessed UI heuristics.
+  let equipFailure = $derived.by(() =>
+    displayed?.kind === 'bag' && view.inventory[displayed.index]
+      ? bridge.equipmentPlacementError(displayed.index) : null
+  );
+  function rejectionText(reason: InventoryError | null): string {
+    const cs = $locale === 'cs';
+    switch (reason) {
+      case 'LEVEL_REQUIRED':
+        return cs ? 'Nemáš dostatečnou úroveň pro nasazení tohoto předmětu.'
+          : 'Your character level is too low to equip this item.';
+      case 'HAND_CONFLICT':
+        return cs ? 'Druhou ruku blokuje obouruční zbraň.'
+          : 'A two-handed weapon blocks the off-hand slot.';
+      case 'INVENTORY_FULL':
+        return cs ? 'V batohu není místo pro odloženou výbavu z druhé ruky.'
+          : 'Backpack is full: no room for displaced off-hand gear.';
+      case 'INCOMPATIBLE_SLOT':
+      case 'INVALID_SLOT':
+        return cs ? 'Předmět nepatří do tohoto slotu výbavy.'
+          : 'This item is not compatible with that equipment slot.';
+      default:
+        return $t('inventory.invalidPlacement');
+    }
+  }
 
   function itemName(item: Item): string {
     return itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId));
@@ -103,7 +130,9 @@
     const item = source.kind === 'bag' ? view.inventory[source.index]
       : view.equipment[source.slot];
     if (!item || !canPlace(target, source)) {
-      placementMessage = $t('inventory.invalidPlacement');
+      placementMessage = source.kind === 'bag' && target.kind === 'gear'
+        ? rejectionText(bridge.equipmentPlacementError(source.index, target.slot))
+        : $t('inventory.invalidPlacement');
       return false;
     }
     if (source.kind === 'bag' && target.kind === 'gear') {
@@ -512,9 +541,7 @@
                   </div>
                 {/each}
               {:else}
-                <p class="invalid-equip">{$locale === 'cs'
-                  ? 'Předmět nelze nasadit: zkontroluj úroveň, typ slotu nebo druhou ruku.'
-                  : 'Cannot equip: check the required level, slot type or two-handed conflict.'}</p>
+                <p class="invalid-equip" role="status">{rejectionText(equipFailure)}</p>
               {/if}
             </div>
             <div class="inspector-actions">

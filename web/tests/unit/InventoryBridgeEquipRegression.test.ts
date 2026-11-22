@@ -78,6 +78,37 @@ describe('Inventory equip / unequip through GameBridge', () => {
     expect(bridge.snapshot().player.y).toBe(beforeMovement.y);
   });
 
+  it('explains level, incompatible slot and invalid index using the same read-only equip planner', () => {
+    const bridge = new GameBridge();
+    const start = bridge.snapshot();
+    const base = rollItemForBase('belt', 'high-level-belt', 1, 'COMMON',
+      new SeededRng(78))!;
+    const highLevel = { ...base, requiredLevel: start.level + 8 };
+    const inventory = [...start.inventory];
+    inventory[5] = highLevel;
+    expect(bridge.restore({ ...start, inventory })).toBe(true);
+    bridge.command({ type: 'pause', value: true });
+    const before = bridge.snapshot();
+
+    expect(bridge.equipmentPlacementError(5, 'BELT')).toBe('LEVEL_REQUIRED');
+    expect(bridge.equipmentPlacementError(5, 'HELMET')).toBe('INCOMPATIBLE_SLOT');
+    expect(bridge.equipmentPlacementError(999, 'BELT')).toBe('INVALID_INDEX');
+    expect(bridge.equipmentPlacementError(6, 'BELT')).toBe('EMPTY_SLOT');
+    expect(bridge.snapshot()).toEqual(before);
+
+    bridge.command({ type: 'equip', index: 5, slot: 'BELT' });
+    expect(bridge.snapshot().inventory[5]?.id).toBe(highLevel.id);
+    expect(bridge.snapshot().equipment.BELT).toBeNull();
+    expect(bridge.snapshot().paused).toBe(true);
+
+    const available = { ...highLevel, requiredLevel: start.level };
+    expect(bridge.restore({ ...before, inventory: [
+      ...before.inventory.slice(0, 5), available, ...before.inventory.slice(6)
+    ] })).toBe(true);
+    expect(bridge.equipmentPlacementError(5, 'BELT')).toBeNull();
+    expect(bridge.previewEquipment(5, 'BELT')).not.toBeNull();
+  });
+
   it('rejects invalid occupied destination without losing the equipped item', () => {
     const bridge = new GameBridge();
     const initial = bridge.snapshot();

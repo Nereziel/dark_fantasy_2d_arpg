@@ -3,7 +3,7 @@ import { spawnPlayer, updateHealthLimit, advanceResource, regenerateHealth } fro
 import { awardProgression, rewardForActivity, xpRequiredForLevel, MAX_LEVEL } from '../progression/progressionRules';
 import {
   planEquip, planUnequip, planUnequipAt, planSwap, planDrop, sortInventory, favoriteOrLockItem,
-  type ItemFlags, type InventoryState, type EquipmentRules
+  type ItemFlags, type InventoryState, type EquipmentRules, type InventoryError
 } from '../inventory/equipmentRules';
 import { ITEM_BASES, WEAPON_TYPES } from '../items/itemCatalog';
 import { rollLootTable, bossGuaranteedLoot, type LootContext, type LootRoll } from '../loot/lootTables';
@@ -1872,6 +1872,13 @@ export class GameSimulation {
     const selected = targetSlot ?? (item.slot === 'RING_1' && this.equipment.RING_1 && !this.equipment.RING_2
       ? 'RING_2' : undefined);
     this.updateInventory(planEquip(this.inventoryState(), index, selected, this.inventoryRules()));
+  }
+
+  /** Exact failure from the same authoritative equip planner used by
+   * command('equip') and the stat-preview path. Never mutates the inventory. */
+  equipmentPlacementError(index: number, targetSlot?: EquipmentSlot): InventoryError | null {
+    const candidate = planEquip(this.inventoryState(), index, targetSlot, this.inventoryRules());
+    return candidate.ok ? null : candidate.reason;
   }
 
   /** Pure, authoritative candidate projection for the equipment comparison panel. */
