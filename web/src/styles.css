@@ -219,3 +219,22 @@ h1 span,.brand-mark span{color:#b88b59}
   .game-hud .hud-actions { grid-template-columns:repeat(3,minmax(44px,1fr)); gap:3px; }
   .game-hud .hud-actions button { min-height:44px; padding:3px; }
 }
+
+
+/* Issue #102: higher-contrast borders and focus, independently selectable
+   from OS motion preferences. Only UI presentation changes. */
+html[data-ar-high-contrast="true"] .game-hud,
+html[data-ar-high-contrast="true"] .enemy-roster,
+html[data-ar-high-contrast="true"] .enemy-roster button,
+html[data-ar-high-contrast="true"] .modal-shield .pause-card,
+html[data-ar-high-contrast="true"] .visual-settings-card {
+  border-color:#fff0cf;
+}
+html[data-ar-high-contrast="true"] button:focus-visible,
+html[data-ar-high-contrast="true"] select:focus-visible,
+html[data-ar-high-contrast="true"] input:focus-visible {
+  outline:3px solid #fff2a6;outline-offset:3px;
+}
+html[data-ar-high-contrast="true"] .roster-health {
+  color:#ffe7bf;
+}

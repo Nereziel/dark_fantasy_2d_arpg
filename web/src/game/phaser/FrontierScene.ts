@@ -3,6 +3,7 @@ import { get } from 'svelte/store';
 import { _ as translate, locale } from 'svelte-i18n';
 import { planCombatVfx } from './combatVfxPlan';
 import { planCombatReadability, type CombatReadabilityInput } from './combatReadabilityPlan';
+import { getVisualPreferences, shouldReduceMotion } from '../ui/visualPreferences';
 import { statusVisuals } from '../status/statusVisuals';
 import type { StatusInstance } from '../status/statusRuntime';
 import type { GameBridge } from '../bridge/GameBridge';
@@ -498,10 +499,11 @@ export class FrontierScene extends Phaser.Scene {
     else graphic.destroy();
   }
 
-  /** Respect operating-system reduced-motion preference without touching game timing. */
+  /** Explicit browser setting overrides OS reduced motion, not game timing. */
   private reducedCombatMotion(): boolean {
-    return typeof window !== 'undefined'
+    const osReduced = typeof window !== 'undefined'
       && (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false);
+    return shouldReduceMotion(getVisualPreferences(), osReduced);
   }
 
   /** Geometry-only overlay; gameplay state and authoritative hit timing never change. */
@@ -815,9 +817,11 @@ export class FrontierScene extends Phaser.Scene {
       });
       for (const cue of cues) {
         if (cue.type === 'screenShake') {
-          if (!this.reducedCombatMotion())
-            this.cameras.main.shake(cue.durationMs, 0.0025 * cue.intensity);
+          const settings = getVisualPreferences();
+          if (!this.reducedCombatMotion() && settings.shake > 0)
+            this.cameras.main.shake(cue.durationMs, 0.0025 * cue.intensity * settings.shake);
         } else if (cue.type === 'floatText') {
+          if (!getVisualPreferences().floatingCombatText) continue;
           const text = cue.content.kind === 'damage'
             ? '-' + cue.content.amount : get(translate)(cue.content.key);
           const label = this.add.text(cue.position.x, cue.position.y - 39, text, {

@@ -18,6 +18,9 @@
   import CharacterSheet from './ui/CharacterSheet.svelte';
   import TalentTree from './ui/TalentTree.svelte';
   import ControlsPanel from './ui/ControlsPanel.svelte';
+  import VisualSettingsPanel from './ui/VisualSettingsPanel.svelte';
+  import { getVisualPreferences, setVisualPreferences,
+    DEFAULT_VISUAL_PREFERENCES, type VisualPreferences } from './game/ui/visualPreferences';
   import SkillBar from './ui/SkillBar.svelte';
   import QuestJournal from './ui/QuestJournal.svelte';
   import WorldMapCanvas from './ui/WorldMapCanvas.svelte';
@@ -86,6 +89,8 @@
   let characterOpen = $state(false);
   let talentsOpen = $state(false);
   let controlsOpen = $state(false);
+  let settingsOpen = $state(false);
+  let visualPreferences: VisualPreferences = $state({ ...DEFAULT_VISUAL_PREFERENCES });
   let mapOpen = $state(false);
   let mapZoom = $state(1);
   let mapCenter: Point | null = $state(null);
@@ -113,9 +118,29 @@
     } catch { /* Settings may be unavailable in private browsing. */ }
   }
 
+  function applyVisualRoot(prefs: VisualPreferences): void {
+    if (typeof document === 'undefined') return;
+    // Scale readable rem-based UI without resizing the Phaser playfield.
+    document.documentElement.style.fontSize = (16 * prefs.uiScale).toFixed(1) + 'px';
+    document.documentElement.dataset.arHighContrast = prefs.highContrast ? 'true' : 'false';
+  }
+
+  function updateVisualPreferences(next: VisualPreferences): void {
+    visualPreferences = setVisualPreferences(next);
+    applyVisualRoot(visualPreferences);
+  }
+
+  function openVisualSettings(origin?: HTMLElement): void {
+    if (!playing || !view.paused || settingsOpen || controlsOpen
+      || inventoryOpen || characterOpen || talentsOpen || mapOpen
+      || dialogueOpen || tradeNpc !== null || townModal !== null) return;
+    rememberModalOrigin(origin);
+    settingsOpen = true;
+  }
+
   function openControls(origin?: HTMLElement): void {
     if (!playing || dialogueOpen || tradeNpc !== null || townModal !== null
-      || inventoryOpen || characterOpen || talentsOpen) return;
+      || inventoryOpen || characterOpen || talentsOpen || settingsOpen) return;
     rememberModalOrigin(origin);
     bridge.command({ type: 'pause', value: true });
     controlsOpen = true;
@@ -145,7 +170,7 @@
   }
   let modalKind = $derived(!playing ? '' :
     mapOpen ? 'map' : townModal !== null ? 'town' : tradeNpc !== null ? 'trade'
-    : controlsOpen ? 'controls' : dialogueOpen ? 'dialogue' : inventoryOpen ? 'inventory'
+    : settingsOpen ? 'settings' : controlsOpen ? 'controls' : dialogueOpen ? 'dialogue' : inventoryOpen ? 'inventory'
     : characterOpen ? 'character' : talentsOpen ? 'talents'
     : !view.player.alive ? 'death' : view.paused ? 'pause' : '');
 
@@ -238,6 +263,8 @@
   }
 
   onMount(() => {
+    visualPreferences = getVisualPreferences();
+    applyVisualRoot(visualPreferences);
     void refreshCharacters().catch(() => { messageKey = 'status.saveError'; });
     try {
       const raw = JSON.parse(window.localStorage.getItem(controlsStorage) ?? '[]');
@@ -329,7 +356,7 @@
     inventoryOpen = false;
     characterOpen = false;
     talentsOpen = false;
-    controlsOpen = false;
+    controlsOpen = false; settingsOpen = false;
     mapOpen = false;
     dialogueOpen = false;
     tradeNpc = null;
@@ -379,7 +406,7 @@
   }
   function menu(): void {
     talentsOpen = false;
-    controlsOpen = false;
+    controlsOpen = false; settingsOpen = false;
     mapOpen = false;
     heldShiftKeys.clear();
     bridge.command({ type: 'holdPosition', value: false });
@@ -456,12 +483,19 @@
   }
   function handleKeydown(event: KeyboardEvent): void {
     if (!playing) return;
+    if (settingsOpen) {
+      if (event.code === 'Escape') {
+        event.preventDefault();
+        settingsOpen = false;
+      }
+      return;
+    }
     if (controlsOpen) {
       // Escape cancels an in-progress rebind inside ControlsPanel; otherwise
       // it returns to the paused game without leaking input into Phaser.
       if (event.code === 'Escape' && !document.querySelector('.controls-card .capture-hint')) {
         event.preventDefault();
-        controlsOpen = false;
+        controlsOpen = false; settingsOpen = false;
       }
       return;
     }
@@ -652,7 +686,7 @@
         inventoryOpen = false;
         characterOpen = false;
         talentsOpen = false;
-        controlsOpen = false;
+        controlsOpen = false; settingsOpen = false;
         mapOpen = false;
         dialogueOpen = false;
         tradeNpc = null;
@@ -980,10 +1014,15 @@
         </div>
       {:else if tradeNpc}
         <TradePanel {view} {bridge} npc={tradeNpc} close={closeDialogue} />
+      {:else if settingsOpen}
+        <div class="modal-shield">
+          <VisualSettingsPanel preferences={visualPreferences}
+            save={updateVisualPreferences} close={() => { settingsOpen = false; }} />
+        </div>
       {:else if controlsOpen}
         <div class="modal-shield">
           <ControlsPanel bindings={controlBindings} save={updateBindings}
-            close={() => { controlsOpen = false; }} />
+            close={() => { controlsOpen = false; settingsOpen = false; }} />
         </div>
       {:else if dialogueOpen}
         <NpcDialogue quest={view.quest} questLedger={view.questLedger} accept={acceptQuest} turnIn={turnInQuest} close={closeDialogue} />
@@ -1013,6 +1052,8 @@
             <h2>{$t('menu.paused')}</h2>
             <button class="primary" onclick={() => togglePause()}>{$t('menu.resume')}</button>
             <button class="secondary" onclick={(event) => openControls(event.currentTarget)}>{$t('bindings.open')}</button>
+            <button class="secondary" data-testid="open-visual-settings"
+              onclick={(event) => openVisualSettings(event.currentTarget)}>{$t('visualSettings.open')}</button>
             <button class="secondary" onclick={menu}>{$t('menu.back')}</button>
           </div>
         </div>
