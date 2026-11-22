@@ -70,7 +70,7 @@ test.describe('touch item preview and loot-label preferences', () => {
     await move.tap();
     await modal.locator('[data-equipment-slot="HELMET"]').tap();
     await expect(inspector.locator('.placement-error[role="status"]'))
-      .toContainText('Cannot place here');
+      .toContainText('This item is not compatible with that equipment slot.');
     await expect(modal.locator('[data-equipment-slot="HELMET"] svg[data-item-art="belt"]'))
       .toHaveCount(0);
     await modal.locator('[data-equipment-slot="BELT"]').tap();
