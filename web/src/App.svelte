@@ -21,6 +21,7 @@
   import VisualSettingsPanel from './ui/VisualSettingsPanel.svelte';
   import { getVisualPreferences, setVisualPreferences,
     DEFAULT_VISUAL_PREFERENCES, type VisualPreferences } from './game/ui/visualPreferences';
+  import { isFullscreenAvailable, toggleBrowserFullscreen } from './game/ui/displayModes';
   import { getAudioPreferences, setAudioPreferences,
     DEFAULT_AUDIO_PREFERENCES, type AudioPreferences } from './game/audio/audioPreferences';
   import { WebAudioDirector } from './game/audio/WebAudioDirector';
@@ -96,6 +97,10 @@
   let controlsOpen = $state(false);
   let settingsOpen = $state(false);
   let visualPreferences: VisualPreferences = $state({ ...DEFAULT_VISUAL_PREFERENCES });
+  let appRoot: HTMLDivElement;
+  let fullscreenSupported = $state(false);
+  let fullscreenActive = $state(false);
+  let fullscreenError = $state(false);
   let audioPreferences: AudioPreferences = $state({ ...DEFAULT_AUDIO_PREFERENCES });
   let mapOpen = $state(false);
   let mapZoom = $state(1);
@@ -148,11 +153,24 @@
     audio.setPaused(!playing || view.paused);
   });
 
+  function syncFullscreenState(): void {
+    fullscreenActive = typeof document !== 'undefined'
+      && document.fullscreenElement === appRoot;
+  }
+
+  async function toggleFullscreen(): Promise<void> {
+    fullscreenError = false;
+    const success = await toggleBrowserFullscreen(document, appRoot);
+    if (!success) fullscreenError = true;
+    syncFullscreenState();
+  }
+
   function openVisualSettings(origin?: HTMLElement): void {
     if (!playing || !view.paused || settingsOpen || controlsOpen
       || inventoryOpen || characterOpen || talentsOpen || mapOpen
       || dialogueOpen || tradeNpc !== null || townModal !== null) return;
     rememberModalOrigin(origin);
+    fullscreenError = false;
     settingsOpen = true;
   }
 
@@ -281,6 +299,10 @@
   }
 
   onMount(() => {
+    fullscreenSupported = isFullscreenAvailable(document, appRoot)
+      && document.fullscreenEnabled !== false;
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    syncFullscreenState();
     visualPreferences = getVisualPreferences();
     applyVisualRoot(visualPreferences);
     audioPreferences = getAudioPreferences();
@@ -378,6 +400,7 @@
       window.removeEventListener('pointerdown', unlockAudio, true);
       window.removeEventListener('keydown', unlockAudio, true);
       audio.dispose();
+      document.removeEventListener('fullscreenchange', syncFullscreenState);
       window.removeEventListener('pagehide', flushOnExit);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       void autosaver.dispose().catch(() => {});
@@ -752,7 +775,7 @@
   <meta name="description" content="Aether & Ruin – Svelte / Phaser ARPG prototype" />
 </svelte:head>
 
-<div class="app-frame">
+<div class="app-frame" bind:this={appRoot}>
   {#if !playing}
     <main class="main-menu">
       <div class="menu-orbit"></div>
@@ -824,7 +847,9 @@
   {:else}
     <main class="game-screen" data-world-seed={view.worldSeed} data-zone={view.zone}
       data-player-x={view.player.x} data-player-y={view.player.y}>
-      <GameViewport {bridge} />
+      {#key visualPreferences.pixelFilter}
+        <GameViewport {bridge} renderMode={visualPreferences.pixelFilter} />
+      {/key}
       <div class="game-vignette" aria-hidden="true"></div>
 
       <header class="game-header" inert={modalKind !== ''}>
@@ -1053,6 +1078,7 @@
         <div class="modal-shield">
           <VisualSettingsPanel preferences={visualPreferences}
             save={updateVisualPreferences} {audioPreferences} saveAudio={updateAudioPreferences}
+            {fullscreenSupported} {fullscreenActive} {fullscreenError} {toggleFullscreen}
             close={() => { settingsOpen = false; }} />
         </div>
       {:else if controlsOpen}
