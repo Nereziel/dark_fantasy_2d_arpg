@@ -6,6 +6,9 @@
   import type { GameSnapshot, Point } from './game/core/types';
   import { resolveKeyboardAction, applyBindingOverrides, type InputBinding, type InputAction } from './game/input/bindings';
   import { GAME_BINDINGS } from './game/input/gameBindings';
+  import { resolvePointerAction } from './game/input/bindings';
+  import { planPointerUiAction, type PointerUiState, type PointerUiSurface,
+    type PointerUiOperation } from './game/input/pointerUiActions';
   import { dispatchCombatAction } from './game/input/combatActionDispatcher';
   import { prioritizeCombatRoster } from './game/ui/combatRoster';
   import { loadGame, saveGame, listCharacters, deleteCharacter, MAX_SAVED_CHARACTERS, type SavedCharacterInfo } from './persistence/SaveRepository';
@@ -534,6 +537,60 @@
     townModal = null;
     bridge.command({ type: 'pause', value: false });
   }
+  /** Only the Phaser canvas opens a mouse-mapped panel; only an empty
+   * modal backdrop can close one. HUD buttons and dialog content stay native.
+   * Touch and pen input must retain their original tapping/dragging behavior.
+   */
+  function pointerUiSurface(target: EventTarget | null): PointerUiSurface {
+    if (target instanceof HTMLCanvasElement
+      && target.closest('.phaser-container')) return 'canvas';
+    if (target instanceof HTMLElement && target.matches(
+      '.modal-shield, .inventory-overlay, .character-sheet-backdrop, ' +
+      '.talent-backdrop, .npc-dialog-shield, .trade-overlay'
+    )) return 'backdrop';
+    return 'other';
+  }
+
+  function pointerUiState(): PointerUiState {
+    if (!playing || settingsOpen || controlsOpen || !view.player.alive) return 'blocked';
+    if (mapOpen) return 'map';
+    if (talentsOpen) return 'talents';
+    if (inventoryOpen) return 'inventory';
+    if (characterOpen) return 'character';
+    if (dialogueOpen || tradeNpc !== null || townModal !== null) return 'dialogue';
+    return view.paused ? 'pause' : 'gameplay';
+  }
+
+  function pointerUiOperation(button: number, target: EventTarget | null): PointerUiOperation | null {
+    const action = resolvePointerAction({ button, uiCaptured: false }, bridge.bindings());
+    return planPointerUiAction(action, pointerUiState(), pointerUiSurface(target));
+  }
+
+  function handlePointerUiDown(event: PointerEvent): void {
+    if (event.pointerType !== 'mouse') return;
+    const operation = pointerUiOperation(event.button, event.target);
+    if (!operation) return;
+    event.preventDefault();
+    switch (operation) {
+      case 'openMap': openMap(); break;
+      case 'closeMap': closeMap(); break;
+      case 'openTalents': openTalents(); break;
+      case 'closeTalents': closeTalents(); break;
+      case 'openInventory': openInventory(); break;
+      case 'closeInventory': closeInventory(); break;
+      case 'openCharacter': openCharacterSheet(); break;
+      case 'closeCharacter': closeCharacterSheet(); break;
+      case 'togglePause': togglePause(); break;
+      case 'closeDialogue': closeDialogue(); break;
+    }
+  }
+
+  function handlePointerUiContextMenu(event: MouseEvent): void {
+    // Right-button UI bindings must not leave a browser context menu hanging
+    // over the game after a modal opens or closes.
+    if (pointerUiOperation(event.button, event.target)) event.preventDefault();
+  }
+
   function handleKeydown(event: KeyboardEvent): void {
     if (!playing) return;
     if (settingsOpen) {
@@ -709,7 +766,9 @@
   }
 </script>
 
-<svelte:window onkeydown={handleKeydown} onkeyup={handleKeyup} onblur={handleBlur} />
+<svelte:window onkeydown={handleKeydown} onkeyup={handleKeyup}
+  onpointerdown={handlePointerUiDown} oncontextmenu={handlePointerUiContextMenu}
+  onblur={handleBlur} />
 
 <svelte:head>
   <title>Aether &amp; Ruin</title>
