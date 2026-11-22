@@ -5,7 +5,7 @@
 import type { GameEvent } from '../core/types';
 import type { QuestStatus } from '../quests/firstQuest';
 import type { GameSnapshot } from '../core/types';
-import { ACT_I_STORY_QUEST_IDS, type ActIStoryQuestId } from '../quests/actIQuestChain';
+import { ACT_I_MILESTONES, ACT_I_STORY_QUEST_IDS, type ActIStoryQuestId } from '../quests/actIQuestChain';
 import { xpRequiredForLevel } from '../progression/progressionRules';
 
 export type OnboardingStep =
@@ -119,6 +119,15 @@ function tipIndex(progress: OnboardingProgress): number {
   return index;
 }
 
+/** Only an explicitly NPC-gated, currently ready quest warrants a Vesna return.
+ * Automatic exploration, combat and crypt milestones do not require dialogue.
+ */
+export function storyNeedsWardenTurnIn(questId: unknown): boolean {
+  return typeof questId === 'string' && ACT_I_MILESTONES.some(
+    beat => beat.questId === questId && beat.npcTurnInHint !== null
+  );
+}
+
 /** Quest status always takes precedence; never leak a crypt hint before entry. */
 export function getOnboardingStep(
   progress: OnboardingProgress, context: OnboardingContext
@@ -129,7 +138,8 @@ export function getOnboardingStep(
   if (Number.isSafeInteger(context.talentPoints) && (context.talentPoints ?? 0) > 0)
     return 'talent';
   if (context.questStatus === 'completed') {
-    if (context.storyQuestId && context.storyQuestStatus === 'ready') return 'storyReturn';
+    if (context.storyQuestId && context.storyQuestStatus === 'ready')
+      return storyNeedsWardenTurnIn(context.storyQuestId) ? 'storyReturn' : 'story';
     if (context.storyQuestId && context.storyQuestStatus === 'active') return 'story';
     return 'followup';
   }
