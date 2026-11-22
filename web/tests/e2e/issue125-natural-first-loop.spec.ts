@@ -126,10 +126,32 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(guide.getByRole('button', { name: 'Zobrazit objevenou mapu' })).toBeVisible();
   await page.locator('#game-language').selectOption('en');
 
+  // Regression guard: a genuine first-quest turn-in must survive a character
+  // save without changing XP, gold or the active story objective. No test-only
+  // bridge commands or fabricated character/quest state are involved.
+  const progressBeforeSave = await guide.getByTestId('onboarding-xp').innerText();
+  const hudBeforeSave = await page.locator('.hud-details').innerText();
+  const objectiveBeforeSave = await page.locator('.quest-journal').innerText();
+  expect(await game.getAttribute('data-zone')).toBe('wilderness');
+  await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
+
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await expect(guide.getByTestId('onboarding-xp')).toHaveText(progressBeforeSave);
+  await expect(page.locator('.hud-details')).toHaveText(hudBeforeSave);
+  await expect(page.locator('.quest-journal')).toHaveText(objectiveBeforeSave);
+  await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
+  await expect(game).toHaveAttribute('data-zone', 'wilderness');
+
+  // Reloaded map must still reveal only discovered locations. The active
+  // story hint cannot accidentally turn future quest markers into spoilers.
+  await guide.getByRole('button', { name: 'View discovered map' }).click();
+  await expect(map).toBeVisible();
+  await expect(map.locator('[data-fog="unexplored"]').first()).toBeVisible();
+  await expect(map.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
+  await map.getByTestId('map-close').click();
   // Turn-in immediately starts the next genuine Act I objective;
   // the journal correctly replaces the completed starter quest.
   await expect(page.locator('.quest-journal')).toContainText('Trail of Black Ash');
