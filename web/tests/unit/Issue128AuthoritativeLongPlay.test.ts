@@ -11,7 +11,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
-import { PACK_SIZE } from '../../src/game/enemies/enemies';
+import { PACK_SIZE, packTypesForWave } from '../../src/game/enemies/enemies';
+import { ACTOR_RADIUS, canOccupy } from '../../src/game/world/navigation';
+import { buildWilderness } from '../../src/game/world/wildernessRuntime';
 import type { GameEvent } from '../../src/game/core/types';
 
 describe('Issue 128: authoritative 33-enemy long-play across regular waves', () => {
@@ -65,7 +67,22 @@ describe('Issue 128: authoritative 33-enemy long-play across regular waves', () 
           zeroResource: { ...state, resource: 0 },
           noSelection: { ...state, selectedTargetId: null },
           noWarriorCooldowns: { ...state, warriorCooldowns: {} },
-          noEventView: { ...state, worldEvents: undefined }
+          noEventView: { ...state, worldEvents: undefined },
+          noMapDiscovery: { ...state, mapDiscovery: undefined },
+          noWorldFacts: { ...state, worldFacts: undefined },
+          noMapOrWorldFacts: { ...state, mapDiscovery: undefined, worldFacts: undefined },
+          noEnvironment: { ...state, environmentObjects: undefined },
+          noEnvironmentBlessings: { ...state, environmentBlessings: undefined },
+          noProjectiles: { ...state, projectiles: [] },
+          noDungeonProps: { ...state, cryptInteractables: undefined },
+          noMinibossStates: { ...state, miniBossStates: undefined },
+          noPotions: { ...state, potions: undefined },
+          noAllOptionalWorld: {
+            ...state, mapDiscovery: undefined, worldFacts: undefined,
+            worldEvents: undefined, environmentObjects: undefined,
+            miniBossStates: undefined, cryptInteractables: undefined,
+            activatedCheckpointIds: undefined, respawnAt: undefined
+          }
         };
         const probes = Object.fromEntries(
           Object.entries(variants).map(([key, value]) =>
@@ -85,6 +102,14 @@ describe('Issue 128: authoritative 33-enemy long-play across regular waves', () 
               })),
               loot: state.groundLoot.map(loot => ({ id: loot.id, item: loot.item.id })),
               quest: state.quest, worldEvents: state.worldEvents,
+              actorOccupancy: state.enemies.map(unit => ({
+                id: unit.actor.id,
+                occupy: canOccupy(unit.actor, ACTOR_RADIUS,
+                  buildWilderness(state.worldSeed).layout.obstacles)
+              })),
+              playerOccupancy: canOccupy(state.player, ACTOR_RADIUS,
+                buildWilderness(state.worldSeed).layout.obstacles),
+              expectedRoster: packTypesForWave(state.wave),
               probes
             }).slice(0, 5500)
         ).toBe(true);
