@@ -109,6 +109,42 @@ describe('Inventory equip / unequip through GameBridge', () => {
     expect(bridge.previewEquipment(5, 'BELT')).not.toBeNull();
   });
 
+  it('explains full-bag unequip and occupied exact destinations without changing any item', () => {
+    const bridge = new GameBridge();
+    const start = bridge.snapshot();
+    const belt = rollItemForBase('belt', 'full-bag-equipped-belt', 1, 'COMMON',
+      new SeededRng(88))!;
+    // 24 occupied cells: all item instance IDs are unique and valid.
+    const inventory = start.inventory.map((_, index) =>
+      rollItemForBase('helm', 'full-bag-item-' + index, 1, 'COMMON',
+        new SeededRng(100 + index))!);
+    expect(bridge.restore({ ...start, inventory,
+      equipment: { ...start.equipment, BELT: belt } })).toBe(true);
+    bridge.command({ type: 'pause', value: true });
+    const full = bridge.snapshot();
+
+    expect(bridge.equipmentRemovalError('BELT')).toBe('INVENTORY_FULL');
+    expect(bridge.equipmentRemovalError('BELT', 17)).toBe('SLOT_OCCUPIED');
+    expect(bridge.equipmentRemovalError('BELT', -1)).toBe('INVALID_INDEX');
+    expect(bridge.equipmentRemovalError('RELIC')).toBe('EMPTY_SLOT');
+    expect(bridge.snapshot()).toEqual(full);
+    bridge.command({ type: 'unequip', slot: 'BELT' });
+    expect(bridge.snapshot()).toEqual(full);
+
+    // A single free cell changes the exact planner result, not the item
+    // identity. Re-equip/unequip still work while the inventory is paused.
+    bridge.command({ type: 'dropInventory', index: 17 });
+    expect(bridge.snapshot().inventory[17]).toBeNull();
+    expect(bridge.equipmentRemovalError('BELT')).toBeNull();
+    expect(bridge.equipmentRemovalError('BELT', 17)).toBeNull();
+    const before = bridge.snapshot().inventory.filter(item => item !== null).length;
+    bridge.command({ type: 'unequip', slot: 'BELT' });
+    expect(bridge.snapshot().equipment.BELT).toBeNull();
+    expect(bridge.snapshot().inventory[17]?.id).toBe(belt.id);
+    expect(bridge.snapshot().inventory.filter(item => item !== null)).toHaveLength(before + 1);
+    expect(bridge.snapshot().paused).toBe(true);
+  });
+
   it('rejects invalid occupied destination without losing the equipped item', () => {
     const bridge = new GameBridge();
     const initial = bridge.snapshot();
