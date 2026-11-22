@@ -105,13 +105,19 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(warden).toBeVisible({ timeout: 18_000 });
   await warden.getByRole('button', { name: 'Complete quest' }).click();
   await warden.getByRole('button', { name: 'Leave' }).click();
-  await expect(page.locator('.quest-journal')).toContainText('Quest completed');
+  // Turn-in immediately starts the next genuine Act I objective;
+  // the journal correctly replaces the completed starter quest.
+  await expect(page.locator('.quest-journal')).toContainText('Trail of Black Ash');
+  await expect(guide).toHaveAttribute('data-guide-step', 'followup');
 
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
-  await expect(page.locator('.quest-journal')).toContainText('Quest completed');
+  // Turn-in immediately starts the next genuine Act I objective;
+  // the journal correctly replaces the completed starter quest.
+  await expect(page.locator('.quest-journal')).toContainText('Trail of Black Ash');
+  await expect(guide).toHaveAttribute('data-guide-step', 'followup');
 });
 
 test.describe('touch input', () => {
