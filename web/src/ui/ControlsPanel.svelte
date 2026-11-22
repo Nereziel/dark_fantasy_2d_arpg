@@ -21,7 +21,8 @@
   function currentLabel(action: InputAction): string {
     return bindings.filter(binding => binding.action === action)
       .map(binding => binding.device === 'keyboard'
-        ? keyboardBindingLabel(binding) : 'Mouse ' + binding.button)
+        ? binding.modifiers ? keyboardBindingLabel(binding) : binding.code
+        : 'Mouse ' + binding.button)
       .join(' / ') || '—';
   }
   function assign(binding: InputBinding): void {
