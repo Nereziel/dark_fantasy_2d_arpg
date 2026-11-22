@@ -281,6 +281,7 @@
               style:grid-area={slot}
               style:border-color={item ? RARITIES[item.rarity].color : undefined}
               data-equipment-slot={slot}
+              data-item-id={item?.id}
               draggable={!!item}
               onpointerdown={(event) => { touchInput = event.pointerType !== 'mouse'; }}
               ondragstart={(event) => startDrag(event, { kind: 'gear', slot })}
@@ -382,6 +383,7 @@
                class:drop-invalid={!!placementSource && isDropHover({ kind: 'bag', index }) && !canPlace({ kind: 'bag', index })}
               style:border-color={item ? RARITIES[item.rarity].color : undefined}
               data-bag-index={index}
+              data-item-id={item?.id}
               disabled={filtered}
               draggable={!!item && !filtered}
               onpointerdown={(event) => { touchInput = event.pointerType !== 'mouse'; }}
