@@ -375,9 +375,10 @@
       }
     });
     const unsubscribe = bridge.subscribe((latest) => {
-      // Any pause/death source, including NPCs and modal screens, releases input.
-      if (latest.paused || !latest.player.alive) heldPosition.clear();
       view = latest;
+      // Input release can synchronously emit a newer snapshot. Never overwrite
+      // that release with the stale pre-release snapshot in this callback.
+      if (latest.paused || !latest.player.alive) heldPosition.clear();
       audio.setZone(latest.zone);
       audio.setPaused(!playing || latest.paused);
       if (playing) {
