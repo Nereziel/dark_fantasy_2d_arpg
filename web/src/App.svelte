@@ -4,7 +4,7 @@
   import { languageOptions, setLanguage, type Language } from './i18n';
   import { GameBridge } from './game/bridge/GameBridge';
   import type { GameSnapshot, Point } from './game/core/types';
-  import { resolveKeyboardAction, rebindAction, type InputBinding, type InputAction } from './game/input/bindings';
+  import { resolveKeyboardAction, applyBindingOverrides, type InputBinding, type InputAction } from './game/input/bindings';
   import { GAME_BINDINGS } from './game/input/gameBindings';
   import { prioritizeCombatRoster } from './game/ui/combatRoster';
   import { loadGame, saveGame, listCharacters, deleteCharacter, MAX_SAVED_CHARACTERS, type SavedCharacterInfo } from './persistence/SaveRepository';
@@ -320,13 +320,11 @@
     try {
       const raw = JSON.parse(window.localStorage.getItem(controlsStorage) ?? '[]');
       if (Array.isArray(raw) && raw.length <= 25) {
-        let result: readonly InputBinding[] = GAME_BINDINGS;
-        for (const value of raw) {
-          const applied = rebindAction(result, value as InputBinding);
-          if (!applied.ok) throw new Error('Invalid control mapping');
-          result = applied.bindings;
-        }
-        controlBindings = result.map(binding => ({ ...binding }));
+        // Restore the whole v1 override set atomically: a legal LMB/RMB swap
+        // cannot be replayed one action at a time without a false collision.
+        const result = applyBindingOverrides(GAME_BINDINGS, raw as InputBinding[]);
+        if (!result.ok) throw new Error('Invalid control mapping');
+        controlBindings = result.bindings;
         bridge.setBindings(controlBindings);
       }
     } catch { /* Invalid settings fall back to defaults. */ }
@@ -926,7 +924,7 @@
         <div class="minimap-overlay" data-minimap="active">
           <WorldMapCanvas projection={miniProjection} compact />
           <button onclick={(event) => openMap(event.currentTarget)} disabled={view.paused} aria-label={$t('map.open')}>
-            {$t('map.open')} · M
+            {$t('map.open')} · {shortcutHint(controlBindings, 'MAP')}
           </button>
         </div>
       {/if}

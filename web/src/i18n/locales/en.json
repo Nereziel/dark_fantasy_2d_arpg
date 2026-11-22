@@ -837,6 +837,7 @@
     "pressShort": "Press…",
     "change": "Change",
     "reset": "Restore defaults",
+    "swapMouse": "Swap primary / secondary mouse buttons",
     "close": "Back",
     "reserved": "Some reserved skills and future panels are not yet active. Bindings are saved on this device, separately from your character.",
     "CONFLICT": "This key or button is already assigned.",
