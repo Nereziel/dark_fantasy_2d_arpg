@@ -557,18 +557,23 @@
       }
       return;
     }
+    const target = event.target;
+    const isTyping = target instanceof HTMLElement
+      && !!target.closest('input, textarea, select, [contenteditable="true"]');
+    // A single binding resolver owns every configured shortcut, including
+    // modal open/close. Do not hardcode KeyM or KeyT after the user rebinds.
+    const action = resolveKeyboardAction({
+      code: event.code, repeat: event.repeat, isTyping, uiCaptured: false
+    }, bridge.bindings());
     if (talentsOpen) {
-      if (event.code === 'Escape') {
+      if (event.code === 'Escape' || action === 'MENU' || action === 'TALENTS') {
         event.preventDefault();
         closeTalents();
       }
       return;
     }
-    const target = event.target;
-    const isTyping = target instanceof HTMLElement
-      && !!target.closest('input, textarea, select, [contenteditable="true"]');
     if (mapOpen) {
-      if (event.code === 'Escape' || (!isTyping && event.code === 'KeyM')) {
+      if (event.code === 'Escape' || action === 'MENU' || action === 'MAP') {
         event.preventDefault();
         closeMap();
       } else if (!isTyping) {
@@ -590,15 +595,17 @@
       }
       return;
     }
-    if (!isTyping && event.code === 'KeyM' && !event.repeat) {
+    if (action === 'MAP') {
       event.preventDefault();
       openMap();
       return;
     }
-    const action = resolveKeyboardAction({
-      code: event.code, repeat: event.repeat, isTyping, uiCaptured: false
-    }, bridge.bindings());
     if (!action) return;
+    if (action === 'TALENTS') {
+      event.preventDefault();
+      openTalents();
+      return;
+    }
 
     if (action === 'MENU') {
       event.preventDefault();
