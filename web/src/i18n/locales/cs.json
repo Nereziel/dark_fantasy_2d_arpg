@@ -1493,5 +1493,17 @@
     "uiScale": "Velikost rozhraní",
     "floatingText": "Plovoucí text poškození",
     "highContrast": "Vysoký kontrast"
+  },
+  "audioSettings": {
+    "title": "Zvuk a hlasitost",
+    "description": "Původní syntetizované efekty. Zvuk se aktivuje až po stisku klávesy nebo klepnutí. Nastavení platí pro tento prohlížeč.",
+    "mute": "Ztlumit vše",
+    "master": "Celková hlasitost",
+    "music": "Hudba",
+    "ambience": "Prostředí",
+    "combat": "Souboj",
+    "monsters": "Monstra",
+    "spells": "Kouzla",
+    "ui": "Rozhraní"
   }
 }
