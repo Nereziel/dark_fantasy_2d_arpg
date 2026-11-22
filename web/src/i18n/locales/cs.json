@@ -829,6 +829,24 @@
       "utility": "Ostatní vlastnosti"
     }
   },
+  "onboarding": {
+    "title": "První kroky",
+    "show": "Zobrazit rady",
+    "skip": "Skrýt rady",
+    "next": "Další rada",
+    "restart": "Začít rady znovu",
+    "steps": {
+      "warden": "Začni rozhovorem se strážkyní Vesnou. Po zemi se pohybuješ přes {primary}; na dotyku klepni na cíl.",
+      "move": "Vydej se za tábor. Pro pohyb klikni na zem ({primary}); na dotyku klepni na cílové místo.",
+      "attack": "Na nepřítele útoč přes {primary}, {secondary} nebo tlačítko schopnosti. Na dotyku vyber cíl a použij bojový panel.",
+      "loot": "Po poražení nepřítele klikni nebo klepni na kořist. Inventář otevřeš přes {inventory} nebo ikonu brašny.",
+      "equip": "Otevři inventář ({inventory}), porovnej vybavení a předmět nasaď nebo přetáhni do platného slotu.",
+      "objective": "Sleduj aktuální úkol v deníku. Na mapě používej jen objevené oblasti. Lektvar: {potion}.",
+      "return": "První úkol je připravený k odevzdání. Vrať se ke strážkyni Vesně pro odměnu.",
+      "followup": "První úkol je splněn. Zkontroluj deník a pro další úkol promluv s Vesnou.",
+      "dungeon": "Dorazil jsi do krypty. Sleduj úkol a objevené cesty, využívej schopnosti a lektvary."
+    }
+  },
   "bindings": {
     "title": "Nastavení ovládání",
     "open": "Ovládání",

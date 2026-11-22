@@ -829,6 +829,24 @@
       "utility": "Utility"
     }
   },
+  "onboarding": {
+    "title": "First steps",
+    "show": "Show tips",
+    "skip": "Hide tips",
+    "next": "Next tip",
+    "restart": "Restart tips",
+    "steps": {
+      "warden": "Meet Warden Vesna to begin. Move with {primary} on the ground; on touch, tap a destination.",
+      "move": "Move beyond the camp with {primary} on the ground. On touch, tap where you want to walk.",
+      "attack": "Attack a nearby foe with {primary}, {secondary}, or a skill button. On touch, tap a target or use the combat dock.",
+      "loot": "After defeating an enemy, click or tap dropped loot. Open inventory with {inventory} or the bag button.",
+      "equip": "Open inventory ({inventory}), inspect an item against equipped gear, then equip or drag it into a valid slot.",
+      "objective": "Follow the current quest in the journal. Consult only discovered areas on the map. Potion: {potion}.",
+      "return": "Your first objective is ready. Return to Warden Vesna to report and collect the reward.",
+      "followup": "Your first quest is complete. Check the journal and speak with Vesna for your next objective.",
+      "dungeon": "You reached the crypt. Follow your current quest and discovered paths; use your skills and potions."
+    }
+  },
   "bindings": {
     "title": "Input bindings",
     "open": "Controls",
