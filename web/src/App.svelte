@@ -657,7 +657,9 @@
     // A single binding resolver owns every configured shortcut, including
     // modal open/close. Do not hardcode KeyM or KeyT after the user rebinds.
     const action = resolveKeyboardAction({
-      code: event.code, repeat: event.repeat, isTyping, uiCaptured: false
+      code: event.code, repeat: event.repeat, isTyping, uiCaptured: false,
+      ctrlKey: event.ctrlKey, altKey: event.altKey,
+      shiftKey: event.shiftKey, metaKey: event.metaKey
     }, bridge.bindings());
     if (talentsOpen) {
       if (event.code === 'Escape' || action === 'MENU' || action === 'TALENTS') {
