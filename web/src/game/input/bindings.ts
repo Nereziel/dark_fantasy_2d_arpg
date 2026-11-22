@@ -30,6 +30,8 @@ export type KeyboardInput = {
   altKey?: boolean;
   shiftKey?: boolean;
   metaKey?: boolean;
+  /** True when KeyboardEvent.getModifierState('AltGraph') is active. */
+  altGraphKey?: boolean;
 };
 
 export type PointerInput = { button: number; uiCaptured: boolean };
@@ -168,11 +170,15 @@ export function resolveKeyboardAction(
 ): InputAction | null {
   if (!input || input.uiCaptured || input.isTyping || !isKeyboardCode(input.code)
     || !Array.isArray(bindings)
-    || ['ctrlKey', 'altKey', 'shiftKey', 'metaKey'].some(k => {
+    || ['ctrlKey', 'altKey', 'shiftKey', 'metaKey', 'altGraphKey'].some(k => {
       const flag = input[k as keyof KeyboardInput];
       return flag !== undefined && typeof flag !== 'boolean';
     })) return null;
 
+  // AltGr commonly appears as Ctrl+Alt (or as AltGraph alone depending on
+  // OS/browser). Neither may accidentally invoke a standalone Ctrl/Alt action.
+  // Ctrl+Alt bindings are deliberately invalid, so this cannot hide a valid chord.
+  if (input.altGraphKey || (input.ctrlKey && input.altKey)) return null;
   if (input.metaKey && input.code !== 'MetaLeft' && input.code !== 'MetaRight') return null;
   const ctrl = !!input.ctrlKey, alt = !!input.altKey, shift = !!input.shiftKey;
   let action: InputAction | null = null;

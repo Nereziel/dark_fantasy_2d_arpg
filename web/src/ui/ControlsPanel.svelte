@@ -12,6 +12,9 @@
   let capturing: InputAction | null = $state(null);
   let error = $state('');
   let pendingModifier: string | null = $state(null);
+  // Some browsers synthesize CtrlLeft before AltRight for AltGr; track the
+  // AltRight release so that it cannot be mistaken for a standalone binding.
+  let altGraphHeld = false;
   const actions: readonly InputAction[] = [
     'PRIMARY', 'SECONDARY', 'FORCE_MOVE', 'HOLD_POSITION',
     'SLOT_1', 'SLOT_2', 'SLOT_3', 'SLOT_4', 'SLOT_5', 'SLOT_6',
@@ -28,6 +31,7 @@
   function assign(binding: InputBinding): void {
     const result = rebindAction(bindings, binding);
     pendingModifier = null;
+    altGraphHeld = false;
     if (result.ok) {
       save(result.bindings);
       error = '';
@@ -41,6 +45,7 @@
       error = '';
       capturing = null;
       pendingModifier = null;
+      altGraphHeld = false;
     } else error = result.reason;
   }
   function captureKey(event: KeyboardEvent): void {
@@ -50,7 +55,18 @@
     if (event.code === 'Escape') {
       capturing = null;
       pendingModifier = null;
+      altGraphHeld = false;
       error = '';
+      return;
+    }
+    const altGraph = event.getModifierState('AltGraph') || event.key === 'AltGraph'
+      || (event.code === 'AltRight' && event.ctrlKey && event.altKey);
+    // AltGr is a text-entry modifier, not a bindable game shortcut. Ctrl+Alt
+    // is reserved for keyboard layouts as well as OS/browser accelerators.
+    if (altGraph || (event.ctrlKey && event.altKey) || altGraphHeld) {
+      if (altGraph && event.code === 'AltRight') altGraphHeld = true;
+      pendingModifier = null;
+      error = 'INVALID';
       return;
     }
     // A modifier alone is captured on keyup. If a second key arrives first,
@@ -75,6 +91,16 @@
     if (!capturing || !isModifierCode(event.code)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    if (event.code === 'AltRight' && altGraphHeld) {
+      altGraphHeld = false;
+      pendingModifier = null;
+      return;
+    }
+    if (event.key === 'AltGraph' || event.getModifierState('AltGraph')
+      || (event.ctrlKey && event.altKey)) {
+      pendingModifier = null;
+      return;
+    }
     if (pendingModifier !== event.code) return;
     pendingModifier = null;
     if (/^Meta/.test(event.code)) { error = 'INVALID'; return; }
@@ -85,6 +111,7 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     pendingModifier = null;
+    altGraphHeld = false;
     assign({ action: capturing, device: 'mouse', button: event.button });
   }
 </script>
@@ -104,7 +131,7 @@
         <span class="binding-action">{$t('bindings.actions.' + action)}</span>
         <code>{currentLabel(action)}</code>
         <button disabled={capturing !== null && capturing !== action}
-          onclick={() => { capturing = action; pendingModifier = null; error = ''; }}>
+          onclick={() => { capturing = action; pendingModifier = null; altGraphHeld = false; error = ''; }}>
           {$t(capturing === action ? 'bindings.pressShort' : 'bindings.change')}
         </button>
       </div>
@@ -113,8 +140,8 @@
   <div class="controls-footer">
     <button type="button" data-testid="swap-primary-secondary" disabled={capturing !== null}
       onclick={swapMouseButtons}>{$t('bindings.swapMouse')}</button>
-    <button onclick={() => { capturing = null; pendingModifier = null; error = ''; save([]); }}>{$t('bindings.reset')}</button>
-    <button class="primary" onclick={() => { capturing = null; pendingModifier = null; close(); }}>{$t('bindings.close')}</button>
+    <button onclick={() => { capturing = null; pendingModifier = null; altGraphHeld = false; error = ''; save([]); }}>{$t('bindings.reset')}</button>
+    <button class="primary" onclick={() => { capturing = null; pendingModifier = null; altGraphHeld = false; close(); }}>{$t('bindings.close')}</button>
   </div>
   <small>{$t('bindings.reserved')}</small>
 </div>
