@@ -33,7 +33,7 @@
     </div>
     <div class="setting-row">
       <label for="visual-shake">{$t('visualSettings.shake')}</label>
-      <select id="visual-shake" data-testid="visual-shake" value={preferences.shake}
+      <select id="visual-shake" data-testid="visual-shake" value={String(preferences.shake)}
         onchange={(event) => change({ shake: Number(event.currentTarget.value) as CameraShakePreference })}>
         <option value="0">{$t('visualSettings.off')}</option>
         <option value="0.5">{$t('visualSettings.half')}</option>
@@ -42,7 +42,7 @@
     </div>
     <div class="setting-row">
       <label for="visual-scale">{$t('visualSettings.uiScale')}</label>
-      <select id="visual-scale" data-testid="visual-scale" value={preferences.uiScale}
+      <select id="visual-scale" data-testid="visual-scale" value={String(preferences.uiScale)}
         onchange={(event) => change({ uiScale: Number(event.currentTarget.value) as UiScalePreference })}>
         <option value="0.9">90%</option>
         <option value="1">100%</option>
