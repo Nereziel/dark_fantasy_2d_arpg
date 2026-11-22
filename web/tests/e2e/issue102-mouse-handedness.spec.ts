@@ -42,9 +42,11 @@ test('primary and secondary mouse bindings swap atomically and persist across re
   expect(box).not.toBeNull();
   await page.mouse.click(box!.x + box!.width / 2 + 155,
     box!.y + box!.height / 2 + 75, { button: 'right' });
-  await expect.poll(async () => page.locator('.game-screen').evaluate(node =>
-    Math.hypot(Number(node.getAttribute('data-player-x')) - start.x,
-      Number(node.getAttribute('data-player-y')) - start.y)
+  // Playwright executes locator.evaluate in the browser: pass the origin as an
+  // explicit argument rather than capturing the test runner's local variable.
+  await expect.poll(async () => page.locator('.game-screen').evaluate((node, origin) =>
+    Math.hypot(Number(node.getAttribute('data-player-x')) - origin.x,
+      Number(node.getAttribute('data-player-y')) - origin.y), start
   ), { timeout: 10000 }).toBeGreaterThan(3);
 
   await page.reload();
