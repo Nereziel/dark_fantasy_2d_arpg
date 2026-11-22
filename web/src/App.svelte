@@ -588,7 +588,10 @@
   function handlePointerUiContextMenu(event: MouseEvent): void {
     // Right-button UI bindings must not leave a browser context menu hanging
     // over the game after a modal opens or closes.
-    if (pointerUiOperation(event.button, event.target)) event.preventDefault();
+    const action = resolvePointerAction({ button: event.button, uiCaptured: false }, bridge.bindings());
+    if (pointerUiSurface(event.target) !== 'other'
+      && (action === 'MAP' || action === 'TALENTS' || action === 'INVENTORY'
+        || action === 'CHARACTER' || action === 'MENU')) event.preventDefault();
   }
 
   function handleKeydown(event: KeyboardEvent): void {

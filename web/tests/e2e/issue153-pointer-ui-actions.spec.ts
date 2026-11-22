@@ -15,7 +15,7 @@ test('mouse-bound map shortcut opens and closes on backdrop, then persists on re
   await secondary.getByRole('button', { name: 'Change' }).click();
   await page.keyboard.press('y');
   await expect(secondary.locator('code')).toHaveText('KeyY');
-  const map = controls.locator('.binding-row').filter({ hasText: 'Map', hasNotText: 'mouse' });
+  const map = controls.locator('.binding-row').filter({ hasText: 'Map' });
   await map.getByRole('button', { name: 'Change' }).click();
   await page.mouse.click(180, 180, { button: 'right' });
   await expect(map.locator('code')).toHaveText('Mouse 2');
@@ -46,7 +46,7 @@ test('mouse-bound map shortcut opens and closes on backdrop, then persists on re
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Controls' }).click();
   const reopened = page.getByRole('dialog', { name: 'Input bindings' });
-  await expect(reopened.locator('.binding-row').filter({ hasText: 'Map', hasNotText: 'mouse' }).locator('code'))
+  await expect(reopened.locator('.binding-row').filter({ hasText: 'Map' }).locator('code'))
     .toHaveText('Mouse 2');
 });
 
