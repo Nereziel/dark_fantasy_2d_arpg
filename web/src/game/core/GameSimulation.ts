@@ -4550,8 +4550,9 @@ export class GameSimulation {
     // activates the next quest while the dead boar actors are still present.
     // Accept only the entire canonical three-boar pack with stable wave IDs,
     // never a forged mixture of normal wave mobs and story boars.
-    const blightedProgress = s?.questLedger?.quests?.find(entry =>
-      entry?.questId === 'blighted_pack');
+    const blightedProgress = Array.isArray(s?.questLedger?.quests)
+      ? s.questLedger.quests.find(entry => entry?.questId === 'blighted_pack')
+      : undefined;
     const storyBoarPack = s?.zone === 'wilderness' && s.wave >= 3
       && (s.wave - 3) % 4 === 0
       && (blightedProgress?.status === 'active'
