@@ -71,6 +71,11 @@ export class GameBridge implements GameStateReader {
     ReturnType<GameSimulation['equipmentPlacementError']> {
     return this.simulation.equipmentPlacementError(index, slot);
   }
+  /** Read-only reason for the first free bag cell or one exact drag target. */
+  equipmentRemovalError(slot: EquipmentSlot, destinationIndex?: number):
+    ReturnType<GameSimulation['equipmentRemovalError']> {
+    return this.simulation.equipmentRemovalError(slot, destinationIndex);
+  }
   restoreCharacter(progress: CharacterProgress, worldSeed = newSessionSeed()): boolean {
     this.pointerWorld = null;
     this.pointerEnemy = null;
