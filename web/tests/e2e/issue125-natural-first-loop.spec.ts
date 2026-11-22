@@ -53,6 +53,16 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
   const journal = page.locator('.quest-journal');
   const deadline = Date.now() + timeoutMs;
   let stalled = 0;
+  let waypointIndex = 0;
+  let waypointTicks = 0;
+  // Search the authored region, not a hidden procedural feature coordinate.
+  // The mandatory site can shift to the nearest reachable grid candidate.
+  const waypoints = [
+    { x: 1550, y: 280 }, { x: 1490, y: 200 }, { x: 1620, y: 200 },
+    { x: 1640, y: 320 }, { x: 1550, y: 390 }, { x: 1440, y: 330 },
+    { x: 1420, y: 190 }, { x: 1720, y: 280 }, { x: 1700, y: 410 },
+    { x: 1420, y: 420 }
+  ];
   while (Date.now() < deadline) {
     if ((await journal.innerText()).includes('The Blighted Pack')) return;
     if (await page.getByTestId('death-overlay').count()) {
@@ -76,19 +86,32 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
 
     const rect = await canvas.boundingBox();
     if (!rect) throw new Error('Phaser canvas missing during story exploration');
-    // The camera follows the hero. Short, onscreen FORCE_MOVE steps avoid
-    // targeting hostiles accidentally; this is the default middle-mouse action.
-    const aimX = 0.5 + Math.max(-0.13, Math.min(0.13, (1550 - x) / 950));
-    const aimY = 0.5 + Math.max(-0.13, Math.min(0.13, (280 - y) / 950));
-    await page.mouse.click(rect.x + rect.width * aimX,
-      rect.y + rect.height * aimY, { button: 'middle' });
+    const { width, height } = await canvas.evaluate(node => ({
+      width: node.width, height: node.height
+    }));
+    const waypoint = waypoints[waypointIndex]!;
+    // Phaser's camera clamps to world edges: a hero north of the viewport
+    // midpoint is NOT drawn at canvas center. Project the target using the
+    // clamped camera scroll, then choose a safe on-screen middle-mouse click.
+    const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
+    const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
+    const screenX = Math.max(width * 0.35,
+      Math.min(width * 0.67, waypoint.x - scrollX));
+    const screenY = Math.max(height * 0.23,
+      Math.min(height * 0.68, waypoint.y - scrollY));
+    await page.mouse.click(rect.x + rect.width * screenX / width,
+      rect.y + rect.height * screenY / height, { button: 'middle' });
     await page.waitForTimeout(1200);
     const nextX = Number(await game.getAttribute('data-player-x'));
     const nextY = Number(await game.getAttribute('data-player-y'));
     stalled = Math.hypot(nextX - x, nextY - y) < 6 ? stalled + 1 : 0;
-    if (stalled >= 5) throw new Error(
-      'Natural Act I movement stalled near ' + nextX + ',' + nextY
-    );
+    waypointTicks += 1;
+    if (Math.hypot(nextX - waypoint.x, nextY - waypoint.y) < 45
+      || waypointTicks >= 12 || stalled >= 4) {
+      waypointIndex = (waypointIndex + 1) % waypoints.length;
+      waypointTicks = 0;
+      stalled = 0;
+    }
   }
   throw new Error('Natural Act I exploration timed out at (' +
     await game.getAttribute('data-player-x') + ',' +
