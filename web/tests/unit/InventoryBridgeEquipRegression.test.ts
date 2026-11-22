@@ -34,6 +34,50 @@ describe('Inventory equip / unequip through GameBridge', () => {
     expect(bridge.snapshot().inventory[17]).toBeNull();
   });
 
+  it('allows paused inventory swaps, sort, flags and protected drops without unpausing gameplay', () => {
+    const bridge = new GameBridge();
+    const initial = bridge.snapshot();
+    const first = rollItemForBase('belt', 'pause-belt-a', 1, 'COMMON', new SeededRng(46))!;
+    const second = rollItemForBase('belt', 'pause-belt-b', 1, 'COMMON', new SeededRng(47))!;
+    const inventory = [...initial.inventory];
+    inventory[0] = first;
+    inventory[1] = second;
+    expect(bridge.restore({ ...initial, inventory })).toBe(true);
+    bridge.command({ type: 'pause', value: true });
+    expect(bridge.snapshot().paused).toBe(true);
+
+    bridge.command({ type: 'swapInventory', fromIndex: 0, toIndex: 1 });
+    expect(bridge.snapshot().inventory[0]?.id).toBe(second.id);
+    expect(bridge.snapshot().inventory[1]?.id).toBe(first.id);
+
+    bridge.command({ type: 'sortInventory' });
+    expect(bridge.snapshot().inventory[0]?.id).toBe(first.id);
+    expect(bridge.snapshot().inventory[1]?.id).toBe(second.id);
+    bridge.command({ type: 'setItemFlag', itemId: first.id, flag: 'locked', value: true });
+    expect(bridge.snapshot().itemFlags?.[first.id]?.locked).toBe(true);
+
+    const beforeProtected = bridge.snapshot();
+    bridge.command({ type: 'dropInventory', index: 0 });
+    expect(bridge.snapshot().inventory[0]?.id).toBe(first.id);
+    expect(bridge.snapshot().groundLoot).toEqual(beforeProtected.groundLoot);
+
+    bridge.command({ type: 'setItemFlag', itemId: first.id, flag: 'locked', value: false });
+    bridge.command({ type: 'dropInventory', index: 0 });
+    expect(bridge.snapshot().inventory[0]).toBeNull();
+    expect(bridge.snapshot().groundLoot.some(drop => drop.item.id === first.id)).toBe(true);
+    expect(bridge.snapshot().paused).toBe(true);
+
+    // A paused inventory does not let a queued movement/combat escape when
+    // the user closes the modal.
+    const beforeMovement = bridge.snapshot().player;
+    bridge.command({ type: 'move', destination: { x: 620, y: 480 } });
+    bridge.tick(1000);
+    bridge.command({ type: 'pause', value: false });
+    bridge.tick(500);
+    expect(bridge.snapshot().player.x).toBe(beforeMovement.x);
+    expect(bridge.snapshot().player.y).toBe(beforeMovement.y);
+  });
+
   it('rejects invalid occupied destination without losing the equipped item', () => {
     const bridge = new GameBridge();
     const initial = bridge.snapshot();
