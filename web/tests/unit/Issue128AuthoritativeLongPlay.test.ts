@@ -52,11 +52,19 @@ describe('Issue 128: authoritative 33-enemy long-play across regular waves', () 
       const target = living[0]!.actor;
       // Like an automated checkpoint between encounters. No enemy data,
       // cooldowns, combat damage, kill ledger, XP or wave counter is forged.
-      expect(sim.restore({
-        ...state,
-        player: { ...state.player, x: target.x, y: target.y,
+      expect(sim.restore(state),
+        'baseline snapshot cannot be restored before wave ' + state.wave
+          + ' target ' + target.id).toBe(true);
+      const checkpoint = {
+        ...state, player: { ...state.player, x: target.x, y: target.y,
           health: state.player.maxHealth }
-      })).toBe(true);
+      };
+      expect(sim.restore(checkpoint),
+        'checkpoint relocation rejected in wave ' + state.wave
+        + ' for ' + target.id + ' at ' + target.x + ',' + target.y
+        + ' player was ' + state.player.x + ',' + state.player.y
+        + ' with ' + state.player.health + '/' + state.player.maxHealth
+      ).toBe(true);
       sim.command({ type: 'attack', targetId: target.id });
       attacks++;
 
