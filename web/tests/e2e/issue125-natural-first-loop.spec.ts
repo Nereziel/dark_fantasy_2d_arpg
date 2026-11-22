@@ -129,6 +129,17 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // Regression guard: a genuine first-quest turn-in must survive a character
   // save without changing XP, gold or the active story objective. No test-only
   // bridge commands or fabricated character/quest state are involved.
+  // The actual item equipped from ground loot must retain its identity and
+  // slot after reload, not merely survive as a duplicated bag item.
+  await page.locator('[data-quick-action="inventory"]').click();
+  const gearBeforeSave = await inventory.locator('.equipment-slot.has-item')
+    .evaluateAll(nodes => nodes.map(node => ({
+      slot: node.getAttribute('data-equipment-slot'),
+      label: node.getAttribute('aria-label')
+    })));
+  expect(gearBeforeSave.length).toBeGreaterThan(0);
+  await inventory.locator('.close-button').click();
+
   const progressBeforeSave = await guide.getByTestId('onboarding-xp').innerText();
   const hudBeforeSave = await page.locator('.hud-details').innerText();
   const objectiveBeforeSave = await page.locator('.quest-journal').innerText();
@@ -142,6 +153,14 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(guide.getByTestId('onboarding-xp')).toHaveText(progressBeforeSave);
   await expect(page.locator('.hud-details')).toHaveText(hudBeforeSave);
   await expect(page.locator('.quest-journal')).toHaveText(objectiveBeforeSave);
+  await page.locator('[data-quick-action="inventory"]').click();
+  const gearAfterSave = await inventory.locator('.equipment-slot.has-item')
+    .evaluateAll(nodes => nodes.map(node => ({
+      slot: node.getAttribute('data-equipment-slot'),
+      label: node.getAttribute('aria-label')
+    })));
+  expect(gearAfterSave).toEqual(gearBeforeSave);
+  await inventory.locator('.close-button').click();
   await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
   await expect(game).toHaveAttribute('data-zone', 'wilderness');
 
