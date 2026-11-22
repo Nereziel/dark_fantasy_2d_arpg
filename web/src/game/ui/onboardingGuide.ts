@@ -125,7 +125,9 @@ export function observeOnboardingEvent(
 export function observeOnboardingSnapshot(
   progress: OnboardingProgress,
   view: { player: { x: number; y: number }; equipment: unknown },
-  origin: { x: number; y: number }
+  origin: { x: number; y: number },
+  /** Optional baseline prevents starter gear being mistaken for an equip action. */
+  initialEquipmentIds: readonly string[] = []
 ): OnboardingProgress {
   let next = progress;
   if (!next.evidence.moved && Number.isFinite(origin.x) && Number.isFinite(origin.y)
@@ -134,9 +136,14 @@ export function observeOnboardingSnapshot(
     next = record(next, 'moved');
   }
   if (!next.evidence.equipped && view.equipment && typeof view.equipment === 'object'
-    && !Array.isArray(view.equipment)
-    && Object.values(view.equipment).some(item => item !== null && item !== undefined)) {
-    next = record(next, 'equipped');
+    && !Array.isArray(view.equipment)) {
+    const equippedIds = Object.values(view.equipment)
+      .filter((item): item is { id: string } =>
+        !!item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string')
+      .map(item => item.id);
+    if (equippedIds.some(id => !initialEquipmentIds.includes(id))) {
+      next = record(next, 'equipped');
+    }
   }
   return next;
 }

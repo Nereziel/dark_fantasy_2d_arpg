@@ -94,4 +94,18 @@ describe('Issue #125: first-play guide is a read-only projection of the tutorial
     expect(next.evidence.pickedUp).toBe(true);
     expect(next.evidence.attacked).toBe(false);
   });
+  it('starter equipment alone is not credited as an equipment tutorial action', () => {
+    const p = freshOnboarding();
+    const starter = observeOnboardingSnapshot(p, {
+      player: { x: 20, y: 20 },
+      equipment: { MAIN_HAND: { id: 'starter-sword' } }
+    }, { x: 20, y: 20 }, ['starter-sword']);
+    expect(starter).toBe(p);
+    const changed = observeOnboardingSnapshot(starter, {
+      player: { x: 20, y: 20 },
+      equipment: { MAIN_HAND: { id: 'new-sword' } }
+    }, { x: 20, y: 20 }, ['starter-sword']);
+    expect(changed.evidence.equipped).toBe(true);
+  });
+
 });

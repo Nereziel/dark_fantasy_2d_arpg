@@ -65,6 +65,7 @@
   let onboardingProgress: OnboardingProgress = $state(freshOnboarding());
   let onboardingCharacterId: string | null = null;
   let onboardingOrigin: Point | null = null;
+  let onboardingStarterEquipmentIds: string[] = [];
 
   function storeOnboarding(next: OnboardingProgress): void {
     if (next === onboardingProgress) return;
@@ -81,6 +82,9 @@
     onboardingCharacterId = id;
     const snapshot = bridge.snapshot();
     onboardingOrigin = { x: snapshot.player.x, y: snapshot.player.y };
+    onboardingStarterEquipmentIds = Object.values(snapshot.equipment)
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .map(item => item.id);
     const key = onboardingStorageKey(id);
     let progress = freshOnboarding();
     if (key) {
@@ -88,7 +92,9 @@
       catch { /* No local storage is not a game error. */ }
     }
     onboardingProgress = progress;
-    storeOnboarding(observeOnboardingSnapshot(progress, snapshot, onboardingOrigin));
+    storeOnboarding(observeOnboardingSnapshot(
+      progress, snapshot, onboardingOrigin, onboardingStarterEquipmentIds
+    ));
   }
 
   function advanceOnboarding(): void {
@@ -100,6 +106,9 @@
   function showGuide(): void { storeOnboarding(resumeOnboarding(onboardingProgress)); }
   function resetGuide(): void {
     onboardingOrigin = { x: view.player.x, y: view.player.y };
+    onboardingStarterEquipmentIds = Object.values(view.equipment)
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .map(item => item.id);
     storeOnboarding(freshOnboarding());
   }
   // Read-only display projection; never reorder GameSimulation's enemy array.
@@ -427,7 +436,9 @@
       view = latest;
       if (playing && onboardingOrigin && onboardingCharacterId ===
         (bridge.character().characterId ?? 'hero')) {
-        storeOnboarding(observeOnboardingSnapshot(onboardingProgress, latest, onboardingOrigin));
+        storeOnboarding(observeOnboardingSnapshot(
+          onboardingProgress, latest, onboardingOrigin, onboardingStarterEquipmentIds
+        ));
       }
       // Input release can synchronously emit a newer snapshot. Never overwrite
       // that release with the stale pre-release snapshot in this callback.
