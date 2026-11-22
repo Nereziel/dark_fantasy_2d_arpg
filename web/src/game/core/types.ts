@@ -214,6 +214,8 @@ export interface GameSnapshot {
   quest: QuestProgress;
   /** Read-only derived story states; never world or enemy persistence. */
   questLedger?: QuestLedger;
+  /** Proximity/quest-gated UI affordance, computed by the simulation only. */
+  canInspectStoryEvidence?: boolean;
   actIIUnlocked?: boolean;
   /** Session/world scoped map and immutable facts (not character progression). */
   mapDiscovery?: MapDiscoveryState;
@@ -274,6 +276,7 @@ export type GameCommand =
   | GemAction
   | { type: 'questAccept'; questId?: string }
   | { type: 'questTurnIn'; questId?: string }
+  | { type: 'inspectStoryEvidence' }
   | { type: 'pickup'; id: string }
   | { type: 'equip'; index: number; slot?: EquipmentSlot }
   | { type: 'unequip'; slot: EquipmentSlot }
