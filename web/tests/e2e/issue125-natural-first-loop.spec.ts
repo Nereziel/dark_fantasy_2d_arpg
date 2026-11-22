@@ -108,7 +108,23 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // Turn-in immediately starts the next genuine Act I objective;
   // the journal correctly replaces the completed starter quest.
   await expect(page.locator('.quest-journal')).toContainText('Trail of Black Ash');
-  await expect(guide).toHaveAttribute('data-guide-step', 'followup');
+  await expect(guide).toHaveAttribute('data-guide-step', 'story');
+  await expect(guide).toContainText('Investigate the corruption site');
+  await expect(guide.getByTestId('onboarding-xp')).toContainText(/Level \d+ · XP \d+\/\d+/);
+
+  // The optional guide opens the same discovered-only map as the HUD;
+  // it does not reveal any future quest coordinate or mutate progression.
+  await guide.getByRole('button', { name: 'View discovered map' }).click();
+  const map = page.getByTestId('world-map-dialog');
+  await expect(map).toBeVisible();
+  await map.getByTestId('map-close').click();
+  await expect(guide).toHaveAttribute('data-guide-step', 'story');
+
+  // The *current* objective is localized live, not a stale Warden message.
+  await page.locator('#game-language').selectOption('cs');
+  await expect(guide).toContainText('Prozkoumej ohnisko korupce');
+  await expect(guide.getByRole('button', { name: 'Zobrazit objevenou mapu' })).toBeVisible();
+  await page.locator('#game-language').selectOption('en');
 
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
