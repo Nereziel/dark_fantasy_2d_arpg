@@ -1353,6 +1353,12 @@ export class GameSimulation {
     if (command.type === 'equip') { this.equip(command.index, command.slot); return; }
     if (command.type === 'unequip') { this.unequip(command.slot); return; }
     if (command.type === 'unequipTo') { this.unequipTo(command.slot, command.index); return; }
+    // Inventory management remains available while its modal pauses combat.
+    // Use the same validated immutable plans, never bypass item/slot checks.
+    if (command.type === 'swapInventory') { this.updateInventory(planSwap(this.inventoryState(), command.fromIndex, command.toIndex, this.inventoryRules())); return; }
+    if (command.type === 'sortInventory') { this.updateInventory(sortInventory(this.inventoryState(), this.inventoryRules())); return; }
+    if (command.type === 'setItemFlag') { this.updateInventory(favoriteOrLockItem(this.inventoryState(), command.itemId, command.flag, command.value, this.inventoryRules())); return; }
+    if (command.type === 'dropInventory') { this.dropInventory(command.index); return; }
     // Shop actions must be checked inside the authoritative simulation.
     // A shop panel pauses combat, but doesn't disable transactions.
     if (command.type === 'buyItem') {
@@ -1464,10 +1470,6 @@ export class GameSimulation {
       return;
     }
     if (!this.player.alive || this.paused) return;
-    if (command.type === 'swapInventory') { this.updateInventory(planSwap(this.inventoryState(), command.fromIndex, command.toIndex, this.inventoryRules())); return; }
-    if (command.type === 'sortInventory') { this.updateInventory(sortInventory(this.inventoryState(), this.inventoryRules())); return; }
-    if (command.type === 'setItemFlag') { this.updateInventory(favoriteOrLockItem(this.inventoryState(), command.itemId, command.flag, command.value, this.inventoryRules())); return; }
-    if (command.type === 'dropInventory') { this.dropInventory(command.index); return; }
     if (command.type === 'interactCrypt') {
       if (this.zone !== 'crypt' || !this.player.alive || typeof command.id !== 'string'
         || command.id.length > 160
