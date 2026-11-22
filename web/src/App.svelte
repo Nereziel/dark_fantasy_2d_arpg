@@ -32,6 +32,12 @@
   import { WebAudioDirector } from './game/audio/WebAudioDirector';
   import SkillBar from './ui/SkillBar.svelte';
   import { shortcutHint } from './game/ui/shortcutHints';
+  import OnboardingGuide from './ui/OnboardingGuide.svelte';
+  import {
+    freshOnboarding, onboardingStorageKey, parseOnboarding,
+    getOnboardingStep, nextOnboardingTip, skipOnboarding, resumeOnboarding,
+    observeOnboardingEvent, observeOnboardingSnapshot, type OnboardingProgress
+  } from './game/ui/onboardingGuide';
   import QuestJournal from './ui/QuestJournal.svelte';
   import WorldMapCanvas from './ui/WorldMapCanvas.svelte';
   import WorldEventPanel from './ui/WorldEventPanel.svelte';
@@ -56,6 +62,46 @@
   const audio = new WebAudioDirector();
   let playing = $state(false);
   let view: GameSnapshot = $state(bridge.snapshot());
+  let onboardingProgress: OnboardingProgress = $state(freshOnboarding());
+  let onboardingCharacterId: string | null = null;
+  let onboardingOrigin: Point | null = null;
+
+  function storeOnboarding(next: OnboardingProgress): void {
+    if (next === onboardingProgress) return;
+    onboardingProgress = next;
+    const key = onboardingStorageKey(onboardingCharacterId ?? '');
+    if (!key) return;
+    try { window.localStorage.setItem(key, JSON.stringify(next)); }
+    catch { /* Private browsing may disallow local storage. */ }
+  }
+
+  function activateOnboardingForHero(): void {
+    const id = bridge.character().characterId ?? 'hero';
+    if (onboardingCharacterId === id) return;
+    onboardingCharacterId = id;
+    const snapshot = bridge.snapshot();
+    onboardingOrigin = { x: snapshot.player.x, y: snapshot.player.y };
+    const key = onboardingStorageKey(id);
+    let progress = freshOnboarding();
+    if (key) {
+      try { progress = parseOnboarding(window.localStorage.getItem(key)); }
+      catch { /* No local storage is not a game error. */ }
+    }
+    onboardingProgress = progress;
+    storeOnboarding(observeOnboardingSnapshot(progress, snapshot, onboardingOrigin));
+  }
+
+  function advanceOnboarding(): void {
+    storeOnboarding(nextOnboardingTip(onboardingProgress, {
+      questStatus: view.quest.status, zone: view.zone
+    }));
+  }
+  function skipGuide(): void { storeOnboarding(skipOnboarding(onboardingProgress)); }
+  function showGuide(): void { storeOnboarding(resumeOnboarding(onboardingProgress)); }
+  function resetGuide(): void {
+    onboardingOrigin = { x: view.player.x, y: view.player.y };
+    storeOnboarding(freshOnboarding());
+  }
   // Read-only display projection; never reorder GameSimulation's enemy array.
   let rosterUnits = $derived(prioritizeCombatRoster(
     view.enemies, view.miniBossStates, view.selectedTargetId
@@ -333,6 +379,9 @@
     } catch { /* Invalid settings fall back to defaults. */ }
     const unsubscribeEvents = bridge.onEvent((event) => {
       audio.playGameEvent(event);
+      if (playing && onboardingCharacterId === (bridge.character().characterId ?? 'hero')) {
+        storeOnboarding(observeOnboardingEvent(onboardingProgress, event, view.player.id));
+      }
       if (event.type === 'dungeonCleared' && playing) messageKey = 'dungeon.clearedToast';
       if (event.type === 'worldEventStarted' && playing) messageKey = 'worldEvents.started';
       if (event.type === 'worldEventCompleted' && playing) messageKey = 'worldEvents.completed';
@@ -376,6 +425,10 @@
     });
     const unsubscribe = bridge.subscribe((latest) => {
       view = latest;
+      if (playing && onboardingOrigin && onboardingCharacterId ===
+        (bridge.character().characterId ?? 'hero')) {
+        storeOnboarding(observeOnboardingSnapshot(onboardingProgress, latest, onboardingOrigin));
+      }
       // Input release can synchronously emit a newer snapshot. Never overwrite
       // that release with the stale pre-release snapshot in this callback.
       if (latest.paused || !latest.player.alive) heldPosition.clear();
@@ -449,6 +502,7 @@
       tradeNpc=null;
       townModal=null;
       playing=true;
+      activateOnboardingForHero();
       const world=boundWorldProgress();
       await Promise.all([
         autosaver.saveNow(bridge.character()),
@@ -471,6 +525,7 @@
     }
     bridge.command({ type: 'pause', value: false });
     playing = true;
+    activateOnboardingForHero();
   }
   function menu(): void {
     talentsOpen = false;
@@ -805,6 +860,7 @@
         const currentWorld=boundWorldProgress();
         if (currentWorld) worldAutosaver.prime(currentWorld);
         playing = true;
+        activateOnboardingForHero();
         selectedCharacterId = bridge.character().characterId ?? 'hero';
         activeSessionDeleted = false;
         await refreshCharacters();
@@ -937,6 +993,12 @@
         <div class="world-guide-sub">{$t('controls.hint')}</div>
       </div>
 
+      {#if modalKind === '' && view.player.alive && !view.paused}
+        <OnboardingGuide progress={onboardingProgress}
+          context={{ questStatus: view.quest.status, zone: view.zone }}
+          bindings={controlBindings} next={advanceOnboarding}
+          skip={skipGuide} show={showGuide} restart={resetGuide} />
+      {/if}
       <QuestJournal {view} talk={talkToWarden} />
       {#if view.zone === 'wilderness' &&
         Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS + 40}
