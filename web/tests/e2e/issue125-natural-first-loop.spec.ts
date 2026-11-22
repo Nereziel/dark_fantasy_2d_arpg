@@ -163,10 +163,33 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(inventory).toBeVisible();
   const bag = inventory.locator('.bag-slot.occupied');
   await expect(bag.first()).toBeVisible();
+  // This item was genuinely looted from a defeated enemy, not purchased or
+  // placed into the test via GameBridge. Preserve its canonical identity.
+  const lootedItemId = await bag.first().getAttribute('data-item-id');
+  expect(lootedItemId).toBeTruthy();
   await bag.first().click();
   const equip = inventory.getByRole('button', { name: 'Equip', exact: true });
   await expect(equip).toBeEnabled();
   await equip.click();
+
+  // Regression: a real acquired item must be able to leave and re-enter its
+  // equipment socket. Confirm a true unequip + native HTML5 drag, preserving
+  // identity rather than accepting just a visual highlight of a valid slot.
+  // Select by stable ID instead of presentation label or arbitrary item icon.
+  const slotWithLoot = inventory.locator('.equipment-slot[data-item-id="' + lootedItemId + '"]');
+  await expect(slotWithLoot).toHaveCount(1);
+  const slotName = await slotWithLoot.getAttribute('data-equipment-slot');
+  expect(slotName).toBeTruthy();
+  await slotWithLoot.click();
+  await inventory.getByTestId('item-inspector')
+    .getByRole('button', { name: 'Unequip', exact: true }).click();
+  const returnedLoot = inventory.locator('.bag-slot[data-item-id="' + lootedItemId + '"]');
+  await expect(returnedLoot).toHaveCount(1);
+  const gearDestination = inventory.locator('[data-equipment-slot="' + slotName + '"]');
+  await expect(gearDestination).not.toHaveClass(/has-item/);
+  await returnedLoot.dragTo(gearDestination);
+  await expect(gearDestination).toHaveAttribute('data-item-id', lootedItemId!);
+  await expect(returnedLoot).toHaveCount(0);
   await inventory.locator('.close-button').click();
   await expect(guide).toHaveAttribute('data-guide-step', 'objective');
 
