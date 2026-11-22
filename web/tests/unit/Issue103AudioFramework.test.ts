@@ -92,9 +92,10 @@ describe('Issue 103: audio mixer preferences and original sound plan', () => {
 
 class FakeParam {
   value = 0;
+  targets = 0;
   setValueAtTime(value: number): this { this.value=value; return this; }
   exponentialRampToValueAtTime(value: number): this { this.value=value; return this; }
-  setTargetAtTime(value: number): this { this.value=value; return this; }
+  setTargetAtTime(value: number): this { this.value=value; this.targets++; return this; }
 }
 class FakeNode {
   gain = new FakeParam();
@@ -151,6 +152,13 @@ describe('Issue 103: gesture-gated Web Audio adapter', () => {
     expect(ctx.gains[6]?.gain.value).toBe(DEFAULT_AUDIO_PREFERENCES.ui);
     director.unlock();
     expect(constructions).toBe(1);
+    director.setZone('wilderness');
+    expect(ctx.oscillators[0]!.frequency.targets).toBe(0);
+    director.setZone('crypt');
+    expect(ctx.oscillators[0]!.frequency.targets).toBe(1);
+    expect(ctx.oscillators[1]!.frequency.targets).toBe(1);
+    director.setZone('crypt');
+    expect(ctx.oscillators[0]!.frequency.targets).toBe(1);
     director.dispose();
     expect(ctx.state).toBe('closed');
     expect(ctx.oscillators.every(node => node.stopped)).toBe(true);
