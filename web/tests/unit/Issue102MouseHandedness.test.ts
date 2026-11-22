@@ -41,8 +41,14 @@ describe('Issue #102: atomic left-handed mouse settings', () => {
     expect(rebindAction(GAME_BINDINGS, overrides[0])).toEqual({ ok: false, reason: 'CONFLICT' });
     const parsed: InputBinding[] = JSON.parse(JSON.stringify(overrides));
     const restored = applyBindingOverrides(GAME_BINDINGS, parsed);
-    expect(restored).toEqual({ ok: true, bindings: swapped.bindings });
+    expect(restored.ok).toBe(true);
     if (!restored.ok) return;
+    // Persisted v1 overrides are grouped by action, not by their previous
+    // physical button order; compare triggers semantically, not by index.
+    expect(restored.bindings).toHaveLength(swapped.bindings.length);
+    for (const trigger of swapped.bindings) {
+      expect(restored.bindings).toContainEqual(trigger);
+    }
     expect(pointer(0, restored.bindings)).toBe('SECONDARY');
     expect(pointer(2, restored.bindings)).toBe('PRIMARY');
   });
