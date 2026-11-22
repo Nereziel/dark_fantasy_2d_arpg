@@ -52,9 +52,43 @@ describe('Issue 128: authoritative 33-enemy long-play across regular waves', () 
       const target = living[0]!.actor;
       // Like an automated checkpoint between encounters. No enemy data,
       // cooldowns, combat damage, kill ledger, XP or wave counter is forged.
-      expect(sim.restore(state),
-        'baseline snapshot cannot be restored before wave ' + state.wave
-          + ' target ' + target.id).toBe(true);
+      const baselineValid = sim.restore(state);
+      if (!baselineValid) {
+        const variants = {
+          noLoot: { ...state, groundLoot: [] },
+          noWarriorAction: { ...state, warriorAction: null },
+          noStatusEffects: { ...state, statusEffects: { player: [], enemies: {} } },
+          noPlayerEffects: { ...state, effects: { ...state.effects, player: [] } },
+          noElites: { ...state, enemies: state.enemies.map(unit => ({
+            ...unit, elite: undefined
+          })) },
+          zeroResource: { ...state, resource: 0 },
+          noSelection: { ...state, selectedTargetId: null },
+          noWarriorCooldowns: { ...state, warriorCooldowns: {} },
+          noEventView: { ...state, worldEvents: undefined }
+        };
+        const probes = Object.fromEntries(
+          Object.entries(variants).map(([key, value]) =>
+            [key, sim.restore(value as typeof state)])
+        );
+        expect(baselineValid,
+          'baseline save invalid after wave ' + state.wave + ' target ' + target.id
+            + ': ' + JSON.stringify({
+              player: state.player, level: state.level, xp: state.xp,
+              resource: state.resource, maxResource: state.stats.maxResource,
+              heroAction: state.warriorAction,
+              statusEffects: state.statusEffects,
+              enemies: state.enemies.map(unit => ({
+                id: unit.actor.id, pos: [unit.actor.x, unit.actor.y],
+                alive: unit.actor.alive, intent: unit.intent,
+                abilities: unit.abilityCooldowns, elite: unit.elite
+              })),
+              loot: state.groundLoot.map(loot => ({ id: loot.id, item: loot.item.id })),
+              quest: state.quest, worldEvents: state.worldEvents,
+              probes
+            })).slice(0, 5500)
+        ).toBe(true);
+      }
       const checkpoint = {
         ...state, player: { ...state.player, x: target.x, y: target.y,
           health: state.player.maxHealth }
