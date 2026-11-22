@@ -85,7 +85,22 @@ describe('Issue 128: authoritative 33-enemy long-play across regular waves', () 
           expect(state.player.alive).toBe(true);
         }
       }
-      expect(killed, 'real combat must finish target ' + target.id).toBe(true);
+      const stalled = sim.snapshot();
+      const stalledActor = stalled.enemies.find(unit => unit.actor.id === target.id);
+      expect(killed, 'real combat must finish target ' + target.id + ': '
+        + JSON.stringify({
+          wave: stalled.wave,
+          kills: stalled.kills,
+          health: stalled.player.health,
+          player: { x: stalled.player.x, y: stalled.player.y },
+          enemy: stalledActor?.actor,
+          enemyIntent: stalledActor?.intent,
+          warriorAction: stalled.warriorAction,
+          moveDestination: stalled.moveDestination,
+          holdPosition: stalled.holdPosition,
+          status: stalled.status,
+          selectedTarget: stalled.selectedTargetId
+        })).toBe(true);
     }
 
     const finished = sim.snapshot();
