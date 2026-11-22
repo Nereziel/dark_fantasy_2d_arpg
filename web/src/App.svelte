@@ -6,6 +6,7 @@
   import type { GameSnapshot, Point } from './game/core/types';
   import { resolveKeyboardAction, applyBindingOverrides, type InputBinding, type InputAction } from './game/input/bindings';
   import { GAME_BINDINGS } from './game/input/gameBindings';
+  import { HeldPositionSources } from './game/input/heldPositionSources';
   import { resolvePointerAction } from './game/input/bindings';
   import { planPointerUiAction, type PointerUiState, type PointerUiSurface,
     type PointerUiOperation } from './game/input/pointerUiActions';
@@ -114,6 +115,7 @@
   const controlsStorage = 'aether-ruin-controls-v1';
 
   function updateBindings(next: InputBinding[]): void {
+    heldPosition.clear();
     const updated = next.length ? next : GAME_BINDINGS.map(binding => ({ ...binding }));
     controlBindings = updated;
     bridge.setBindings(updated);
@@ -184,7 +186,11 @@
   let dialogueOpen = $state(false);
   let tradeNpc: TradeNpcId | null = $state(null);
   let townModal: TownEntry | null = $state(null);
-  const heldShiftKeys = new Set<string>();
+  let holdPositionActive = $state(false);
+  const heldPosition = new HeldPositionSources(held => {
+    holdPositionActive = held;
+    bridge.command({ type: 'holdPosition', value: held });
+  });
   const autosaver = new CharacterAutosaver(saveGame, 1400, () => {
     messageKey = 'status.saveError';
   });
@@ -371,6 +377,8 @@
       }
     });
     const unsubscribe = bridge.subscribe((latest) => {
+      // Any pause/death source, including NPCs and modal screens, releases input.
+      if (latest.paused || !latest.player.alive) heldPosition.clear();
       view = latest;
       audio.setZone(latest.zone);
       audio.setPaused(!playing || latest.paused);
@@ -383,16 +391,19 @@
     // Browser lifecycle hooks are best-effort; the regular autosave debounce
     // is what protects character progression during normal play.
     const flushOnExit = () => {
+      heldPosition.clear();
       void autosaver.flush().catch(() => {});
       void worldAutosaver.flush().catch(() => {});
     };
     const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') heldPosition.clear();
       audio.setHidden(document.visibilityState === 'hidden');
       if (document.visibilityState === 'hidden') flushOnExit();
     };
     window.addEventListener('pagehide', flushOnExit);
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
+      heldPosition.clear();
       unsubscribe();
       unsubscribeEvents();
       window.removeEventListener('pointerdown', unlockAudio, true);
@@ -408,7 +419,7 @@
 
   function respawn(): void {
     if (!playing || view.player.alive) return;
-    heldShiftKeys.clear();
+    heldPosition.clear();
     inventoryOpen = false;
     characterOpen = false;
     talentsOpen = false;
@@ -422,6 +433,7 @@
 
   async function newGame(): Promise<void> {
     if (busy || savedCharacters.length >= MAX_SAVED_CHARACTERS) return;
+    heldPosition.clear();
     busy=true;
     try {
       // Drain the previous hero's queued writes before changing the save slot.
@@ -453,6 +465,7 @@
     }
   }
   function resume(): void {
+    heldPosition.clear();
     if (activeSessionDeleted) {
       messageKey = 'status.emptySave';
       return;
@@ -464,8 +477,7 @@
     talentsOpen = false;
     controlsOpen = false; settingsOpen = false;
     mapOpen = false;
-    heldShiftKeys.clear();
-    bridge.command({ type: 'holdPosition', value: false });
+    heldPosition.clear();
     tradeNpc = null;
     townModal = null;
     dialogueOpen = false;
@@ -568,6 +580,7 @@
 
   function handlePointerUiDown(event: PointerEvent): void {
     if (event.pointerType !== 'mouse') return;
+    handleHoldPointerDown(event);
     const operation = pointerUiOperation(event.button, event.target);
     if (!operation) return;
     event.preventDefault();
@@ -585,13 +598,40 @@
     }
   }
 
+  /** HOLD_POSITION is a real pressed state, not a click/toggle.
+   * Window-level releases cover mouseup outside the game canvas.
+   */
+  function handleHoldPointerDown(event: PointerEvent): void {
+    if (event.pointerType !== 'mouse' || pointerUiState() !== 'gameplay'
+      || pointerUiSurface(event.target) !== 'canvas') return;
+    const action = resolvePointerAction({
+      button: event.button, uiCaptured: false
+    }, bridge.bindings());
+    if (action !== 'HOLD_POSITION') return;
+    event.preventDefault();
+    heldPosition.pointerDown(event.pointerId, event.button);
+  }
+  function handleHoldPointerUp(event: PointerEvent): void {
+    if (event.pointerType === 'mouse')
+      heldPosition.pointerUp(event.pointerId, event.button);
+  }
+  function handleHoldPointerCancel(event: PointerEvent): void {
+    if (event.pointerType === 'mouse') heldPosition.pointerCancel(event.pointerId);
+  }
+  function handleHoldPointerOut(event: PointerEvent): void {
+    if (event.pointerType === 'mouse'
+      && pointerUiSurface(event.target) === 'canvas')
+      heldPosition.pointerCancel(event.pointerId);
+  }
+
   function handlePointerUiContextMenu(event: MouseEvent): void {
     // Right-button UI bindings must not leave a browser context menu hanging
     // over the game after a modal opens or closes.
     const action = resolvePointerAction({ button: event.button, uiCaptured: false }, bridge.bindings());
     if (pointerUiSurface(event.target) !== 'other'
       && (action === 'MAP' || action === 'TALENTS' || action === 'INVENTORY'
-        || action === 'CHARACTER' || action === 'MENU')) event.preventDefault();
+        || action === 'CHARACTER' || action === 'MENU'
+        || action === 'HOLD_POSITION')) event.preventDefault();
   }
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -690,8 +730,7 @@
 
     if (action === 'HOLD_POSITION') {
       event.preventDefault();
-      heldShiftKeys.add(event.code);
-      bridge.command({ type: 'holdPosition', value: true });
+      heldPosition.keyDown(event.code);
     } else if (dispatchCombatAction(bridge, action)) {
       event.preventDefault();
     } else if (action === 'FORCE_MOVE' || action === 'PRIMARY') {
@@ -703,13 +742,10 @@
     // Remaining classes retain reserved slots until their original kits are complete.
   }
   function handleKeyup(event: KeyboardEvent): void {
-    if (!heldShiftKeys.delete(event.code)) return;
-    bridge.command({ type: 'holdPosition', value: heldShiftKeys.size > 0 });
+    heldPosition.keyUp(event.code);
   }
   function handleBlur(): void {
-    if (heldShiftKeys.size === 0) return;
-    heldShiftKeys.clear();
-    bridge.command({ type: 'holdPosition', value: false });
+    heldPosition.clear();
   }
   async function save(): Promise<void> {
     if (busy) return;
@@ -732,6 +768,7 @@
   }
   async function load(requestedId?: string): Promise<void> {
     if (busy) return;
+    heldPosition.clear();
     busy = true;
     try {
       await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
@@ -770,8 +807,9 @@
 </script>
 
 <svelte:window onkeydown={handleKeydown} onkeyup={handleKeyup}
-  onpointerdown={handlePointerUiDown} oncontextmenu={handlePointerUiContextMenu}
-  onblur={handleBlur} />
+  onpointerdown={handlePointerUiDown} onpointerup={handleHoldPointerUp}
+  onpointercancel={handleHoldPointerCancel} onpointerout={handleHoldPointerOut}
+  oncontextmenu={handlePointerUiContextMenu} onblur={handleBlur} />
 
 <svelte:head>
   <title>Aether &amp; Ruin</title>
@@ -849,7 +887,8 @@
     </main>
   {:else}
     <main class="game-screen" data-world-seed={view.worldSeed} data-zone={view.zone}
-      data-player-x={view.player.x} data-player-y={view.player.y}>
+      data-player-x={view.player.x} data-player-y={view.player.y}
+      data-hold-position={holdPositionActive}>
       {#key visualPreferences.pixelFilter}
         <GameViewport {bridge} renderMode={visualPreferences.pixelFilter} />
       {/key}
