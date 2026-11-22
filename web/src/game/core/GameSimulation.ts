@@ -1902,6 +1902,17 @@ export class GameSimulation {
     };
   }
 
+  /** Read-only error from the exact same unequip planner as the command.
+   * The optional index is used for a targeted drag into a specific bag cell. */
+  equipmentRemovalError(slot: EquipmentSlot, destinationIndex?: number): InventoryError | null {
+    const state = this.inventoryState();
+    const rules = this.inventoryRules();
+    const plan = destinationIndex === undefined
+      ? planUnequip(state, slot, rules)
+      : planUnequipAt(state, slot, destinationIndex, rules);
+    return plan.ok ? null : plan.reason;
+  }
+
   private unequip(slot: EquipmentSlot): void {
     this.updateInventory(planUnequip(this.inventoryState(), slot, this.inventoryRules()));
   }

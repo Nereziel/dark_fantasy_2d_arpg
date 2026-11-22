@@ -100,6 +100,10 @@
     displayed?.kind === 'bag' && view.inventory[displayed.index]
       ? bridge.equipmentPlacementError(displayed.index) : null
   );
+  let unequipFailure = $derived.by(() =>
+    displayed?.kind === 'gear' && view.equipment[displayed.slot]
+      ? bridge.equipmentRemovalError(displayed.slot) : null
+  );
   function rejectionText(reason: InventoryError | null): string {
     const cs = $locale === 'cs';
     switch (reason) {
@@ -121,6 +125,22 @@
     }
   }
 
+  /** Removing gear requires one vacant bag cell, unlike a compatible
+   * gear↔bag replacement. Use the authoritative removal plan for the reason. */
+  function removalText(reason: InventoryError | null): string {
+    const cs = $locale === 'cs';
+    switch (reason) {
+      case 'INVENTORY_FULL':
+        return cs
+          ? 'Batoh je plný. Uvolni jednu pozici, abys mohl sundat výbavu.'
+          : 'Backpack is full. Free one bag slot before unequipping.';
+      case 'SLOT_OCCUPIED':
+        return cs
+          ? 'Cílová pozice je obsazená. Vyber volnou pozici.'
+          : 'That bag slot is occupied. Choose an empty slot.';
+      default: return rejectionText(reason);
+    }
+  }
   function itemName(item: Item): string {
     return itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId));
   }
@@ -132,7 +152,11 @@
     if (!item || !canPlace(target, source)) {
       placementMessage = source.kind === 'bag' && target.kind === 'gear'
         ? rejectionText(bridge.equipmentPlacementError(source.index, target.slot))
-        : $t('inventory.invalidPlacement');
+        : source.kind === 'gear' && target.kind === 'bag'
+          ? (view.inventory[target.index]
+            ? rejectionText(bridge.equipmentPlacementError(target.index, source.slot))
+            : removalText(bridge.equipmentRemovalError(source.slot, target.index)))
+          : $t('inventory.invalidPlacement');
       return false;
     }
     if (source.kind === 'bag' && target.kind === 'gear') {
@@ -176,10 +200,15 @@
   function unequip(slot: EquipmentSlot): void {
     const item = view.equipment[slot];
     if (!item) return;
+    const refusal = bridge.equipmentRemovalError(slot);
+    if (refusal) {
+      placementMessage = removalText(refusal);
+      return;
+    }
     bridge.command({ type: 'unequip', slot });
     const index = bridge.snapshot().inventory.findIndex(candidate => candidate?.id === item.id);
     if (index < 0 || bridge.snapshot().equipment[slot]) {
-      placementMessage = $t('inventory.invalidPlacement');
+      placementMessage = removalText(bridge.equipmentRemovalError(slot));
       return;
     }
     selected = { kind: 'bag', index };
@@ -562,8 +591,12 @@
               </button>
             </div>
           {:else if displayed?.kind === 'gear'}
+            {#if unequipFailure}
+              <p class="invalid-equip" role="status">{removalText(unequipFailure)}</p>
+            {/if}
             <div class="inspector-actions">
-              <button class="primary-action" onclick={unequipInspected}>
+              <button class="primary-action" disabled={!!unequipFailure}
+                onclick={unequipInspected}>
                 {$t('inventory.unequip')}
               </button>
             </div>
