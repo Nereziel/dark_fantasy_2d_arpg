@@ -838,7 +838,7 @@
     "change": "Change",
     "reset": "Restore defaults",
     "close": "Back",
-    "reserved": "Unimplemented skills, potion and panels are reserved for later prompts. Bindings are saved on this device, separately from your character.",
+    "reserved": "Some reserved skills and future panels are not yet active. Bindings are saved on this device, separately from your character.",
     "CONFLICT": "This key or button is already assigned.",
     "INVALID": "That key or button is not supported.",
     "actions": {
