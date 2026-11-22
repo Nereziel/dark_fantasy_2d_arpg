@@ -126,10 +126,52 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(guide.getByRole('button', { name: 'Zobrazit objevenou mapu' })).toBeVisible();
   await page.locator('#game-language').selectOption('en');
 
+  // Regression guard: a genuine first-quest turn-in must survive a character
+  // save without changing XP, gold or the active story objective. No test-only
+  // bridge commands or fabricated character/quest state are involved.
+  // The actual item equipped from ground loot must retain its identity and
+  // slot after reload, not merely survive as a duplicated bag item.
+  await page.locator('[data-quick-action="inventory"]').click();
+  const gearBeforeSave = await inventory.locator('.equipment-slot.has-item')
+    .evaluateAll(nodes => nodes.map(node => ({
+      slot: node.getAttribute('data-equipment-slot'),
+      label: node.getAttribute('aria-label')
+    })));
+  expect(gearBeforeSave.length).toBeGreaterThan(0);
+  await inventory.locator('.close-button').click();
+
+  const progressBeforeSave = await guide.getByTestId('onboarding-xp').innerText();
+  const hudBeforeSave = await page.locator('.hud-details span').allTextContents();
+  const journalProgress = page.locator('.quest-journal strong, .quest-journal .quest-progress');
+  const objectiveBeforeSave = await journalProgress.allTextContents();
+  expect(await game.getAttribute('data-zone')).toBe('wilderness');
+  await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
+
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Hero saved');
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await expect(guide.getByTestId('onboarding-xp')).toHaveText(progressBeforeSave);
+  await expect(page.locator('.hud-details span')).toHaveText(hudBeforeSave);
+  await expect(journalProgress).toHaveText(objectiveBeforeSave);
+  await page.locator('[data-quick-action="inventory"]').click();
+  const gearAfterSave = await inventory.locator('.equipment-slot.has-item')
+    .evaluateAll(nodes => nodes.map(node => ({
+      slot: node.getAttribute('data-equipment-slot'),
+      label: node.getAttribute('aria-label')
+    })));
+  expect(gearAfterSave).toEqual(gearBeforeSave);
+  await inventory.locator('.close-button').click();
+  await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
+  await expect(game).toHaveAttribute('data-zone', 'wilderness');
+
+  // Reloaded map must still reveal only discovered locations. The active
+  // story hint cannot accidentally turn future quest markers into spoilers.
+  await guide.getByRole('button', { name: 'View discovered map' }).click();
+  await expect(map).toBeVisible();
+  await expect(map.locator('[data-fog="unexplored"]').first()).toBeVisible();
+  await expect(map.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
+  await map.getByTestId('map-close').click();
   // Turn-in immediately starts the next genuine Act I objective;
   // the journal correctly replaces the completed starter quest.
   await expect(page.locator('.quest-journal')).toContainText('Trail of Black Ash');
