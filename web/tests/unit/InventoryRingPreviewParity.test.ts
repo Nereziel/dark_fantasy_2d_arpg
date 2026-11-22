@@ -38,9 +38,12 @@ describe('Inventory ring equip / comparison slot parity', () => {
     expect(equipped.equipment.RING_2?.id).toBe(second.id);
     expect(equipped.inventory[7]).toBeNull();
     expect(equipped.paused).toBe(true);
-    for (const [stat, delta] of Object.entries(projectedRight!)) {
-      const key = stat as keyof typeof projectedRight;
-      expect(equipped.stats[key] - before.stats[key]).toBeCloseTo(delta as number, 2);
+    for (const stat of [
+      'armor', 'damageMin', 'damageMax', 'maxHealth', 'critChance',
+      'attackSpeed', 'blockChance', 'fireResist'
+    ] as const) {
+      expect(equipped.stats[stat] - before.stats[stat])
+        .toBeCloseTo(projectedRight![stat], 2);
     }
   });
 
