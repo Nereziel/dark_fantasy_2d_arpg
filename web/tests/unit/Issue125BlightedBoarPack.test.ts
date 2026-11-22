@@ -70,8 +70,7 @@ describe('Issue #125 — one coherent corrupted boar quest pack', () => {
 
     // Invalid untrusted quest ledgers must be rejected, never throw during the
     // extra story-wave validation before the canonical restore checks run.
-    const malformed = ({ ...hunt, questLedger: { quests: { invalid: true } } }
-      as unknown) as typeof hunt;
+    const malformed = { ...hunt, questLedger: { quests: { invalid: true } } } as unknown as typeof hunt;
     expect(() => game.restore(malformed)).not.toThrow();
     expect(game.restore(malformed)).toBe(false);
 
