@@ -68,6 +68,13 @@ describe('Issue #125 — one coherent corrupted boar quest pack', () => {
     expect(game.snapshot().enemies.slice(0, 3).map(unit => unit.actor.type))
       .toEqual(['corruptedBoar', 'corruptedBoar', 'corruptedBoar']);
 
+    // Invalid untrusted quest ledgers must be rejected, never throw during the
+    // extra story-wave validation before the canonical restore checks run.
+    const malformed = { ...hunt, questLedger: { quests: { invalid: true } } }
+      as unknown as typeof hunt;
+    expect(() => game.restore(malformed)).not.toThrow();
+    expect(game.restore(malformed)).toBe(false);
+
     // Ordinary non-quest waves continue to use the existing enemy roster.
     expect(createPack(3, game.snapshot().level)
       .map(unit => unit.actor.type)).toEqual(['spider', 'corruptedBoar', 'skeletonMage']);
