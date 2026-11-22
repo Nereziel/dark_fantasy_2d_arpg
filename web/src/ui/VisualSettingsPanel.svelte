@@ -1,10 +1,14 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
   import type { VisualPreferences, MotionPreference, CameraShakePreference, UiScalePreference } from '../game/ui/visualPreferences';
+  import type { AudioPreferences } from '../game/audio/audioPreferences';
+  import AudioVolumePanel from './AudioVolumePanel.svelte';
 
-  let { preferences, save, close }: {
+  let { preferences, save, audioPreferences, saveAudio, close }: {
     preferences: VisualPreferences;
     save: (next: VisualPreferences) => void;
+    audioPreferences: AudioPreferences;
+    saveAudio: (next: AudioPreferences) => void;
     close: () => void;
   } = $props();
 
@@ -62,6 +66,7 @@
         onchange={(event) => change({ highContrast: event.currentTarget.checked })} />
     </label>
   </div>
+  <AudioVolumePanel preferences={audioPreferences} save={saveAudio} />
   <footer>
     <button type="button" class="primary" onclick={close}>{$t('visualSettings.close')}</button>
   </footer>

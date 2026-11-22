@@ -1493,5 +1493,17 @@
     "uiScale": "Interface size",
     "floatingText": "Floating damage text",
     "highContrast": "High contrast"
+  },
+  "audioSettings": {
+    "title": "Audio and volume",
+    "description": "Original synthesized effects. Sound starts only after a key press or pointer gesture. These settings apply to this browser.",
+    "mute": "Mute all",
+    "master": "Master volume",
+    "music": "Music",
+    "ambience": "Ambience",
+    "combat": "Combat",
+    "monsters": "Monsters",
+    "spells": "Spells",
+    "ui": "Interface"
   }
 }

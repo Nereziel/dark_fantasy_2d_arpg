@@ -21,6 +21,9 @@
   import VisualSettingsPanel from './ui/VisualSettingsPanel.svelte';
   import { getVisualPreferences, setVisualPreferences,
     DEFAULT_VISUAL_PREFERENCES, type VisualPreferences } from './game/ui/visualPreferences';
+  import { getAudioPreferences, setAudioPreferences,
+    DEFAULT_AUDIO_PREFERENCES, type AudioPreferences } from './game/audio/audioPreferences';
+  import { WebAudioDirector } from './game/audio/WebAudioDirector';
   import SkillBar from './ui/SkillBar.svelte';
   import QuestJournal from './ui/QuestJournal.svelte';
   import WorldMapCanvas from './ui/WorldMapCanvas.svelte';
@@ -47,6 +50,8 @@
   import { xpRequiredForLevel } from './game/progression/progressionRules';
 
   const bridge = new GameBridge();
+  // No browser AudioContext is created until an explicit trusted user gesture.
+  const audio = new WebAudioDirector();
   let playing = $state(false);
   let view: GameSnapshot = $state(bridge.snapshot());
   // Read-only display projection; never reorder GameSimulation's enemy array.
@@ -91,6 +96,7 @@
   let controlsOpen = $state(false);
   let settingsOpen = $state(false);
   let visualPreferences: VisualPreferences = $state({ ...DEFAULT_VISUAL_PREFERENCES });
+  let audioPreferences: AudioPreferences = $state({ ...DEFAULT_AUDIO_PREFERENCES });
   let mapOpen = $state(false);
   let mapZoom = $state(1);
   let mapCenter: Point | null = $state(null);
@@ -129,6 +135,18 @@
     visualPreferences = setVisualPreferences(next);
     applyVisualRoot(visualPreferences);
   }
+
+  function updateAudioPreferences(next: AudioPreferences): void {
+    audioPreferences = setAudioPreferences(next);
+    audio.setPreferences(audioPreferences);
+    audio.play('ui.select');
+  }
+
+  $effect(() => {
+    // Paused combat / ambient buses must never leak through a Svelte dialog;
+    // menu UI volume previews remain available after audio is unlocked.
+    audio.setPaused(!playing || view.paused);
+  });
 
   function openVisualSettings(origin?: HTMLElement): void {
     if (!playing || !view.paused || settingsOpen || controlsOpen
@@ -265,6 +283,16 @@
   onMount(() => {
     visualPreferences = getVisualPreferences();
     applyVisualRoot(visualPreferences);
+    audioPreferences = getAudioPreferences();
+    audio.setPreferences(audioPreferences);
+    audio.setHidden(document.visibilityState === 'hidden');
+    // Browsers require gesture-unlocked WebAudio. Never unlock on startup,
+    // automatic game ticks, timers or a synthetic DOM event.
+    const unlockAudio = (event: KeyboardEvent | PointerEvent) => {
+      if (event.isTrusted) audio.unlock();
+    };
+    window.addEventListener('pointerdown', unlockAudio, true);
+    window.addEventListener('keydown', unlockAudio, true);
     void refreshCharacters().catch(() => { messageKey = 'status.saveError'; });
     try {
       const raw = JSON.parse(window.localStorage.getItem(controlsStorage) ?? '[]');
@@ -280,6 +308,7 @@
       }
     } catch { /* Invalid settings fall back to defaults. */ }
     const unsubscribeEvents = bridge.onEvent((event) => {
+      audio.playGameEvent(event);
       if (event.type === 'dungeonCleared' && playing) messageKey = 'dungeon.clearedToast';
       if (event.type === 'worldEventStarted' && playing) messageKey = 'worldEvents.started';
       if (event.type === 'worldEventCompleted' && playing) messageKey = 'worldEvents.completed';
@@ -323,6 +352,8 @@
     });
     const unsubscribe = bridge.subscribe((latest) => {
       view = latest;
+      audio.setZone(latest.zone);
+      audio.setPaused(!playing || latest.paused);
       if (playing) {
         autosaver.schedule(bridge.character());
         const world = boundWorldProgress();
@@ -336,6 +367,7 @@
       void worldAutosaver.flush().catch(() => {});
     };
     const onVisibilityChange = () => {
+      audio.setHidden(document.visibilityState === 'hidden');
       if (document.visibilityState === 'hidden') flushOnExit();
     };
     window.addEventListener('pagehide', flushOnExit);
@@ -343,6 +375,9 @@
     return () => {
       unsubscribe();
       unsubscribeEvents();
+      window.removeEventListener('pointerdown', unlockAudio, true);
+      window.removeEventListener('keydown', unlockAudio, true);
+      audio.dispose();
       window.removeEventListener('pagehide', flushOnExit);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       void autosaver.dispose().catch(() => {});
@@ -1017,7 +1052,8 @@
       {:else if settingsOpen}
         <div class="modal-shield">
           <VisualSettingsPanel preferences={visualPreferences}
-            save={updateVisualPreferences} close={() => { settingsOpen = false; }} />
+            save={updateVisualPreferences} {audioPreferences} saveAudio={updateAudioPreferences}
+            close={() => { settingsOpen = false; }} />
         </div>
       {:else if controlsOpen}
         <div class="modal-shield">
