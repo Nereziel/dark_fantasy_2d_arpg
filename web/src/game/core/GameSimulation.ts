@@ -1866,18 +1866,26 @@ export class GameSimulation {
     this.resource = Math.min(cap, this.resource);
   }
 
+  /** Select the same default socket for command, preview and error feedback.
+   * If the first ring is occupied and the second is empty, auto-equip uses
+   * RING_2 instead of replacing the existing ring. Explicit choices win. */
+  private resolveEquipmentSlot(index: number, targetSlot?: EquipmentSlot): EquipmentSlot | undefined {
+    if (targetSlot !== undefined) return targetSlot;
+    return this.inventory[index]?.slot === 'RING_1' && this.equipment.RING_1 && !this.equipment.RING_2
+      ? 'RING_2' : undefined;
+  }
+
   private equip(index: number, targetSlot?: EquipmentSlot): void {
-    const item = this.inventory[index];
-    if (!item) return;
-    const selected = targetSlot ?? (item.slot === 'RING_1' && this.equipment.RING_1 && !this.equipment.RING_2
-      ? 'RING_2' : undefined);
+    if (!this.inventory[index]) return;
+    const selected = this.resolveEquipmentSlot(index, targetSlot);
     this.updateInventory(planEquip(this.inventoryState(), index, selected, this.inventoryRules()));
   }
 
   /** Exact failure from the same authoritative equip planner used by
    * command('equip') and the stat-preview path. Never mutates the inventory. */
   equipmentPlacementError(index: number, targetSlot?: EquipmentSlot): InventoryError | null {
-    const candidate = planEquip(this.inventoryState(), index, targetSlot, this.inventoryRules());
+    const selected = this.resolveEquipmentSlot(index, targetSlot);
+    const candidate = planEquip(this.inventoryState(), index, selected, this.inventoryRules());
     return candidate.ok ? null : candidate.reason;
   }
 
@@ -1886,7 +1894,8 @@ export class GameSimulation {
     damageMax: number; maxHealth: number; critChance: number; attackSpeed: number;
     blockChance: number; fireResist: number } | null {
     if (!Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return null;
-    const candidate = planEquip(this.inventoryState(), index, targetSlot, this.inventoryRules());
+    const selected = this.resolveEquipmentSlot(index, targetSlot);
+    const candidate = planEquip(this.inventoryState(), index, selected, this.inventoryRules());
     if (!candidate.ok) return null;
     const before = this.currentStats();
     const after = this.currentStats(candidate.state.equipment as Equipment);
