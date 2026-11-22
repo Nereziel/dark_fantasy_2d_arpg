@@ -1,33 +1,43 @@
-/** Display-only keyboard and mouse hints derived from the active, validated bindings.
- * These labels never dispatch input and must not imply a default key still works.
- * KeyboardEvent.code is intentionally used instead of locale-dependent key values.
+/** Display-only hints derived from validated, active bindings.
+ * These labels never dispatch input. KeyboardEvent.code remains layout-neutral.
  */
-import type { InputAction, InputBinding } from '../input/bindings';
+import { isInputBinding, type InputAction, type InputBinding } from '../input/bindings';
 
 const MOUSE_LABELS = ['LMB', 'MMB', 'RMB', 'Mouse 4', 'Mouse 5'] as const;
+type KeyBinding = Extract<InputBinding, { device: 'keyboard' }>;
+
+/** Shared compact notation for the Controls panel and the in-game HUD. */
+export function keyboardBindingLabel(binding: KeyBinding): string {
+  const code = binding.code;
+  let base: string;
+  if (/^Key[A-Z]$/.test(code)) base = code.slice(3);
+  else if (/^Digit[0-9]$/.test(code)) base = code.slice(5);
+  else if (/^Numpad[0-9]$/.test(code)) base = 'Num ' + code.slice(6);
+  else {
+    switch (code) {
+      case 'Escape': base = 'Esc'; break;
+      case 'ShiftLeft': base = 'Shift L'; break;
+      case 'ShiftRight': base = 'Shift R'; break;
+      case 'ControlLeft': base = 'Ctrl L'; break;
+      case 'ControlRight': base = 'Ctrl R'; break;
+      case 'AltLeft': base = 'Alt L'; break;
+      case 'AltRight': base = 'Alt R'; break;
+      default: base = code;
+    }
+  }
+  if (!binding.modifiers) return base;
+  return [
+    binding.modifiers.ctrl ? 'Ctrl' : null,
+    binding.modifiers.alt ? 'Alt' : null,
+    binding.modifiers.shift ? 'Shift' : null,
+    base
+  ].filter(Boolean).join('+');
+}
 
 export function shortcutHint(bindings: readonly InputBinding[], action: InputAction): string {
   if (!Array.isArray(bindings)) return '—';
-  const binding = bindings.find(item => item?.action === action && (
-    item.device === 'keyboard'
-      ? typeof item.code === 'string' && item.code.length > 0
-      : item.device === 'mouse'
-        && Number.isInteger(item.button) && item.button >= 0 && item.button <= 4
-  ));
+  const binding = bindings.find(item => item?.action === action && isInputBinding(item));
   if (!binding) return '—';
   if (binding.device === 'mouse') return MOUSE_LABELS[binding.button] ?? '—';
-  const code = binding.code;
-  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
-  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
-  if (/^Numpad[0-9]$/.test(code)) return 'Num ' + code.slice(6);
-  switch (code) {
-    case 'Escape': return 'Esc';
-    case 'ShiftLeft': return 'Shift L';
-    case 'ShiftRight': return 'Shift R';
-    case 'ControlLeft': return 'Ctrl L';
-    case 'ControlRight': return 'Ctrl R';
-    case 'AltLeft': return 'Alt L';
-    case 'AltRight': return 'Alt R';
-    default: return code;
-  }
+  return keyboardBindingLabel(binding);
 }
