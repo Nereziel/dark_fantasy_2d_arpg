@@ -1087,8 +1087,22 @@ export class GameSimulation {
   private spawnMorrow(): void {
     if (this.defeatedMiniBossIds.has('morrow_gravebound')
       || this.zone !== 'wilderness' || this.questStatus('morrow_gravebound') !== 'active'
-      || this.units.some(unit => unit.actor.id === 'morrow_gravebound')
-      || this.units.length >= PACK_SIZE + 2) return;
+      || this.units.some(unit => unit.actor.id === 'morrow_gravebound')) return;
+    // Optional enemies can fill the two extra actor slots exactly when the
+    // graveyard quest unlocks. Do not permanently soft-lock this main story
+    // encounter: retire only a dead optional miniboss, never a living fight,
+    // quest enemy, summon, or active world-event guard.
+    if (this.units.length >= PACK_SIZE + 2) {
+      const deadOptionalIndex = this.units.findIndex((unit, index) =>
+        index >= PACK_SIZE && !unit.actor.alive
+        && unit.actor.id !== 'morrow_gravebound'
+        && MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId));
+      if (deadOptionalIndex >= 0) {
+        const [retired] = this.units.splice(deadOptionalIndex, 1);
+        if (retired) this.miniBossStates.delete(retired.actor.id);
+      }
+    }
+    if (this.units.length >= PACK_SIZE + 2) return;
     const marker = this.storyFeatures.find(feature => feature.id === 'act1.grave_warden');
     if (!marker) return;
     const health = 270 + Math.max(0, this.level - 1) * 24;
@@ -3784,6 +3798,9 @@ export class GameSimulation {
     this.tickProjectiles(dt);
     this.tickElites(dt);
     this.spawnOptionalMiniBosses();
+    // Retry after reloading an in-progress quest or after optional encounters
+    // release a slot. A successful spawn is idempotent on subsequent ticks.
+    this.spawnMorrow();
     if (this.aliveEnemies.length === 0 && !this.dungeonCleared) {
       if (this.zone === 'wilderness') {
         this.respawnTimer -= dt;
