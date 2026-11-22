@@ -200,7 +200,8 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   const journalProgress = page.locator('.quest-journal strong, .quest-journal .quest-progress');
   const objectiveBeforeSave = await journalProgress.allTextContents();
   expect(await game.getAttribute('data-zone')).toBe('wilderness');
-  await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
+  // Optional POIs legitimately discovered during combat are visible in the
+  // minimap; map IDs before/after reload are compared below.
 
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
@@ -217,7 +218,6 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
     })));
   expect(gearAfterSave).toEqual(gearBeforeSave);
   await inventory.locator('.close-button').click();
-  await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
   await expect(game).toHaveAttribute('data-zone', 'wilderness');
 
   // Reloaded map must still reveal only discovered locations. The active
