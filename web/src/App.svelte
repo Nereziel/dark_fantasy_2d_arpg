@@ -186,9 +186,7 @@
   let dialogueOpen = $state(false);
   let tradeNpc: TradeNpcId | null = $state(null);
   let townModal: TownEntry | null = $state(null);
-  let holdPositionActive = $state(false);
   const heldPosition = new HeldPositionSources(held => {
-    holdPositionActive = held;
     bridge.command({ type: 'holdPosition', value: held });
   });
   const autosaver = new CharacterAutosaver(saveGame, 1400, () => {
@@ -888,7 +886,7 @@
   {:else}
     <main class="game-screen" data-world-seed={view.worldSeed} data-zone={view.zone}
       data-player-x={view.player.x} data-player-y={view.player.y}
-      data-hold-position={holdPositionActive}>
+      data-hold-position={view.holdPosition}>
       {#key visualPreferences.pixelFilter}
         <GameViewport {bridge} renderMode={visualPreferences.pixelFilter} />
       {/key}
