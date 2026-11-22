@@ -3778,6 +3778,11 @@ export class GameSimulation {
             ? (this.wave < 3 ? 3 : this.wave + (4 - ((this.wave - 3) % 4)))
             : this.wave + 1;
           this.units = createPack(this.wave, this.level, this.world.encounterPositions);
+          // The preceding pack can include a temporary mini-boss. A normal
+          // respawn replaces the entire roster, so its obsolete AI state must
+          // not survive without the matching actor: restore() correctly
+          // rejects such dangling references as an invalid saved game.
+          this.miniBossStates.clear();
           this.seedElitePack();
           this.statusEffects.enemies = {};
           this.respawnTimer = 0;
