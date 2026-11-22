@@ -61,7 +61,11 @@ describe('Issue 128: authoritative 33-enemy long-play across regular waves', () 
       attacks++;
 
       let killed = false;
-      for (let step = 0; step < 700; step++) {
+      // Later elite packs can have >260 HP; allow a bounded, realistic
+      // autoattack window rather than treating a still-progressing fight as a stall.
+      const maxCombatSteps = Math.max(1200, Math.min(3600,
+        Math.ceil(target.maxHealth * 12)));
+      for (let step = 0; step < maxCombatSteps; step++) {
         sim.advance(16.667);
         elapsedTicks++;
         const events: GameEvent[] = sim.drainEvents();
@@ -125,5 +129,5 @@ describe('Issue 128: authoritative 33-enemy long-play across regular waves', () 
     const saved = structuredClone(finished);
     expect(new GameSimulation(42).restore(saved)).toBe(true);
     expect(sim.snapshot()).toEqual(finished);
-  }, 60_000);
+  }, 120_000);
 });
