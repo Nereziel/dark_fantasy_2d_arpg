@@ -99,6 +99,15 @@ describe('Issue 128: authoritative 33-enemy long-play across regular waves', () 
           moveDestination: stalled.moveDestination,
           holdPosition: stalled.holdPosition,
           status: stalled.status,
+          resource: stalled.resource,
+          playerEffects: stalled.statusEffects?.player,
+          playerLegacyEffects: stalled.effects.player,
+          enemyEffects: stalledActor?.effects,
+          enemyElite: stalledActor?.elite,
+          playerAttackCooldowns: stalled.warriorCooldowns,
+          actualAutoTarget: (sim as unknown as { attackTarget: string | null }).attackTarget,
+          actualAttackTimer: (sim as unknown as { attackTimer: number }).attackTimer,
+          actualImmobilized: (sim as unknown as { immobilized: boolean }).immobilized,
           selectedTarget: stalled.selectedTargetId
         })).toBe(true);
     }
