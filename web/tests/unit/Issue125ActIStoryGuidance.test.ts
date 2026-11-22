@@ -50,6 +50,16 @@ describe('Issue #125 — Act I guidance honors active story and real progression
       { id: 'vesnas_report', status: 'completed' }))).toBe('followup');
   });
 
+  it('never tells players to report an automatically resolved wilderness objective to Vesna', () => {
+    const automatic = onboardingContextFromSnapshot(view('completed',
+      { id: 'trail_of_black_ash', status: 'ready' }));
+    expect(getOnboardingStep(freshOnboarding(), automatic)).toBe('story');
+    expect(step(view('completed',
+      { id: 'blighted_pack', status: 'ready' }))).toBe('story');
+    expect(step(view('completed',
+      { id: 'vesnas_report', status: 'ready' }))).toBe('storyReturn');
+  });
+
   it('does not expose undiscovered or unknown future quest names', () => {
     expect(step(view('completed'))).toBe('followup');
     expect(step(view('completed', { id: 'crypt_lord_fallen', status: 'available' })))
