@@ -2,6 +2,8 @@
   import { _ as t } from 'svelte-i18n';
   import type { GameBridge } from '../game/bridge/GameBridge';
   import type { GameSnapshot } from '../game/core/types';
+  import type { InputAction, InputBinding } from '../game/input/bindings';
+  import { shortcutHint } from '../game/ui/shortcutHints';
   import { SKILLS, SKILL_SLOTS } from '../game/skills/skills';
   import { CLASSES } from '../game/data/classes';
   import { POTION_IDS } from '../game/consumables/potionRules';
@@ -14,11 +16,15 @@
   import { projectEquippedSkill } from '../game/skills/skillModifiers';
   import { projectTalentBonuses } from '../game/progression/talentTree';
   const extraWarriorSkills = ['groundSlam', 'warCry', 'whirlwind', 'execute', 'basicAttack'] as const;
-  const warriorShortcuts: Record<typeof extraWarriorSkills[number], string> = {
-    groundSlam: '2', warCry: '3', whirlwind: '4', execute: '5', basicAttack: '6'
+  const warriorShortcuts: Record<typeof extraWarriorSkills[number], InputAction> = {
+    groundSlam: 'SLOT_2', warCry: 'SLOT_3', whirlwind: 'SLOT_4',
+    execute: 'SLOT_5', basicAttack: 'SLOT_6'
   };
+  const extraSlotActions = ['SLOT_2', 'SLOT_3', 'SLOT_4', 'SLOT_5', 'SLOT_6'] as const;
 
-  let { bridge, view }: { bridge: GameBridge; view: GameSnapshot } = $props();
+  let { bridge, view, bindings }: {
+    bridge: GameBridge; view: GameSnapshot; bindings: readonly InputBinding[];
+  } = $props();
   let mageCostDiscount = $derived(projectTalentBonuses(view.talentRanks ?? {}).manaEfficiency);
 
   function castWarrior(id: WarriorAbilityId): void {
@@ -71,7 +77,7 @@
         title={$t('skills.' + skill.id + '.desc') + ' · ' + skill.cost + ' ' + $t('resource.' + CLASSES[view.classId].resourceId)}
         onclick={() => cast(slot)}
       >
-        <span class="skill-shortcut">{slot === 'rmb' ? 'RMB' : '1'}</span>
+        <span class="skill-shortcut">{shortcutHint(bindings, slot === 'rmb' ? 'SECONDARY' : 'SLOT_1')}</span>
         <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
         <span class="skill-title">{$t('skills.' + skill.id + '.name')}</span>
         <span class="skill-cost">{skill.cost === 0 ? '—' : skill.cost}</span>
@@ -101,7 +107,7 @@
                   ? ' · ' + $t('skillModifiers.bleeding') : '') : '')}
           onclick={() => castWarrior(id)}
         >
-          <span class="skill-shortcut">{warriorShortcuts[id]}</span>
+          <span class="skill-shortcut">{shortcutHint(bindings, warriorShortcuts[id])}</span>
           <span class="skill-icon" aria-hidden="true">{id === 'warCry' ? '✦' : id === 'groundSlam' ? '✹' : id === 'whirlwind' ? '⟳' : id === 'execute' ? '⚔' : '✧'}</span>
           <span class="skill-title">{$t('skills.' + id + '.name')}</span>
           {#if modified.modifierIds.length}
@@ -128,7 +134,7 @@
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.faith')}
           onclick={() => castPaladin(id)}
         >
-          <span class="skill-shortcut">{index+2}</span>
+          <span class="skill-shortcut">{shortcutHint(bindings, extraSlotActions[index])}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
           <span class="skill-cost">{skill.cost}</span>
@@ -153,7 +159,7 @@
           title={$t('skills.'+id+'.desc')+' · '+actualCost+' '+$t('resource.mana')}
           onclick={() => castMage(id)}
         >
-          <span class="skill-shortcut">{index+2}</span>
+          <span class="skill-shortcut">{shortcutHint(bindings, extraSlotActions[index])}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
           <span class="skill-cost">{actualCost}</span>
@@ -173,7 +179,7 @@
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.energy')}
           onclick={()=>castRogue(id)}>
-          <span class="skill-shortcut">{index+2}</span>
+          <span class="skill-shortcut">{shortcutHint(bindings, extraSlotActions[index])}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
           <span class="skill-cost">{skill.cost}</span>
@@ -193,7 +199,7 @@
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.essence')}
           onclick={() => castNecro(id)}>
-          <span class="skill-shortcut">{index+2}</span>
+          <span class="skill-shortcut">{shortcutHint(bindings, extraSlotActions[index])}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
           <span class="skill-cost">{skill.cost}</span>
@@ -213,7 +219,7 @@
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.soul')}
           onclick={() => castWarlock(id)}>
-          <span class="skill-shortcut">{index+2}</span>
+          <span class="skill-shortcut">{shortcutHint(bindings, extraSlotActions[index])}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
           <span class="skill-cost">{skill.cost}</span>
@@ -249,7 +255,7 @@
         || view.potions.selected === 'resource' && view.resource >= view.stats.maxResource}
       aria-label={$t('potions.use') + ' ' + $t('potions.' + (view.potions?.selected ?? 'healing') + '.name')}
       onclick={() => bridge.command({ type: 'usePotion' })}>
-      <span class="potion-key">Q</span>
+      <span class="potion-key">{shortcutHint(bindings, 'POTION')}</span>
       <span>{$t('potions.' + (view.potions?.selected ?? 'healing') + '.name')}</span>
       <strong>{view.potions?.charges[view.potions?.selected ?? 'healing'] ?? 0}</strong>
       {#if (view.potions?.cooldown ?? 0) > 0}
