@@ -15,7 +15,11 @@ test('favorite and locked items cannot be dropped until explicitly unprotected',
   await page.getByRole('button', { name: 'Inventory (I)' }).click();
 
   const inventory = page.getByRole('dialog', { name: 'Inventory & Equipment' });
-  const item = inventory.locator('.bag-slot.occupied').first();
+  const index = await inventory.locator('.bag-slot.occupied').first()
+    .getAttribute('data-bag-index');
+  expect(index).not.toBeNull();
+  // Stable cell locator: its occupied class disappears after a real drop.
+  const item = inventory.locator('[data-bag-index="' + index + '"]');
   const id = await item.getAttribute('data-item-id');
   expect(id).toBeTruthy();
   await item.click();
