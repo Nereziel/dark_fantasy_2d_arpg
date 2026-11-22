@@ -838,7 +838,7 @@
     "change": "Změnit",
     "reset": "Výchozí ovládání",
     "close": "Zpět",
-    "reserved": "Další schopnosti, lektvary a panely jsou vyhrazené pro příští prompty. Ovládání se ukládá v zařízení, odděleně od postavy.",
+    "reserved": "Některé vyhrazené schopnosti a budoucí panely ještě nejsou aktivní. Ovládání se ukládá v zařízení, odděleně od postavy.",
     "CONFLICT": "Tato klávesa nebo tlačítko již má jinou akci.",
     "INVALID": "Tato klávesa nebo tlačítko není podporované.",
     "actions": {
