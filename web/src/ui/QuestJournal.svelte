@@ -3,6 +3,7 @@
   import type { GameSnapshot } from '../game/core/types';
   import { QUEST_REQUIRED_KILLS, FIRST_QUEST_ID } from '../game/quests/firstQuest';
   import { ACT_I_QUEST_CATALOG } from '../game/quests/actIQuestChain';
+  import { storyNeedsWardenTurnIn } from '../game/ui/onboardingGuide';
 
   let { view, talk }: { view: GameSnapshot; talk: () => void } = $props();
   const storyState = $derived(view.questLedger?.quests.find(quest =>
@@ -25,7 +26,7 @@
       {/if}
     </div>
     <div class="quest-progress">{$t(storyDefinition.descriptionKey)}</div>
-    {#if storyState.status === 'ready'}
+    {#if storyState.status === 'ready' && storyNeedsWardenTurnIn(storyState.questId)}
       <div class="quest-ready">{$t('quest.actI.returnToVesna')}</div>
     {/if}
   {:else}
