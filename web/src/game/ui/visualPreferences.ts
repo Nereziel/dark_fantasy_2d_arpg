@@ -6,6 +6,7 @@
 export type MotionPreference = 'system' | 'reduced' | 'full';
 export type CameraShakePreference = 0 | 0.5 | 1;
 export type UiScalePreference = 0.9 | 1 | 1.1;
+export type PixelFilterPreference = 'sharp' | 'smooth';
 
 export interface VisualPreferences {
   readonly motion: MotionPreference;
@@ -13,6 +14,8 @@ export interface VisualPreferences {
   readonly uiScale: UiScalePreference;
   readonly floatingCombatText: boolean;
   readonly highContrast: boolean;
+  /** Phaser 4 pixel-art texture interpolation; world simulation unaffected. */
+  readonly pixelFilter: PixelFilterPreference;
 }
 
 export const VISUAL_PREFERENCES_KEY = 'aether-ruin-visual-preferences-v1';
@@ -22,12 +25,14 @@ export const DEFAULT_VISUAL_PREFERENCES: VisualPreferences = Object.freeze({
   shake: 1,
   uiScale: 1,
   floatingCombatText: true,
-  highContrast: false
+  highContrast: false,
+  pixelFilter: 'sharp'
 });
 
 const motionOptions: readonly MotionPreference[] = ['system', 'reduced', 'full'];
 const shakeOptions: readonly CameraShakePreference[] = [0, 0.5, 1];
 const scaleOptions: readonly UiScalePreference[] = [0.9, 1, 1.1];
+const pixelFilterOptions: readonly PixelFilterPreference[] = ['sharp','smooth'];
 
 export function normalizeVisualPreferences(input: unknown): VisualPreferences {
   if (!input || typeof input !== 'object' || Array.isArray(input))
@@ -43,7 +48,9 @@ export function normalizeVisualPreferences(input: unknown): VisualPreferences {
     floatingCombatText: typeof value.floatingCombatText === 'boolean'
       ? value.floatingCombatText : DEFAULT_VISUAL_PREFERENCES.floatingCombatText,
     highContrast: typeof value.highContrast === 'boolean'
-      ? value.highContrast : DEFAULT_VISUAL_PREFERENCES.highContrast
+      ? value.highContrast : DEFAULT_VISUAL_PREFERENCES.highContrast,
+    pixelFilter: pixelFilterOptions.includes(value.pixelFilter as PixelFilterPreference)
+      ? value.pixelFilter! : DEFAULT_VISUAL_PREFERENCES.pixelFilter
   });
 }
 

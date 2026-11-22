@@ -1,14 +1,21 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
-  import type { VisualPreferences, MotionPreference, CameraShakePreference, UiScalePreference } from '../game/ui/visualPreferences';
+  import type { VisualPreferences, MotionPreference, CameraShakePreference,
+    UiScalePreference, PixelFilterPreference } from '../game/ui/visualPreferences';
   import type { AudioPreferences } from '../game/audio/audioPreferences';
   import AudioVolumePanel from './AudioVolumePanel.svelte';
 
-  let { preferences, save, audioPreferences, saveAudio, close }: {
+  let { preferences, save, audioPreferences, saveAudio,
+    fullscreenSupported, fullscreenActive, fullscreenError,
+    toggleFullscreen, close }: {
     preferences: VisualPreferences;
     save: (next: VisualPreferences) => void;
     audioPreferences: AudioPreferences;
     saveAudio: (next: AudioPreferences) => void;
+    fullscreenSupported: boolean;
+    fullscreenActive: boolean;
+    fullscreenError: boolean;
+    toggleFullscreen: () => void;
     close: () => void;
   } = $props();
 
@@ -53,6 +60,25 @@
         <option value="1.1">110%</option>
       </select>
     </div>
+    <div class="setting-row">
+      <label for="visual-pixel-filter">{$t('visualSettings.pixelFilter')}</label>
+      <select id="visual-pixel-filter" data-testid="visual-pixel-filter"
+        value={preferences.pixelFilter}
+        onchange={(event) => change({ pixelFilter: event.currentTarget.value as PixelFilterPreference })}>
+        <option value="sharp">{$t('visualSettings.pixelSharp')}</option>
+        <option value="smooth">{$t('visualSettings.pixelSmooth')}</option>
+      </select>
+    </div>
+    <div class="setting-row">
+      <span>{$t('visualSettings.fullscreen')}</span>
+      <button type="button" class="fullscreen-button" data-testid="visual-fullscreen"
+        disabled={!fullscreenSupported} onclick={toggleFullscreen}>
+        {fullscreenActive ? $t('visualSettings.fullscreenExit') : $t('visualSettings.fullscreenEnter')}
+      </button>
+    </div>
+    {#if fullscreenError}
+      <p class="fullscreen-error" role="alert">{$t('visualSettings.fullscreenDenied')}</p>
+    {/if}
     <label class="setting-toggle" for="visual-floating-text">
       <span>{$t('visualSettings.floatingText')}</span>
       <input id="visual-floating-text" data-testid="visual-floating-text"
@@ -88,7 +114,9 @@
     min-height:48px;border-bottom:1px solid #44505b;
     color:#e6dbc5;font-size:.85rem
   }
-  .setting-row label,.setting-toggle span{flex:1;min-width:0;overflow-wrap:anywhere}
+  .setting-row label,.setting-row>span,.setting-toggle span{flex:1;min-width:0;overflow-wrap:anywhere}
+  .fullscreen-button{min-height:44px;min-width:130px;max-width:52%;padding:7px 9px;font-size:.8rem}
+  .fullscreen-error{color:#ffd9a8;margin:2px 0;font-size:.8rem}
   select{min-width:130px;max-width:52%;min-height:44px}
   input[type='checkbox']{width:22px;height:22px;accent-color:#e3bc75;flex-shrink:0}
   footer{display:flex;justify-content:flex-end;margin-top:12px}
