@@ -100,6 +100,12 @@
     displayed?.kind === 'bag' && view.inventory[displayed.index]
       ? bridge.equipmentPlacementError(displayed.index) : null
   );
+  // The authoritative drop planner rejects favorite/locked items. Explain
+  // their protection up front instead of offering an action that does nothing.
+  let dropProtected = $derived(!!(
+    displayed?.kind === 'bag' && inspected
+    && (view.itemFlags?.[inspected.id]?.favorite || view.itemFlags?.[inspected.id]?.locked)
+  ));
   let unequipFailure = $derived.by(() =>
     displayed?.kind === 'gear' && view.equipment[displayed.slot]
       ? bridge.equipmentRemovalError(displayed.slot) : null
@@ -586,7 +592,12 @@
               <button onclick={() => flagInspected('locked')}>
                 {$t(view.itemFlags?.[inspected.id]?.locked ? 'inventory.unlock' : 'inventory.lock')}
               </button>
-              <button onclick={dropInspected}>
+              {#if dropProtected}
+                <p class="invalid-equip" role="status">{$locale === 'cs'
+                  ? 'Oblíbené nebo zamčené předměty nelze zahodit. Nejprve zruš jejich ochranu.'
+                  : 'Locked or favorite items cannot be dropped. Unlock or unfavorite first.'}</p>
+              {/if}
+              <button disabled={dropProtected} onclick={dropInspected}>
                 {$t('inventory.drop')}
               </button>
             </div>
