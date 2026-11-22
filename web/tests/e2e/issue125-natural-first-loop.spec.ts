@@ -133,7 +133,9 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // Turn-in immediately starts the next genuine Act I objective;
   // the journal correctly replaces the completed starter quest.
   await expect(page.locator('.quest-journal')).toContainText('Trail of Black Ash');
-  await expect(guide).toHaveAttribute('data-guide-step', 'followup');
+  await expect(guide).toHaveAttribute('data-guide-step', 'story');
+  await expect(guide).toContainText('Investigate the corruption site');
+  await expect(guide.getByTestId('onboarding-xp')).toContainText(/Level \d+ · XP \d+\/\d+/);
 });
 
 test.describe('touch input', () => {
