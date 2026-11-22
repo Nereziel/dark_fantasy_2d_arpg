@@ -832,14 +832,14 @@
   "bindings": {
     "title": "Input bindings",
     "open": "Controls",
-    "help": "Choose an action, then press a key or mouse button. Escape cancels capture.",
+    "help": "Choose an action, then press Ctrl, Alt, or Shift with a key. Release a modifier alone to bind that key. Escape cancels.",
     "press": "Waiting for input",
     "pressShort": "Press…",
     "change": "Change",
     "reset": "Restore defaults",
     "swapMouse": "Swap primary / secondary mouse buttons",
     "close": "Back",
-    "reserved": "Some reserved skills and future panels are not yet active. Bindings are saved on this device, separately from your character.",
+    "reserved": "Browser/system shortcuts, Meta combinations, and Ctrl+Alt (AltGr) cannot be assigned. Future panels are not active. Controls are saved on this device.",
     "CONFLICT": "This key or button is already assigned.",
     "INVALID": "That key or button is not supported.",
     "actions": {

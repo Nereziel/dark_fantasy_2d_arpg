@@ -11,8 +11,14 @@ export type InputAction =
   | 'POTION' | 'EVADE' | 'INVENTORY' | 'CHARACTER'
   | 'SKILLS' | 'TALENTS' | 'MAP' | 'JOURNAL' | 'MENU';
 
+/** Optional canonical modifiers. Omitted on existing v1 bindings. */
+export type KeyboardModifiers = {
+  ctrl?: true;
+  alt?: true;
+  shift?: true;
+};
 export type InputBinding =
-  | { action: InputAction; device: 'keyboard'; code: string }
+  | { action: InputAction; device: 'keyboard'; code: string; modifiers?: KeyboardModifiers }
   | { action: InputAction; device: 'mouse'; button: number };
 
 export type KeyboardInput = {
@@ -20,6 +26,10 @@ export type KeyboardInput = {
   uiCaptured: boolean;
   isTyping: boolean;
   repeat?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
+  shiftKey?: boolean;
+  metaKey?: boolean;
 };
 
 export type PointerInput = { button: number; uiCaptured: boolean };
@@ -62,12 +72,60 @@ function isMouseButton(button: unknown): button is number {
     && button >= 0 && button <= 4;
 }
 
-function isInputBinding(value: unknown): value is InputBinding {
+const CONTROL_RESERVED: ReadonlySet<string> = new Set([
+  // New tab/window, navigation, reload, save, print, editing, find, tabs.
+  'KeyA', 'KeyC', 'KeyD', 'KeyF', 'KeyH', 'KeyJ', 'KeyL', 'KeyN',
+  'KeyO', 'KeyP', 'KeyR', 'KeyS', 'KeyT', 'KeyU', 'KeyV', 'KeyW',
+  'KeyX', 'KeyY', 'KeyZ', 'Tab', 'Backspace', 'PageUp', 'PageDown',
+  'F4', 'F5', 'ArrowLeft', 'ArrowRight',
+  ...Array.from({ length: 10 }, (_, i) => 'Digit' + i)
+]);
+const ALT_RESERVED: ReadonlySet<string> = new Set([
+  'Tab', 'F4', 'Escape', 'Space', 'Home', 'ArrowLeft', 'ArrowRight',
+  'KeyD', 'KeyE', 'KeyF'
+]);
+
+export function isModifierCode(code: string): boolean {
+  return /^(Shift|Control|Alt|Meta)(Left|Right)$/.test(code);
+}
+
+/** Invalid structures, AltGr (Ctrl+Alt), Meta chords and browser shortcuts
+ * are refused both for new bindings and when rehydrating localStorage.
+ */
+function validModifiers(code: string, value: unknown): value is KeyboardModifiers | undefined {
+  if (value === undefined) return true;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const pairs = Object.entries(value);
+  if (!pairs.length || pairs.some(([name, flag]) =>
+    !['ctrl', 'alt', 'shift'].includes(name) || flag !== true
+  )) return false;
+  const mods = value as KeyboardModifiers;
+  if (isModifierCode(code) || (mods.ctrl && mods.alt)) return false;
+  if (mods.ctrl && CONTROL_RESERVED.has(code)) return false;
+  if (mods.alt && ALT_RESERVED.has(code)) return false;
+  return true;
+}
+
+function copyBinding(binding: InputBinding): InputBinding {
+  return binding.device === 'keyboard'
+    ? { ...binding, ...(binding.modifiers ? { modifiers: { ...binding.modifiers } } : {}) }
+    : { ...binding };
+}
+
+export function isInputBinding(value: unknown): value is InputBinding {
   if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as { action?: unknown; device?: unknown; code?: unknown; button?: unknown };
+  const candidate = value as {
+    action?: unknown; device?: unknown; code?: unknown;
+    button?: unknown; modifiers?: unknown
+  };
   if (typeof candidate.action !== 'string' || !INPUT_ACTIONS.has(candidate.action)) return false;
-  if (candidate.device === 'keyboard') return isKeyboardCode(candidate.code);
-  if (candidate.device === 'mouse') return isMouseButton(candidate.button);
+  if (candidate.device === 'keyboard') {
+    return isKeyboardCode(candidate.code)
+      && validModifiers(candidate.code, candidate.modifiers);
+  }
+  if (candidate.device === 'mouse') {
+    return isMouseButton(candidate.button) && candidate.modifiers === undefined;
+  }
   return false;
 }
 
@@ -99,21 +157,49 @@ export const DEFAULT_BINDINGS: readonly InputBinding[] = Object.freeze(
   defaultValues.map(binding => Object.freeze({ ...binding }))
 );
 
-/** UI and text entry always take precedence over gameplay shortcuts. */
+/** UI and text entry always take precedence over gameplay shortcuts.
+ * Explicit chords are more specific than the old key-only triggers, so
+ * Shift+1 can override 1 without breaking Shift-to-hold-position + other
+ * default skill keys. Ctrl/Alt never accidentally dispatch plain shortcuts.
+ */
 export function resolveKeyboardAction(
   input: KeyboardInput,
   bindings: readonly InputBinding[] = DEFAULT_BINDINGS
 ): InputAction | null {
   if (!input || input.uiCaptured || input.isTyping || !isKeyboardCode(input.code)
-      || !Array.isArray(bindings)) return null;
+    || !Array.isArray(bindings)
+    || ['ctrlKey', 'altKey', 'shiftKey', 'metaKey'].some(k => {
+      const flag = input[k as keyof KeyboardInput];
+      return flag !== undefined && typeof flag !== 'boolean';
+    })) return null;
 
+  if (input.metaKey && input.code !== 'MetaLeft' && input.code !== 'MetaRight') return null;
+  const ctrl = !!input.ctrlKey, alt = !!input.altKey, shift = !!input.shiftKey;
   let action: InputAction | null = null;
+  let best = -1;
+  let ambiguous = false;
   for (const binding of bindings) {
-    if (!isInputBinding(binding) || binding.device !== 'keyboard' || binding.code !== input.code) continue;
-    if (action !== null && action !== binding.action) return null;
-    action = binding.action;
+    if (!isInputBinding(binding) || binding.device !== 'keyboard'
+      || binding.code !== input.code) continue;
+    let priority = 0;
+    if (binding.modifiers) {
+      if (!!binding.modifiers.ctrl !== ctrl || !!binding.modifiers.alt !== alt
+        || !!binding.modifiers.shift !== shift) continue;
+      priority = 1;
+    } else {
+      // Unmodified Shift/Control/Alt keys themselves are legal standalone
+      // bindings; pressed Shift is an optional modifier for legacy keys.
+      if (ctrl && !/^Control(Left|Right)$/.test(input.code)) continue;
+      if (alt && !/^Alt(Left|Right)$/.test(input.code)) continue;
+    }
+    if (priority > best) {
+      action = binding.action;
+      best = priority;
+      ambiguous = false;
+    } else if (priority === best && action !== binding.action) ambiguous = true;
   }
-  return input.repeat && action !== 'HOLD_POSITION' ? null : action;
+  if (ambiguous || (input.repeat && action !== 'HOLD_POSITION')) return null;
+  return action;
 }
 
 /** Browser button indices: left=0, middle=1, right=2, back=3, forward=4. */
@@ -134,7 +220,9 @@ export function resolvePointerAction(
 }
 
 function bindingKey(binding: InputBinding): string {
-  return binding.device === 'keyboard' ? `keyboard:${binding.code}` : `mouse:${binding.button}`;
+  return binding.device === 'keyboard'
+    ? `keyboard:${binding.code}:${binding.modifiers?.ctrl ? 1 : 0}${binding.modifiers?.alt ? 1 : 0}${binding.modifiers?.shift ? 1 : 0}`
+    : `mouse:${binding.button}`;
 }
 
 /**
@@ -164,8 +252,8 @@ export function rebindAction(
   const index = bindings.findIndex(binding => binding.action === replacement.action);
   const result = bindings
     .filter(binding => binding.action !== replacement.action)
-    .map(binding => ({ ...binding }));
-  result.splice(index < 0 ? result.length : index, 0, { ...replacement });
+    .map(copyBinding);
+  result.splice(index < 0 ? result.length : index, 0, copyBinding(replacement));
   return { ok: true, bindings: result };
 }
 
@@ -201,22 +289,22 @@ export function applyBindingOverrides(
 
   for (const binding of overrides) {
     const group = byAction.get(binding.action) ?? [];
-    group.push({ ...binding });
+    group.push(copyBinding(binding));
     byAction.set(binding.action, group);
   }
   const result: InputBinding[] = [];
   const inserted = new Set<InputAction>();
   for (const binding of defaults) {
     const replacement = byAction.get(binding.action);
-    if (!replacement) result.push({ ...binding });
+    if (!replacement) result.push(copyBinding(binding));
     else if (!inserted.has(binding.action)) {
-      result.push(...replacement.map(item => ({ ...item })));
+      result.push(...replacement.map(copyBinding));
       inserted.add(binding.action);
     }
   }
   // Future valid actions not present in older defaults are appended in stable order.
   for (const [action, replacements] of byAction) {
-    if (!inserted.has(action)) result.push(...replacements.map(item => ({ ...item })));
+    if (!inserted.has(action)) result.push(...replacements.map(copyBinding));
   }
   const error = validate(result);
   return error ? { ok: false, reason: error } : { ok: true, bindings: result };

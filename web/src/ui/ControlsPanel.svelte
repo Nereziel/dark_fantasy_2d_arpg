@@ -1,6 +1,8 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
-  import { rebindAction, swapPrimarySecondaryMouse, type InputAction, type InputBinding } from '../game/input/bindings';
+  import { isModifierCode, rebindAction, swapPrimarySecondaryMouse,
+    type InputAction, type InputBinding, type KeyboardModifiers } from '../game/input/bindings';
+  import { keyboardBindingLabel } from '../game/ui/shortcutHints';
 
   let { bindings, save, close }: {
     bindings: readonly InputBinding[];
@@ -9,6 +11,7 @@
   } = $props();
   let capturing: InputAction | null = $state(null);
   let error = $state('');
+  let pendingModifier: string | null = $state(null);
   const actions: readonly InputAction[] = [
     'PRIMARY', 'SECONDARY', 'FORCE_MOVE', 'HOLD_POSITION',
     'SLOT_1', 'SLOT_2', 'SLOT_3', 'SLOT_4', 'SLOT_5', 'SLOT_6',
@@ -17,11 +20,14 @@
   ];
   function currentLabel(action: InputAction): string {
     return bindings.filter(binding => binding.action === action)
-      .map(binding => binding.device === 'keyboard' ? binding.code : 'Mouse ' + binding.button)
+      .map(binding => binding.device === 'keyboard'
+        ? binding.modifiers ? keyboardBindingLabel(binding) : binding.code
+        : 'Mouse ' + binding.button)
       .join(' / ') || '—';
   }
   function assign(binding: InputBinding): void {
     const result = rebindAction(bindings, binding);
+    pendingModifier = null;
     if (result.ok) {
       save(result.bindings);
       error = '';
@@ -34,24 +40,56 @@
       save(result.bindings);
       error = '';
       capturing = null;
+      pendingModifier = null;
     } else error = result.reason;
   }
   function captureKey(event: KeyboardEvent): void {
     if (!capturing) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (event.code === 'Escape') { capturing = null; error = ''; return; }
+    if (event.code === 'Escape') {
+      capturing = null;
+      pendingModifier = null;
+      error = '';
+      return;
+    }
+    // A modifier alone is captured on keyup. If a second key arrives first,
+    // store that explicit chord instead of prematurely binding ControlLeft.
+    if (isModifierCode(event.code)) {
+      if (!event.repeat) pendingModifier = event.code;
+      return;
+    }
+    pendingModifier = null;
+    if (event.metaKey) { error = 'INVALID'; return; }
+    const modifiers: KeyboardModifiers = {
+      ...(event.ctrlKey ? { ctrl: true as const } : {}),
+      ...(event.altKey ? { alt: true as const } : {}),
+      ...(event.shiftKey ? { shift: true as const } : {})
+    };
+    assign({
+      action: capturing, device: 'keyboard', code: event.code,
+      ...(Object.keys(modifiers).length ? { modifiers } : {})
+    });
+  }
+  function captureKeyup(event: KeyboardEvent): void {
+    if (!capturing || !isModifierCode(event.code)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (pendingModifier !== event.code) return;
+    pendingModifier = null;
+    if (/^Meta/.test(event.code)) { error = 'INVALID'; return; }
     assign({ action: capturing, device: 'keyboard', code: event.code });
   }
   function captureMouse(event: MouseEvent): void {
     if (!capturing) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    pendingModifier = null;
     assign({ action: capturing, device: 'mouse', button: event.button });
   }
 </script>
 
-<svelte:window onkeydown={captureKey} onmousedown={captureMouse} />
+<svelte:window onkeydown={captureKey} onkeyup={captureKeyup} onmousedown={captureMouse} />
 
 <div class="controls-card" role="dialog" aria-modal="true" aria-label={$t('bindings.title')}>
   <h2>{$t('bindings.title')}</h2>
@@ -66,7 +104,7 @@
         <span class="binding-action">{$t('bindings.actions.' + action)}</span>
         <code>{currentLabel(action)}</code>
         <button disabled={capturing !== null && capturing !== action}
-          onclick={() => { capturing = action; error = ''; }}>
+          onclick={() => { capturing = action; pendingModifier = null; error = ''; }}>
           {$t(capturing === action ? 'bindings.pressShort' : 'bindings.change')}
         </button>
       </div>
@@ -75,8 +113,8 @@
   <div class="controls-footer">
     <button type="button" data-testid="swap-primary-secondary" disabled={capturing !== null}
       onclick={swapMouseButtons}>{$t('bindings.swapMouse')}</button>
-    <button onclick={() => { capturing = null; error = ''; save([]); }}>{$t('bindings.reset')}</button>
-    <button class="primary" onclick={close}>{$t('bindings.close')}</button>
+    <button onclick={() => { capturing = null; pendingModifier = null; error = ''; save([]); }}>{$t('bindings.reset')}</button>
+    <button class="primary" onclick={() => { capturing = null; pendingModifier = null; close(); }}>{$t('bindings.close')}</button>
   </div>
   <small>{$t('bindings.reserved')}</small>
 </div>
