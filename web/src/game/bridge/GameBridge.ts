@@ -66,6 +66,11 @@ export class GameBridge implements GameStateReader {
   previewEquipment(index: number, slot?: EquipmentSlot): ReturnType<GameSimulation['previewEquipment']> {
     return this.simulation.previewEquipment(index, slot);
   }
+  /** Read-only reason from the same planner as the actual equip command. */
+  equipmentPlacementError(index: number, slot?: EquipmentSlot):
+    ReturnType<GameSimulation['equipmentPlacementError']> {
+    return this.simulation.equipmentPlacementError(index, slot);
+  }
   restoreCharacter(progress: CharacterProgress, worldSeed = newSessionSeed()): boolean {
     this.pointerWorld = null;
     this.pointerEnemy = null;
