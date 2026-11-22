@@ -157,3 +157,71 @@ test.describe('landscape touch equipment management', () => {
     await expect(target).toHaveClass(/occupied/);
   });
 });
+
+test('equipped item swaps and exact bag placement persist through real Save/Load', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await page.getByRole('button', { name: 'Browse wares' }).click();
+  const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
+  const buyBelt = merchant.getByRole('button', { name: 'Buy Studded War Belt' });
+  await buyBelt.click();
+  await buyBelt.click(); // Actual purchases, not injected inventory or save contents.
+  await merchant.getByRole('button', { name: 'Leave' }).click();
+  await page.getByRole('button', { name: 'Inventory (I)' }).click();
+
+  const inventory = page.getByRole('dialog', { name: 'Inventory & Equipment' });
+  const firstCell = inventory.locator('[data-bag-index="0"]');
+  const secondCell = inventory.locator('[data-bag-index="1"]');
+  const chosenCell = inventory.locator('[data-bag-index="17"]');
+  const gear = inventory.locator('[data-equipment-slot="BELT"]');
+  const firstId = await firstCell.getAttribute('data-item-id');
+  const secondId = await secondCell.getAttribute('data-item-id');
+  expect(firstId).toBeTruthy();
+  expect(secondId).toBeTruthy();
+  expect(firstId).not.toBe(secondId);
+
+  // Equip the first belt, then explicitly replace it with the second belt.
+  await firstCell.click();
+  await inventory.getByTestId('item-inspector')
+    .getByRole('button', { name: 'Equip', exact: true }).click();
+  await expect(gear).toHaveAttribute('data-item-id', firstId!);
+  await expect(firstCell).not.toHaveClass(/occupied/);
+  await secondCell.click();
+  await inventory.getByTestId('item-inspector')
+    .getByRole('button', { name: 'Equip', exact: true }).click();
+  await expect(gear).toHaveAttribute('data-item-id', secondId!);
+  await expect(secondCell).toHaveAttribute('data-item-id', firstId!);
+
+  // Move the currently equipped belt to an explicitly chosen empty cell.
+  await gear.dragTo(chosenCell);
+  await expect(gear).not.toHaveClass(/has-item/);
+  await expect(chosenCell).toHaveAttribute('data-item-id', secondId!);
+  await expect(secondCell).toHaveAttribute('data-item-id', firstId!);
+  await inventory.getByRole('button', { name: 'Close' }).click();
+
+  // Authoritative save must retain stable item identities, exact positions,
+  // and the empty equipment socket after a reload (not merely item counts).
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await page.getByRole('button', { name: 'Inventory (I)' }).click();
+  await expect(gear).not.toHaveClass(/has-item/);
+  await expect(secondCell).toHaveAttribute('data-item-id', firstId!);
+  await expect(chosenCell).toHaveAttribute('data-item-id', secondId!);
+
+  // Re-equip through real DnD and verify persistence in the other direction.
+  await chosenCell.dragTo(gear);
+  await expect(gear).toHaveAttribute('data-item-id', secondId!);
+  await expect(chosenCell).not.toHaveClass(/occupied/);
+  await inventory.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await page.getByRole('button', { name: 'Inventory (I)' }).click();
+  await expect(gear).toHaveAttribute('data-item-id', secondId!);
+  await expect(secondCell).toHaveAttribute('data-item-id', firstId!);
+  await expect(chosenCell).not.toHaveClass(/occupied/);
+});
