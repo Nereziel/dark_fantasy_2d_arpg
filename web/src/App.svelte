@@ -26,6 +26,7 @@
     DEFAULT_AUDIO_PREFERENCES, type AudioPreferences } from './game/audio/audioPreferences';
   import { WebAudioDirector } from './game/audio/WebAudioDirector';
   import SkillBar from './ui/SkillBar.svelte';
+  import { shortcutHint } from './game/ui/shortcutHints';
   import QuestJournal from './ui/QuestJournal.svelte';
   import WorldMapCanvas from './ui/WorldMapCanvas.svelte';
   import WorldEventPanel from './ui/WorldEventPanel.svelte';
@@ -981,21 +982,21 @@
           <div class="hud-details"><span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
           <div class="experience-track"><div style:width={`${xpRequiredForLevel(view.level) > 0 ? 100 * view.xp / xpRequiredForLevel(view.level) : 100}%`}></div></div>
         </div>
-        <SkillBar {bridge} {view} />
+        <SkillBar {bridge} {view} bindings={controlBindings} />
         <div class="hud-actions">
           <button onclick={(event) => openInventory(event.currentTarget)} aria-label={$t('inventory.open')} title={$t('inventory.open')}
-            data-quick-action="inventory"><span aria-hidden="true">▦</span><span class="quick-key">I</span></button>
+            data-quick-action="inventory"><span aria-hidden="true">▦</span><span class="quick-key">{shortcutHint(controlBindings, 'INVENTORY')}</span></button>
           <button onclick={(event) => openCharacterSheet(event.currentTarget)} aria-label={$t('character.open')} title={$t('character.open')}
-            data-quick-action="character"><span aria-hidden="true">♙</span><span class="quick-key">C</span></button>
+            data-quick-action="character"><span aria-hidden="true">♙</span><span class="quick-key">{shortcutHint(controlBindings, 'CHARACTER')}</span></button>
           <button onclick={(event) => openTalents(event.currentTarget)} disabled={!view.player.alive || view.paused}
             aria-label={$t('talents.open') + (view.talentPoints ? ' (' + view.talentPoints + ')' : '')}
             title={$t('talents.open')}
-            data-quick-action="talents"><span aria-hidden="true">✧</span><span class="quick-key">T</span>
+            data-quick-action="talents"><span aria-hidden="true">✧</span><span class="quick-key">{shortcutHint(controlBindings, 'TALENTS')}</span>
             {#if (view.talentPoints ?? 0) > 0}<span class="quick-notice">{view.talentPoints}</span>{/if}</button>
           <button disabled={busy} onclick={save} aria-label={$t('menu.save')} title={$t('menu.save')}
-            data-quick-action="save"><span aria-hidden="true">▣</span><span class="quick-key">S</span></button>
+            data-quick-action="save"><span aria-hidden="true">▣</span></button>
           <button disabled={busy} onclick={() => load()} aria-label={$t('menu.load')} title={$t('menu.load')}
-            data-quick-action="load"><span aria-hidden="true">↺</span><span class="quick-key">L</span></button>
+            data-quick-action="load"><span aria-hidden="true">↺</span></button>
         </div>
       </div>
 
