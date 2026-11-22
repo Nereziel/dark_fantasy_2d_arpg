@@ -1492,7 +1492,14 @@
     "full": "Plné",
     "uiScale": "Velikost rozhraní",
     "floatingText": "Plovoucí text poškození",
-    "highContrast": "Vysoký kontrast"
+    "highContrast": "Vysoký kontrast",
+    "pixelFilter": "Vyhlazení pixel artu",
+    "pixelSharp": "Ostré pixely",
+    "pixelSmooth": "Jemné hrany",
+    "fullscreen": "Celá obrazovka",
+    "fullscreenEnter": "Zapnout",
+    "fullscreenExit": "Vypnout",
+    "fullscreenDenied": "Prohlížeč nepovolil režim celé obrazovky."
   },
   "audioSettings": {
     "title": "Zvuk a hlasitost",
