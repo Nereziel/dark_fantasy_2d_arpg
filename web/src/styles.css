@@ -199,7 +199,10 @@ h1 span,.brand-mark span{color:#b88b59}
     min-width:0; min-height:44px; height:44px; padding:3px;
     font-size:1rem; touch-action:manipulation;
   }
-  .game-hud .quick-key { font-size:.55rem; display:block; }
+  .game-hud .quick-key {
+    font-size:.55rem; display:block; max-width:100%; text-align:center;
+    overflow-wrap:anywhere; line-height:1.05;
+  }
   .minimap-overlay button { min-height:44px; }
 }
 @media(max-width:420px){

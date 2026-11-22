@@ -659,7 +659,8 @@
     const action = resolveKeyboardAction({
       code: event.code, repeat: event.repeat, isTyping, uiCaptured: false,
       ctrlKey: event.ctrlKey, altKey: event.altKey,
-      shiftKey: event.shiftKey, metaKey: event.metaKey
+      shiftKey: event.shiftKey, metaKey: event.metaKey,
+      altGraphKey: event.getModifierState('AltGraph') || event.key === 'AltGraph'
     }, bridge.bindings());
     if (talentsOpen) {
       if (event.code === 'Escape' || action === 'MENU' || action === 'TALENTS') {

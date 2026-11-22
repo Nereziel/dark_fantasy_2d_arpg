@@ -61,14 +61,14 @@ test.describe('Issue #153 mobile bindings acceptance', () => {
     await page.setViewportSize({ width: 320, height: 740 });
     await page.goto('./');
     await page.evaluate(() => localStorage.setItem('aether-ruin-controls-v1', JSON.stringify([
-      { action: 'MAP', device: 'keyboard', code: 'F8',
+      { action: 'INVENTORY', device: 'keyboard', code: 'F8',
         modifiers: { ctrl: true, shift: true } }
     ])));
     await page.reload();
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: 'Enter the world' }).click();
     const mapAction = page.getByTestId('combat-dock')
-      .locator('[data-quick-action="map"]');
+      .locator('[data-quick-action="inventory"]');
     await expect(mapAction.locator('.quick-key')).toHaveText('Ctrl+Shift+F8');
     const bounds = await mapAction.evaluate(node => {
       const btn = node.getBoundingClientRect();
@@ -81,9 +81,9 @@ test.describe('Issue #153 mobile bindings acceptance', () => {
     expect(bounds.labelLeft).toBeGreaterThanOrEqual(bounds.left - 1);
     expect(bounds.labelRight).toBeLessThanOrEqual(bounds.right + 1);
     await mapAction.tap();
-    const dialog = page.getByTestId('world-map-dialog');
+    const dialog = page.getByRole('dialog', { name: 'Inventory & Equipment' });
     await expect(dialog).toBeVisible();
-    await dialog.getByTestId('map-close').tap();
+    await dialog.locator('.close-button').tap();
     await expect(dialog).toHaveCount(0);
   });
 });
