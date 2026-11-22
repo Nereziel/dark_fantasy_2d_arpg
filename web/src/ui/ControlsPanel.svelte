@@ -1,6 +1,6 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
-  import { rebindAction, type InputAction, type InputBinding } from '../game/input/bindings';
+  import { rebindAction, swapPrimarySecondaryMouse, type InputAction, type InputBinding } from '../game/input/bindings';
 
   let { bindings, save, close }: {
     bindings: readonly InputBinding[];
@@ -22,6 +22,14 @@
   }
   function assign(binding: InputBinding): void {
     const result = rebindAction(bindings, binding);
+    if (result.ok) {
+      save(result.bindings);
+      error = '';
+      capturing = null;
+    } else error = result.reason;
+  }
+  function swapMouseButtons(): void {
+    const result = swapPrimarySecondaryMouse(bindings);
     if (result.ok) {
       save(result.bindings);
       error = '';
@@ -65,6 +73,8 @@
     {/each}
   </div>
   <div class="controls-footer">
+    <button type="button" data-testid="swap-primary-secondary" disabled={capturing !== null}
+      onclick={swapMouseButtons}>{$t('bindings.swapMouse')}</button>
     <button onclick={() => { capturing = null; error = ''; save([]); }}>{$t('bindings.reset')}</button>
     <button class="primary" onclick={close}>{$t('bindings.close')}</button>
   </div>
@@ -82,6 +92,6 @@
   .binding-action{color:#d9cbaf;font-size:.75rem}
   code{font-size:.7rem;overflow-wrap:anywhere;color:#9fcae2}
   button{font-size:.72rem;padding:7px 10px}
-  .controls-footer{display:flex;justify-content:flex-end;gap:10px}
+  .controls-footer{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
   @media(max-width:560px){.binding-row{grid-template-columns:1fr 1fr 75px;gap:4px}.binding-row button{padding:5px}.controls-card{padding:11px}}
 </style>

@@ -168,3 +168,89 @@ export function rebindAction(
   result.splice(index < 0 ? result.length : index, 0, { ...replacement });
   return { ok: true, bindings: result };
 }
+
+
+/**
+ * Restore all changed actions together rather than replaying rebindAction().
+ * Replaying individual records rejects valid left/right swaps as transient
+ * collisions with the unchanged default binding. Persisted v1 override arrays
+ * and legacy single-action overrides retain exactly the same shape.
+ */
+export function applyBindingOverrides(
+  defaults: readonly InputBinding[], overrides: readonly InputBinding[]
+): { ok: true; bindings: InputBinding[] } | { ok: false; reason: 'INVALID' | 'CONFLICT' } {
+  if (!Array.isArray(defaults) || !Array.isArray(overrides)) {
+    return { ok: false, reason: 'INVALID' };
+  }
+  const byAction = new Map<InputAction, InputBinding[]>();
+  const validate = (entries: readonly InputBinding[]) => {
+    const occupied = new Set<string>();
+    for (const binding of entries) {
+      if (!isInputBinding(binding)) return 'INVALID' as const;
+      const key = bindingKey(binding);
+      if (occupied.has(key)) return 'CONFLICT' as const;
+      occupied.add(key);
+    }
+    return null;
+  };
+  const defaultError = validate(defaults);
+  const overrideError = validate(overrides);
+  if (defaultError || overrideError) {
+    return { ok: false, reason: defaultError ?? overrideError ?? 'INVALID' };
+  }
+
+  for (const binding of overrides) {
+    const group = byAction.get(binding.action) ?? [];
+    group.push({ ...binding });
+    byAction.set(binding.action, group);
+  }
+  const result: InputBinding[] = [];
+  const inserted = new Set<InputAction>();
+  for (const binding of defaults) {
+    const replacement = byAction.get(binding.action);
+    if (!replacement) result.push({ ...binding });
+    else if (!inserted.has(binding.action)) {
+      result.push(...replacement.map(item => ({ ...item })));
+      inserted.add(binding.action);
+    }
+  }
+  // Future valid actions not present in older defaults are appended in stable order.
+  for (const [action, replacements] of byAction) {
+    if (!inserted.has(action)) result.push(...replacements.map(item => ({ ...item })));
+  }
+  const error = validate(result);
+  return error ? { ok: false, reason: error } : { ok: true, bindings: result };
+}
+
+/**
+ * Swap the physical PRIMARY and SECONDARY mouse actions atomically.
+ * This preserves other bindings, force-move and keyboard mappings, including
+ * custom button 3/4 layouts. A missing or ambiguous primary/secondary button
+ * fails without modifying the caller's bindings.
+ */
+export function swapPrimarySecondaryMouse(
+  bindings: readonly InputBinding[]
+): { ok: true; bindings: InputBinding[] } | { ok: false; reason: 'INVALID' | 'CONFLICT' } {
+  if (!Array.isArray(bindings)) return { ok: false, reason: 'INVALID' };
+  const triggers = new Set<string>();
+  for (const binding of bindings) {
+    if (!isInputBinding(binding)) return { ok: false, reason: 'INVALID' };
+    const trigger = bindingKey(binding);
+    if (triggers.has(trigger)) return { ok: false, reason: 'CONFLICT' };
+    triggers.add(trigger);
+  }
+  const primary = bindings.filter(binding => binding.device === 'mouse' && binding.action === 'PRIMARY');
+  const secondary = bindings.filter(binding => binding.device === 'mouse' && binding.action === 'SECONDARY');
+  if (primary.length !== 1 || secondary.length !== 1) {
+    return { ok: false, reason: 'INVALID' };
+  }
+  return {
+    ok: true,
+    bindings: bindings.map(binding =>
+      binding.device !== 'mouse' ? { ...binding }
+      : binding.action === 'PRIMARY' ? { ...binding, action: 'SECONDARY' }
+      : binding.action === 'SECONDARY' ? { ...binding, action: 'PRIMARY' }
+      : { ...binding }
+    )
+  };
+}
