@@ -61,7 +61,8 @@ export function onboardingContextFromSnapshot(
     zone: view.zone,
     storyQuestId: story?.questId as ActIStoryQuestId | undefined,
     storyQuestStatus: story?.status as 'active' | 'ready' | undefined,
-    talentPoints: Number.isSafeInteger(view.talentPoints) && view.talentPoints >= 0
+    talentPoints: typeof view.talentPoints === 'number'
+      && Number.isSafeInteger(view.talentPoints) && view.talentPoints >= 0
       ? view.talentPoints : 0,
     level, xp, xpRequired
   };
