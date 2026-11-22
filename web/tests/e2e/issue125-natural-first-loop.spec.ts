@@ -114,7 +114,9 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(page.locator('.quest-journal')).toContainText('Quest completed');
 });
 
-test('Issue #125 — touch loot affordance is reachable without canvas pinpoint', async ({ page }) => {
+test.describe('touch input', () => {
+  test.use({ hasTouch: true });
+  test('Issue #125 — touch loot affordance is reachable without canvas pinpoint', async ({ page }) => {
   test.setTimeout(85_000);
   await page.setViewportSize({ width: 390, height: 740 });
   await page.goto('./');
@@ -139,4 +141,6 @@ test('Issue #125 — touch loot affordance is reachable without canvas pinpoint'
   await expect(button).toHaveCount(0, { timeout: 12_000 });
   await page.locator('[data-quick-action="inventory"]').tap();
   await expect(page.getByRole('dialog', { name: 'Inventář a výbava' })).toBeVisible();
+});
+
 });
