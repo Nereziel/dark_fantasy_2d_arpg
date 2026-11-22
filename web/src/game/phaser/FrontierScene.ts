@@ -23,6 +23,7 @@ import {
   type ContextTarget, type ResolvedPointerContext
 } from '../input/contextResolver';
 import { resolvePointerAction } from '../input/bindings';
+import { dispatchCombatAction } from '../input/combatActionDispatcher';
 import { HeldPointerMovement } from '../input/heldMovement';
 import { playerAnimation } from '../entities/playerAnimation';
 import {
@@ -385,17 +386,11 @@ export class FrontierScene extends Phaser.Scene {
     const context = this.pointerContext(world);
     this.bridge.setPointerAim(world, context.kind === 'ENEMY' ? context.id : null);
 
-    if (action === 'SECONDARY') {
-      const aim = this.bridge.skillAim('rmb');
-      this.bridge.command({
-        type: 'cast', slot: 'rmb',
-        ...(aim ? { aim } : {}),
-        ...(context.kind === 'ENEMY' ? { targetId: context.id } : {})
-      });
-      return;
-    }
-    if (action === 'EVADE') {
-      this.bridge.command({ type: 'evade' });
+    // Rebound potion/skill/evade mouse actions share keyboard dispatch, aim and targets.
+    if (dispatchCombatAction(
+      this.bridge, action, context.kind === 'ENEMY' ? context.id : undefined
+    )) {
+      this.heldMovement.release();
       return;
     }
     if (action !== 'PRIMARY' && action !== 'FORCE_MOVE') return;

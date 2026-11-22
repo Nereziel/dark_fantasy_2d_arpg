@@ -6,6 +6,7 @@
   import type { GameSnapshot, Point } from './game/core/types';
   import { resolveKeyboardAction, applyBindingOverrides, type InputBinding, type InputAction } from './game/input/bindings';
   import { GAME_BINDINGS } from './game/input/gameBindings';
+  import { dispatchCombatAction } from './game/input/combatActionDispatcher';
   import { prioritizeCombatRoster } from './game/ui/combatRoster';
   import { loadGame, saveGame, listCharacters, deleteCharacter, MAX_SAVED_CHARACTERS, type SavedCharacterInfo } from './persistence/SaveRepository';
   import { loadWorldProgress, saveWorldProgress } from './persistence/WorldProgressRepository';
@@ -43,11 +44,6 @@
   import { townEntry, type TownEntry } from './game/world/townManifest';
   import { CLASSES, type ClassId } from './game/data/classes';
   import { createCharacterId } from './game/creation/characterCreation';
-  import { PALADIN_EXTRA_IDS } from './game/skills/paladinKit';
-  import { MAGE_EXTRA_IDS } from './game/skills/mageKit';
-  import { NECRO_EXTRA_IDS } from './game/skills/necromancerKit';
-  import { ROGUE_EXTRA_IDS } from './game/skills/rogueKit';
-  import { WARLOCK_EXTRA_IDS } from './game/skills/warlockKit';
   import { POTION_IDS, POTIONS } from './game/consumables/potionRules';
   import { xpRequiredForLevel } from './game/progression/progressionRules';
 
@@ -632,73 +628,12 @@
     if (dialogueOpen || tradeNpc !== null || inventoryOpen || characterOpen || talentsOpen
       || view.paused || !view.player.alive) return;
 
-    if (action === 'POTION') {
-      event.preventDefault();
-      bridge.command({ type: 'usePotion' });
-    } else if (action === 'HOLD_POSITION') {
+    if (action === 'HOLD_POSITION') {
       event.preventDefault();
       heldShiftKeys.add(event.code);
       bridge.command({ type: 'holdPosition', value: true });
-    } else if (action === 'EVADE') {
+    } else if (dispatchCombatAction(bridge, action)) {
       event.preventDefault();
-      bridge.command({ type: 'evade' });
-    } else if (action === 'SECONDARY' || action === 'SLOT_1') {
-      event.preventDefault();
-      const slot = action === 'SECONDARY' ? 'rmb' : 'slot1';
-      const aim = bridge.skillAim(slot);
-      bridge.command({ type: 'cast', slot, ...(aim ? { aim } : {}) });
-    } else if (view.classId === 'WARRIOR'
-      && ['SLOT_2', 'SLOT_3', 'SLOT_4', 'SLOT_5', 'SLOT_6'].includes(action)) {
-      const slots = {
-        SLOT_2: 'groundSlam', SLOT_3: 'warCry', SLOT_4: 'whirlwind',
-        SLOT_5: 'execute', SLOT_6: 'basicAttack'
-      } as const;
-      const id = slots[action as keyof typeof slots];
-      event.preventDefault();
-      bridge.command({ type: 'warriorAbility', id, targetId: view.selectedTargetId ?? view.enemy.id });
-    } else if (view.classId === 'PALADIN'
-      && ['SLOT_2','SLOT_3','SLOT_4','SLOT_5','SLOT_6'].includes(action)) {
-      event.preventDefault();
-      const slotIndex=Number(action.slice(-1))-2;
-      const id=PALADIN_EXTRA_IDS[slotIndex];
-      if(id)bridge.command({type:'paladinAbility',id,targetId:view.selectedTargetId??view.enemy.id});
-    } else if (view.classId === 'MAGE'
-      && ['SLOT_2','SLOT_3','SLOT_4','SLOT_5','SLOT_6'].includes(action)) {
-      event.preventDefault();
-      const index = Number(action.slice(-1)) - 2;
-      const id = MAGE_EXTRA_IDS[index];
-      if (id) {
-        const position = bridge.pointerPosition();
-        bridge.command({ type: 'mageAbility', id,
-          targetId: view.selectedTargetId ?? view.enemy.id,
-          ...(position ? { position } : {}) });
-      }
-    } else if (view.classId === 'NECROMANCER'
-      && ['SLOT_2','SLOT_3','SLOT_4','SLOT_5','SLOT_6'].includes(action)) {
-      event.preventDefault();
-      const id=NECRO_EXTRA_IDS[Number(action.slice(-1))-2];
-      if(id){
-        const position=bridge.pointerPosition();
-        bridge.command({type:'necroAbility',id,
-          targetId:view.selectedTargetId??view.enemy.id,
-          ...(position?{position}:{})});
-      }
-    } else if(view.classId==='ROGUE'
-      &&['SLOT_2','SLOT_3','SLOT_4','SLOT_5','SLOT_6'].includes(action)){
-      event.preventDefault();
-      const id=ROGUE_EXTRA_IDS[Number(action.slice(-1))-2];
-      if(id){
-        const position=bridge.pointerPosition();
-        bridge.command({type:'rogueAbility',id,
-          targetId:view.selectedTargetId??view.enemy.id,
-          ...(position?{position}:{})});
-      }
-    } else if (view.classId === 'WARLOCK'
-      && ['SLOT_2','SLOT_3','SLOT_4','SLOT_5','SLOT_6'].includes(action)) {
-      event.preventDefault();
-      const id=WARLOCK_EXTRA_IDS[Number(action.slice(-1))-2];
-      if(id)bridge.command({type:'warlockAbility',id,
-        targetId:view.selectedTargetId??view.enemy.id});
     } else if (action === 'FORCE_MOVE' || action === 'PRIMARY') {
       const position = bridge.pointerPosition();
       if (!position) return;
