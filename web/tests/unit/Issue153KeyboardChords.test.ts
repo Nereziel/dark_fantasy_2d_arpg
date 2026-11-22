@@ -135,4 +135,32 @@ describe('Issue #153: browser-safe Ctrl/Alt/Shift keyboard chords', () => {
     expect(key('ShiftLeft', { shiftKey: true }, r.bindings)).toBeNull();
     expect(shortcutHint(r.bindings, 'HOLD_POSITION')).toBe('Ctrl L');
   });
+  it('releasing a required chord modifier clears only that held-key source', async () => {
+    const { HeldPositionSources } = await import('../../src/game/input/heldPositionSources');
+    const changes: boolean[] = [];
+    const held = new HeldPositionSources(value => changes.push(value));
+    held.keyDown('KeyM', { ctrl: true });
+    held.releaseMissingModifiers({ ctrlKey: true, altKey: false, shiftKey: false });
+    expect(held.active).toBe(true);
+    held.releaseMissingModifiers({ ctrlKey: false, altKey: false, shiftKey: false });
+    expect(held.active).toBe(false);
+    held.keyUp('KeyM');
+    expect(changes).toEqual([true, false]);
+  });
+
+  it('does not cancel another held pointer or Shift when one chord modifier is lifted', async () => {
+    const { HeldPositionSources } = await import('../../src/game/input/heldPositionSources');
+    const changes: boolean[] = [];
+    const held = new HeldPositionSources(value => changes.push(value));
+    held.pointerDown(1, 2);
+    held.keyDown('KeyZ', { alt: true, shift: true });
+    held.keyDown('ShiftLeft');
+    held.releaseMissingModifiers({ ctrlKey: false, altKey: false, shiftKey: true });
+    expect(held.active).toBe(true);
+    held.keyUp('ShiftLeft');
+    expect(held.active).toBe(true);
+    held.pointerUp(1, 2);
+    expect(changes).toEqual([true, false]);
+  });
+
 });

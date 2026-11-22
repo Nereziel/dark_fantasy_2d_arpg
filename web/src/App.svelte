@@ -731,7 +731,15 @@
 
     if (action === 'HOLD_POSITION') {
       event.preventDefault();
-      heldPosition.keyDown(event.code);
+      const heldChord = bridge.bindings().find(binding =>
+        binding.action === 'HOLD_POSITION' && binding.device === 'keyboard'
+        && binding.code === event.code && binding.modifiers
+        && !!binding.modifiers.ctrl === event.ctrlKey
+        && !!binding.modifiers.alt === event.altKey
+        && !!binding.modifiers.shift === event.shiftKey
+      );
+      heldPosition.keyDown(event.code,
+        heldChord?.device === 'keyboard' ? heldChord.modifiers : undefined);
     } else if (dispatchCombatAction(bridge, action)) {
       event.preventDefault();
     } else if (action === 'FORCE_MOVE' || action === 'PRIMARY') {
@@ -744,6 +752,9 @@
   }
   function handleKeyup(event: KeyboardEvent): void {
     heldPosition.keyUp(event.code);
+    heldPosition.releaseMissingModifiers({
+      ctrlKey: event.ctrlKey, altKey: event.altKey, shiftKey: event.shiftKey
+    });
   }
   function handleBlur(): void {
     heldPosition.clear();

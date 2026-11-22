@@ -77,3 +77,26 @@ test('standalone modifier captured on keyup, not prematurely on keydown', async 
   await expect(potion.locator('code')).toHaveText('ControlLeft');
   await expect(panel.locator('.capture-hint')).toHaveCount(0);
 });
+
+test('Ctrl+M HOLD_POSITION releases when Ctrl is lifted before M', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Controls' }).click();
+  const panel = page.getByRole('dialog', { name: 'Input bindings' });
+  const hold = panel.locator('.binding-row').filter({ hasText: 'Hold position' });
+  await hold.getByRole('button', { name: 'Change' }).click();
+  await page.keyboard.press('Control+m');
+  await expect(hold.locator('code')).toHaveText('Ctrl+M');
+  await panel.getByRole('button', { name: 'Back' }).click();
+  await page.keyboard.press('Escape');
+  const game = page.locator('.game-screen');
+  await page.keyboard.down('Control');
+  await page.keyboard.down('m');
+  await expect(game).toHaveAttribute('data-hold-position', 'true');
+  await page.keyboard.up('Control');
+  await expect(game).toHaveAttribute('data-hold-position', 'false');
+  await page.keyboard.up('m');
+  await expect(game).toHaveAttribute('data-hold-position', 'false');
+});
