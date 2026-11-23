@@ -36,6 +36,7 @@ import {
   CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS
 } from '../world/generator';
 import { buildWilderness } from '../world/wildernessRuntime';
+import { CORRUPTION_TRAIL_ID, FOREST_SIDE_TRAIL_ID } from '../world/forestTrail';
 import { buildCryptWorld } from '../world/dungeonRuntime';
 import type { ProceduralDungeonResult, DungeonRoomType } from '../world/proceduralDungeon';
 import type { CryptThemePlan } from '../world/cryptTheme';
@@ -1344,10 +1345,12 @@ export class FrontierScene extends Phaser.Scene {
           y: segment.from.y + dy * t + ny * offset
         });
       }
+      const mainTrail = segment.roadId === CORRUPTION_TRAIL_ID;
+      const forestTrail = mainTrail || segment.roadId === FOREST_SIDE_TRAIL_ID;
       for (const stroke of [
         { width: segment.width + 8, color: 0x101711, alpha: 0.18 },
-        { width: segment.width, color: 0x483d32, alpha: 0.50 },
-        { width: segment.width * 0.70, color: 0x392f27, alpha: 0.36 }
+        { width: segment.width, color: forestTrail ? 0x554331 : 0x483d32, alpha: mainTrail ? 0.81 : 0.50 },
+        { width: segment.width * 0.70, color: forestTrail ? 0x6a5340 : 0x392f27, alpha: forestTrail ? 0.32 : 0.36 }
       ]) {
         g.lineStyle(stroke.width, stroke.color, stroke.alpha);
         g.beginPath();
@@ -1358,6 +1361,10 @@ export class FrontierScene extends Phaser.Scene {
     }
     for (const wall of chunk.obstacles) {
       if (wall.id === 'shrine') continue;
+      if (wall.id.startsWith('trail-edge-')) {
+        this.paintForestEdge(g, wall);
+        continue;
+      }
       g.fillStyle(0x48515a, 0.96)
         .fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 5);
       g.lineStyle(3, 0x747c7e, 0.75)
@@ -1400,6 +1407,29 @@ export class FrontierScene extends Phaser.Scene {
     }
     if (chunk.anchors.some(anchor => anchor.kind === 'cryptGate')) {
       this.paintPortal(g, CRYPT_GATE.x, CRYPT_GATE.y, 0x96afbc);
+    }
+  }
+
+  private paintForestEdge(g: Phaser.GameObjects.Graphics, wall: Obstacle): void {
+    const { x, y, width, height } = wall;
+    const clearing = wall.id.startsWith('trail-edge-clearing-');
+    const ravine = wall.id.startsWith('trail-edge-ravine-');
+    g.fillStyle(clearing ? 0x222d24 : 0x202627)
+      .fillRoundedRect(x, y, width, height, 6);
+    g.lineStyle(2, clearing ? 0x455a3d : 0x565850, 0.75)
+      .strokeRoundedRect(x, y, width, height, 6);
+    const count = Math.max(2, Math.floor(width / 26));
+    for (let i = 0; i < count; i++) {
+      const cx = x + (i + 0.5) * width / count;
+      const cy = y + height * (i % 2 ? 0.63 : 0.42);
+      if (clearing) {
+        g.fillStyle(0x435a3e).fillTriangle(cx, cy - 19, cx - 14, cy + 10, cx + 12, cy + 10);
+        g.fillStyle(0x60704b, 0.7).fillTriangle(cx, cy - 19, cx - 3, cy + 4, cx + 8, cy + 3);
+      } else {
+        g.fillStyle(ravine ? 0x3e4846 : 0x6e6557, 0.9)
+          .fillRoundedRect(cx - 10, cy - 9, 20, 18, ravine ? 7 : 2);
+        g.lineStyle(2, 0x97927c, 0.6).lineBetween(cx - 6, cy - 5, cx + 5, cy - 5);
+      }
     }
   }
 

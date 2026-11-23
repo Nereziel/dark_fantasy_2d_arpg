@@ -81,9 +81,14 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
         criticalPath(seed, 'wilderness', 'encounter-' + index, layout.camp,
           point, layout.obstacles);
       }
+      const side = terrain.roads.find(road => road.id === 'road-forest-side');
+      const trail = terrain.roads.find(road => road.id === 'road-story-corruption_site');
+      expect(side).toBeDefined();
+      expect(trail?.points).toContainEqual(side?.from);
+      expect(trail?.points).toContainEqual(side?.to);
       for (const road of terrain.roads) {
         expect(road.points.length).toBeGreaterThan(0);
-        expect(road.points[0]).toEqual(CAMP);
+        expect(road.points[0]).toEqual(road.from);
         expect(road.points.at(-1)).toEqual(road.to);
         for (const point of road.points)
           expect(canOccupy(point, ACTOR_RADIUS, layout.obstacles)).toBe(true);

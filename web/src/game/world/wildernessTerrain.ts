@@ -231,7 +231,7 @@ function buildRoads(encounters: readonly Point[], obstacles: readonly Obstacle[]
   }
   return roads;
 }
-function makeTiles(seed: number, roads: readonly TerrainRoad[]): TerrainTile[] {
+export function makeWildernessTiles(seed: number, roads: readonly TerrainRoad[]): TerrainTile[] {
   const tiles: TerrainTile[] = [];
   const cols = Math.ceil(WORLD_WIDTH / TERRAIN_TILE_SIZE);
   const rows = Math.ceil(WORLD_HEIGHT / TERRAIN_TILE_SIZE);
@@ -375,7 +375,11 @@ export function validateWildernessTerrain(value: unknown): WildernessValidationI
       || seenRoads.has(road.id) || !Array.isArray(road.points)
       || !finitePoint(road.from) || !finitePoint(road.to)
       || !Number.isFinite(road.width) || road.width < ACTOR_RADIUS * 2
-      || road.from.x !== CAMP.x || road.from.y !== CAMP.y
+      || (!(road.from.x === CAMP.x && road.from.y === CAMP.y)
+        && !world.roads.some(main => main && main !== road && main.from?.x === CAMP.x
+          && main.from.y === CAMP.y && Array.isArray(main.points)
+          && [road.from, road.to].every(junction => main.points.some(
+            point => point?.x === junction.x && point.y === junction.y))))
       || !road.points.every(finitePoint)
       || !road.points.length
       || road.points[0]!.x !== road.from.x || road.points[0]!.y !== road.from.y
@@ -422,7 +426,7 @@ export function generateWildernessTerrain(seed: number): WildernessTerrainResult
     const proposed: Omit<WildernessTerrainResult, 'validation'> = {
       biomeId: 'corrupted_frontier',
       width: WORLD_WIDTH, height: WORLD_HEIGHT, tileSize: TERRAIN_TILE_SIZE,
-      layout, roads, tiles: makeTiles(seed, roads)
+      layout, roads, tiles: makeWildernessTiles(seed, roads)
     };
     validationErrors = validateWildernessTerrain(proposed);
     if (validationErrors.length === 0) {
@@ -443,7 +447,7 @@ export function generateWildernessTerrain(seed: number): WildernessTerrainResult
     selected = {
       biomeId: 'corrupted_frontier',
       width: WORLD_WIDTH, height: WORLD_HEIGHT, tileSize: TERRAIN_TILE_SIZE,
-      layout, roads, tiles: makeTiles(seed, roads)
+      layout, roads, tiles: makeWildernessTiles(seed, roads)
     };
     validationErrors = validateWildernessTerrain(selected);
   }
