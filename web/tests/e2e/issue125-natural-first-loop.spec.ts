@@ -178,13 +178,14 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
   let ticks = 0;
   let stalled = 0;
   const waypoints = [
-    // Approach by the western road and then sweep both sides of the
-    // procedural graveyard; a wall can block straight west-to-east travel.
-    { x: 1630, y: 530 }, { x: 1760, y: 540 }, { x: 1810, y: 650 },
-    { x: 1910, y: 690 }, { x: 1860, y: 600 },
-    { x: 2000, y: 630 }, { x: 2010, y: 780 }, { x: 1900, y: 810 },
-    { x: 1780, y: 760 }, { x: 1720, y: 660 }, { x: 1840, y: 890 },
-    { x: 2040, y: 710 }, { x: 1760, y: 560 }
+    // Survey the authored graveyard area from the northern approach and
+    // sweep south. Keep intermediate waypoints reachable with normal input;
+    // the actual feature marker may shift with the procedural layout.
+    { x: 1610, y: 390 }, { x: 1690, y: 280 }, { x: 1820, y: 280 },
+    { x: 1980, y: 360 }, { x: 2000, y: 520 }, { x: 1950, y: 670 },
+    { x: 1880, y: 690 }, { x: 2000, y: 780 }, { x: 1870, y: 830 },
+    { x: 1780, y: 960 }, { x: 1940, y: 980 }, { x: 2040, y: 670 },
+    { x: 1860, y: 570 }, { x: 1780, y: 450 }
   ];
   while (Date.now() < deadline) {
     // A genuine graveyard discovery auto-completes Forgotten Graves and
@@ -214,14 +215,20 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     const { width, height } = await canvas.evaluate(node => ({
       width: node.width, height: node.height
     }));
+    // Recover if a procedural obstacle blocks a specific eastward click.
+    // This uses real viewport movement; it does not inspect map obstacles.
     const waypoint = stalled >= 2
-      ? { x: Math.max(100, Math.min(2080, x + (index % 2 ? -90 : 115))),
-        y: y < 570 ? Math.min(1200, y + 270) : Math.max(120, y - 230) }
+      ? { x: Math.max(100, x - 160),
+        y: y >= 570 ? Math.max(130, y - 330) : Math.min(1260, y + 310) }
       : waypoints[index]!;
     const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
     const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
+    // At the east world edge the camera can no longer follow the hero.
+    // Clamping at 67% capped the maximum world-click x to 1777 in a 1280px
+    // viewport (2200 - 1280 + 0.67 * 1280): the exact repeated CI failure.
+    // 78% stays left of the right HUD but reaches the graveyard at x≈1900.
     const screenX = Math.max(width * 0.35,
-      Math.min(width * 0.67, waypoint.x - scrollX));
+      Math.min(width * 0.78, waypoint.x - scrollX));
     const screenY = Math.max(height * 0.23,
       Math.min(height * 0.68, waypoint.y - scrollY));
     await page.mouse.click(rect.x + rect.width * screenX / width,
@@ -233,7 +240,7 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     stalled = Math.hypot(nextX - x, nextY - y) < 6 ? stalled + 1 : 0;
     ticks += 1;
     if (Math.hypot(nextX - waypoint.x, nextY - waypoint.y) < 48
-      || ticks >= 12 || stalled >= 4) {
+      || ticks >= 7 || stalled >= 3) {
       index = (index + 1) % waypoints.length;
       ticks = 0;
       stalled = 0;
@@ -241,14 +248,70 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
   }
   throw new Error('Natural graveyard exploration timed out at ('
     + await game.getAttribute('data-player-x') + ','
-    + await game.getAttribute('data-player-y') + '), journal: '
-    + await journal.innerText());
+    + await game.getAttribute('data-player-y') + '), waypoint: '
+    + index + ' (' + waypoints[index]!.x + ',' + waypoints[index]!.y
+    + '), journal: ' + await journal.innerText());
+}
+
+/** Defeat the unique Act I miniboss through the visible HUD and ordinary
+ * player auto-attack/healing. Only the actual boss kill advances the ledger;
+ * merely targeting, reaching the marker or waiting cannot pass this check.
+ */
+async function defeatMorrowNaturally(page: Page, timeoutMs: number): Promise<void> {
+  const journal = page.locator('.quest-journal');
+  const morrow = page.locator('.enemy-roster button')
+    .filter({ hasText: 'Morrow, Graveyard Warden' });
+  const deadline = Date.now() + timeoutMs;
+  let lastTargetAt = 0;
+  let sawTargeting = false;
+  while (Date.now() < deadline) {
+    const story = await journal.innerText();
+    if (story.includes('The Seal of Rot')) return;
+    if (await page.getByTestId('death-overlay').count()) {
+      throw new Error('Natural Act I Morrow fight: the hero died before the Seal of Rot quest');
+    }
+    const hpText = await page.locator('.vital-top').first().innerText();
+    const hp = hpText.match(/(\d+)\s*\/\s*(\d+)/);
+    if (hp && Number(hp[1]) / Number(hp[2]) < 0.73) {
+      const heal = page.locator('[data-paladin-ability="healingLight"]');
+      if (await heal.isEnabled()) await heal.click();
+      else {
+        const potion = page.getByTestId('use-potion');
+        if (await potion.isEnabled()) await potion.click();
+      }
+    }
+
+    const aliveBoss = page.locator('.enemy-roster button:not([disabled])')
+      .filter({ hasText: 'Morrow, Graveyard Warden' });
+    if (await aliveBoss.count() === 0) {
+      // A dead Morrow must cause an authoritative quest transition, not be
+      // counted as success merely because the target disappeared.
+      await page.waitForTimeout(400);
+      continue;
+    }
+    const targeted = await morrow.getAttribute('aria-pressed') === 'true';
+    sawTargeting ||= targeted;
+    if (!targeted || Date.now() - lastTargetAt > 10_000) {
+      try {
+        await morrow.click({ timeout: 1_500 });
+        lastTargetAt = Date.now();
+      } catch (error) {
+        // Live targets can die or become temporarily disabled as the
+        // simulation advances; never suppress unrelated click failures.
+        if (!(error instanceof errors.TimeoutError)) throw error;
+      }
+    }
+    await page.waitForTimeout(400);
+  }
+  throw new Error('Natural Act I Morrow fight timed out; target was selected: '
+    + sawTargeting + '; journal: ' + await journal.innerText()
+    + '; enemy roster: ' + (await page.locator('.enemy-roster').innerText()).replaceAll('\n', ' '));
 }
 
 test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, equip, turn-in', async ({ page }) => {
   // Continuous natural run: real first quest, corruption, boar hunt, graveyard,
   // then a fresh real Save/Load proving the unique Morrow encounter persists.
-  test.setTimeout(530_000);
+  test.setTimeout(700_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
@@ -483,6 +546,40 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(guide.getByTestId('onboarding-xp')).toHaveText(afterGravesProgress);
   await expect(morrow).toHaveCount(1, { timeout: 15_000 });
   await expect(morrow).toHaveAttribute('data-threat', 'boss');
+  await page.locator('[data-quick-action="inventory"]').click();
+  await expect(inventory.locator('.equipment-slot[data-item-id="' + lootedItemId + '"]'))
+    .toHaveCount(1);
+  await inventory.locator('.close-button').click();
+
+  // A genuine boss kill, not the earlier discovery or a mere target click,
+  // must unlock the next authoritative story beat. Morrow has a real
+  // two-phase miniboss plan and cannot be marked slain from UI test state.
+  await expect(page.locator('.quest-journal'))
+    .toContainText('Defeat Morrow at the graveyard');
+  await expect(morrow).toBeEnabled();
+  await defeatMorrowNaturally(page, 150_000);
+  await expect(page.locator('.quest-journal')).toContainText('The Seal of Rot');
+  await expect(page.locator('.quest-journal'))
+    .toContainText('Recover evidence leading to the crypt');
+  await expect(page.locator('.quest-journal')).not.toContainText('Morrow, Gravebound');
+  await expect(morrow).not.toBeEnabled();
+
+  // Reload the genuine character after the unique miniboss reward. A
+  // completed boss may never respawn or award its one-time reward again.
+  const afterMorrowHud = await page.locator('.hud-details span').allTextContents();
+  const afterMorrowXp = await guide.getByTestId('onboarding-xp').innerText();
+  const afterMorrowJournal = await journalProgress.allTextContents();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await expect(game).toHaveAttribute('data-zone', 'wilderness');
+  await expect(page.locator('.quest-journal')).toContainText('The Seal of Rot');
+  await expect(page.locator('.quest-journal')).not.toContainText('Morrow, Gravebound');
+  await expect(journalProgress).toHaveText(afterMorrowJournal);
+  await expect(page.locator('.hud-details span')).toHaveText(afterMorrowHud);
+  await expect(guide.getByTestId('onboarding-xp')).toHaveText(afterMorrowXp);
+  await expect(morrow).toHaveCount(0);
   await page.locator('[data-quick-action="inventory"]').click();
   await expect(inventory.locator('.equipment-slot[data-item-id="' + lootedItemId + '"]'))
     .toHaveCount(1);
