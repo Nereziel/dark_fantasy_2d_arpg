@@ -60,7 +60,7 @@ import {
 } from '../enemies/miniBossRules';
 import { monsterActions, monsterAction, type MonsterAction } from '../enemies/monsterRuntime';
 import { getEnemyArchetype } from '../enemies/archetypeCatalog';
-import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, findPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
+import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, findPath, findPickupPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
   type WorldLayout
@@ -137,6 +137,8 @@ const MAX_FRAME_SECONDS = 0.1;
 const PLAYER_SPEED = 190;
 const INVENTORY_SIZE = 24;
 const ENEMY_SEPARATION = 44;
+
+const PICKUP_RANGE = 36;
 
 function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -363,7 +365,7 @@ export class GameSimulation {
     stalledTicks: number;
   } | null = null;
   private attackTarget: string | null = null;
-  private pickupTarget: string | null = null;
+  private pickupTarget: { id: string; path: Point[] } | null = null;
   private pendingObject: WorldObjectId | null = null;
   private usedObjects = new Set<WorldObjectId>();
   private shield = 0;
@@ -1750,8 +1752,11 @@ export class GameSimulation {
       this.pendingTown = null;
       this.pendingObject = null;
       this.pendingPortal = false;
-    } else if (command.type === 'pickup' && this.groundLoot.some(loot => loot.id === command.id)) {
-      this.pickupTarget = command.id;
+    } else if (command.type === 'pickup') {
+      const loot = this.groundLoot.find(item => item.id === command.id);
+      if (!loot) return;
+      this.pickupTarget = { id: loot.id,
+        path: findPickupPath(this.player, loot, PICKUP_RANGE, this.world.obstacles) };
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
@@ -4108,10 +4113,18 @@ export class GameSimulation {
         }
       }
     } else if (this.pickupTarget) {
-      const loot = this.groundLoot.find(item => item.id === this.pickupTarget);
+      const { id, path } = this.pickupTarget;
+      const loot = this.groundLoot.find(item => item.id === id);
       if (!loot) this.pickupTarget = null;
-      else if (distance(this.player, loot) <= 36) this.collectLoot(loot);
-      else this.follow(this.player, loot, speed, dt, 32, true);
+      else if (distance(this.player, loot) <= PICKUP_RANGE) this.collectLoot(loot);
+      else {
+        const waypoint = path[0];
+        if (!waypoint) this.pickupTarget = null;
+        else {
+          this.follow(this.player, waypoint, speed, dt);
+          if (distance(this.player, waypoint) <= 1) path.shift();
+        }
+      }
     } else if (this.movePath.length) {
       const point = this.movePath[0]!;
       this.follow(this.player, point, speed, dt);

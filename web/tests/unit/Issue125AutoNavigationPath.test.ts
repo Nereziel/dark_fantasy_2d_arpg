@@ -1,6 +1,8 @@
 // F0: the live auto-approach must route around the dungeon rooms, not run
 // a collision-constrained straight line forever. GPL-3.0-only.
 import { describe, expect, it } from 'vitest';
+import { rollItem, SeededRng } from '../../src/game/data/items';
+import { buildWilderness } from '../../src/game/world/wildernessRuntime';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { createCryptPack } from '../../src/game/enemies/enemies';
 import type { Point } from '../../src/game/core/types';
@@ -9,6 +11,27 @@ import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../../src/game/wo
 import { ACTOR_RADIUS, canOccupy, findPath, hasLineOfSight } from '../../src/game/world/navigation';
 
 describe('F0 — click-to-interact auto-navigation around solid walls', () => {
+  it('walks to pickup range for a drop too close to a wall for the hero to stand on it', () => {
+    const game = new GameSimulation(0);
+    const snapshot = game.snapshot();
+    const { obstacles } = buildWilderness(0).layout;
+    const origin = { x: 1100, y: 690 };
+    const item = rollItem(1, snapshot.level, new SeededRng(42));
+    const loot = { id: 'wall-drop', x: 1258, y: 690, item };
+    expect(canOccupy(loot, 0, obstacles)).toBe(true);
+    expect(canOccupy(loot, ACTOR_RADIUS, obstacles)).toBe(false);
+    expect(game.restore({ ...snapshot, player: { ...snapshot.player, ...origin },
+      groundLoot: [loot] })).toBe(true);
+
+    game.command({ type: 'pickup', id: loot.id });
+    for (let tick = 0; tick < 120 && game.snapshot().groundLoot.length; tick++) {
+      game.advance(33.334);
+      expect(canOccupy(game.snapshot().player, ACTOR_RADIUS, obstacles)).toBe(true);
+    }
+    expect(game.snapshot().groundLoot).toEqual([]);
+    expect(game.snapshot().inventory.filter(entry => entry?.id === item.id)).toHaveLength(1);
+  });
+
   it.each([0, 42, 901])(
     'completes a genuine portal command around crypt walls on seed %i',
     (seed) => {

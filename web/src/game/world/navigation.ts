@@ -130,6 +130,25 @@ export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS, obstac
   return [];
 }
 
+/** Route to a usable reach position even when the exact item coordinate is blocked. */
+export function findPickupPath(
+  from: Point, loot: Point, range: number, obstacles: readonly Obstacle[]
+): Point[] {
+  if (Math.hypot(from.x - loot.x, from.y - loot.y) <= range) return [];
+  const angle = Math.atan2(from.y - loot.y, from.x - loot.x);
+  const offset = range - 4;
+  const destinations = [0, -1, 1, -2, 2, -3, 3, 4].map(turn => ({
+    x: loot.x + Math.cos(angle + turn * Math.PI / 4) * offset,
+    y: loot.y + Math.sin(angle + turn * Math.PI / 4) * offset
+  }));
+  for (const destination of [...destinations, loot]) {
+    const path = findPath(from, destination, ACTOR_RADIUS, obstacles);
+    if (path.length && path.every((point, index) =>
+      lineClear(index === 0 ? from : path[index - 1]!, point, ACTOR_RADIUS, obstacles))) return path;
+  }
+  return [];
+}
+
 /** Resolve one click to a reachable destination without altering the existing pathfinder. */
 export function resolveReachableDestination(
   from: Point,
