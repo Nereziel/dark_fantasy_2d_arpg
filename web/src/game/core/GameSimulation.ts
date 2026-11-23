@@ -784,8 +784,16 @@ export class GameSimulation {
     // a convex corner indefinitely. Reuse a deterministic, clearance-aware
     // route until its target or the active world changes; never A* each tick.
     const cached = this.autoFollowPlan;
+    // Auto-attacks and mobile enemies continuously move their aim point.
+    // A cached final waypoint must never leave the hero just outside attack
+    // reach while the target drifts inside the path-cache tolerance.
+    const staleFinal = cached && cached.points.length === 1
+      && distance(actor, cached.points[0]!) <= Math.max(8, cached.stop + 2)
+      && distance(actor, target) > stop + 1
+      && distance(cached.goal, target) > 0.5;
     if (!cached || cached.world !== this.world || cached.stop !== stop
-      || distance(cached.goal, target) > 24) {
+      || distance(cached.goal, target) > (stop > 0 ? 6 : 12)
+      || staleFinal) {
       this.autoFollowPlan = {
         world: this.world, goal: { ...target }, stop,
         points: findPath(actor, target, ACTOR_RADIUS, this.world.obstacles),
