@@ -6,9 +6,9 @@ Tento postup platí pro další agentní vlny. Nemění existující historické
 
 - `quality.yml` je jediný validační workflow pro PR i změny v `main`; **job `verify` zachovává existující název required checku**.
 - `pull_request` vždy spouští check, unit testy, build, Chromium E2E a referenční HTML test. PR nikdy nedeployuje.
-- `push` do `main` validuje změny v `web/**`, `tests/**`, quality workflow a sdílených Actions. Publikace nastane **pouze** při změně vstupů hry (`web/src`, `web/public`, hlavních konfigurací/dependencies nebo `.github/actions`). Dokumentace a testy bez změny hry nezpůsobí publikaci.
+- `push` do `main` validuje změny v `web/**`, `tests/**`, quality workflow a sdílených Actions. Publikace nastane při změně vstupů hry (`web/src`, `web/public`, hlavních konfigurací/dependencies nebo `.github/actions`) či samotného `quality.yml`. Dokumentace a testy bez změny hry nezpůsobí publikaci.
 - `workflow_dispatch` provede plnou validaci a v případě úspěchu znovu publikuje.
-- `verify` uloží `web/dist` přes `actions/upload-artifact` jako `pages-dist-<GITHUB_SHA>` **až po úspěšném E2E**. Job `deploy` vyžaduje úspěšné `verify`, použije artifact ze **stejného runu a přesného SHA**, kontroluje base path a publikuje přes `actions/deploy-pages`. Znovu nespouští `npm ci`, typecheck, testy ani build.
+- `verify` ověří base path a nahraje `web/dist` jako Pages balíček až po úspěšném E2E. Název obsahuje SHA a číslo pokusu. Job `deploy` dostane přesný název z výstupu `verify` a publikuje jej pomocí `actions/deploy-pages`. Při opakování pouze nasazovacího jobu se použije již ověřený balíček.
 - `setup-node` používá npm download cache podle `web/package-lock.json`; `npm ci` stále instaluje soubory z důvěryhodného lockfile. **Nekešovat a nesdílet `node_modules` mezi worktree**.
 - Pro headless Chromium se instaluje jen shell (`npx playwright install --only-shell chromium`). Pokud budoucí E2E začnou vyžadovat headed browser, vraťte plnou instalaci.
 - Při chybějícím push `before` commitu se nasazení raději povolí (fail-safe směrem k publikaci), stále až po GREEN. Cache ani artifact se nepoužívají jako důkaz úspěchu jiného SHA.
