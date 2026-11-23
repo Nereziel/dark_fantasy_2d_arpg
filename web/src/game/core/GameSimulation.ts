@@ -1875,6 +1875,15 @@ export class GameSimulation {
       ? 'RING_2' : undefined;
   }
 
+  /** The canonical slot used by equip/preview, exposed read-only so the UI's
+   * side-by-side comparison shows the item actually being replaced. */
+  equipmentTargetSlot(index: number): EquipmentSlot | null {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= this.inventory.length) return null;
+    const item = this.inventory[index];
+    if (!item) return null;
+    return this.resolveEquipmentSlot(index) ?? item.slot;
+  }
+
   private equip(index: number, targetSlot?: EquipmentSlot): void {
     if (!this.inventory[index]) return;
     const selected = this.resolveEquipmentSlot(index, targetSlot);
