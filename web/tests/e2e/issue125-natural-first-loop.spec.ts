@@ -75,7 +75,7 @@ async function keepFighting(
   throw new Error('Natural quest playthrough timed out at ' +
     await activeQuestCount(page) + '/3 kills; target ' + until
     + '; active quest: ' + (await page.locator('.quest-journal').innerText())
-    + '; enemies: ' + rosterText.replaceAll('\\n', ' ')
+    + '; enemies: ' + rosterText.replaceAll('\n', ' ')
     + '; player position: ' + await game.getAttribute('data-player-x')
     + ',' + await game.getAttribute('data-player-y'));
 }
