@@ -66,7 +66,7 @@ test.describe('touch stash view changes cancel pending transfers', () => {
     await stash.getByRole('combobox', { name: 'Category' }).selectOption('');
     await expect(stored).toHaveAttribute('data-item-id', id!);
     await stored.getByRole('button', { name: 'Select for move' }).tap();
-    await stash.getByRole('combobox', { name: 'Sort by' }).selectOption('name');
+    await stash.getByRole('combobox', { name: 'Order' }).selectOption('name');
     await expect(stash.getByRole('button', { name: 'Cancel move' })).toHaveCount(0);
     await expect(stash.locator('[data-stash-tab="1"]')).not.toHaveClass(/drop-ready/);
     await stash.locator('[data-stash-tab="1"]').tap();
