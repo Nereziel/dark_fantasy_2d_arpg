@@ -93,6 +93,10 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
   // Search the authored region, not a hidden procedural feature coordinate.
   // The mandatory site can shift to the nearest reachable grid candidate.
   const waypoints = [
+    // Start along the old road south of the northern forest obstacles.
+    // Clicking directly northeast can leave a procedural seed pinned at
+    // the north edge (observed x≈883,y=140 in PR #189 CI).
+    { x: 860, y: 470 }, { x: 1110, y: 470 }, { x: 1320, y: 440 },
     { x: 1550, y: 280 }, { x: 1490, y: 200 }, { x: 1620, y: 200 },
     { x: 1640, y: 320 }, { x: 1550, y: 390 }, { x: 1440, y: 330 },
     { x: 1420, y: 190 }, { x: 1720, y: 280 }, { x: 1700, y: 410 },
@@ -124,7 +128,14 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
     const { width, height } = await canvas.evaluate(node => ({
       width: node.width, height: node.height
     }));
-    const waypoint = waypoints[waypointIndex]!;
+    // If the path is pinned against an obstacle, make a real short sideways
+    // world click, then retry the authored region search. No simulation
+    // teleport, hidden map marker or obstacle lookup is involved.
+    const target = stalled >= 2
+      ? { x: Math.max(100, Math.min(2080, x + (waypointIndex % 2 ? -90 : 115))),
+        y: y < 570 ? Math.min(1200, y + 270) : Math.max(120, y - 230) }
+      : waypoints[waypointIndex]!;
+    const waypoint = target;
     // Phaser's camera clamps to world edges: a hero north of the viewport
     // midpoint is NOT drawn at canvas center. Project the target using the
     // clamped camera scroll, then choose a safe on-screen middle-mouse click.
@@ -167,7 +178,10 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
   let ticks = 0;
   let stalled = 0;
   const waypoints = [
-    { x: 1810, y: 650 }, { x: 1910, y: 690 }, { x: 1860, y: 600 },
+    // Approach by the western road and then sweep both sides of the
+    // procedural graveyard; a wall can block straight west-to-east travel.
+    { x: 1630, y: 530 }, { x: 1760, y: 540 }, { x: 1810, y: 650 },
+    { x: 1910, y: 690 }, { x: 1860, y: 600 },
     { x: 2000, y: 630 }, { x: 2010, y: 780 }, { x: 1900, y: 810 },
     { x: 1780, y: 760 }, { x: 1720, y: 660 }, { x: 1840, y: 890 },
     { x: 2040, y: 710 }, { x: 1760, y: 560 }
@@ -200,7 +214,10 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     const { width, height } = await canvas.evaluate(node => ({
       width: node.width, height: node.height
     }));
-    const waypoint = waypoints[index]!;
+    const waypoint = stalled >= 2
+      ? { x: Math.max(100, Math.min(2080, x + (index % 2 ? -90 : 115))),
+        y: y < 570 ? Math.min(1200, y + 270) : Math.max(120, y - 230) }
+      : waypoints[index]!;
     const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
     const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
     const screenX = Math.max(width * 0.35,
@@ -231,7 +248,7 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
 test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, equip, turn-in', async ({ page }) => {
   // Continuous natural run: real first quest, corruption, boar hunt, graveyard,
   // then a fresh real Save/Load proving the unique Morrow encounter persists.
-  test.setTimeout(470_000);
+  test.setTimeout(530_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
@@ -395,7 +412,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // Continue using actual player movement after loading the genuine quest save.
   // The corruption-site discovery must grant its reward exactly once and
   // automatically activate the next story quest, not a second Vesna turn-in.
-  await walkToCorruptionSite(page, 95_000);
+  await walkToCorruptionSite(page, 110_000);
   await expect(page.locator('.quest-journal')).toContainText('The Blighted Pack');
   await expect(page.locator('.quest-journal')).toContainText('Defeat three corrupted boars');
   await expect(game).toHaveAttribute('data-zone', 'wilderness');
@@ -440,7 +457,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
     .filter({ hasText: 'Morrow, Graveyard Warden' });
   await expect(morrow).toHaveCount(0);
   await expect(page.locator('.quest-journal')).toContainText('Discover the abandoned graveyard');
-  await walkToAbandonedGraveyard(page, 110_000);
+  await walkToAbandonedGraveyard(page, 130_000);
   await expect(page.locator('.quest-journal')).toContainText('Morrow, Gravebound');
   await expect(page.locator('.quest-journal')).toContainText('Defeat Morrow at the graveyard');
   await expect(page.locator('.quest-journal')).not.toContainText('The Forgotten Graves');
