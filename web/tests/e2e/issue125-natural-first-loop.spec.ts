@@ -253,6 +253,86 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     + '), journal: ' + await journal.innerText());
 }
 
+/** Continue from Morrow using ordinary world clicks, not a prepared save.
+ * The evidence marker is seed-dependent; only the visible Inspect button
+ * proves the live player reached its interaction radius.
+ */
+async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void> {
+  const game = page.locator('.game-screen');
+  const canvas = page.locator('.phaser-container canvas');
+  const inspect = page.getByTestId('story-inspect-evidence');
+  const deadline = Date.now() + timeoutMs;
+  const waypoints = [
+    // Travel west on the southern road to avoid the old tower, then survey
+    // both sides of the authored evidence region without reading its marker.
+    { x: 1700, y: 965 }, { x: 1500, y: 1020 },
+    { x: 1310, y: 1050 }, { x: 1110, y: 1050 },
+    { x: 930, y: 1050 }, { x: 850, y: 1050 },
+    { x: 790, y: 960 }, { x: 910, y: 940 },
+    { x: 970, y: 1120 }, { x: 820, y: 1140 },
+    { x: 740, y: 1030 }, { x: 870, y: 1050 }
+  ];
+  let index = 0;
+  let ticks = 0;
+  let stalled = 0;
+  const lastSteps: string[] = [];
+  while (Date.now() < deadline) {
+    if (await inspect.count() > 0) return;
+    if (await page.getByTestId('death-overlay').count()) {
+      throw new Error('Natural Act I evidence search: hero died');
+    }
+    const x = Number(await game.getAttribute('data-player-x'));
+    const y = Number(await game.getAttribute('data-player-y'));
+    expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
+    const hp = (await page.locator('.vital-top').first().innerText())
+      .match(/(\d+)\s*\/\s*(\d+)/);
+    if (hp && Number(hp[1]) / Number(hp[2]) < 0.67) {
+      const heal = page.locator('[data-paladin-ability="healingLight"]');
+      if (await heal.isEnabled()) await heal.click();
+      else {
+        const potion = page.getByTestId('use-potion');
+        if (await potion.isEnabled()) await potion.click();
+      }
+    }
+    const rect = await canvas.boundingBox();
+    if (!rect) throw new Error('Phaser canvas missing while finding story evidence');
+    const { width, height } = await canvas.evaluate(node => ({
+      width: node.width, height: node.height
+    }));
+    const waypoint = stalled >= 2
+      ? { x: Math.max(120, Math.min(2080, x + (index % 2 ? 155 : -155))),
+        y: y >= 860 ? Math.max(140, y - 200) : Math.min(1250, y + 245) }
+      : waypoints[index]!;
+    const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
+    const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
+    const screenX = Math.max(width * 0.35,
+      Math.min(width * 0.78, waypoint.x - scrollX));
+    const screenY = Math.max(height * 0.23,
+      Math.min(height * 0.68, waypoint.y - scrollY));
+    await page.mouse.click(rect.x + rect.width * screenX / width,
+      rect.y + rect.height * screenY / height, { button: 'middle' });
+    await page.waitForTimeout(1200);
+    const nextX = Number(await game.getAttribute('data-player-x'));
+    const nextY = Number(await game.getAttribute('data-player-y'));
+    lastSteps.push(index + ': ' + Math.round(x) + ',' + Math.round(y)
+      + ' -> ' + Math.round(nextX) + ',' + Math.round(nextY));
+    if (lastSteps.length > 8) lastSteps.shift();
+    stalled = Math.hypot(nextX - x, nextY - y) < 6 ? stalled + 1 : 0;
+    ticks++;
+    if (Math.hypot(nextX - waypoint.x, nextY - waypoint.y) < 48
+      || ticks >= 9 || stalled >= 3) {
+      index = (index + 1) % waypoints.length;
+      ticks = 0;
+      stalled = 0;
+    }
+  }
+  throw new Error('Natural Act I evidence search timed out at ('
+    + await game.getAttribute('data-player-x') + ','
+    + await game.getAttribute('data-player-y') + '), waypoint=' + index
+    + ', last steps=' + lastSteps.join(' | ')
+    + ', journal=' + await page.locator('.quest-journal').innerText());
+}
+
 /** Defeat the unique Act I miniboss through the visible HUD and ordinary
  * player auto-attack/healing. Only the actual boss kill advances the ledger;
  * merely targeting, reaching the marker or waiting cannot pass this check.
@@ -311,7 +391,7 @@ async function defeatMorrowNaturally(page: Page, timeoutMs: number): Promise<voi
 test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, equip, turn-in', async ({ page }) => {
   // Continuous natural run: real first quest, corruption, boar hunt, graveyard,
   // then a fresh real Save/Load proving the unique Morrow encounter persists.
-  test.setTimeout(700_000);
+  test.setTimeout(950_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
@@ -584,6 +664,50 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(inventory.locator('.equipment-slot[data-item-id="' + lootedItemId + '"]'))
     .toHaveCount(1);
   await inventory.locator('.close-button').click();
+
+  // Evidence is an explicit player interaction: walking through the site is
+  // insufficient to complete Seal of Rot. No hidden feature coordinate is
+  // looked up; the quest panel exposes its action only within reach.
+  await expect(page.locator('.quest-journal'))
+    .toContainText('Recover evidence leading to the crypt');
+  await walkToStoryEvidence(page, 135_000);
+  const evidence = page.getByTestId('story-inspect-evidence');
+  await expect(evidence).toBeVisible();
+  await expect(page.locator('.quest-journal')).toContainText('The Seal of Rot');
+  await evidence.click();
+  await expect(page.locator('.quest-journal')).toContainText('Descent into the Crypt');
+  await expect(page.locator('.quest-journal')).toContainText('Enter the crypt');
+  await expect(page.locator('.quest-journal')).not.toContainText('The Seal of Rot');
+
+  // A fifth real Save/Load proves the evidence action is one-shot, the new
+  // quest is authoritative, and the earlier looted equipment keeps its ID.
+  const afterEvidenceHud = await page.locator('.hud-details span').allTextContents();
+  const afterEvidenceXp = await guide.getByTestId('onboarding-xp').innerText();
+  const afterEvidenceJournal = await journalProgress.allTextContents();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await expect(game).toHaveAttribute('data-zone', 'wilderness');
+  await expect(page.locator('.quest-journal')).toContainText('Descent into the Crypt');
+  await expect(page.locator('.quest-journal')).not.toContainText('The Seal of Rot');
+  await expect(journalProgress).toHaveText(afterEvidenceJournal);
+  await expect(page.locator('.hud-details span')).toHaveText(afterEvidenceHud);
+  await expect(guide.getByTestId('onboarding-xp')).toHaveText(afterEvidenceXp);
+  await expect(evidence).toHaveCount(0);
+  await page.locator('[data-quick-action="inventory"]').click();
+  await expect(inventory.locator('.equipment-slot[data-item-id="' + lootedItemId + '"]'))
+    .toHaveCount(1);
+  await inventory.locator('.close-button').click();
+
+  // Enter through the visible in-game dungeon button; the simulation owns
+  // the approach/path and zone transition. Never teleport or mutate quests.
+  await page.getByRole('button', { name: 'Enter the crypt' }).click();
+  await expect(game).toHaveAttribute('data-zone', 'crypt', { timeout: 55_000 });
+  await expect(page.locator('.quest-journal')).toContainText('The Crypt Lord Falls');
+  await expect(page.locator('.quest-journal')).toContainText('Defeat the Crypt Lord');
+  await expect(page.locator('.quest-journal')).not.toContainText('Descent into the Crypt');
+
 });
 
 test.describe('touch input', () => {
