@@ -220,7 +220,13 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
-  await page.getByRole('button', { name: 'Inventory (I)' }).click();
+  await expect(page.locator('.game-screen')).toBeVisible();
+  // Exercise the real, default inventory hotkey after the second reload.
+  // Waiting for the live HUD action button to become geometrically stable
+  // can time out during scene/layout transitions; the earlier reload still
+  // covers the visible inventory button, so both entry paths are tested.
+  await page.keyboard.press('i');
+  await expect(inventory).toBeVisible();
   await expect(gear).toHaveAttribute('data-item-id', secondId!);
   await expect(secondCell).toHaveAttribute('data-item-id', firstId!);
   await expect(chosenCell).not.toHaveClass(/occupied/);

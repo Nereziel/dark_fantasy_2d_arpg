@@ -30,6 +30,11 @@ describe('Inventory ring equip / comparison slot parity', () => {
     expect(projectedRight).not.toEqual(projectedReplacement);
     expect(bridge.previewEquipment(7)).toEqual(projectedRight);
     expect(bridge.equipmentPlacementError(7)).toBeNull();
+    // The inspector's side-by-side item must be the gear in the very same
+    // default target socket as the derived-stat projection and equip button.
+    expect(bridge.equipmentTargetSlot(7)).toBe('RING_2');
+    expect(before.equipment[bridge.equipmentTargetSlot(7)!]).toBeNull();
+    expect(before.equipment.RING_1?.id).toBe(first.id);
     expect(bridge.snapshot()).toEqual(before);
 
     bridge.command({ type: 'equip', index: 7 });
@@ -61,6 +66,11 @@ describe('Inventory ring equip / comparison slot parity', () => {
     const before = bridge.snapshot();
     expect(bridge.previewEquipment(3)).toEqual(bridge.previewEquipment(3, 'RING_1'));
     expect(bridge.previewEquipment(3)).not.toEqual(bridge.previewEquipment(3, 'RING_2'));
+    expect(bridge.equipmentTargetSlot(3)).toBe('RING_1');
+    expect(before.equipment[bridge.equipmentTargetSlot(3)!]?.id).toBe(first.id);
+    expect(bridge.equipmentTargetSlot(-1)).toBeNull();
+    expect(bridge.equipmentTargetSlot(99)).toBeNull();
+    expect(bridge.equipmentTargetSlot(6)).toBeNull();
     expect(bridge.snapshot()).toEqual(before);
     bridge.command({ type: 'equip', index: 3 });
     expect(bridge.snapshot().equipment.RING_1?.id).toBe(next.id);
