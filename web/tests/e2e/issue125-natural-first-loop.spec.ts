@@ -154,10 +154,84 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
     await journal.innerText());
 }
 
+/** Find the actual procedurally placed graveyard by walking the wilderness,
+ * using only visible canvas input. Authored map anchors are search regions,
+ * not an authoritative feature-coordinate lookup or a teleport.
+ */
+async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<void> {
+  const game = page.locator('.game-screen');
+  const canvas = page.locator('.phaser-container canvas');
+  const journal = page.locator('.quest-journal');
+  const deadline = Date.now() + timeoutMs;
+  let index = 0;
+  let ticks = 0;
+  let stalled = 0;
+  const waypoints = [
+    { x: 1810, y: 650 }, { x: 1910, y: 690 }, { x: 1860, y: 600 },
+    { x: 2000, y: 630 }, { x: 2010, y: 780 }, { x: 1900, y: 810 },
+    { x: 1780, y: 760 }, { x: 1720, y: 660 }, { x: 1840, y: 890 },
+    { x: 2040, y: 710 }, { x: 1760, y: 560 }
+  ];
+  while (Date.now() < deadline) {
+    // A genuine graveyard discovery auto-completes Forgotten Graves and
+    // immediately activates Morrow; the 1/1 intermediate state is transient.
+    if ((await journal.innerText()).includes('Morrow, Gravebound')) return;
+    if (await page.getByTestId('death-overlay').count()) {
+      throw new Error('Natural Act I exploration: hero died before finding the graveyard');
+    }
+
+    const x = Number(await game.getAttribute('data-player-x'));
+    const y = Number(await game.getAttribute('data-player-y'));
+    expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
+
+    const hp = (await page.locator('.vital-top').first().innerText())
+      .match(/(\d+)\s*\/\s*(\d+)/);
+    if (hp && Number(hp[1]) / Number(hp[2]) < 0.68) {
+      const healing = page.locator('[data-paladin-ability="healingLight"]');
+      if (await healing.isEnabled()) await healing.click();
+      else {
+        const potion = page.getByTestId('use-potion');
+        if (await potion.isEnabled()) await potion.click();
+      }
+    }
+
+    const rect = await canvas.boundingBox();
+    if (!rect) throw new Error('Phaser canvas missing during graveyard exploration');
+    const { width, height } = await canvas.evaluate(node => ({
+      width: node.width, height: node.height
+    }));
+    const waypoint = waypoints[index]!;
+    const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
+    const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
+    const screenX = Math.max(width * 0.35,
+      Math.min(width * 0.67, waypoint.x - scrollX));
+    const screenY = Math.max(height * 0.23,
+      Math.min(height * 0.68, waypoint.y - scrollY));
+    await page.mouse.click(rect.x + rect.width * screenX / width,
+      rect.y + rect.height * screenY / height, { button: 'middle' });
+    await page.waitForTimeout(1200);
+
+    const nextX = Number(await game.getAttribute('data-player-x'));
+    const nextY = Number(await game.getAttribute('data-player-y'));
+    stalled = Math.hypot(nextX - x, nextY - y) < 6 ? stalled + 1 : 0;
+    ticks += 1;
+    if (Math.hypot(nextX - waypoint.x, nextY - waypoint.y) < 48
+      || ticks >= 12 || stalled >= 4) {
+      index = (index + 1) % waypoints.length;
+      ticks = 0;
+      stalled = 0;
+    }
+  }
+  throw new Error('Natural graveyard exploration timed out at ('
+    + await game.getAttribute('data-player-x') + ','
+    + await game.getAttribute('data-player-y') + '), journal: '
+    + await journal.innerText());
+}
+
 test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, equip, turn-in', async ({ page }) => {
-  // This continuous natural run now includes the three-boss-hunt wave after
-  // actual corruption-site discovery, followed by another real Save/Load.
-  test.setTimeout(340_000);
+  // Continuous natural run: real first quest, corruption, boar hunt, graveyard,
+  // then a fresh real Save/Load proving the unique Morrow encounter persists.
+  test.setTimeout(470_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
@@ -359,6 +433,43 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
     .toHaveCount(1);
   await inventory.locator('.close-button').click();
   await expect(game).toHaveAttribute('data-zone', 'wilderness');
+
+  // The next story objective is a location discovery, not an enemy kill:
+  // Morrow must not already exist before the real graveyard is found.
+  const morrow = page.locator('.enemy-roster button')
+    .filter({ hasText: 'Morrow, Graveyard Warden' });
+  await expect(morrow).toHaveCount(0);
+  await expect(page.locator('.quest-journal')).toContainText('Discover the abandoned graveyard');
+  await walkToAbandonedGraveyard(page, 110_000);
+  await expect(page.locator('.quest-journal')).toContainText('Morrow, Gravebound');
+  await expect(page.locator('.quest-journal')).toContainText('Defeat Morrow at the graveyard');
+  await expect(page.locator('.quest-journal')).not.toContainText('The Forgotten Graves');
+  await expect(morrow).toHaveCount(1, { timeout: 15_000 });
+  await expect(morrow).toHaveAttribute('data-threat', 'boss');
+  await expect(morrow).toBeEnabled();
+
+  // Recreate the transient world from the character-only save. The real
+  // previously discovered story location must remain completed, the next
+  // boss quest active, and the unique actor must respawn exactly once.
+  const afterGravesHud = await page.locator('.hud-details span').allTextContents();
+  const afterGravesProgress = await guide.getByTestId('onboarding-xp').innerText();
+  const afterGravesObjective = await journalProgress.allTextContents();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await expect(game).toHaveAttribute('data-zone', 'wilderness');
+  await expect(page.locator('.quest-journal')).toContainText('Morrow, Gravebound');
+  await expect(page.locator('.quest-journal')).not.toContainText('The Forgotten Graves');
+  await expect(journalProgress).toHaveText(afterGravesObjective);
+  await expect(page.locator('.hud-details span')).toHaveText(afterGravesHud);
+  await expect(guide.getByTestId('onboarding-xp')).toHaveText(afterGravesProgress);
+  await expect(morrow).toHaveCount(1, { timeout: 15_000 });
+  await expect(morrow).toHaveAttribute('data-threat', 'boss');
+  await page.locator('[data-quick-action="inventory"]').click();
+  await expect(inventory.locator('.equipment-slot[data-item-id="' + lootedItemId + '"]'))
+    .toHaveCount(1);
+  await inventory.locator('.close-button').click();
 });
 
 test.describe('touch input', () => {
