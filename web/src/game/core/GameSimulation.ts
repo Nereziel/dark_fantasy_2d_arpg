@@ -355,6 +355,12 @@ export class GameSimulation {
   private player = spawnPlayer('WARRIOR', this.equipment, { x: 390, y: 470 });
   private groundLoot: GroundItem[] = [];
   private movePath: Point[] = [];
+  /** Transient route for all simulation-owned auto-approaches (portal, NPC,
+   * loot, enemies and interaction objects). No additional save state. */
+  private autoFollowPlan: {
+    world: WorldLayout; goal: Point; stop: number; points: Point[];
+    stalledTicks: number;
+  } | null = null;
   private attackTarget: string | null = null;
   private pickupTarget: string | null = null;
   private pendingObject: WorldObjectId | null = null;
@@ -767,13 +773,53 @@ export class GameSimulation {
   }
 
   private follow(actor: Point, target: Point, speed: number, dt: number, stop = 0): void {
-    if (actor === this.player) {
-      if (this.immobilized) { this.movementSpeed = 0; return; }
-      const left = Math.max(0, distance(actor, target) - stop);
-      this.movementSpeed = nextMoveSpeed(this.movementSpeed, speed, left, dt);
-      moveToward(actor, target, this.movementSpeed, dt, stop, this.world.obstacles);
-      if (left <= 0.01) this.movementSpeed = 0;
-    } else moveToward(actor, target, speed, dt, stop, this.world.obstacles);
+    if (actor !== this.player) {
+      moveToward(actor, target, speed, dt, stop, this.world.obstacles);
+      return;
+    }
+    if (this.immobilized) { this.movementSpeed = 0; return; }
+    if (distance(actor, target) <= stop) { this.movementSpeed = 0; return; }
+
+    // Direct movement with collision sliding alone can pin the hero against
+    // a convex corner indefinitely. Reuse a deterministic, clearance-aware
+    // route until its target or the active world changes; never A* each tick.
+    const cached = this.autoFollowPlan;
+    if (!cached || cached.world !== this.world || cached.stop !== stop
+      || distance(cached.goal, target) > 24) {
+      this.autoFollowPlan = {
+        world: this.world, goal: { ...target }, stop,
+        points: findPath(actor, target, ACTOR_RADIUS, this.world.obstacles),
+        stalledTicks: 0
+      };
+    }
+    const plan = this.autoFollowPlan!;
+    // The final leg respects the interaction range; intermediate legs must
+    // actually reach their turning point before heading through a doorway.
+    while (plan.points.length > 1 && distance(actor, plan.points[0]!) <= 8) {
+      plan.points.shift();
+    }
+    const waypoint = plan.points[0];
+    if (!waypoint) { this.movementSpeed = 0; return; }
+    const reach = plan.points.length === 1 ? stop : 0;
+    const left = Math.max(0, distance(actor, waypoint) - reach);
+    this.movementSpeed = nextMoveSpeed(this.movementSpeed, speed, left, dt);
+    const previous = { ...actor };
+    moveToward(actor, waypoint, this.movementSpeed, dt, reach, this.world.obstacles);
+    if (plan.points.length > 1 && distance(actor, waypoint) <= 8) {
+      plan.points.shift();
+    }
+    // If a dynamic actor or a collision keeps the current waypoint blocked,
+    // regenerate the route from the real position, not the old wall corner.
+    if (left > 8 && distance(actor, previous) < 0.05) {
+      if (++plan.stalledTicks >= 12) {
+        plan.points = findPath(actor, target, ACTOR_RADIUS, this.world.obstacles);
+        plan.goal = { ...target };
+        plan.stalledTicks = 0;
+      }
+    } else plan.stalledTicks = 0;
+    if (plan.points.length === 1 && distance(actor, target) <= stop + 0.01) {
+      this.movementSpeed = 0;
+    }
   }
 
   private get focusedUnit(): EnemyUnit {
