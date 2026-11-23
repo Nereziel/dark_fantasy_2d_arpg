@@ -89,7 +89,10 @@
   });
   let comparedSlot = $derived.by((): EquipmentSlot | null => {
     if (!displayed || !inspected) return null;
-    return displayed.kind === 'gear' ? displayed.slot : inspected.slot;
+    // Side-by-side equipment must use the SAME socket as the authoritative
+    // equip command and stat delta. This matters for an empty RING_2.
+    return displayed.kind === 'gear' ? displayed.slot
+      : bridge.equipmentTargetSlot(displayed.index);
   });
   let equippedItem = $derived(comparedSlot ? view.equipment[comparedSlot] : null);
   let delta = $derived(displayed?.kind === 'bag'
@@ -197,10 +200,9 @@
     return true;
   }
   function equip(index: number, slot?: EquipmentSlot): void {
-    const item = view.inventory[index];
-    if (!item) return;
-    const targetSlot = slot ?? (item.slot === 'RING_1' && view.equipment.RING_1
-      && !view.equipment.RING_2 ? 'RING_2' : item.slot);
+    if (!view.inventory[index]) return;
+    const targetSlot = slot ?? bridge.equipmentTargetSlot(index);
+    if (!targetSlot) return;
     moveItem({ kind: 'bag', index }, { kind: 'gear', slot: targetSlot });
   }
   function unequip(slot: EquipmentSlot): void {
@@ -555,7 +557,8 @@
                 </p>
               {:else}
                 <p class="detail-placeholder">
-                  {$locale === 'cs' ? 'Prázdný slot. Předmět lze nasadit dvojklikem nebo přetažením.' : 'Empty equipment slot. Double-click or drag the item to equip it.'}
+                  {comparedSlot ? $t('item.slot.' + comparedSlot) + ': ' : ''}
+                  {$locale === 'cs' ? 'Prázdný slot – předmět se sem nasadí dvojklikem nebo přetažením.' : 'Empty slot – double-click or drag the item here to equip it.'}
                 </p>
               {/if}
             </section>
