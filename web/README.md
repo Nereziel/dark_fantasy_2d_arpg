@@ -1,39 +1,17 @@
 # Aether & Ruin — Browser client
 
-Svelte 5 + Phaser 4 + TypeScript + Vite. This is the **live GitHub Pages application**, still under active migration from the legacy HTML engine.
+Svelte 5 + Phaser 4 + TypeScript + Vite. This directory contains the static game served on GitHub Pages. The root HTML prototype is available as an offline reference.
 
-## Development
+See the [project README](../README.md) for startup, controls and test commands, the [roadmap](../docs/ROADMAP.md) for scope, and the [implementation status](../docs/IMPLEMENTATION_STATUS.md) for verification and deployment evidence.
 
-```bash
-npm ci
-npm run dev
-npm run check
-npm run test
-npm run build
-npx playwright install chromium
-npm run test:e2e
-```
+## Browser storage
 
-Production base path: `/dark_fantasy_2d_arpg/` (also served by the Vite development server). Gameplay and translated display content are separate; the UI offers `cs` and `en`.
+| Record | Contents |
+| --- | --- |
+| IndexedDB character v11 | Up to 12 saved characters. Each slot stores progression, inventory, equipment, stash and the quest ledger. Supported web character formats v8–v10 migrate explicitly. |
+| IndexedDB world v1 | Per-character seed, map discovery, checkpoints and selected persistent facts. A valid record restores the hero’s discovered world in a fresh session. |
+| Browser-local settings | Language, bindings, accessibility and audio preferences. |
 
-## Current functionality
+Loading brings the hero back to camp with full health. The session rebuilds transient encounters, loot on the ground, effects and combat cooldowns. The old HTML prototype uses a separate format.
 
-Six classes with original base stats/resources, mouse movement/targeting, basic attacks, **two original active skills per class** (Q/right mouse and 1), plus five additional Warrior skills (keys 2–6) with timed impact and Rage/cooldown rules, cooldowns, damage-over-time and buffs, combat feedback, XP/gold/level progression, deterministic loot, inventory/equipment and runtime Czech/English switching. The tutorial enemy archetypes (wraith / skeleton / corrupted wolf) spawn **together in groups of three**, while later wilderness waves cycle through data-driven undead, beast, bandit and cultist rosters with tactical enemy behavior, including healer support, with separate AI, health, damage effects, cooldowns and dodgeable telegraphs. Target opponents directly in Phaser or with the accessible enemy list. World navigation uses collision-aware movement and bounded A* around fixed obstacles. **Character-only v8** IndexedDB saves are supported. Save records contain only class, level, XP, gold, cumulative kills, inventory, equipment (including item temper levels) and permanent quest progress. On load, the hero returns to the safe start position with full health and a new session; monsters, dropped loot, combat cooldowns, active effects and world-state snapshots are not restored. The starter camp is a safe sanctuary. Each session regenerates the surrounding wilderness from a new seed, changing the placement of some ruins and obstacle geometry; full biome generation is still planned. Character changes are autosaved with debounce as well as manually. No legacy/demo save import.
-
-The original HTML game remains in the repository for reference, but is not in the Pages build. This does **not** mean that the original full game content has been migrated.
-
-## First quest: Ashes at the Gate
-
-Warden Vesna stands in the safe Emberwatch camp. Click the NPC or use the quest journal's **Speak to the warden** button to open bilingual dialogue. Accept the quest, defeat three enemies **after accepting**, then return to the warden for a one-time reward of **150 gold and 100 XP**. Quest state (`available`, `active`, `ready`, `completed`) and kill progress survive reloading the character; temporary combat and world state do not. Saves use the current character-only format **v8**; no migration of older demo saves is provided.
-
-## Camp trading and forging
-
-Merchant Bram offers a small fixed stock of basic equipment. Items have fixed buy prices and lower resale values; buying checks gold and backpack capacity, while selling removes exactly one owned backpack item. The blacksmith Odan can permanently temper **equipped** weapons and armor up to **three times**, improving their item stats for increasing gold costs. Unsupported slots, insufficient funds, missing items, remote transactions and attempted fourth upgrades are rejected by the simulation, not only the UI. The player can reach either NPC by clicking in the world or use camp service buttons. Trading pauses the combat simulation while the panel is open.
-
-Item `upgrades` values (0–3), gold, inventory and equipped items are preserved in **character-only v8 saves**. Merchant stock, active dialogs, world state and current combat are not serialized. Pre-v8 demo saves are deliberately not migrated.
-
-## First dungeon: Crypt of the Hollow Crown
-
-An interactable stone gateway just beyond the starter camp leads to a **separate, seed-generated crypt map**. Players may click the gateway or press **Enter the crypt** in the dungeon panel; the hero walks into portal range. Inside, three tougher guardians spawn first. After they are defeated, a stronger **Crypt Lord** and two retainers appear, with larger telegraphed melee danger zones. Clearing that final encounter awards gold and XP in addition to normal drops. A visible return portal (or the **Return to camp** button) takes the hero back at any time.
-
-The crypt uses its own seeded collision obstacles and Phaser floor graphics. Area, dungeon stage, boss state, enemy positions, current battle and uncollected drops are **session-only**; the existing v8 save stores only durable character progression. Reloading the hero starts in the safe camp with a regenerated wilderness. This is a first dungeon prototype, not a full room-and-corridor procedural generator or finished campaign.
+The production and development base path is `/dark_fantasy_2d_arpg/`. Build and test the client at this subpath when changing assets, navigation or deployment.
