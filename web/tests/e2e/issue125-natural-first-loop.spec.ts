@@ -344,6 +344,68 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
     + ', journal=' + await page.locator('.quest-journal').innerText());
 }
 
+/** Clear the real crypt guardians and Hollow King encounter from visible HUD.
+ * A boss cannot pass this gate by disappearing; the journal AND dungeon clear
+ * must be confirmed by the ordinary simulation and renderer.
+ */
+async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void> {
+  const journal = page.locator('.quest-journal');
+  const roster = page.locator('.enemy-roster');
+  const dungeon = page.locator('.dungeon-panel');
+  const deadline = Date.now() + timeoutMs;
+  let lastTargetAt = 0;
+  while (Date.now() < deadline) {
+    const quest = await journal.innerText();
+    const chamber = await dungeon.innerText();
+    if (quest.includes('Report to Vesna') && chamber.includes('Crypt cleared')) return;
+    if (await page.getByTestId('death-overlay').count()) {
+      throw new Error('Natural crypt battle: hero died before Act I boss victory; quest=' + quest);
+    }
+    const hp = (await page.locator('.vital-top').first().innerText())
+      .match(/(\d+)\s*\/\s*(\d+)/);
+    if (hp && Number(hp[1]) / Number(hp[2]) < 0.74) {
+      const heal = page.locator('[data-paladin-ability="healingLight"]');
+      if (await heal.isEnabled()) {
+        try { await heal.click({ timeout: 1_500 }); }
+        catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
+      } else {
+        const potion = page.getByTestId('use-potion');
+        if (await potion.isEnabled()) {
+          try { await potion.click({ timeout: 1_500 }); }
+          catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
+        }
+      }
+    }
+    if (hp && Number(hp[1]) / Number(hp[2]) < 0.6) {
+      const shield = page.locator('[data-paladin-ability="divineShield"]');
+      if (await shield.isEnabled()) {
+        try { await shield.click({ timeout: 1_500 }); }
+        catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
+      }
+    }
+    const live = roster.locator('button:not([disabled])');
+    const kings = live.filter({ hasText: 'The Hollow King' });
+    const candidate = (await kings.count()) ? kings.first() : live.first();
+    if (await live.count() > 0) {
+      const targeted = await candidate.getAttribute('aria-pressed') === 'true';
+      if (!targeted || Date.now() - lastTargetAt > 10_000) {
+        try {
+          await candidate.click({ timeout: 1_500 });
+          lastTargetAt = Date.now();
+        } catch (error) {
+          if (!(error instanceof errors.TimeoutError)) throw error;
+        }
+      }
+    }
+    await page.waitForTimeout(400);
+  }
+  throw new Error('Natural crypt battle timed out; quest=' + await journal.innerText()
+    + '; dungeon=' + await dungeon.innerText() + '; roster='
+    + (await roster.innerText()).replaceAll('\n', ' ')
+    + '; player=' + await page.locator('.game-screen').getAttribute('data-player-x')
+    + ',' + await page.locator('.game-screen').getAttribute('data-player-y'));
+}
+
 /** Defeat the unique Act I miniboss through the visible HUD and ordinary
  * player auto-attack/healing. Only the actual boss kill advances the ledger;
  * merely targeting, reaching the marker or waiting cannot pass this check.
@@ -402,7 +464,7 @@ async function defeatMorrowNaturally(page: Page, timeoutMs: number): Promise<voi
 test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, equip, turn-in', async ({ page }) => {
   // Continuous natural run: real first quest, corruption, boar hunt, graveyard,
   // then a fresh real Save/Load proving the unique Morrow encounter persists.
-  test.setTimeout(950_000);
+  test.setTimeout(1_350_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
@@ -718,6 +780,57 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(page.locator('.quest-journal')).toContainText('The Crypt Lord Falls');
   await expect(page.locator('.quest-journal')).toContainText('Defeat the Crypt Lord');
   await expect(page.locator('.quest-journal')).not.toContainText('Descent into the Crypt');
+
+  // The genuine crypt guardian wave and the three-phase Hollow King battle
+  // must finish before the authoritative quest allows the final report.
+  await clearCryptNaturally(page, 240_000);
+  await expect(page.locator('.quest-journal')).toContainText('Report to Vesna');
+  await expect(page.locator('.quest-journal')).toContainText('Speak to Vesna in town');
+  await expect(page.locator('.dungeon-panel')).toContainText('Crypt cleared');
+
+  // Normal UI portal auto-approach; no debug teleport or forced zone edit.
+  await page.getByRole('button', { name: 'Return to camp' }).click();
+  try {
+    await expect(game).toHaveAttribute('data-zone', 'wilderness', { timeout: 80_000 });
+  } catch {
+    throw new Error('Real crypt portal auto-approach failed at ('
+      + await game.getAttribute('data-player-x') + ','
+      + await game.getAttribute('data-player-y') + '), zone='
+      + await game.getAttribute('data-zone') + ', dungeon='
+      + (await page.locator('.dungeon-panel').innerText()).replaceAll('\n', ' '));
+  }
+  await expect(page.locator('.quest-journal')).toContainText('Report to Vesna');
+  await page.getByRole('button', { name: 'Speak to the warden' }).click();
+  const finalWarden = page.getByRole('dialog', { name: 'Warden Vesna' });
+  await expect(finalWarden).toBeVisible({ timeout: 25_000 });
+  // The Act I finale is reached via Vesna's visible dialogue tree, not the
+  // starter quest's root-level Complete quest button.
+  await finalWarden.getByRole('button', { name: 'Threat Beyond the Gate' }).click();
+  await finalWarden.getByRole('button', { name: 'Vesna awaits your final report.' }).click();
+  const report = finalWarden.getByRole('button', { name: 'Deliver the report' });
+  await expect(report).toBeEnabled();
+  await report.click();
+  await finalWarden.getByRole('button', { name: 'Leave' }).click();
+  await expect(page.locator('.quest-journal')).toContainText('Act I complete');
+  await expect(page.locator('.quest-journal')).not.toContainText('Report to Vesna');
+
+  // Save & reload through actual UI: completion cannot duplicate rewards,
+  // lose item identity, or restart the finished story.
+  const completedHud = await page.locator('.hud-details span').allTextContents();
+  const completedXp = await guide.getByTestId('onboarding-xp').innerText();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await expect(game).toHaveAttribute('data-zone', 'wilderness');
+  await expect(page.locator('.quest-journal')).toContainText('Act I complete');
+  await expect(page.locator('.quest-journal')).not.toContainText('Report to Vesna');
+  await expect(page.locator('.hud-details span')).toHaveText(completedHud);
+  await expect(guide.getByTestId('onboarding-xp')).toHaveText(completedXp);
+  await page.locator('[data-quick-action="inventory"]').click();
+  await expect(inventory.locator('.equipment-slot[data-item-id="' + lootedItemId + '"]'))
+    .toHaveCount(1);
+  await inventory.locator('.close-button').click();
 
 });
 
