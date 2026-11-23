@@ -16,6 +16,7 @@ async function keepFighting(
   const deadline = Date.now() + timeoutMs;
   const roster = page.locator('.enemy-roster');
   let previousCount = -1;
+  let lastTargetRefreshAt = 0;
   while (Date.now() < deadline) {
     const journal = await page.locator('.quest-journal').innerText();
     // The starter hunt is NPC-gated and stays at 3/3. Act I boar kills,
@@ -41,18 +42,27 @@ async function keepFighting(
     }
 
     const activeTarget = roster.locator('button.targeted:not([disabled])');
-    if (await activeTarget.count() === 0 || achieved !== previousCount) {
-      const liveTargets = roster.locator('button:not([disabled])');
-      if (await liveTargets.count()) {
+    const huntBoars = nextQuestTitle !== undefined;
+    const liveTargets = roster.locator('button:not([disabled])');
+    // Presentation sorts minibosses ahead of ordinary enemies. During the
+    // mandatory boar hunt, clearing the real encounter pack (then selecting
+    // the three actual boars) takes priority over optional wandering bosses.
+    const boars = liveTargets.filter({ hasText: 'Corrupted Boar' });
+    const otherEncounterTargets = roster.locator('button:not([disabled]):not(.bossTarget)');
+    const boarVisible = huntBoars && await boars.count() > 0;
+    const candidates = boarVisible ? boars
+      : huntBoars && await otherEncounterTargets.count() > 0
+        ? otherEncounterTargets : liveTargets;
+    const refreshTarget = huntBoars && (Date.now() - lastTargetRefreshAt > 10_000
+      || (boarVisible && await activeTarget.filter({ hasText: 'Corrupted Boar' }).count() === 0));
+    if (await activeTarget.count() === 0 || achieved !== previousCount || refreshTarget) {
+      if (await candidates.count()) {
         try {
-          // Enemies can die or leave targeting range between the locator
-          // check and the real click. Do not let Playwright retry a now-disabled
-          // button for the remainder of this natural-combat acceptance test.
-          await liveTargets.first().click({ timeout: 1_500 });
+          // A real click may race with an enemy death, as in PR #187. Bound
+          // only the transient control wait, never the quest/death conditions.
+          await candidates.first().click({ timeout: 1_500 });
+          lastTargetRefreshAt = Date.now();
         } catch (error) {
-          // A short click timeout only means the transient target was no
-          // longer actionable. Re-read live combat state on the next tick;
-          // the quest/death/deadline assertions above still decide success.
           if (!(error instanceof errors.TimeoutError)) throw error;
         }
       }
@@ -60,8 +70,14 @@ async function keepFighting(
     previousCount = achieved;
     await page.waitForTimeout(400);
   }
+  const rosterText = await roster.innerText();
+  const game = page.locator('.game-screen');
   throw new Error('Natural quest playthrough timed out at ' +
-    await activeQuestCount(page) + '/3 kills; target ' + until);
+    await activeQuestCount(page) + '/3 kills; target ' + until
+    + '; active quest: ' + (await page.locator('.quest-journal').innerText())
+    + '; enemies: ' + rosterText.replaceAll('\\n', ' ')
+    + '; player position: ' + await game.getAttribute('data-player-x')
+    + ',' + await game.getAttribute('data-player-y'));
 }
 
 /** Follow the ordinary world canvas from the finished first quest to Act I's next
