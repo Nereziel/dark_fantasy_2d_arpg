@@ -80,6 +80,15 @@
       && dropHover.slot === target.slot;
   }
   function clearDrag(): void { dragged = null; dropHover = null; }
+  /** Clearing a selection also cancels its pending two-step transfer. Otherwise
+   * the next innocent inspection click silently arms an unrelated bag item. */
+  function clearMoveSelection(): void {
+    selected = null;
+    hovered = null;
+    moveArmed = false;
+    clearDrag();
+    placementMessage = '';
+  }
 
   let displayed = $derived(touchInput ? selected : (hovered ?? selected));
   let inspected = $derived.by((): Item | null => {
@@ -390,10 +399,7 @@
             <select value={rarityFilter} aria-label={$t('inventory.filter')}
               onchange={(event) => {
                 rarityFilter = event.currentTarget.value;
-                selected = null;
-                hovered = null;
-                dragged = null;
-                moveArmed = false;
+                clearMoveSelection();
               }}>
               <option value="ALL">{$t('inventory.all')}</option>
               {#each Object.keys(RARITIES) as rarity (rarity)}
@@ -401,7 +407,7 @@
               {/each}
             </select>
           </label>
-          <button onclick={() => { selected = null; bridge.command({ type: 'sortInventory' }); }}>
+          <button onclick={() => { clearMoveSelection(); bridge.command({ type: 'sortInventory' }); }}>
             {$t('inventory.sort')}
           </button>
         </div>
@@ -484,7 +490,7 @@
           <span class="desktop-hint">{$locale === 'cs' ? 'Kliknutím zobrazíš detail · dvojklik nebo přetažení přesune předmět' : 'Click to inspect · double-click or drag to move gear'}</span>
           <span class="touch-hint">{$locale === 'cs' ? 'Klepni pro náhled · přesun přes tlačítko výše' : 'Tap to inspect · use Move by tap'}</span>
           {#if selected?.kind === 'bag'}
-            <button onclick={() => { selected = null; }}>{$locale === 'cs' ? 'Zrušit výběr' : 'Clear selection'}</button>
+            <button onclick={() => clearMoveSelection()}>{$locale === 'cs' ? 'Zrušit výběr' : 'Clear selection'}</button>
           {/if}
         </div>
       </section>
