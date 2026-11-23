@@ -155,7 +155,7 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
     const screenX = Math.max(width * 0.35,
       Math.min(width * 0.67, waypoint.x - scrollX));
     const screenY = Math.max(height * 0.23,
-      Math.min(height * 0.68, waypoint.y - scrollY));
+      Math.min(height * 0.94, waypoint.y - scrollY));
     await page.mouse.click(rect.x + rect.width * screenX / width,
       rect.y + rect.height * screenY / height, { button: 'middle' });
     await page.waitForTimeout(1200);
@@ -188,6 +188,7 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
   let index = 0;
   let ticks = 0;
   let stalled = 0;
+  const lastSteps: string[] = [];
   const waypoints = [
     // Survey the authored graveyard area from the northern approach and
     // sweep south. Keep intermediate waypoints reachable with normal input;
@@ -228,10 +229,11 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     }));
     // Recover if a procedural obstacle blocks a specific eastward click.
     // This uses real viewport movement; it does not inspect map obstacles.
+    const destination = waypoints[index]!;
     const waypoint = stalled >= 2
-      ? { x: Math.max(100, x - 160),
-        y: y >= 570 ? Math.max(130, y - 330) : Math.min(1260, y + 310) }
-      : waypoints[index]!;
+      ? { x: x - (stalled % 2 ? 95 : 175),
+        y: Math.max(130, Math.min(1260, y + (stalled % 2 ? -165 : 245))) }
+      : destination;
     const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
     const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
     // At the east world edge the camera can no longer follow the hero.
@@ -240,18 +242,22 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     // 78% stays left of the right HUD but reaches the graveyard at x≈1900.
     const screenX = Math.max(width * 0.35,
       Math.min(width * 0.78, waypoint.x - scrollX));
-    const screenY = Math.max(height * 0.23,
-      Math.min(height * 0.68, waypoint.y - scrollY));
+    // The combat controls sit below the canvas, so southern clicks can use
+    // its lower rows. Leave a small edge margin and keep clear of the side HUD.
+    const screenY = Math.max(height * 0.18,
+      Math.min(height * 0.94, waypoint.y - scrollY));
     await page.mouse.click(rect.x + rect.width * screenX / width,
       rect.y + rect.height * screenY / height, { button: 'middle' });
     await page.waitForTimeout(1200);
 
     const nextX = Number(await game.getAttribute('data-player-x'));
     const nextY = Number(await game.getAttribute('data-player-y'));
+    lastSteps.push(`${index}: ${Math.round(x)},${Math.round(y)} → ${Math.round(nextX)},${Math.round(nextY)}`);
+    if (lastSteps.length > 8) lastSteps.shift();
     stalled = Math.hypot(nextX - x, nextY - y) < 6 ? stalled + 1 : 0;
     ticks += 1;
-    if (Math.hypot(nextX - waypoint.x, nextY - waypoint.y) < 48
-      || ticks >= 7 || stalled >= 3) {
+    if (Math.hypot(nextX - destination.x, nextY - destination.y) < 48
+      || ticks >= 9 || stalled >= 4) {
       index = (index + 1) % waypoints.length;
       ticks = 0;
       stalled = 0;
@@ -261,7 +267,9 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     + await game.getAttribute('data-player-x') + ','
     + await game.getAttribute('data-player-y') + '), waypoint: '
     + index + ' (' + waypoints[index]!.x + ',' + waypoints[index]!.y
-    + '), journal: ' + await journal.innerText());
+    + '), seed: ' + await game.getAttribute('data-world-seed')
+    + ', last steps: ' + lastSteps.join(' | ')
+    + ', journal: ' + await journal.innerText());
 }
 
 /** Continue from Morrow using ordinary world clicks, not a prepared save.
@@ -319,7 +327,7 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
     const screenX = Math.max(width * 0.35,
       Math.min(width * 0.78, waypoint.x - scrollX));
     const screenY = Math.max(height * 0.23,
-      Math.min(height * 0.68, waypoint.y - scrollY));
+      Math.min(height * 0.94, waypoint.y - scrollY));
     await page.mouse.click(rect.x + rect.width * screenX / width,
       rect.y + rect.height * screenY / height, { button: 'middle' });
     await page.waitForTimeout(1200);
