@@ -169,9 +169,9 @@
     "move": "Pohyb: klikni nebo drž levé tlačítko",
     "attack": "Útok: kliknutí na nepřítele",
     "pause": "Pauza: Esc",
-    "hint": "Mezerník: úskok · Shift: držet pozici · Q/RMB a 1: míření kurzorem · Esc → Ovládání",
+    "hint": "{evade}: úskok · {hold}: držet pozici · {menu} → Ovládání pro změnu kláves",
     "pickup": "Kořist: kliknutí na zářící předmět",
-    "skills": "Schopnosti: Q / pravé tlačítko myši a klávesa 1",
+    "skills": "Schopnosti: {skills} · Lektvar: {potion}",
     "avoid": "Uhni z červené oblasti dříve, než útok dopadne.",
     "navigate": "Drž levé tlačítko a pohybuj kurzorem. Kliknutí do zdi najde dostupný bod; prostřední tlačítko vynutí pohyb."
   },

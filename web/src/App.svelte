@@ -1006,10 +1006,18 @@
         <div>{$t('controls.move')}</div>
         <div>{$t('controls.attack')}</div>
         <div>{$t('controls.pickup')}</div>
-        <div>{$t('controls.skills')}</div>
+        <div>{$t('controls.skills', { values: {
+          skills: (['SECONDARY', 'SLOT_1', 'SLOT_2', 'SLOT_3', 'SLOT_4', 'SLOT_5', 'SLOT_6'] as const)
+            .map(action => shortcutHint(controlBindings, action)).join(' / '),
+          potion: shortcutHint(controlBindings, 'POTION')
+        } })}</div>
         <div>{$t('controls.avoid')}</div>
         <div>{$t('controls.navigate')}</div>
-        <div class="world-guide-sub">{$t('controls.hint')}</div>
+        <div class="world-guide-sub">{$t('controls.hint', { values: {
+          evade: shortcutHint(controlBindings, 'EVADE'),
+          hold: shortcutHint(controlBindings, 'HOLD_POSITION'),
+          menu: shortcutHint(controlBindings, 'MENU')
+        } })}</div>
       </div>
 
       {#if modalKind === '' && view.player.alive && !view.paused}
