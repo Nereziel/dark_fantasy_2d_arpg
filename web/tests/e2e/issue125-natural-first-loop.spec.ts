@@ -10,13 +10,20 @@ async function activeQuestCount(page: Page): Promise<number> {
   return match ? Number(match[1]) : -1;
 }
 
-async function keepFighting(page: Page, until: number, timeoutMs: number): Promise<void> {
+async function keepFighting(
+  page: Page, until: number, timeoutMs: number, nextQuestTitle?: string
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const roster = page.locator('.enemy-roster');
   let previousCount = -1;
   while (Date.now() < deadline) {
+    const journal = await page.locator('.quest-journal').innerText();
+    // The starter hunt is NPC-gated and stays at 3/3. Act I boar kills,
+    // by contrast, immediately auto-complete and activate Forgotten Graves:
+    // 3/3 is never guaranteed to remain visible for a polling interval.
+    if (nextQuestTitle ? journal.includes(nextQuestTitle)
+      : (await activeQuestCount(page)) >= until) return;
     const achieved = await activeQuestCount(page);
-    if (achieved >= until) return;
     if (await page.getByTestId('death-overlay').count()) {
       throw new Error('Natural quest playthrough: the hero died before ' + until + '/3 kills');
     }
@@ -310,7 +317,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // enemy falls the simulation spawns its actual three-corrupted-boar wave.
   // The objective cannot advance from ordinary skeleton/wolf/wraith kills.
   await expect(page.locator('.quest-journal')).toContainText('0/3');
-  await keepFighting(page, 3, 105_000);
+  await keepFighting(page, 3, 105_000, 'The Forgotten Graves');
   await expect(page.locator('.quest-journal')).toContainText('Forgotten Graves');
   await expect(page.locator('.quest-journal')).toContainText('graveyard');
   await expect(page.locator('.quest-journal')).not.toContainText('The Blighted Pack');
