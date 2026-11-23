@@ -364,7 +364,7 @@
               ondragover={(event) => permitDrop(event, { kind: 'gear', slot })}
                ondragleave={() => { if (isDropHover({ kind: 'gear', slot })) dropHover = null; }}
               ondrop={(event) => dropGear(event, slot)}
-              onpointerenter={() => { hovered = { kind: 'gear', slot }; }}
+              onpointerenter={(event) => { if (event.pointerType === 'mouse') touchInput = false; hovered = { kind: 'gear', slot }; }}
               onpointerleave={() => { hovered = null; }}
               onfocus={() => { hovered = { kind: 'gear', slot }; }}
               onclick={() => pickGear(slot)}
@@ -464,7 +464,7 @@
               ondragover={(event) => { if (!filtered) permitDrop(event, { kind: 'bag', index }); }}
                ondragleave={() => { if (isDropHover({ kind: 'bag', index })) dropHover = null; }}
               ondrop={(event) => { if (!filtered) dropBag(event,index); }}
-              onpointerenter={() => { hovered = item && !filtered ? { kind: 'bag', index } : null; }}
+              onpointerenter={(event) => { if (event.pointerType === 'mouse') touchInput = false; hovered = item && !filtered ? { kind: 'bag', index } : null; }}
               onpointerleave={() => { hovered = null; }}
               onfocus={() => { hovered = item && !filtered ? { kind: 'bag', index } : null; }}
               onclick={() => { if (!filtered) pickBag(index); }}
