@@ -80,6 +80,15 @@
       && dropHover.slot === target.slot;
   }
   function clearDrag(): void { dragged = null; dropHover = null; }
+  /** Commit the last real mouse preview before crossing into the inspector.
+   * Otherwise clearing hovered on leave silently retargets action buttons to
+   * an older selected item. Never modify a touch selection or armed move. */
+  function pinMousePreviewOnLeave(event: PointerEvent, source: Source, item: Item | null): void {
+    if (event.pointerType === 'mouse' && item && !moveArmed && !dragged) {
+      selected = source;
+    }
+    hovered = null;
+  }
   /** Clearing a selection also cancels its pending two-step transfer. Otherwise
    * the next innocent inspection click silently arms an unrelated bag item. */
   function clearMoveSelection(): void {
@@ -366,7 +375,7 @@
               ondrop={(event) => dropGear(event, slot)}
               onpointerenter={(event) => { if (event.pointerType === 'mouse') touchInput = false; hovered = { kind: 'gear', slot }; }}
               onpointermove={(event) => { if (event.pointerType === 'mouse') { touchInput = false; hovered = { kind: 'gear', slot }; } }}
-              onpointerleave={() => { hovered = null; }}
+              onpointerleave={(event) => pinMousePreviewOnLeave(event, { kind: 'gear', slot }, item)}
               onfocus={() => { hovered = { kind: 'gear', slot }; }}
               onclick={() => pickGear(slot)}
               ondblclick={() => { if (!touchInput) unequip(slot); }}
@@ -467,7 +476,7 @@
               ondrop={(event) => { if (!filtered) dropBag(event,index); }}
               onpointerenter={(event) => { if (event.pointerType === 'mouse') touchInput = false; hovered = item && !filtered ? { kind: 'bag', index } : null; }}
               onpointermove={(event) => { if (event.pointerType === 'mouse') { touchInput = false; hovered = item && !filtered ? { kind: 'bag', index } : null; } }}
-              onpointerleave={() => { hovered = null; }}
+              onpointerleave={(event) => pinMousePreviewOnLeave(event, { kind: 'bag', index }, filtered ? null : item)}
               onfocus={() => { hovered = item && !filtered ? { kind: 'bag', index } : null; }}
               onclick={() => { if (!filtered) pickBag(index); }}
               ondblclick={() => { if (item && !filtered && !touchInput) equip(index); }}
