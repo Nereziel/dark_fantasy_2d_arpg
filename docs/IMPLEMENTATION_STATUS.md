@@ -1,8 +1,34 @@
 # Aether & Ruin — Sequential Prompt Status
 
-Source of truth: [2d_arpg_implementation_prompts.md](../2d_arpg_implementation_prompts.md) (63 numbered implementation prompts).
+[Implementation prompts](../2d_arpg_implementation_prompts.md) define the requirements.
+[Roadmap](ROADMAP.md) defines integration order and acceptance gates.
 
-We will now complete foundational prompts in numeric order, even though early vertical-slice prototypes already include features from later steps. A feature existing in prototype form is **not** evidence that its full prompt acceptance criteria passed.
+## Verified snapshot · 23 November 2026
+
+| Evidence | Result |
+| --- | --- |
+| [Main build and CI](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/45257482488) | `6bb14372` passed typecheck, build, 1,022 unit tests and 103 Chromium tests. This test-only push skipped Pages. |
+| [Pages deployment](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/45146031245) | The public page matched a build of `196476c8`. [Navigation fix #195](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/195) is on main but [its deploy was skipped](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/45211485247) after browser test failure. |
+| [Act I finale #194](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/194) | Draft. [Green browser run](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/45257723985) covers the normal browser route from onboarding through Hollow King, the return portal, Vesna and Save/Load. |
+| [Mandatory boar wave #196](https://github.com/Nereziel/dark_fantasy_2d_arpg/pull/196) | Draft. [CI passed](https://github.com/Nereziel/dark_fantasy_2d_arpg/actions/runs/45259272983) with 1,026 unit tests and 103 Chromium tests. The runtime fix and public deployment remain open. |
+
+## Current prompt coverage
+
+| Prompts | Integrated scope and remaining work |
+| --- | --- |
+| 01–20 | Core simulation, input, combat, enemies, loot, progression and camp interactions are integrated. |
+| 21–29 | Act I chain, seed-based world and crypt, A* navigation, minibosses, phased Hollow King and death/respawn are integrated. Browser acceptance through Morrow, Seal evidence and crypt entry is on main (#188–#192). The full finale and public rollout are tracked above. |
+| 30–38 | Talents, skill modifiers, crafting, gems/runes, potions, stash, waypoints, world events, shrines and props are integrated. Some advanced variants and natural-play balance remain acceptance work. |
+| 39–44 | Paladin, Mage, Necromancer, Rogue and Warlock runtimes and six-class creation are integrated (#85, #88–#90, #98–#99). Necromancer, Rogue and Warlock talent trees followed in #131. |
+| 45 | Multi-character IndexedDB and independent world records integrated in #129. Character v11 supports migrations from web v8–v10. World v1 restores the saved seed and selected facts. |
+| 46–47 | HUD, touch controls, map/fog, settings and rebinding are integrated (#130, #134, #145, #148–#157). #193 verifies HUD geometry and modal focus in Chromium. Physical mobile, screen-reader and inventory acceptance remain open. |
+| 48 | Central Web Audio mixer and procedural cues integrated in #147. Final sound design and real-device listening checks remain open. |
+| 49–56 | Act II has an unlock flag after Vesna’s report. The new region and later campaign, scaling, deeper item systems and endgame are roadmap work. |
+| 57–63 | Seed and regression baselines exist, including #132 for Act I. Broader profiling, expanded campaign validation, developer tools, architectural review and final release acceptance remain planned. |
+
+## Historical integration records · Prompts 01–38
+
+The entries below retain the evidence and format versions from their implementation waves. Use the snapshot above and the roadmap for current acceptance status.
 
 | Prompt | Status | Remaining essentials |
 | --- | --- | --- |
@@ -38,7 +64,6 @@ We will now complete foundational prompts in numeric order, even though early ve
 | **36 — Fast Travel and Waypoints** | **CORE INTEGRATED (PR #79; full natural-play acceptance pending)** | Town waypoint activated on live physical interaction; Soul Shrine checkpoint reused as a second field waypoint only after activation. Pure simulation-owned source proximity, unlocked destination and navigation/collision checks, safe teleport with combat input cleanup, world facts/quest/item preservation and no fog reveal along travel path. CS/EN map and town UI, Phaser transition. Old map fingerprint and world format 1 and character v11 preserved. 753 unit + 22 Chromium tests GREEN. |
 | **37 — World Events** | **CORE INTEGRATED (PR #81; extended escort/rescue acceptance pending)** | Eight seeded event kinds chosen from regional tables at two validated optional wilderness anchors. Simulation owns two-guard encounter, controlled activation, combat, completion and one-shot XP/gold/material/equipment award backed by the existing seed-scoped `eventCompleted` fact. No partial kill/quest/reward farming; undiscovered events hidden. CS/EN objective HUD and Phaser cues, world format1/character v11/fingerprint unchanged. 759 unit + 23 Chromium CI GREEN. |
 | **38 — Shrines and Environmental Interactions** | **CORE INTEGRATED (PR #83; runtime collision/openings and shrine-triggered combat outstanding)** | Deterministic collision-validated catalog of 15 environment interactables across 10 types including 6 temporary shrine effects. Existing central Phaser pointer resolver dispatches to simulation command with pathfinding approach and bounded interaction range. Lever reveals hidden wall and unlocks door logically; chest/barrel/crate/trap use one-shot reward/hazard. Optional world-instance `environmentUsedIds` format 1 persists open/used states, character save v11 unchanged. EN/CS UI and Phaser feedback. Exact-head CI 765 Vitest, 24 Chromium, typecheck/build/legacy PASS. |
-| 39–63 | Not audited against complete original acceptance | Next Prompt 39: Paladin Class — Faith, seven skills, talent paths and class-specific item affixes with existing class infrastructure. |
 
 ## Prompt 07–11 remaining acceptance closeout (integration PR #21)
 

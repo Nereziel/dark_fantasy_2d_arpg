@@ -1,8 +1,8 @@
 # 2D Dark Fantasy ARPG — Sequential Implementation Prompts for Codex
 
-Use these **63 prompts in order**. Each step must preserve a playable, testable browser game and support deployment to GitHub Pages.
+These **63 numbered prompts** define the scope and acceptance criteria. Use the [roadmap](docs/ROADMAP.md) for current integration order and dependencies and the [implementation status](docs/IMPLEMENTATION_STATUS.md) to identify work already integrated. Preserve a playable, testable browser game at every step.
 
-This plan modernizes the **existing Aether & Ruin HTML5 Canvas prototype**. Reuse its functioning classes, quests, combat, inventory and world systems where practical. **Old save files do not need to be supported or imported.** The target is a top-down dark-fantasy ARPG with Diablo-like mouse movement, six classes, five acts, procedural locations and future multiplayer-readiness.
+This plan modernizes the **existing Aether & Ruin HTML5 Canvas prototype**. Reuse its functioning classes, quests, combat, inventory and world systems where practical. **Preserve the supported web save formats and their migrations.** Importing saves from the original HTML prototype is outside this project scope. The target is a top-down dark-fantasy ARPG with Diablo-like mouse movement, six classes, five acts, procedural locations and future multiplayer-readiness.
 
 ## Project licensing and third-party material
 
@@ -23,7 +23,7 @@ This is the project's selected architecture. **Do not switch to Godot, React, Ne
 | Gameplay | **TypeScript** (strict) | Authoritative state, combat, entities, movement, AI, quests, item rules, deterministic generation |
 | Tooling | **Vite**, `@sveltejs/vite-plugin-svelte` | Development server, hot reload, client-side SPA and static production bundle |
 | UI state bridge | Typed commands/events and Svelte-facing read-only projections | Communication without tight coupling |
-| Persistence | **IndexedDB** (saves), `localStorage` (preferences only) | Versioned saves for the current game format (no legacy importer) |
+| Persistence | **IndexedDB** (saves), `localStorage` (preferences only) | Versioned character and world records with supported web-format migrations |
 | Tests | **Vitest**, **Playwright**, `svelte-check` | Logic tests, browser tests, static checks |
 | Deployment | **GitHub Actions → GitHub Pages** | Publish `dist/`, no runtime backend |
 | Localization | **`svelte-i18n`**, `cs` and `en` | Runtime language switching, ICU messages, localized game UI and content |
@@ -32,7 +32,7 @@ Use compatible stable versions and a committed `package-lock.json`; verify insta
 
 ## Architecture Rules and Ownership
 
-1. **Pure TypeScript simulation** (`src/game/core`, `entities`, `combat`, `systems`, `world`): Owns player HP, positions, cooldowns, damage, inventory, loot, NPC/quest state, RNG and saving. It must not import Phaser, Svelte or the DOM.
+1. **Pure TypeScript simulation** (under `web/src/game`): Owns player HP, positions, cooldowns, damage, inventory, loot, NPC/quest state and RNG. It exposes validated progression projections. Browser persistence adapters own IndexedDB. The simulation has no Phaser, Svelte or DOM dependency.
 2. **Phaser adapter** (`src/game/phaser`): Owns `Phaser.Game`, scenes, sprite and tilemap rendering, camera, pointer world-coordinate conversion, animation, VFX and audio adapters. Phaser GameObjects are **views**, not authoritative game entities.
 3. **Svelte UI** (`src/ui`): Owns menus, overlay modals, inventory display and HUD. Components observe read-only state projections and submit typed game commands. Never edit core game state or Phaser GameObjects directly.
 4. **Typed bridge** (`src/game/bridge`): `GameCommand` → simulation → `GameEvent`/`GameSnapshot` → Phaser visuals and Svelte projections. Avoid `window.gameApp`, cross-layer globals and circular imports.
@@ -100,13 +100,9 @@ The JSON blocks above are illustrative fragments (comments are documentation onl
 
 ## GitHub Pages Contract
 
-- **Current decision (November 2026):** Publish the new **Svelte 5 / Phaser 4** app at the main GitHub Pages URL immediately, even before complete legacy feature parity. Keep old root HTML code only as a local reference; do not include it in the Pages artifact.
-- `.github/workflows/pages.yml` runs `npm ci`, `npm run check`, `npm run test`, `npm run build` and Chromium E2E in `web/` before deploying **`web/dist/`**.
-- Filter production pushes to only `web/index.html`, `web/src/**`, `web/public/**`, package/lock files, build configs/scripts and deploy workflow files. Edits limited to README, docs, implementation prompts and tests must **not** rebuild Pages.
-- Use Vite `base: '/dark_fantasy_2d_arpg/'` for all assets, textures and translations at the project's GitHub Pages URL.
-- `.github/workflows/quality.yml` handles PRs and test-only changes without deployment. Do not require a path-filtered Pages workflow as a mandatory PR check.
-- Every published release must pass current unit, type, build, browser and asset path tests. Early releases may be incomplete, but incomplete features must be accurately documented and must not introduce failing tests.
-- Use static hosting only; no Node.js server, runtime API keys or backend is required. Manual `workflow_dispatch` deployment remains supported.
+- [`quality.yml`](.github/workflows/quality.yml) handles PRs, eligible pushes to `main` and manual dispatch. It installs locked dependencies, validates types, runs Vitest, builds and runs Chromium against the production bundle.
+- The `deploy` job publishes `web/dist/` after successful verification of a push with published build-input changes or a manual dispatch. Docs-only and test-only changes do not publish. Treat a green verification job and an actual successful Pages deployment as separate evidence.
+- Serve the static Svelte/Phaser app at Vite base `/dark_fantasy_2d_arpg/`. The published build needs no runtime backend or API keys. The root HTML prototype remains an offline reference.
 
 ## Migration Strategy for Existing Files
 
@@ -116,14 +112,14 @@ The repo already includes `dark_fantasy_2d_arpg_engine.html`, `visuals.js`, `vis
 2. Build Svelte/Phaser in **`web/`**, preserving the old root HTML for reference. Deploy a tested `web/dist/` to the main Pages URL as a public development release.
 3. Extract typed content, simulation, stat/combat formulas, seeded RNG, command handling and save DTOs into testable TypeScript modules; preserve balance and IDs.
 4. Migrate scenes, pixel sprites, movement/input and graphical effects incrementally into Phaser. Replace UI panels with Svelte, communicating only through the typed bridge.
-5. Persist an explicit **character-progress DTO**, never a full `GameSnapshot` or current world/combat state. After load, generate a fresh game session with the hero at a safe starting point. Do not import/migrate old HTML or demo saves; reject incompatible versions gracefully.
+5. Persist explicit character and world-progress DTOs, never a full `GameSnapshot`. Loading creates a fresh session at a safe starting point and restores validated durable world facts for the saved seed. Preserve the existing web-format migrations described in Prompt 45.
 6. Incrementally complete a parity slice: town → NPC quest → mouse movement → combat → loot → inventory → save → reload. Pages already deploys `web/dist/`; every additional release must pass quality gates. Keep root legacy HTML as an offline reference.
 
 Never replace working systems with empty Phaser/Svelte placeholders just to satisfy file structure.
 
 ## Milestone Gates and Definition of Done
 
-All 63 prompts remain sequential. The public new-engine build can be feature-incomplete, but milestones are **quality gates** for declaring features complete; never ship a build with failing tests:
+Milestones define the evidence needed to declare a feature complete. For current sequencing, use the roadmap.
 
 | Gate | Prompts | Evidence required |
 | --- | --- | --- |
@@ -131,7 +127,7 @@ All 63 prompts remain sequential. The public new-engine build can be feature-inc
 | Core combat slice | 06–17 | Mouse movement, attacks, damage, status effects, loot and inventory work together; deterministic unit tests |
 | Act I world slice | 18–29 | Reachable town/quest → wilderness → dungeon → boss → loot → return, in browser, with bilingual NPC dialogue, objectives, item names and map labels |
 | Progression and classes | 30–44 | No duplicated item/skill rules; each class uses shared systems; representative builds tested |
-| Persistence and UI | 45–48 | Only the current save format loads; valid new saves survive reload and incompatible saves fail gracefully; keyboard/UI interactions and mid-game `cs`↔`en` switching verified |
+| Persistence and UI | 45–48 | Current and supported migrated saves retain progression after reload. Unsupported records fail gracefully. Keyboard/UI interactions and mid-game `cs`↔`en` switching are verified. |
 | Campaign and endgame | 49–56 | Region/act transitions and generated objectives are navigable, saveable, testable |
 | Release readiness | 57–63 | Profiler evidence, deterministic seed suite, combat tests, full vertical-slice E2E, no console errors and successful Pages preview |
 
@@ -139,13 +135,13 @@ Every implemented feature needs: a clearly owned TypeScript state, a Phaser pres
 
 **Simulation determinism**: pick a documented simulation tick rate, use accumulator/catch-up caps after tab suspension, never depend on render delta or `Math.random()` for authoritative rolls, and make replay/seed failures reproducible.
 
-**Save safety**: version current save DTOs and content definitions; distinguish persistent IDs from Phaser sprite IDs, validate data, handle quota/private-mode/storage errors, and **reject old or incompatible save versions** without attempting migrations. A new game must always remain possible.
+**Save safety**: version current save DTOs and content definitions; distinguish persistent IDs from Phaser sprite IDs, validate data, handle quota/private-mode/storage errors, and **migrate explicitly supported web formats** and reject invalid or unsupported records. A new game must always remain possible.
 
 **Graphics production**: establish consistent camera/world units, tile sizes, sprite pivots, depth/occlusion layers, pixel-art filter/zoom, animation naming, texture atlases and art credits before scaling content. Include a visual regression/screenshot check for representative environments where practical.
 
-**Mobile/accessibility**: the priority is a usable desktop mouse/keyboard experience; Svelte HUD should scale responsively. Mobile touch input may be a separate explicitly scoped milestone, never assumed to be covered by CSS breakpoints alone.
+**Mobile/accessibility**: the priority is a usable desktop mouse/keyboard experience; Svelte HUD should scale responsively. Touch controls and accessible modal interactions have their own acceptance checks. Use automated viewport coverage and record separate results for physical Android/iOS and a screen reader.
 
-**Deployment optimization**: a docs-only or test-only commit may execute an appropriate quality check, but must not produce a Pages artifact or deployment. During migration, changes to unpublished `web/` code run staging CI only. When published, game/asset/config changes build and deploy exactly that published app.
+**Deployment optimization**: a docs-only or test-only commit may execute an appropriate quality check, but must not produce a Pages artifact or deployment. A verified push with game, asset or build-input changes deploys the published app.
 
 **No artificial green checks**: if a feature is only a scaffold, mark it incomplete. Do not declare a prompt finished because TypeScript compiles while runtime gameplay, browser rendering or persistence still fails.
 
@@ -171,7 +167,7 @@ Every implemented feature needs: a clearly owned TypeScript state, a Phaser pres
 16. Avoid per-frame Svelte store updates for sprites and particles.
 17. Run `npm run check`, applicable Vitest tests and `npm run build` on frontend changes.
 18. Use Playwright smoke tests for critical UI, gameplay and deployment milestones, serving the production Vite bundle at the actual repository subpath.
-19. Preserve relevant existing class/quest functionality; **legacy save compatibility is explicitly out of scope**.
+19. Preserve existing class and quest behavior, including supported web save migrations. The original HTML prototype has a separate save format.
 19a. For every player-facing message added or edited in a prompt, provide Czech and English translations in the same change and test the runtime locale switch; never store translated strings as gameplay IDs or save fields.
 20. At the end of each task report: created/modified files, architecture changes, gameplay changes, tests, Pages/deploy status, limitations and recommended next step.
 21. Do not redeploy Pages when only README, prompts, docs or tests change. Rebuild after published `web/` game, asset, locale or build-input changes, with independent PR quality checks.
@@ -191,14 +187,13 @@ Required project structure (the new frontend is permanently isolated under `web/
 
 ```text
 /
-├── index.html                        # Existing published legacy entrypoint (unchanged until cutover)
+├── index.html                        # Offline HTML reference entrypoint
 ├── dark_fantasy_2d_arpg_engine.html  # Existing browser reference game
 ├── visuals.js / visuals.css          # Legacy art helpers
 ├── 2d_arpg_implementation_prompts.md
 ├── .github/
 │   └── workflows/
-│       ├── pages.yml                # Deploy CURRENT published site only
-│       └── quality.yml              # PR / staging quality checks, no deploy
+│       └── quality.yml              # Verify PR/push and deploy eligible builds
 ├── web/
 │   ├── index.html                   # New Vite/Svelte SPA entrypoint
 │   ├── package.json
@@ -2316,52 +2311,22 @@ Acceptance criteria:
 
 # PROMPT 45 — Save/Load System
 
-Implement a versioned save system.
+Maintain versioned IndexedDB saves for multiple characters. Keep durable hero and world progression independently scoped to the selected character.
 
-Save:
+- **Character v11:** class, level, XP, points, inventory/equipment, stash, gold, materials, skill/talent progression, and durable quest and campaign milestones. Preserve stable inventory instance IDs and completed reward flags.
+- **World v1:** seed, map discovery, waypoint/checkpoint activation and allowlisted world facts, such as consumed props and defeated persistent encounters. Validate the character ID, seed and referenced content before restoring.
+- **Browser preferences:** locale, bindings, accessibility and audio settings have browser-local storage and do not enter either record.
 
-- character class
-- level
-- XP
-- stats/progression
-- inventory
-- equipment
-- stash
-- gold
-- materials
-- skills
-- talents
-- quest state
-- world seed
-- discovered map
-- waypoints
-- world persistent states
-- dungeon seeds/state
-- NPC state
-- campaign progress
+Load into a fresh session at the safe hub with full health. Restore validated durable facts and regenerate world geometry from the seed. Current position, active fights, enemy health, dropped ground loot, general combat cooldowns and active temporary effects are session data. Explicit durable consumable bookkeeping uses the existing validated character fields.
 
-Use schema/save versioning.
-
-Do not add legacy importers or migrations for old game builds; document current-format invalidation behavior instead.
-
-Never serialize fragile scene/node references as primary identity.
-
-Use stable IDs.
-
-
-### Implementation notes — Svelte / Phaser / TypeScript
-
-Language preference is a **UI/browser setting**, not part of the character/world save. Locale-independent entity/item/quest IDs remain stable when switching `cs`/`en`. Legacy save imports are not required.
-
-Use versioned IndexedDB **character-only** saves with atomic writes, validation and graceful rejection of incompatible versions. Save class, level, XP, gold, inventory/equipment, and (once implemented) quest flags, learned skills and talents. **Never save current enemy positions/health, active fights, dropped ground loot, cooldowns, temporary buffs/debuffs, world instance, or player map coordinates.** On load start a new fresh world instance and place the hero at a safe hub/spawn point with full health; quest and character progression survives. Do not import old HTML or demo saves. Never serialize Phaser/Svelte objects. Test character-only round trips, rejected old versions and new-session world reset.
+Use stable IDs, atomic IndexedDB writes and explicit migrations from Svelte/Phaser character formats v8–v10. Handle unsupported versions, damaged records and browser storage failures gracefully. Keep the original HTML saves outside the web migration path.
 
 Acceptance criteria:
 
-- new game can be saved
-- the game can be closed and reopened into a **fresh world/session**
-- the hero's permanent progression restores correctly; combat, ground drops, cooldowns and enemy state do not
-- corrupted/invalid save fails gracefully
-- version field exists
+- Save/Load preserves the selected hero, gear identities, quest outcomes and compatible world facts after closing and reopening the game.
+- Two characters can be switched and reloaded without sharing map discovery, items or quest rewards.
+- Supported web-format migrations are tested with equipment and already-claimed rewards. Invalid and unsupported records produce recoverable behavior.
+- Reload starts combat in a clean state and restores the saved seed and eligible world facts when the world record is valid.
 
 ---
 
@@ -2413,9 +2378,9 @@ Write Svelte 5 HUD/menus as small components observing read-only selectors. Comm
 
 Acceptance criteria:
 
-- UI supports mouse interaction correctly
-- UI blocks world click-through
-- all major gameplay information is readable
+- Keep key actions reachable at 390, 560, 740, 900 and 1440 px in browser tests. Check small touch portrait and landscape on physical devices before F0 sign-off.
+- Test keyboard focus entry/return, accessible names and prevention of world click-through or game hotkeys while interacting with a modal.
+- Verify the same item and skill identities in HUD, inventory and tooltips after panel changes and live CS/EN switching. The simulation remains authoritative for equip, loot and skill actions.
 
 ---
 
@@ -2450,9 +2415,9 @@ Svelte owns settings and saved preferences; Phaser applies resolution scale, aud
 
 Acceptance criteria:
 
-- settings persist
-- keybindings persist
-- changing input mapping does not require code changes
+- Settings and bindings persist across refresh, and HUD hints reflect remapping immediately.
+- Verify left-handed mouse remapping, held-position release, input conflicts and Czech keyboard behavior using physical key codes. Track modifier/browser edge cases in [#153](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/153).
+- Record keyboard-only, screen-reader and device checks separately from automated viewport coverage.
 
 ---
 
@@ -2489,9 +2454,9 @@ Use Phaser audio or a Web Audio adapter. Svelte changes preferences, and browser
 
 Acceptance criteria:
 
-- categories have separate volume
-- gameplay events can trigger audio centrally
-- missing sound asset does not break gameplay
+- Master and category controls persist and affect their own audio buses. Combat, boss, loot, NPC and environment cues use centralized typed event routing.
+- Audio unlocks on user interaction. Muting, hidden tabs, unavailable audio and missing optional assets leave gameplay functional.
+- The integrated procedural cues establish runtime coverage. Assess production sound and music separately with credited assets or project-authored sources.
 
 ---
 
@@ -2539,9 +2504,11 @@ Act II is typed region/biome content rendered through shared Phaser tilemap and 
 
 Acceptance criteria:
 
-- Act II is a progression from Act I
-- it introduces new mechanics rather than only higher numbers
-- content is data-driven
+- Use Vesna’s completed report as the authoritative unlock. Before completion, the new route is unavailable. After completion, normal play and Save/Load preserve access, with Act I quest outcomes and rewards intact.
+- Integrate the first playable route in stages as described in the [roadmap](docs/ROADMAP.md). The full prompt requires a playable region, complete local quest chain, dungeon encounter and Mother of Decay.
+- Add a biome mechanic with readable cues and player counterplay. Reuse typed region, quest, enemy and loot systems.
+- Cover a fixed regression seed and generated routes to required objectives, dungeon entry and return. Verify generated layout reproducibility and useful failures with the failing seed.
+- Verify a natural Act I → Act II handoff and stable quest and item identities across Save/Load, with corresponding CS/EN strings.
 
 ---
 
@@ -3008,9 +2975,9 @@ Acceptance criteria:
 
 # PROMPT 62 — Final Vertical Slice Verification
 
-Perform a full gameplay verification.
+Perform the release-wide vertical-slice verification after campaign integration. F0 uses the [Act I acceptance gate](docs/ROADMAP.md#f0--přejímka-aktuálního-buildu) earlier and already exercises the story through Vesna. This prompt also checks progression, economy, crafting, travel and the release build.
 
-The game must support this sequence without debug commands:
+Run this sequence from a fresh character with ordinary player-facing controls:
 
 1. Start game.
 2. Create Warrior.
@@ -3038,7 +3005,7 @@ The game must support this sequence without debug commands:
 24. Save.
 25. Exit game.
 26. Reload game.
-27. Confirm character/world progression restored correctly.
+27. Confirm the same item identities, character progression, durable quest rewards, seed, map and applicable world facts after reload.
 
 Fix all blocking issues discovered.
 
