@@ -32,13 +32,14 @@ describe('F0 — click-to-interact auto-navigation around solid walls', () => {
     // omit enemy AI so this tests navigation alone, not character survival.
     const runtime = game as unknown as {
       player: Point;
-      follow(actor: Point, goal: Point, speed: number, dt: number, stop?: number): void;
+      follow(actor: Point, goal: Point, speed: number, dt: number,
+        stop?: number, autoRoute?: boolean): void;
     };
     const startDistance = Math.hypot(far!.x - CRYPT_EXIT.x, far!.y - CRYPT_EXIT.y);
     for (let tick = 0; tick < 1_000; tick++) {
       if (Math.hypot(runtime.player.x - CRYPT_EXIT.x, runtime.player.y - CRYPT_EXIT.y) <= 77) break;
       const previous = { ...runtime.player };
-      runtime.follow(runtime.player, CRYPT_EXIT, 220, 1 / 30, 70);
+      runtime.follow(runtime.player, CRYPT_EXIT, 220, 1 / 30, 70, true);
       expect(canOccupy(runtime.player, ACTOR_RADIUS, layout.obstacles)).toBe(true);
       expect(Math.hypot(runtime.player.x - previous.x, runtime.player.y - previous.y))
         .toBeLessThanOrEqual(220 / 30 + 0.01);
