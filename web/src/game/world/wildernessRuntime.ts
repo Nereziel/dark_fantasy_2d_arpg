@@ -6,7 +6,7 @@ import { generateWildernessTerrain, makeWildernessTiles, routeClear, type Wilder
 import { planWildernessFeatures, type WildernessFeature } from './wildernessFeatures';
 import type { WorldLayout } from './generator';
 import { ACTOR_RADIUS, canOccupy, findPath } from './navigation';
-import { CORRUPTION_TRAIL_ID, planForestTrail } from './forestTrail';
+import { planForestTrail } from './forestTrail';
 import { planEnvironmentObjects } from './environmentInteractions';
 import { planWorldEvents } from './worldEvents';
 
@@ -18,7 +18,10 @@ function withStoryRoads(
   terrain: WildernessTerrainResult, features: readonly WildernessFeature[]
 ): WildernessTerrainResult {
   const { camp, obstacles } = terrain.layout;
-  const storyRoads = features.filter(feature => STORY_ROAD_FEATURES.has(feature.id))
+  const site = features.find(feature => feature.id === 'act1.corruption_site');
+  const trail = site && planForestTrail(terrain.layout, site.position);
+  const storyRoads = features.filter(feature => STORY_ROAD_FEATURES.has(feature.id)
+    && !(trail && feature === site))
     .flatMap(feature => {
       for (const radius of [ACTOR_RADIUS, ACTOR_RADIUS + 4]) {
         const points = [{ ...camp }, ...findPath(camp, feature.position, radius, obstacles)];
@@ -29,12 +32,9 @@ function withStoryRoads(
       }
       return [];
     });
-  const site = features.find(feature => feature.id === 'act1.corruption_site');
-  const trail = site && planForestTrail(terrain.layout, site.position);
   if (!trail) return { ...terrain, roads: [...terrain.roads, ...storyRoads] };
 
-  const roads = [...terrain.roads, ...storyRoads.filter(road => road.id !== CORRUPTION_TRAIL_ID),
-    ...trail.roads];
+  const roads = [...terrain.roads, ...storyRoads, ...trail.roads];
   const seed = terrain.layout.seed;
   const environment = planEnvironmentObjects(seed, terrain.layout, features);
   const events = planWorldEvents(seed, terrain.layout, features);
@@ -49,8 +49,8 @@ function withStoryRoads(
   const layout = { ...terrain.layout, obstacles: [...obstacles, ...edges] };
   // Existing saves identify landmarks and world events by stable coordinates
   // and props by ID. Keep the pre-existing placements usable on the new roads.
-  const unchanged = destinations.every(point =>
-    findPath(camp, point, ACTOR_RADIUS, layout.obstacles).length > 0)
+  const unchanged = features.every(feature =>
+    findPath(camp, feature.position, ACTOR_RADIUS, layout.obstacles).length > 0)
     && JSON.stringify(planEnvironmentObjects(seed, layout, features)) === JSON.stringify(environment)
     && JSON.stringify(planWorldEvents(seed, layout, features)) === JSON.stringify(events);
   return { ...terrain, layout: unchanged ? layout : terrain.layout,
@@ -65,7 +65,7 @@ export interface WildernessRuntimeWorld {
 }
 
 /** A failed optional forest generation never removes critical quest destinations. */
-export function buildWilderness(seed: number): WildernessRuntimeWorld {
+function generateWilderness(seed: number): WildernessRuntimeWorld {
   const initial = generateWildernessTerrain(seed);
   const plan = planWildernessFeatures(seed, initial.layout);
   if (plan.ok) {
@@ -86,4 +86,19 @@ export function buildWilderness(seed: number): WildernessRuntimeWorld {
   );
   const terrain = withStoryRoads({ ...safe, layout }, retry.features);
   return { layout: terrain.layout, terrain, features: retry.features, usedFeatureFallback: true };
+}
+
+const recentWorlds = new Map<number, WildernessRuntimeWorld>();
+const MAX_CACHED_WORLDS = 8;
+
+/** The renderer, simulation and save validation all request the same layout. */
+export function buildWilderness(seed: number): WildernessRuntimeWorld {
+  const cached = recentWorlds.get(seed);
+  if (cached) return structuredClone(cached);
+  const world = generateWilderness(seed);
+  if (recentWorlds.size >= MAX_CACHED_WORLDS) {
+    recentWorlds.delete(recentWorlds.keys().next().value!);
+  }
+  recentWorlds.set(seed, world);
+  return structuredClone(world);
 }

@@ -40,6 +40,9 @@ describe('Act I forest trail', () => {
     const world = buildWilderness(seed);
     expect(world.features).toEqual(original.features);
     expect(buildWilderness(seed)).toEqual(world);
+    const independentlyLoaded = buildWilderness(seed);
+    independentlyLoaded.layout.obstacles.length = 0;
+    expect(buildWilderness(seed)).toEqual(world);
 
     const waypoint = getTownManifest().find(entry => entry.role === 'waypoint')!;
     const mapInput = { seed, worldInstanceId: 'world-' + seed + '-hero',
