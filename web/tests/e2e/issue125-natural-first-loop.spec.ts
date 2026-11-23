@@ -178,10 +178,9 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
   let ticks = 0;
   let stalled = 0;
   const waypoints = [
-    // Real postmerge CI on PR #189 got stuck twice at x=1777 (the west
-    // collision boundary of an obstacle). First approach NORTH of the wall
-    // from the known road, cross east, and only then sweep south near the
-    // procedural graveyard marker. Never infer a secret feature coordinate.
+    // Survey the authored graveyard area from the northern approach and
+    // sweep south. Keep intermediate waypoints reachable with normal input;
+    // the actual feature marker may shift with the procedural layout.
     { x: 1610, y: 390 }, { x: 1690, y: 280 }, { x: 1820, y: 280 },
     { x: 1980, y: 360 }, { x: 2000, y: 520 }, { x: 1950, y: 670 },
     { x: 1880, y: 690 }, { x: 2000, y: 780 }, { x: 1870, y: 830 },
@@ -216,17 +215,20 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     const { width, height } = await canvas.evaluate(node => ({
       width: node.width, height: node.height
     }));
-    // Back away from a blocked eastward crossing and route around its
-    // northern/southern end with a real canvas click. The old east-biased
-    // detour repeatedly selected the same inaccessible wall-adjacent cell.
+    // Recover if a procedural obstacle blocks a specific eastward click.
+    // This uses real viewport movement; it does not inspect map obstacles.
     const waypoint = stalled >= 2
       ? { x: Math.max(100, x - 160),
         y: y >= 570 ? Math.max(130, y - 330) : Math.min(1260, y + 310) }
       : waypoints[index]!;
     const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
     const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
+    // At the east world edge the camera can no longer follow the hero.
+    // Clamping at 67% capped the maximum world-click x to 1777 in a 1280px
+    // viewport (2200 - 1280 + 0.67 * 1280): the exact repeated CI failure.
+    // 78% stays left of the right HUD but reaches the graveyard at x≈1900.
     const screenX = Math.max(width * 0.35,
-      Math.min(width * 0.67, waypoint.x - scrollX));
+      Math.min(width * 0.78, waypoint.x - scrollX));
     const screenY = Math.max(height * 0.23,
       Math.min(height * 0.68, waypoint.y - scrollY));
     await page.mouse.click(rect.x + rect.width * screenX / width,
