@@ -161,6 +161,9 @@ test('talks to Warden Vesna, accepts the quest and loads its persistent progress
 });
 
 test('buys equipment, tempers it at the smith and reloads persistent upgrades', async ({ page }) => {
+  // Buying, tempering, two service visits and real Save/Load all happen in one
+  // acceptance flow; permit this scenario realistic time under concurrent CI.
+  test.setTimeout(60_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -204,6 +207,9 @@ test('buys equipment, tempers it at the smith and reloads persistent upgrades', 
   await page.getByRole('dialog', { name: 'Inventory & Equipment' }).locator('[data-equipment-slot="BELT"]').click();
   await page.getByRole('dialog', { name: 'Inventory & Equipment' }).getByRole('button', { name: 'Unequip' }).click();
   await page.getByRole('dialog', { name: 'Inventory & Equipment' }).getByRole('button', { name: 'Close' }).click();
+  // Confirm the modal was removed before clicking the exposed world merchant;
+  // a lingering overlay must not consume or block the next real UI action.
+  await expect(page.getByRole('dialog', { name: 'Inventory & Equipment' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchantAgain = page.getByRole('dialog', { name: 'Merchant Bram' });
   await merchantAgain.getByRole('button', { name: 'Sell Studded War Belt' }).click();
