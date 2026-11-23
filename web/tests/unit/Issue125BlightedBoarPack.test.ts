@@ -5,6 +5,8 @@ import { validateQuestLedger } from '../../src/game/quests/questDialogue';
 import { FIRST_QUEST_ID } from '../../src/game/quests/firstQuest';
 import { createBlightedPack, createPack } from '../../src/game/enemies/enemies';
 import { generateWorld } from '../../src/game/world/generator';
+import { buildWilderness } from '../../src/game/world/wildernessRuntime';
+import { createMiniBossState, getMiniBossDefinition } from '../../src/game/enemies/miniBossRules';
 
 function huntingSimulation() {
   const game = new GameSimulation(0);
@@ -49,6 +51,48 @@ describe('Issue #125 — one coherent corrupted boar quest pack', () => {
         .toBe(true);
       expect(createBlightedPack(3, 4, positions)).toEqual(boars);
     }
+  });
+
+  it('spawns the mandatory hunt with a living optional boss still in the world', () => {
+    const game = huntingSimulation();
+    const initial = game.snapshot();
+    const marker = buildWilderness(0).features.find(feature =>
+      feature.id === 'wild.encounter.1')!;
+    const def = getMiniBossDefinition('bandit_captain')!;
+    const boss = {
+      actor: {
+        id: 'bandit_captain', type: def.enemyType, ...marker.position,
+        health: def.baseHealth, maxHealth: def.baseHealth, alive: true
+      },
+      cooldown: 0.9, intent: null, effects: [], abilityCooldowns: {}
+    };
+    const miniBossState = createMiniBossState('bandit_captain', 'bandit_captain')!;
+    expect(game.restore({
+      ...initial,
+      player: { ...initial.player, ...marker.position },
+      enemies: [...initial.enemies, boss],
+      selectedTargetId: 'bandit_captain',
+      miniBossStates: { bandit_captain: miniBossState }
+    })).toBe(true);
+    const gold = game.snapshot().gold;
+
+    game.advance(100);
+    const hunt = game.snapshot();
+    expect(hunt.wave).toBe(3);
+    expect(hunt.enemies.slice(0, 3).map(unit => unit.actor.type))
+      .toEqual(['corruptedBoar', 'corruptedBoar', 'corruptedBoar']);
+    expect(hunt.enemies.find(unit => unit.actor.id === 'bandit_captain')?.actor.alive)
+      .toBe(true);
+    expect(hunt.miniBossStates?.bandit_captain).toBeDefined();
+    expect(hunt.miniBossDefeatedIds).not.toContain('bandit_captain');
+    expect(hunt.selectedTargetId).toBe('bandit_captain');
+    expect(hunt.gold).toBe(gold);
+    expect(game.restore(hunt)).toBe(true);
+
+    // The mandatory pack may not be replaced every tick while its boars live.
+    game.advance(100);
+    expect(game.snapshot().enemies.map(unit => unit.actor.id))
+      .toEqual(hunt.enemies.map(unit => unit.actor.id));
   });
 
   it('spawns three actual boars when the hunt is active, without breaking snapshot validation', () => {

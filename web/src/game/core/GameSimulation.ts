@@ -3918,26 +3918,50 @@ export class GameSimulation {
     // Retry after reloading an in-progress quest or after optional encounters
     // release a slot. A successful spawn is idempotent on subsequent ticks.
     this.spawnMorrow();
-    if (this.aliveEnemies.length === 0 && !this.dungeonCleared) {
+    // An optional unique miniboss is not part of the mandatory pack. The
+    // story must progress when all canonical enemies are dead, even when an
+    // unrelated living encounter remains on the map.
+    const huntingBoars = this.zone === 'wilderness'
+      && this.questStatus('blighted_pack') === 'active';
+    const canonicalsDead = this.units.length >= PACK_SIZE
+      && this.units.slice(0, PACK_SIZE).every(unit => !unit.actor.alive);
+    const optionalBlocksHunt = huntingBoars && canonicalsDead
+      && this.aliveEnemies.length > 0;
+    if ((this.aliveEnemies.length === 0 || optionalBlocksHunt) && !this.dungeonCleared) {
       if (this.zone === 'wilderness') {
-        this.respawnTimer -= dt;
+        // Normal cleared waves keep their respawn timer. An optional boss
+        // must never keep a newly unlocked required quest waiting forever.
+        this.respawnTimer = optionalBlocksHunt ? 0 : this.respawnTimer - dt;
         if (this.respawnTimer <= 0) {
-          const huntingBoars = this.questStatus('blighted_pack') === 'active';
+          const retainedOptional = optionalBlocksHunt
+            ? this.units.slice(PACK_SIZE).filter(unit =>
+              unit.actor.alive && this.miniBossStates.has(unit.actor.id))
+            : [];
           this.wave = huntingBoars
             ? (this.wave < 3 ? 3 : this.wave + (4 - ((this.wave - 3) % 4)))
             : this.wave + 1;
-          this.units = huntingBoars
+          const nextPack = huntingBoars
             ? createBlightedPack(this.wave, this.level, this.world.encounterPositions)
             : createPack(this.wave, this.level, this.world.encounterPositions);
-          // The preceding pack can include a temporary mini-boss. A normal
-          // respawn replaces the entire roster, so its obsolete AI state must
-          // not survive without the matching actor: restore() correctly
-          // rejects such dangling references as an invalid saved game.
-          this.miniBossStates.clear();
+          this.units = [...nextPack, ...retainedOptional];
+          // World streaming is not a boss kill: preserve the living optional
+          // actor and its actual phase/status. Remove all obsolete references
+          // to the replaced canonical pack so restore() remains valid.
+          for (const id of [...this.miniBossStates.keys()]) {
+            if (!retainedOptional.some(unit => unit.actor.id === id)) this.miniBossStates.delete(id);
+          }
           this.seedElitePack();
-          this.statusEffects.enemies = {};
+          this.statusEffects.enemies = Object.fromEntries(
+            Object.entries(this.statusEffects.enemies).filter(([id]) =>
+              retainedOptional.some(unit => unit.actor.id === id))
+          );
+          if (!retainedOptional.some(unit => unit.actor.id === this.selectedTargetId)) {
+            this.selectedTargetId = null;
+          }
+          if (!retainedOptional.some(unit => unit.actor.id === this.attackTarget)) {
+            this.attackTarget = null;
+          }
           this.respawnTimer = 0;
-          this.selectedTargetId = null;
         }
       } else if (this.dungeonStage === 0) {
         this.respawnTimer -= dt;
