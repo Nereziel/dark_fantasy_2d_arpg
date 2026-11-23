@@ -159,6 +159,10 @@ test.describe('landscape touch equipment management', () => {
 });
 
 test('equipped item swaps and exact bag placement persist through real Save/Load', async ({ page }) => {
+  // This natural UI scenario performs two complete save/reload cycles. On a
+  // contended Chromium CI worker the default 30s budget can expire at the
+  // final HUD click despite correct persisted item identities.
+  test.setTimeout(60_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -206,6 +210,10 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
+  // Wait for the real, asynchronous restore before interacting with the HUD.
+  // A missing/broken save still fails this test instead of being hidden by a timeout.
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
+  await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
   await page.getByRole('button', { name: 'Inventory (I)' }).click();
   await expect(gear).not.toHaveClass(/has-item/);
   await expect(secondCell).toHaveAttribute('data-item-id', firstId!);
@@ -220,6 +228,10 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
+  // Wait for the real, asynchronous restore before interacting with the HUD.
+  // A missing/broken save still fails this test instead of being hidden by a timeout.
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
+  await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
   await page.getByRole('button', { name: 'Inventory (I)' }).click();
   await expect(gear).toHaveAttribute('data-item-id', secondId!);
   await expect(secondCell).toHaveAttribute('data-item-id', firstId!);
