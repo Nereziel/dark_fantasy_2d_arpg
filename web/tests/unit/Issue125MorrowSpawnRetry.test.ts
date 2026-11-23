@@ -53,6 +53,41 @@ describe('Issue #125 — recoverable Morrow spawn on graveyard progression', () 
     expect(game.restore(game.snapshot())).toBe(true);
   });
 
+  it('gives the required Morrow spawn precedence over a full living optional miniboss roster', () => {
+    const game = morrowHunt();
+    const initial = game.snapshot();
+    const pos = buildWilderness(0).features.find(f => f.id === 'wild.encounter.1')!.position;
+    const first = optionalBoss('bandit_captain', pos, true);
+    const second = optionalBoss('brood_mother', pos, true);
+    expect(game.restore({
+      ...initial,
+      player: { ...initial.player, ...pos },
+      enemies: [...initial.enemies, first, second],
+      miniBossStates: {
+        bandit_captain: createMiniBossState('bandit_captain', 'bandit_captain')!,
+        brood_mother: createMiniBossState('brood_mother', 'brood_mother')!
+      }
+    })).toBe(true);
+    const gold = game.snapshot().gold;
+    game.advance(16.667);
+    const after = game.snapshot();
+    // The fixed five-enemy pack and exactly one optional must survive. A
+    // temporary optional encounter may be streamed out, never marked slain.
+    expect(after.enemies).toHaveLength(initial.enemies.length + 2);
+    expect(after.enemies.filter(unit => unit.actor.id === 'morrow_gravebound')).toHaveLength(1);
+    expect(after.enemies.slice(0, initial.enemies.length).map(unit => unit.actor.id))
+      .toEqual(initial.enemies.map(unit => unit.actor.id));
+    expect(after.enemies.filter(unit => unit.actor.id === 'bandit_captain'
+      || unit.actor.id === 'brood_mother')).toHaveLength(1);
+    expect(after.miniBossDefeatedIds).not.toContain('bandit_captain');
+    expect(after.miniBossDefeatedIds).not.toContain('brood_mother');
+    expect(after.gold).toBe(gold);
+    expect(game.restore(after)).toBe(true);
+    game.advance(16.667);
+    expect(game.snapshot().enemies.filter(unit => unit.actor.id === 'morrow_gravebound'))
+      .toHaveLength(1);
+  });
+
   it('reclaims only a dead optional miniboss slot, retaining the living encounter and the story boss', () => {
     const game = morrowHunt();
     const before = game.snapshot();
