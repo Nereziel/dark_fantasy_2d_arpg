@@ -26,6 +26,12 @@ test('F0 HUD columns preserve a usable world canvas and modal focus at 390–144
     await page.setViewportSize(viewport);
     await expect(canvas).toBeVisible();
     await expect(dock).toBeVisible();
+    await expect.poll(async () => {
+      const world = await canvas.boundingBox();
+      const controls = await dock.boundingBox();
+      return world && controls ? world.y + world.height - controls.y : Infinity;
+    }, { message: 'The canvas ends before the combat dock at ' + JSON.stringify(viewport) })
+      .toBeLessThanOrEqual(1);
 
     const boxes = await page.evaluate(() => {
       const rect = (selector: string) => {

@@ -2,9 +2,11 @@
   import { _ as t, locale } from 'svelte-i18n';
   import type { GameSnapshot } from '../game/core/types';
   import type { GameBridge } from '../game/bridge/GameBridge';
+  import ItemArt from './ItemArt.svelte';
+  import { itemDisplayName } from '../game/items/itemName';
   import { RARITIES, type Item } from '../game/data/items';
   import {
-    SHOP_OFFERS, createShopItem, canTemper
+    SHOP_OFFERS, createShopItem, canTemper, temperItem
   } from '../game/trade/commerce';
   import { quotePurchase, quoteSale, quoteTempering } from '../game/trade/economyRules';
   import { MATERIAL_IDS, quoteCraft, type CraftKind } from '../game/crafting/craftingRules';
@@ -22,9 +24,12 @@
     close: () => void;
   } = $props();
 
-  let emptyBag = $derived(view.inventory.every(item => item !== null));
+  let bagFull = $derived(view.inventory.every(item => item !== null));
   function money(value: number): string {
     return new Intl.NumberFormat($locale === 'cs' ? 'cs-CZ' : 'en-US').format(value);
+  }
+  function displayName(item: Item): string {
+    return itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId));
   }
   function salePrice(item: Item): number {
     const quote = quoteSale(item);
@@ -74,13 +79,13 @@
               {@const preview = createShopItem(offer, 'preview')}
               {@const quote = quotePurchase(offer)}
               <div class="trade-item">
-                <span class="trade-icon">{preview.icon}</span>
+                <span class="trade-icon" style:border-color={RARITIES[preview.rarity].color}><ItemArt item={preview} /></span>
                 <div class="trade-item-name">
                   <strong>{$t('item.base.' + offer.templateId)}</strong>
                   <small>{$t('item.slot.' + preview.slot)}</small>
                 </div>
                 <span class="trade-price">{money(quote.ok ? quote.price : 0)} {$t('hud.gold')}</span>
-                <button disabled={!quote.ok || view.gold < (quote.ok ? quote.price : Infinity) || emptyBag}
+                <button disabled={!quote.ok || view.gold < (quote.ok ? quote.price : Infinity) || bagFull}
                   aria-label={$t('trade.buy') + ' ' + $t('item.base.' + offer.templateId)}
                   onclick={() => bridge.command({ type: 'buyItem', offerId: offer.id })}>
                   {$t('trade.buy')}
@@ -88,7 +93,7 @@
               </div>
             {/each}
           </div>
-          {#if emptyBag}<p class="trade-note">{$t('trade.bagFull')}</p>{/if}
+          {#if bagFull}<p class="trade-note">{$t('trade.bagFull')}</p>{/if}
         </section>
         <section>
           <h3>{$t('trade.yourItems')}</h3>
@@ -96,9 +101,9 @@
             {#each view.inventory as item, index (index)}
               {#if item}
                 <div class="trade-item">
-                  <span class="trade-icon" style:color={RARITIES[item.rarity].color}>{item.icon}</span>
+                  <span class="trade-icon" style:border-color={RARITIES[item.rarity].color}><ItemArt {item} /></span>
                   <div class="trade-item-name">
-                    <strong>{$t('item.base.' + item.templateId)}</strong>
+                    <strong>{displayName(item)}</strong>
                     <small>{$t('item.rarity.' + item.rarity)} · +{item.upgrades}</small>
                   </div>
                   <span class="trade-price">{money(salePrice(item))} {$t('hud.gold')}</span>
@@ -123,11 +128,22 @@
         <div class="trade-list">
           {#each Object.entries(view.equipment) as [slot, item] (slot)}
             {#if item && canTemper(item)}
+              {@const upgraded = temperItem(item)}
               <div class="trade-item">
-                <span class="trade-icon" style:color={RARITIES[item.rarity].color}>{item.icon}</span>
+                <span class="trade-icon" style:border-color={RARITIES[item.rarity].color}><ItemArt {item} /></span>
                 <div class="trade-item-name">
-                  <strong>{$t('item.base.' + item.templateId)}</strong>
+                  <strong>{displayName(item)}</strong>
                   <small>{$t('item.slot.' + slot)} · {$t('trade.tempering')} {item.upgrades}/3</small>
+                  {#if upgraded}
+                    <small class="upgrade-preview">
+                      {#if upgraded.armor !== item.armor}
+                        {$t('stat.armor')} {item.armor} → {upgraded.armor}
+                      {:else}
+                        {$t('stat.damageMin')}–{$t('stat.damageMax')}
+                        {item.minDmg}–{item.maxDmg} → {upgraded.minDmg}–{upgraded.maxDmg}
+                      {/if}
+                    </small>
+                  {/if}
                 </div>
                 <span class="trade-price">{money(forgePrice(item))} {$t('hud.gold')}</span>
                 <button disabled={forgePrice(item) === 0 || view.gold < forgePrice(item)}
@@ -138,9 +154,9 @@
               </div>
             {:else if item && item.upgrades === 3}
               <div class="trade-item">
-                <span class="trade-icon" style:color={RARITIES[item.rarity].color}>{item.icon}</span>
+                <span class="trade-icon" style:border-color={RARITIES[item.rarity].color}><ItemArt {item} /></span>
                 <div class="trade-item-name">
-                  <strong>{$t('item.base.' + item.templateId)}</strong>
+                  <strong>{displayName(item)}</strong>
                   <small>{$t('trade.maximum')}</small>
                 </div>
               </div>
@@ -165,8 +181,9 @@
             {#if item}
               <div class="crafting-item" data-craft-id={item.id}>
                 <div class="crafting-head">
-                  <span style:color={RARITIES[item.rarity].color}>
-                    {item.icon} {$t('item.base.'+item.templateId)}
+                  <span class="crafting-name" style:color={RARITIES[item.rarity].color}>
+                    <span class="trade-icon" style:border-color={RARITIES[item.rarity].color}><ItemArt {item} /></span>
+                    {displayName(item)}
                   </span>
                   <small>{$t('item.rarity.'+item.rarity)} · +{item.upgrades}/3</small>
                 </div>
@@ -231,12 +248,15 @@
   .trade-columns{display:grid;grid-template-columns:1fr 1fr;gap:24px}
   .trade-list{display:flex;flex-direction:column;gap:7px;max-height:54vh;overflow:auto;padding:2px}
   .trade-item{display:flex;align-items:center;gap:8px;background:#141e28;border:1px solid #41505a;padding:9px}
-  .trade-icon{font-size:1.25rem;flex:0 0 27px}
+  .trade-icon{display:block;width:38px;height:38px;flex:0 0 38px;border:1px solid;
+    background:radial-gradient(#26313a,#111820 75%)}
+  .trade-item-name .upgrade-preview{color:#a8ddb1}
+  .crafting-name{display:flex;align-items:center;gap:8px;overflow-wrap:anywhere}
   .trade-item-name{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
   .trade-item-name strong{font-size:.75rem;color:#e4ddcd;font-weight:500}
   .trade-item-name small{font-size:.62rem;color:#a9b1af}
   .trade-price{font-size:.7rem;white-space:nowrap;color:#d7ba85}
-  .trade-item button{font-size:.69rem;padding:7px 9px;white-space:nowrap}
+  .trade-item button{font-size:.69rem;min-height:40px;padding:7px 9px;white-space:nowrap}
   .trade-note{font-size:.74rem;color:#adb9b9;line-height:1.6}
   .crafting-section{margin-top:18px;padding-top:15px;border-top:1px solid #5d533e}
   .materials-rows{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:10px 0}

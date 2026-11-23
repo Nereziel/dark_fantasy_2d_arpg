@@ -26,9 +26,13 @@
     <div class="quest-progress">
       {$t(storyDefinition.objectiveKey)}
       {#if currentObjective}
-        · {objectiveCount}/{currentObjective.targetCount}
+        <span class="objective-count">{objectiveCount}/{currentObjective.targetCount}</span>
       {/if}
     </div>
+    {#if currentObjective && currentObjective.targetCount > 1}
+      <progress aria-label={$t(storyDefinition.objectiveKey)}
+        value={objectiveCount} max={currentObjective.targetCount}></progress>
+    {/if}
     <div class="quest-progress">{$t(storyDefinition.descriptionKey)}</div>
     {#if regionHintKey}
       <div class="quest-region" data-testid="story-region-hint">{$t(regionHintKey)}</div>
@@ -47,6 +51,10 @@
         {$t('quest.ashes.objective')} · {view.quest.defeated}/{QUEST_REQUIRED_KILLS}
       {/if}
     </div>
+    {#if view.quest.status === 'active' || view.quest.status === 'ready'}
+      <progress aria-label={$t('quest.ashes.title')}
+        value={view.quest.defeated} max={QUEST_REQUIRED_KILLS}></progress>
+    {/if}
     {#if view.quest.status === 'ready'}
       <div class="quest-ready">{$t('quest.ashes.readyHint')}</div>
     {/if}
@@ -66,6 +74,8 @@
     padding:12px 13px;box-shadow:0 12px 26px #0008}
   .quest-heading{font-size:.64rem;text-transform:uppercase;letter-spacing:.18em;color:#aa9e89;margin-bottom:7px}
   strong{display:block;font-family:Georgia,serif;color:#e6d3ad;font-size:.95rem;margin-bottom:8px}
+  .objective-count{color:#f1d398;font-variant-numeric:tabular-nums;white-space:nowrap}
+  progress{display:block;width:100%;height:6px;margin:5px 0 6px;accent-color:#c9a25e}
   .quest-progress{font-size:.71rem;line-height:1.5;color:#c9c8bb}
   .quest-ready{font-size:.7rem;color:#e4b879;margin-top:6px}
   .quest-region{font-size:.69rem;line-height:1.45;color:#c7b594;margin-top:8px;border-top:1px solid #514735;padding-top:7px}

@@ -1311,6 +1311,7 @@
     "completed": "Blacksmith crafting completed."
   },
   "gems": {
+    "combatLoot": "Added to gem pouch: {gem} · tier {tier}.",
     "title": "Gems and Runes",
     "description": "Forge gems from materials, combine three identical stones into a higher tier, and insert them into empty sockets. Effects depend on the equipment category. Extraction costs gold and returns the stone to your wallet.",
     "forgeTitle": "Gem and Rune Forging",

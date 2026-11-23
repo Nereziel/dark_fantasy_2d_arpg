@@ -317,6 +317,7 @@ export type GameEvent =
   | { type: 'talentSpent'; id: TalentId; rank: number }
   | { type: 'talentsRespecced'; goldSpent: number }
   | { type: 'craftCompleted'; kind: CraftKind; itemId: string; goldSpent: number }
+  | { type: 'gemLoot'; gemId: GemId }
   | { type: 'gemTransacted'; action: GemAction['type']; gemId: GemId;
       itemId?: string; goldSpent: number }
   | { type: 'potionUsed'; potionId: PotionId; healthRestored: number;

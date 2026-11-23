@@ -3,6 +3,7 @@
   import { _ as t, locale } from 'svelte-i18n';
   import { languageOptions, setLanguage, type Language } from './i18n';
   import { GameBridge } from './game/bridge/GameBridge';
+  import { baseOf, tierOf, type GemId } from './game/gems/gemCatalog';
   import type { GameSnapshot, Point } from './game/core/types';
   import { resolveKeyboardAction, applyBindingOverrides, type InputBinding, type InputAction } from './game/input/bindings';
   import { GAME_BINDINGS } from './game/input/gameBindings';
@@ -117,6 +118,7 @@
     view.enemies, view.miniBossStates, view.selectedTargetId
   ));
   let messageKey = $state('');
+  let droppedGem = $state<GemId | null>(null);
   let busy = $state(false);
   let selectedClass: ClassId = $state('WARRIOR');
   let savedCharacters: SavedCharacterInfo[] = $state([]);
@@ -391,6 +393,10 @@
       audio.playGameEvent(event);
       if (playing && onboardingCharacterId === (bridge.character().characterId ?? 'hero')) {
         storeOnboarding(observeOnboardingEvent(onboardingProgress, event, view.player.id));
+      }
+      if (event.type === 'gemLoot' && playing) {
+        droppedGem = event.gemId;
+        messageKey = 'gems.combatLoot';
       }
       if (event.type === 'dungeonCleared' && playing) messageKey = 'dungeon.clearedToast';
       if (event.type === 'worldEventStarted' && playing) messageKey = 'worldEvents.started';
@@ -970,6 +976,7 @@
     <main class="game-screen" data-world-seed={view.worldSeed} data-zone={view.zone}
       data-player-x={view.player.x} data-player-y={view.player.y}
       data-hold-position={view.holdPosition}>
+      <div class="game-play-area">
       {#key visualPreferences.pixelFilter}
         <GameViewport {bridge} renderMode={visualPreferences.pixelFilter} />
       {/key}
@@ -1096,6 +1103,7 @@
         {/each}
       </aside>
       </div>
+      </div>
       <div class="game-hud" data-testid="combat-dock" inert={modalKind !== ''}>
         <div class="vital-panel">
           <div class="vital-top"><span>{$t('hud.health')}</span><strong>{view.player.health} / {view.player.maxHealth}</strong></div>
@@ -1127,7 +1135,16 @@
       </div>
 
       {#if messageKey}
-        <div class="toast" role="status">{$t(messageKey)}</div>
+        <div class="toast" role="status">
+          {#if messageKey === 'gems.combatLoot' && droppedGem}
+            {$t(messageKey, { values: {
+              gem: $t('gems.names.' + baseOf(droppedGem).id),
+              tier: tierOf(droppedGem)
+            } })}
+          {:else}
+            {$t(messageKey)}
+          {/if}
+        </div>
       {/if}
       {#if mapOpen && fullProjection}
         <div class="modal-shield map-shield" role="dialog" aria-modal="true" aria-label={$t('map.title')}
@@ -1260,9 +1277,28 @@
 
 <style>
 
-  /* Independent, scroll-safe HUD columns: no magic top:335px/508px offsets. */
+  .game-screen {
+    display:grid;
+    grid-template-rows:minmax(0,1fr) auto;
+    background:#0b1016;
+  }
+  .game-play-area {
+    position:relative;
+    min-height:0;
+    overflow:hidden;
+    border-bottom:1px solid #55482f;
+  }
+  .game-screen > :global(.game-hud) {
+    position:relative;
+    inset:auto;
+    transform:none;
+    justify-self:center;
+    margin:5px 0 max(5px,env(safe-area-inset-bottom));
+  }
+
+  /* Side panels scroll within the actual canvas row. */
   .hud-left-column,.hud-right-column {
-    position:absolute;z-index:3;top:85px;bottom:clamp(145px,19vh,190px);
+    position:absolute;z-index:3;top:85px;bottom:8px;
     display:flex;flex-direction:column;align-items:stretch;gap:10px;
     overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;
     scrollbar-color:#6c5f49 #111920;
@@ -1302,7 +1338,7 @@
   .hud-right-column :global(.dungeon-panel){max-height:180px;overflow:auto}
   /* Side HUD is always above the single compact combat dock. */
   @media(max-width:850px){
-    .hud-left-column,.hud-right-column{top:72px;bottom:clamp(130px,22vh,185px);gap:6px}
+    .hud-left-column,.hud-right-column{top:72px;gap:6px}
     .hud-left-column{left:7px;width:clamp(132px,22vw,180px)}
     .hud-right-column{right:7px;width:clamp(132px,22vw,180px)}
     .hud-left-column :global(.world-guide){display:none}
@@ -1310,7 +1346,7 @@
     .hud-left-column :global(.camp-services button){font-size:.64rem;padding:5px 4px}
   }
   @media(max-width:560px){
-    .hud-left-column,.hud-right-column{top:64px;bottom:clamp(125px,23vh,180px);gap:5px}
+    .hud-left-column,.hud-right-column{top:64px;gap:5px}
     .hud-left-column{width:clamp(120px,30vw,148px);left:4px}
     .hud-right-column{width:clamp(120px,30vw,148px);right:4px}
     .hud-right-column :global(.enemy-roster){max-height:110px}
@@ -1336,7 +1372,7 @@
   @media(max-width:650px) {
     .hud-left-column,.hud-right-column {
       top: max(59px,calc(env(safe-area-inset-top) + 56px));
-      bottom: min(49dvh,266px); gap:5px;
+      gap:5px;
     }
     .hud-left-column {left:4px;width:clamp(115px,30vw,165px)}
     .hud-right-column{right:4px;width:clamp(115px,30vw,165px)}
@@ -1350,7 +1386,7 @@
     .hud-left-column :global(.camp-services button){min-height:44px}
   }
   @media(max-height:480px) and (min-width:651px){
-    .hud-left-column,.hud-right-column{top:53px;bottom:145px}
+    .hud-left-column,.hud-right-column{top:53px}
   }
   .respawn-destination { color: #d9bc86; margin: 12px 0; }
   .minimap-overlay {

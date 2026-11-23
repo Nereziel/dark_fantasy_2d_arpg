@@ -84,6 +84,9 @@ describe('Issue #125 — Hollow King boss and Vesna report handoff', () => {
     expect(killActive(game, unit => unit.actor.id === 'crypt_lord-4')).toBe(1);
     const defeated = game.snapshot();
     expect(questStatus(game, 'crypt_lord_fallen')).toBe('completed');
+    const gemDrop = game.drainEvents().find(event => event.type === 'gemLoot');
+    expect(gemDrop?.gemId).toMatch(/^rune\.(ash|ward|focus)\.1$/);
+    expect(defeated.gems?.[gemDrop!.gemId]).toBe(1);
     expect(questStatus(game, 'vesnas_report')).toBe('active');
     const bossGold = defeated.gold;
     expect(killActive(game, unit => unit.actor.id === 'crypt_lord-4')).toBe(0);
@@ -123,6 +126,7 @@ describe('Issue #125 — Hollow King boss and Vesna report handoff', () => {
     const loaded = new GameSimulation(42);
     expect(loaded.restoreCharacter(readSaveRecord(saved)!, 0)).toBe(true);
     expect(loaded.snapshot().actIIUnlocked).toBe(true);
+    expect(loaded.snapshot().gems?.[gemDrop!.gemId]).toBe(1);
     expect(questStatus(loaded, 'crypt_lord_fallen')).toBe('completed');
     expect(questStatus(loaded, 'vesnas_report')).toBe('completed');
     expect(loaded.snapshot().gold).toBe(finished.gold);

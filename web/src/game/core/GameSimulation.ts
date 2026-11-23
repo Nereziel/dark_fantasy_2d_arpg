@@ -100,7 +100,8 @@ import {
   planCraft, validateMaterials, type Materials, type CraftRequest
 } from '../crafting/craftingRules';
 import {
-  planGemAction, isValidGemWallet, type GemWallet, type GemAction
+  planGemAction, isValidGemWallet, type GemWallet, type GemAction,
+  grantCombatGem, rollCombatGem
 } from '../gems/gemRules';
 import {
   POTIONS, freshPotions, isPotionState, planPotionUse, planPotionRefill,
@@ -4369,6 +4370,15 @@ export class GameSimulation {
   /** The one runtime path for normal, elite and boss drops; rolls share catalog+affixes. */
   private dropEnemyLoot(unit: EnemyUnit): void {
     const boss = unit.actor.type === 'crypt_lord' || this.defeatedMiniBossIds.has(unit.actor.id as MiniBossId);
+    if (boss || this.zone === 'crypt' || this.wave >= 2) {
+      const rank = boss ? 'boss' : unit.elite ? 'elite' : 'normal';
+      const gem = rollCombatGem(this.world.seed, this.kills, rank);
+      const nextWallet = gem && grantCombatGem(this.gems, gem);
+      if (gem && nextWallet) {
+        this.gems = nextWallet;
+        this.events.push({ type: 'gemLoot', gemId: gem });
+      }
+    }
     const context: LootContext = {
       playerLevel: this.level, monsterLevel: this.level, enemyType: unit.actor.type,
       zone: this.zone, isBoss: boss, difficulty: 'normal',

@@ -1311,6 +1311,7 @@
     "completed": "Úprava u kováře dokončena."
   },
   "gems": {
+    "combatLoot": "Do brašny s kameny přidáno: {gem} · úroveň {tier}.",
     "title": "Gemy a runy",
     "description": "Kuj kameny ze surovin, spoj tři stejné kameny do vyšší úrovně a vkládej je do prázdných socketů. Účinky se liší podle typu vybavení. Vyjmutí stojí zlato, kámen se vrátí do zásob.",
     "forgeTitle": "Kování gemů a run",
