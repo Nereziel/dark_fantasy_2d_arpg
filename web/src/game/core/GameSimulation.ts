@@ -355,6 +355,12 @@ export class GameSimulation {
   private player = spawnPlayer('WARRIOR', this.equipment, { x: 390, y: 470 });
   private groundLoot: GroundItem[] = [];
   private movePath: Point[] = [];
+  /** Transient route for all simulation-owned auto-approaches (portal, NPC,
+   * loot, enemies and interaction objects). No additional save state. */
+  private autoFollowPlan: {
+    world: WorldLayout; goal: Point; stop: number; points: Point[];
+    stalledTicks: number;
+  } | null = null;
   private attackTarget: string | null = null;
   private pickupTarget: string | null = null;
   private pendingObject: WorldObjectId | null = null;
@@ -766,14 +772,75 @@ export class GameSimulation {
       || this.statusEffects.player.some(e => e.id === 'stunned' || e.id === 'frozen' || e.id === 'rooted');
   }
 
-  private follow(actor: Point, target: Point, speed: number, dt: number, stop = 0): void {
-    if (actor === this.player) {
-      if (this.immobilized) { this.movementSpeed = 0; return; }
+  private follow(actor: Point, target: Point, speed: number, dt: number,
+    stop = 0, autoRoute = false): void {
+    if (actor !== this.player) {
+      moveToward(actor, target, speed, dt, stop, this.world.obstacles);
+      return;
+    }
+    if (this.immobilized) { this.movementSpeed = 0; return; }
+    // Existing click-to-move and combat AI already pass A* waypoints to
+    // follow(). Do not run a SECOND pathfinder on those turning points:
+    // snapping a changing enemy/waypoint to stale cached grid centers can
+    // strand a melee character just outside attack range.
+    if (!autoRoute) {
+      this.autoFollowPlan = null;
       const left = Math.max(0, distance(actor, target) - stop);
       this.movementSpeed = nextMoveSpeed(this.movementSpeed, speed, left, dt);
       moveToward(actor, target, this.movementSpeed, dt, stop, this.world.obstacles);
       if (left <= 0.01) this.movementSpeed = 0;
-    } else moveToward(actor, target, speed, dt, stop, this.world.obstacles);
+      return;
+    }
+    if (distance(actor, target) <= stop) { this.movementSpeed = 0; return; }
+
+    // Direct movement with collision sliding alone can pin the hero against
+    // a convex corner indefinitely. Reuse a deterministic, clearance-aware
+    // route until its target or the active world changes; never A* each tick.
+    const cached = this.autoFollowPlan;
+    // Auto-attacks and mobile enemies continuously move their aim point.
+    // A cached final waypoint must never leave the hero just outside attack
+    // reach while the target drifts inside the path-cache tolerance.
+    const staleFinal = cached && cached.points.length === 1
+      && distance(actor, cached.points[0]!) <= Math.max(8, cached.stop + 2)
+      && distance(actor, target) > stop + 1
+      && distance(cached.goal, target) > 0.5;
+    if (!cached || cached.world !== this.world || cached.stop !== stop
+      || distance(cached.goal, target) > (stop > 0 ? 6 : 12)
+      || staleFinal) {
+      this.autoFollowPlan = {
+        world: this.world, goal: { ...target }, stop,
+        points: findPath(actor, target, ACTOR_RADIUS, this.world.obstacles),
+        stalledTicks: 0
+      };
+    }
+    const plan = this.autoFollowPlan!;
+    // The final leg respects the interaction range; intermediate legs must
+    // actually reach their turning point before heading through a doorway.
+    while (plan.points.length > 1 && distance(actor, plan.points[0]!) <= 8) {
+      plan.points.shift();
+    }
+    const waypoint = plan.points[0];
+    if (!waypoint) { this.movementSpeed = 0; return; }
+    const reach = plan.points.length === 1 ? stop : 0;
+    const left = Math.max(0, distance(actor, waypoint) - reach);
+    this.movementSpeed = nextMoveSpeed(this.movementSpeed, speed, left, dt);
+    const previous = { ...actor };
+    moveToward(actor, waypoint, this.movementSpeed, dt, reach, this.world.obstacles);
+    if (plan.points.length > 1 && distance(actor, waypoint) <= 8) {
+      plan.points.shift();
+    }
+    // If a dynamic actor or a collision keeps the current waypoint blocked,
+    // regenerate the route from the real position, not the old wall corner.
+    if (left > 8 && distance(actor, previous) < 0.05) {
+      if (++plan.stalledTicks >= 12) {
+        plan.points = findPath(actor, target, ACTOR_RADIUS, this.world.obstacles);
+        plan.goal = { ...target };
+        plan.stalledTicks = 0;
+      }
+    } else plan.stalledTicks = 0;
+    if (plan.points.length === 1 && distance(actor, target) <= stop + 0.01) {
+      this.movementSpeed = 0;
+    }
   }
 
   private get focusedUnit(): EnemyUnit {
@@ -1088,18 +1155,30 @@ export class GameSimulation {
     if (this.defeatedMiniBossIds.has('morrow_gravebound')
       || this.zone !== 'wilderness' || this.questStatus('morrow_gravebound') !== 'active'
       || this.units.some(unit => unit.actor.id === 'morrow_gravebound')) return;
-    // Optional enemies can fill the two extra actor slots exactly when the
-    // graveyard quest unlocks. Do not permanently soft-lock this main story
-    // encounter: retire only a dead optional miniboss, never a living fight,
-    // quest enemy, summon, or active world-event guard.
+    // Optional bosses can occupy both extra actor slots before the graveyard
+    // objective unlocks. A required story encounter must never be blocked by
+    // an unrelated optional fight: retire a dead optional first, otherwise an
+    // unselected living optional. This is world streaming, NOT a kill: do not
+    // record a defeat, grant loot/XP or discard the five canonical pack foes.
     if (this.units.length >= PACK_SIZE + 2) {
-      const deadOptionalIndex = this.units.findIndex((unit, index) =>
-        index >= PACK_SIZE && !unit.actor.alive
-        && unit.actor.id !== 'morrow_gravebound'
-        && MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId));
-      if (deadOptionalIndex >= 0) {
-        const [retired] = this.units.splice(deadOptionalIndex, 1);
-        if (retired) this.miniBossStates.delete(retired.actor.id);
+      const optional = (unit: EnemyUnit, index: number) =>
+        index >= PACK_SIZE && unit.actor.id !== 'morrow_gravebound'
+        && MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId);
+      const dead = this.units.findIndex((unit, index) =>
+        optional(unit, index) && !unit.actor.alive);
+      const unselected = this.units.findIndex((unit, index) =>
+        optional(unit, index) && unit.actor.id !== this.selectedTargetId);
+      const anyOptional = this.units.findIndex(optional);
+      const retireIndex = dead >= 0 ? dead
+        : unselected >= 0 ? unselected : anyOptional;
+      if (retireIndex >= 0) {
+        const [retired] = this.units.splice(retireIndex, 1);
+        if (retired) {
+          this.miniBossStates.delete(retired.actor.id);
+          delete this.statusEffects.enemies[retired.actor.id];
+          if (this.selectedTargetId === retired.actor.id) this.selectedTargetId = null;
+          if (this.attackTarget === retired.actor.id) this.attackTarget = null;
+        }
       }
     }
     if (this.units.length >= PACK_SIZE + 2) return;
@@ -3895,7 +3974,7 @@ export class GameSimulation {
         this.changeZone();
         return;
       }
-      this.follow(this.player, this.portalPosition, speed, dt, 70);
+      this.follow(this.player, this.portalPosition, speed, dt, 70, true);
     } else if (this.pendingTown) {
       const entry = townEntry(this.pendingTown);
       if (!entry || this.zone !== 'wilderness') this.pendingTown = null;
@@ -3904,7 +3983,7 @@ export class GameSimulation {
         if (entry.role === 'waypoint') this.activateTownWaypoint();
         this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
       } else {
-        this.follow(this.player, entry.position, speed, dt, Math.max(1, entry.interactionRange - 10));
+        this.follow(this.player, entry.position, speed, dt, Math.max(1, entry.interactionRange - 10), true);
       }
     } else if (this.pendingNpc) {
       if (nearNpc(this.player, this.pendingNpc)) {
@@ -3914,13 +3993,13 @@ export class GameSimulation {
         if (id === WARDEN_ID) this.recordVesnaReport();
         this.events.push({ type: 'npcDialogue', npcId: id });
       } else {
-        this.follow(this.player, NPC_POSITIONS[this.pendingNpc], speed, dt, NPC_INTERACT_RANGE - 10);
+        this.follow(this.player, NPC_POSITIONS[this.pendingNpc], speed, dt, NPC_INTERACT_RANGE - 10, true);
       }
     } else if (this.pendingCryptPropId) {
       const prop = this.cryptInteractables().find(p => p.id === this.pendingCryptPropId);
       if (!prop) this.pendingCryptPropId = null;
       else if (distance(this.player, prop.position) <= prop.reach) this.tryInteractCrypt();
-      else this.follow(this.player, prop.position, speed, dt, Math.max(6, prop.reach - 12));
+      else this.follow(this.player, prop.position, speed, dt, Math.max(6, prop.reach - 12), true);
     } else if(this.pendingEnvironmentId) {
       const object=planEnvironmentInteraction(this.pendingEnvironmentId,
         this.environmentPlan,[...this.environmentUsed]);
@@ -3935,7 +4014,7 @@ export class GameSimulation {
       const object = getWorldObject(this.pendingObject, this.zone);
       if (!object) this.pendingObject = null;
       else if (distance(this.player, object.position) <= object.reach) this.tryInteractObject();
-      else this.follow(this.player, object.position, speed, dt, object.reach - 10);
+      else this.follow(this.player, object.position, speed, dt, object.reach - 10, true);
     } else if (this.warriorAction?.timeline.movementLocked
       || this.classAction?.timeline.movementLocked) {
       this.movementSpeed = 0;
@@ -3960,12 +4039,12 @@ export class GameSimulation {
       if (aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA') {
         if (distance(this.player, aim.position) > skill.range) {
           if (!this.holdPosition) {
-            this.follow(this.player, aim.position, speed, dt, Math.max(0, skill.range - 4));
+            this.follow(this.player, aim.position, speed, dt, Math.max(0, skill.range - 4), true);
           }
         } else this.performCast(this.pendingSkill, aim);
       } else if (distance(this.player, focus.actor) > skill.range) {
         if (!this.holdPosition) {
-          this.follow(this.player, focus.actor, speed, dt, Math.max(0, skill.range - 4));
+          this.follow(this.player, focus.actor, speed, dt, Math.max(0, skill.range - 4), true);
         }
       } else this.performCast(this.pendingSkill);
     } else if (this.attackTarget) {
@@ -4007,7 +4086,7 @@ export class GameSimulation {
       const loot = this.groundLoot.find(item => item.id === this.pickupTarget);
       if (!loot) this.pickupTarget = null;
       else if (distance(this.player, loot) <= 36) this.collectLoot(loot);
-      else this.follow(this.player, loot, speed, dt, 32);
+      else this.follow(this.player, loot, speed, dt, 32, true);
     } else if (this.movePath.length) {
       const point = this.movePath[0]!;
       this.follow(this.player, point, speed, dt);
