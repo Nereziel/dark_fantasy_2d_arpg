@@ -97,6 +97,13 @@
     }
   }
   function clearDrag(): void { dragged = null; dropHover = null; }
+  /** Any change to the stash view invalidates a pending tap-to-transfer.
+   * Otherwise a filtered-out item can still be moved by tapping a tab. */
+  function cancelPendingMove(): void {
+    pendingMove = null;
+    clearDrag();
+    moveMessage = '';
+  }
   function allowDrop(event: DragEvent, target: 'bag' | 'stash' | number): void {
     if (!dragged) return;
     const valid = target === 'bag' ? canDropBag()
@@ -192,7 +199,7 @@
         {$locale === 'cs' ? 'Do vybrané záložky' : 'To selected tab'}
       </button>
     {/if}
-    <button type="button" onclick={() => { pendingMove = null; moveMessage = ''; }}>
+    <button type="button" onclick={cancelPendingMove}>
       {$locale === 'cs' ? 'Zrušit přesun' : 'Cancel move'}
     </button>
   </div>
@@ -245,12 +252,12 @@
       <label>
         <span>{$t('stash.search')}</span>
         <input type="search" value={query} maxlength="64"
-          aria-label={$t('stash.search')} oninput={event => { query = event.currentTarget.value; }} />
+          aria-label={$t('stash.search')} oninput={event => { query = event.currentTarget.value; cancelPendingMove(); }} />
       </label>
       <label>
         <span>{$t('stash.rarity')}</span>
         <select aria-label={$t('stash.rarity')}
-          value={rarity} onchange={event => { rarity = event.currentTarget.value as RarityId | ''; }}>
+          value={rarity} onchange={event => { rarity = event.currentTarget.value as RarityId | ''; cancelPendingMove(); }}>
           <option value="">{$t('stash.all')}</option>
           {#each rarityIds as id}
             <option value={id}>{$t('item.rarity.' + id)}</option>
@@ -260,7 +267,7 @@
       <label>
         <span>{$t('stash.category')}</span>
         <select aria-label={$t('stash.category')} value={category}
-          onchange={event => { category = event.currentTarget.value as StashCategory | ''; }}>
+          onchange={event => { category = event.currentTarget.value as StashCategory | ''; cancelPendingMove(); }}>
           <option value="">{$t('stash.all')}</option>
           {#each categories as id}
             <option value={id}>{$t('stash.categoryNames.' + id)}</option>
@@ -270,14 +277,14 @@
       <label>
         <span>{$t('stash.sort')}</span>
         <select aria-label={$t('stash.sort')} value={sort}
-          onchange={event => { sort = event.currentTarget.value as StashSort; }}>
+          onchange={event => { sort = event.currentTarget.value as StashSort; cancelPendingMove(); }}>
           {#each sortModes as id}
             <option value={id}>{$t('stash.sortModes.' + id)}</option>
           {/each}
         </select>
       </label>
     </div>
-    <button class="stash-organize" onclick={() => { pendingMove = null; bridge.command({ type: 'stashSort', tab: activeTab }); }}>
+    <button class="stash-organize" onclick={() => { cancelPendingMove(); bridge.command({ type: 'stashSort', tab: activeTab }); }}>
       {$t('stash.organize')}
     </button>
     <div class="stash-list" data-stash-items={activeTab} role="tabpanel" tabindex="0"
