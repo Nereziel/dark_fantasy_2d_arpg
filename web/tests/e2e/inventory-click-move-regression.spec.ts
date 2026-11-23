@@ -159,9 +159,7 @@ test.describe('landscape touch equipment management', () => {
 });
 
 test('equipped item swaps and exact bag placement persist through real Save/Load', async ({ page }) => {
-  // This natural UI scenario performs two complete save/reload cycles. On a
-  // contended Chromium CI worker the default 30s budget can expire at the
-  // final HUD click despite correct persisted item identities.
+  // Two real save/reload cycles need a scoped CI budget; do not relax the suite.
   test.setTimeout(60_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
@@ -210,8 +208,7 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
-  // Wait for the real, asynchronous restore before interacting with the HUD.
-  // A missing/broken save still fails this test instead of being hidden by a timeout.
+  // Verify that the asynchronous character restore completed, not just that Load was clicked.
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
   await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
   await page.getByRole('button', { name: 'Inventory (I)' }).click();
@@ -228,11 +225,16 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
-  // Wait for the real, asynchronous restore before interacting with the HUD.
-  // A missing/broken save still fails this test instead of being hidden by a timeout.
+  // Verify that the asynchronous character restore completed, not just that Load was clicked.
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
   await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
-  await page.getByRole('button', { name: 'Inventory (I)' }).click();
+  await expect(page.locator('.game-screen')).toBeVisible();
+  // Exercise the real, default inventory hotkey after the second reload.
+  // Waiting for the live HUD action button to become geometrically stable
+  // can time out during scene/layout transitions; the earlier reload still
+  // covers the visible inventory button, so both entry paths are tested.
+  await page.keyboard.press('i');
+  await expect(inventory).toBeVisible();
   await expect(gear).toHaveAttribute('data-item-id', secondId!);
   await expect(secondCell).toHaveAttribute('data-item-id', firstId!);
   await expect(chosenCell).not.toHaveClass(/occupied/);

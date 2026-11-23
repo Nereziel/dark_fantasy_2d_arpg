@@ -66,6 +66,10 @@ export class GameBridge implements GameStateReader {
   previewEquipment(index: number, slot?: EquipmentSlot): ReturnType<GameSimulation['previewEquipment']> {
     return this.simulation.previewEquipment(index, slot);
   }
+  /** Read-only default equipment slot used by both the inspector and equip. */
+  equipmentTargetSlot(index: number): ReturnType<GameSimulation['equipmentTargetSlot']> {
+    return this.simulation.equipmentTargetSlot(index);
+  }
   /** Read-only reason from the same planner as the actual equip command. */
   equipmentPlacementError(index: number, slot?: EquipmentSlot):
     ReturnType<GameSimulation['equipmentPlacementError']> {
