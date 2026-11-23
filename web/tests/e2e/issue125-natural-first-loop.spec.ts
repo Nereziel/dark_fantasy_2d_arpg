@@ -10,13 +10,21 @@ async function activeQuestCount(page: Page): Promise<number> {
   return match ? Number(match[1]) : -1;
 }
 
-async function keepFighting(page: Page, until: number, timeoutMs: number): Promise<void> {
+async function keepFighting(
+  page: Page, until: number, timeoutMs: number, nextQuestTitle?: string
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   const roster = page.locator('.enemy-roster');
   let previousCount = -1;
+  let lastTargetRefreshAt = 0;
   while (Date.now() < deadline) {
+    const journal = await page.locator('.quest-journal').innerText();
+    // The starter hunt is NPC-gated and stays at 3/3. Act I boar kills,
+    // by contrast, immediately auto-complete and activate Forgotten Graves:
+    // 3/3 is never guaranteed to remain visible for a polling interval.
+    if (nextQuestTitle ? journal.includes(nextQuestTitle)
+      : (await activeQuestCount(page)) >= until) return;
     const achieved = await activeQuestCount(page);
-    if (achieved >= until) return;
     if (await page.getByTestId('death-overlay').count()) {
       throw new Error('Natural quest playthrough: the hero died before ' + until + '/3 kills');
     }
@@ -34,18 +42,27 @@ async function keepFighting(page: Page, until: number, timeoutMs: number): Promi
     }
 
     const activeTarget = roster.locator('button.targeted:not([disabled])');
-    if (await activeTarget.count() === 0 || achieved !== previousCount) {
-      const liveTargets = roster.locator('button:not([disabled])');
-      if (await liveTargets.count()) {
+    const huntBoars = nextQuestTitle !== undefined;
+    const liveTargets = roster.locator('button:not([disabled])');
+    // Presentation sorts minibosses ahead of ordinary enemies. During the
+    // mandatory boar hunt, clearing the real encounter pack (then selecting
+    // the three actual boars) takes priority over optional wandering bosses.
+    const boars = liveTargets.filter({ hasText: 'Corrupted Boar' });
+    const otherEncounterTargets = roster.locator('button:not([disabled]):not(.bossTarget)');
+    const boarVisible = huntBoars && await boars.count() > 0;
+    const candidates = boarVisible ? boars
+      : huntBoars && await otherEncounterTargets.count() > 0
+        ? otherEncounterTargets : liveTargets;
+    const refreshTarget = huntBoars && (Date.now() - lastTargetRefreshAt > 10_000
+      || (boarVisible && await activeTarget.filter({ hasText: 'Corrupted Boar' }).count() === 0));
+    if (await activeTarget.count() === 0 || achieved !== previousCount || refreshTarget) {
+      if (await candidates.count()) {
         try {
-          // Enemies can die or leave targeting range between the locator
-          // check and the real click. Do not let Playwright retry a now-disabled
-          // button for the remainder of this natural-combat acceptance test.
-          await liveTargets.first().click({ timeout: 1_500 });
+          // A real click may race with an enemy death, as in PR #187. Bound
+          // only the transient control wait, never the quest/death conditions.
+          await candidates.first().click({ timeout: 1_500 });
+          lastTargetRefreshAt = Date.now();
         } catch (error) {
-          // A short click timeout only means the transient target was no
-          // longer actionable. Re-read live combat state on the next tick;
-          // the quest/death/deadline assertions above still decide success.
           if (!(error instanceof errors.TimeoutError)) throw error;
         }
       }
@@ -53,8 +70,14 @@ async function keepFighting(page: Page, until: number, timeoutMs: number): Promi
     previousCount = achieved;
     await page.waitForTimeout(400);
   }
+  const rosterText = await roster.innerText();
+  const game = page.locator('.game-screen');
   throw new Error('Natural quest playthrough timed out at ' +
-    await activeQuestCount(page) + '/3 kills; target ' + until);
+    await activeQuestCount(page) + '/3 kills; target ' + until
+    + '; active quest: ' + (await page.locator('.quest-journal').innerText())
+    + '; enemies: ' + rosterText.replaceAll('\n', ' ')
+    + '; player position: ' + await game.getAttribute('data-player-x')
+    + ',' + await game.getAttribute('data-player-y'));
 }
 
 /** Follow the ordinary world canvas from the finished first quest to Act I's next
@@ -132,7 +155,9 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
 }
 
 test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, equip, turn-in', async ({ page }) => {
-  test.setTimeout(230_000);
+  // This continuous natural run now includes the three-boss-hunt wave after
+  // actual corruption-site discovery, followed by another real Save/Load.
+  test.setTimeout(340_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
@@ -303,6 +328,37 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // The journey may legitimately discover optional POIs on the travelled
   // path; only the unexplored region's secrets must remain hidden.
 
+  // A real enemy kill, not crossing a marker, advances this hunt. Finish the
+  // existing pack through the same visible combat roster. Once the last
+  // enemy falls the simulation spawns its actual three-corrupted-boar wave.
+  // The objective cannot advance from ordinary skeleton/wolf/wraith kills.
+  await expect(page.locator('.quest-journal')).toContainText('0/3');
+  await keepFighting(page, 3, 105_000, 'The Forgotten Graves');
+  await expect(page.locator('.quest-journal')).toContainText('Forgotten Graves');
+  await expect(page.locator('.quest-journal')).toContainText('graveyard');
+  await expect(page.locator('.quest-journal')).not.toContainText('The Blighted Pack');
+  await expect(game).toHaveAttribute('data-zone', 'wilderness');
+
+  // A completed story-hunt reward must be committed with the new quest.
+  // Reload via the ordinary Save/Load controls, not a restored fixture,
+  // and ensure the unlocked objective, stats and looted gear ID persist.
+  const afterHuntHud = await page.locator('.hud-details span').allTextContents();
+  const afterHuntProgress = await guide.getByTestId('onboarding-xp').innerText();
+  const afterHuntObjective = await journalProgress.allTextContents();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
+  await page.reload();
+  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await expect(page.locator('.quest-journal')).toContainText('Forgotten Graves');
+  await expect(page.locator('.quest-journal')).not.toContainText('The Blighted Pack');
+  await expect(journalProgress).toHaveText(afterHuntObjective);
+  await expect(page.locator('.hud-details span')).toHaveText(afterHuntHud);
+  await expect(guide.getByTestId('onboarding-xp')).toHaveText(afterHuntProgress);
+  await page.locator('[data-quick-action="inventory"]').click();
+  await expect(inventory.locator('.equipment-slot[data-item-id="' + lootedItemId + '"]'))
+    .toHaveCount(1);
+  await inventory.locator('.close-button').click();
+  await expect(game).toHaveAttribute('data-zone', 'wilderness');
 });
 
 test.describe('touch input', () => {
