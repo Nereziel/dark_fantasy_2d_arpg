@@ -122,10 +122,10 @@ jobs:
             before=""
             after=""
           fi
-          if [[ -n "$before" && -n "$after" && ! "$before" =~ ^0+$ ]] \\
-            && git cat-file -e "${before}^{commit}" 2>/dev/null \\
+          if [[ -n "$before" && -n "$after" && ! "$before" =~ ^0+$ ]] \
+            && git cat-file -e "${before}^{commit}" 2>/dev/null \
             && git cat-file -e "${after}^{commit}" 2>/dev/null; then
-            if git diff --quiet --no-renames "$before" "$after" -- \\
+            if git diff --quiet --no-renames "$before" "$after" -- \
               dark_fantasy_2d_arpg_engine.html index.html visuals.js visuals.css tests/site.test.mjs; then
               run_legacy=false
             fi
