@@ -273,7 +273,8 @@ async function defeatMorrowNaturally(page: Page, timeoutMs: number): Promise<voi
       }
     }
 
-    const aliveBoss = morrow.locator('xpath=self::button[not(@disabled)]');
+    const aliveBoss = page.locator('.enemy-roster button:not([disabled])')
+      .filter({ hasText: 'Morrow, Graveyard Warden' });
     if (await aliveBoss.count() === 0) {
       // A dead Morrow must cause an authoritative quest transition, not be
       // counted as success merely because the target disappeared.
