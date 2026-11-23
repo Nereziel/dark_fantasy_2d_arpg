@@ -44,17 +44,19 @@ async function keepFighting(
     const activeTarget = roster.locator('button.targeted:not([disabled])');
     const huntBoars = nextQuestTitle !== undefined;
     const liveTargets = roster.locator('button:not([disabled])');
-    // Presentation sorts minibosses ahead of ordinary enemies. During the
-    // mandatory boar hunt, clearing the real encounter pack (then selecting
-    // the three actual boars) takes priority over optional wandering bosses.
+    // The roster displays optional minibosses first, even during the first
+    // mandatory three-kill quest. A new hero must focus normal quest foes
+    // instead of taking on a Brood Mother that is unrelated to onboarding.
     const boars = liveTargets.filter({ hasText: 'Corrupted Boar' });
     const otherEncounterTargets = roster.locator('button:not([disabled]):not(.bossTarget)');
     const boarVisible = huntBoars && await boars.count() > 0;
-    const candidates = boarVisible ? boars
-      : huntBoars && await otherEncounterTargets.count() > 0
-        ? otherEncounterTargets : liveTargets;
-    const refreshTarget = huntBoars && (Date.now() - lastTargetRefreshAt > 10_000
-      || (boarVisible && await activeTarget.filter({ hasText: 'Corrupted Boar' }).count() === 0));
+    const hasNormal = await otherEncounterTargets.count() > 0;
+    const candidates = boarVisible ? boars : hasNormal ? otherEncounterTargets : liveTargets;
+    const targetingOptional = hasNormal && await roster
+      .locator('button.targeted.bossTarget:not([disabled])').count() > 0;
+    const refreshTarget = targetingOptional || (huntBoars
+      && (Date.now() - lastTargetRefreshAt > 10_000
+      || (boarVisible && await activeTarget.filter({ hasText: 'Corrupted Boar' }).count() === 0)));
     if (await activeTarget.count() === 0 || achieved !== previousCount || refreshTarget) {
       if (await candidates.count()) {
         try {
@@ -120,6 +122,15 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
       else {
         const potion = page.getByTestId('use-potion');
         if (await potion.isEnabled()) await potion.click();
+      }
+    }
+    // This is an ordinary Paladin HUD spell, not a health/quest injection.
+    // Protect low-level exploration against optional wandering minibosses.
+    if (hp && Number(hp[1]) / Number(hp[2]) < 0.80) {
+      const shield = page.locator('[data-paladin-ability="divineShield"]');
+      if (await shield.isEnabled()) {
+        try { await shield.click({ timeout: 1_500 }); }
+        catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
       }
     }
 
