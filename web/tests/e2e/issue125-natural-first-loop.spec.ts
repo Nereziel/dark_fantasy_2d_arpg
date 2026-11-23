@@ -178,13 +178,15 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
   let ticks = 0;
   let stalled = 0;
   const waypoints = [
-    // Approach by the western road and then sweep both sides of the
-    // procedural graveyard; a wall can block straight west-to-east travel.
-    { x: 1630, y: 530 }, { x: 1760, y: 540 }, { x: 1810, y: 650 },
-    { x: 1910, y: 690 }, { x: 1860, y: 600 },
-    { x: 2000, y: 630 }, { x: 2010, y: 780 }, { x: 1900, y: 810 },
-    { x: 1780, y: 760 }, { x: 1720, y: 660 }, { x: 1840, y: 890 },
-    { x: 2040, y: 710 }, { x: 1760, y: 560 }
+    // Real postmerge CI on PR #189 got stuck twice at x=1777 (the west
+    // collision boundary of an obstacle). First approach NORTH of the wall
+    // from the known road, cross east, and only then sweep south near the
+    // procedural graveyard marker. Never infer a secret feature coordinate.
+    { x: 1610, y: 390 }, { x: 1690, y: 280 }, { x: 1820, y: 280 },
+    { x: 1980, y: 360 }, { x: 2000, y: 520 }, { x: 1950, y: 670 },
+    { x: 1880, y: 690 }, { x: 2000, y: 780 }, { x: 1870, y: 830 },
+    { x: 1780, y: 960 }, { x: 1940, y: 980 }, { x: 2040, y: 670 },
+    { x: 1860, y: 570 }, { x: 1780, y: 450 }
   ];
   while (Date.now() < deadline) {
     // A genuine graveyard discovery auto-completes Forgotten Graves and
@@ -214,9 +216,12 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     const { width, height } = await canvas.evaluate(node => ({
       width: node.width, height: node.height
     }));
+    // Back away from a blocked eastward crossing and route around its
+    // northern/southern end with a real canvas click. The old east-biased
+    // detour repeatedly selected the same inaccessible wall-adjacent cell.
     const waypoint = stalled >= 2
-      ? { x: Math.max(100, Math.min(2080, x + (index % 2 ? -90 : 115))),
-        y: y < 570 ? Math.min(1200, y + 270) : Math.max(120, y - 230) }
+      ? { x: Math.max(100, x - 160),
+        y: y >= 570 ? Math.max(130, y - 330) : Math.min(1260, y + 310) }
       : waypoints[index]!;
     const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
     const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
@@ -233,7 +238,7 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     stalled = Math.hypot(nextX - x, nextY - y) < 6 ? stalled + 1 : 0;
     ticks += 1;
     if (Math.hypot(nextX - waypoint.x, nextY - waypoint.y) < 48
-      || ticks >= 12 || stalled >= 4) {
+      || ticks >= 7 || stalled >= 3) {
       index = (index + 1) % waypoints.length;
       ticks = 0;
       stalled = 0;
@@ -241,8 +246,9 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
   }
   throw new Error('Natural graveyard exploration timed out at ('
     + await game.getAttribute('data-player-x') + ','
-    + await game.getAttribute('data-player-y') + '), journal: '
-    + await journal.innerText());
+    + await game.getAttribute('data-player-y') + '), waypoint: '
+    + index + ' (' + waypoints[index]!.x + ',' + waypoints[index]!.y
+    + '), journal: ' + await journal.innerText());
 }
 
 /** Defeat the unique Act I miniboss through the visible HUD and ordinary
