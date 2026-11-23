@@ -69,6 +69,7 @@ describe('Issue #125 — one coherent corrupted boar quest pack', () => {
     const miniBossState = createMiniBossState('bandit_captain', 'bandit_captain')!;
     expect(game.restore({
       ...initial,
+      player: { ...initial.player, ...marker.position },
       enemies: [...initial.enemies, boss],
       selectedTargetId: 'bandit_captain',
       miniBossStates: { bandit_captain: miniBossState }
