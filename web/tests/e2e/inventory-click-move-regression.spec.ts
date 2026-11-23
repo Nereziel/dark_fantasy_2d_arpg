@@ -159,6 +159,8 @@ test.describe('landscape touch equipment management', () => {
 });
 
 test('equipped item swaps and exact bag placement persist through real Save/Load', async ({ page }) => {
+  // Two real save/reload cycles need a scoped CI budget; do not relax the suite.
+  test.setTimeout(60_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -206,6 +208,9 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
+  // Verify that the asynchronous character restore completed, not just that Load was clicked.
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
+  await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
   await page.getByRole('button', { name: 'Inventory (I)' }).click();
   await expect(gear).not.toHaveClass(/has-item/);
   await expect(secondCell).toHaveAttribute('data-item-id', firstId!);
@@ -220,6 +225,9 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await page.getByRole('button', { name: 'Load', exact: true }).click();
+  // Verify that the asynchronous character restore completed, not just that Load was clicked.
+  await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
+  await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
   await expect(page.locator('.game-screen')).toBeVisible();
   // Exercise the real, default inventory hotkey after the second reload.
   // Waiting for the live HUD action button to become geometrically stable
