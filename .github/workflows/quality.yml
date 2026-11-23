@@ -10,6 +10,11 @@ on:
     paths:
       - 'web/**'
       - 'tests/**'
+      # Changes to the archived HTML prototype still receive a validation run.
+      - 'dark_fantasy_2d_arpg_engine.html'
+      - 'index.html'
+      - 'visuals.js'
+      - 'visuals.css'
       - '.github/workflows/quality.yml'
       - '.github/actions/**'
   # Manual rebuild and redeploy, including when there are no changed source files.
@@ -95,7 +100,40 @@ jobs:
         working-directory: web
         run: npm run test:e2e
 
+      - name: Check whether the archived HTML reference changed
+        id: legacy
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Check a PR's changes against its base, or a pushed commit range.
+          # If the range is unavailable, run the test rather than silently skip it.
+          run_legacy=true
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            before="$PR_BASE_SHA"
+            after="$PR_HEAD_SHA"
+          elif [[ "$EVENT_NAME" == "push" ]]; then
+            before="$BEFORE_SHA"
+            after="$GITHUB_SHA"
+          else
+            before=""
+            after=""
+          fi
+          if [[ -n "$before" && -n "$after" && ! "$before" =~ ^0+$ ]] \
+            && git cat-file -e "${before}^{commit}" 2>/dev/null \
+            && git cat-file -e "${after}^{commit}" 2>/dev/null; then
+            if git diff --quiet --no-renames "$before" "$after" -- \
+              dark_fantasy_2d_arpg_engine.html index.html visuals.js visuals.css tests/site.test.mjs; then
+              run_legacy=false
+            fi
+          fi
+          echo "run=$run_legacy" >> "$GITHUB_OUTPUT"
+
       - name: Legacy reference test
+        if: steps.legacy.outputs.run == 'true'
         run: node tests/site.test.mjs
 
       # Uploaded only from a fully verified push/dispatch, not from PRs or tests-only commits.
