@@ -53,7 +53,10 @@ test.describe('hybrid pointer inventory inspection', () => {
     await second.tap();
     await expect(inspector.getByRole('button', { name: 'Favorite', exact: true }))
       .toBeVisible();
-    await first.hover();
+    // The desktop cursor can still be geometrically inside the FIRST slot.
+    // Move it within the same slot: pointermove, not pointerenter, must switch
+    // the preview back after the interleaved touch.
+    await first.hover({ position: { x: 9, y: 9 } });
     await expect(inspector.getByRole('button', { name: 'Unfavorite' })).toBeVisible();
     await expect(second).not.toHaveClass(/favorite/);
   });
