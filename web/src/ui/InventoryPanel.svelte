@@ -83,11 +83,23 @@
       && dropHover.slot === target.slot;
   }
   function clearDrag(): void { dragged = null; dropHover = null; }
+  function previewWithMouse(event: PointerEvent, source: Source | null): void {
+    if (event.pointerType !== 'mouse' || moveArmed) return;
+    // A resize can put a stationary cursor over a slot after a touch tap.
+    if (touchInput && (event.type === 'pointerenter'
+      || (event.movementX === 0 && event.movementY === 0))) return;
+    hovered = source;
+  }
+  function selectPointer(event: PointerEvent): void {
+    touchInput = event.pointerType !== 'mouse';
+    if (touchInput) hovered = null;
+  }
+
   /** Commit the last real mouse preview before crossing into the inspector.
    * Otherwise clearing hovered on leave silently retargets action buttons to
    * an older selected item. Never modify a touch selection or armed move. */
   function pinMousePreviewOnLeave(event: PointerEvent, source: Source, item: Item | null): void {
-    if (event.pointerType === 'mouse' && item && !moveArmed && !dragged) {
+    if (event.pointerType === 'mouse' && item && hovered && !moveArmed && !dragged) {
       selected = source;
     }
     hovered = null;
@@ -102,7 +114,7 @@
     placementMessage = '';
   }
 
-  let displayed = $derived(touchInput ? selected : (hovered ?? selected));
+  let displayed = $derived(moveArmed ? selected : (hovered ?? selected));
   let inspected = $derived.by((): Item | null => {
     if (!displayed) return null;
     return displayed.kind === 'bag' ? view.inventory[displayed.index] ?? null
@@ -369,16 +381,16 @@
               data-equipment-slot={slot}
               data-item-id={item?.id}
               draggable={!!item}
-              onpointerdown={(event) => { touchInput = event.pointerType !== 'mouse'; }}
+              onpointerdown={selectPointer}
               ondragstart={(event) => startDrag(event, { kind: 'gear', slot })}
               ondragend={clearDrag}
               ondragover={(event) => permitDrop(event, { kind: 'gear', slot })}
                ondragleave={() => { if (isDropHover({ kind: 'gear', slot })) dropHover = null; }}
               ondrop={(event) => dropGear(event, slot)}
-              onpointerenter={(event) => { if (event.pointerType === 'mouse') touchInput = false; hovered = { kind: 'gear', slot }; }}
-              onpointermove={(event) => { if (event.pointerType === 'mouse') { touchInput = false; hovered = { kind: 'gear', slot }; } }}
+              onpointerenter={(event) => previewWithMouse(event, { kind: 'gear', slot })}
+              onpointermove={(event) => previewWithMouse(event, { kind: 'gear', slot })}
               onpointerleave={(event) => pinMousePreviewOnLeave(event, { kind: 'gear', slot }, item)}
-              onfocus={() => { hovered = { kind: 'gear', slot }; }}
+              onfocus={() => { if (!touchInput) hovered = { kind: 'gear', slot }; }}
               onclick={() => pickGear(slot)}
               ondblclick={() => { if (!touchInput) unequip(slot); }}
               aria-label={$t('item.slot.' + slot) + (item ? ': ' + itemName(item) : ': ' + $t('inventory.empty'))}
@@ -440,16 +452,16 @@
               data-item-id={item?.id}
               disabled={filtered}
               draggable={!!item && !filtered}
-              onpointerdown={(event) => { touchInput = event.pointerType !== 'mouse'; }}
+              onpointerdown={selectPointer}
               ondragstart={(event) => { if (filtered) event.preventDefault(); else startDrag(event, { kind: 'bag', index }); }}
               ondragend={clearDrag}
               ondragover={(event) => { if (!filtered) permitDrop(event, { kind: 'bag', index }); }}
                ondragleave={() => { if (isDropHover({ kind: 'bag', index })) dropHover = null; }}
               ondrop={(event) => { if (!filtered) dropBag(event,index); }}
-              onpointerenter={(event) => { if (event.pointerType === 'mouse') touchInput = false; hovered = item && !filtered ? { kind: 'bag', index } : null; }}
-              onpointermove={(event) => { if (event.pointerType === 'mouse') { touchInput = false; hovered = item && !filtered ? { kind: 'bag', index } : null; } }}
+              onpointerenter={(event) => previewWithMouse(event, item && !filtered ? { kind: 'bag', index } : null)}
+              onpointermove={(event) => previewWithMouse(event, item && !filtered ? { kind: 'bag', index } : null)}
               onpointerleave={(event) => pinMousePreviewOnLeave(event, { kind: 'bag', index }, filtered ? null : item)}
-              onfocus={() => { hovered = item && !filtered ? { kind: 'bag', index } : null; }}
+              onfocus={() => { if (!touchInput) hovered = item && !filtered ? { kind: 'bag', index } : null; }}
               onclick={() => { if (!filtered) pickBag(index); }}
               ondblclick={() => { if (item && !filtered && !touchInput) equip(index); }}
               oncontextmenu={(event) => { if (item && !filtered) { event.preventDefault(); if (!touchInput) equip(index); } }}
