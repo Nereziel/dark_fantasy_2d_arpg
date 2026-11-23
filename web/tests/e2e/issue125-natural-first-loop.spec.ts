@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { errors, expect, test, type Page } from '@playwright/test';
 
 /** Uses only ordinary user-visible controls on the production Vite build.
  * No GameBridge, debug hooks, direct commands, seeded snapshot injection,
@@ -36,7 +36,19 @@ async function keepFighting(page: Page, until: number, timeoutMs: number): Promi
     const activeTarget = roster.locator('button.targeted:not([disabled])');
     if (await activeTarget.count() === 0 || achieved !== previousCount) {
       const liveTargets = roster.locator('button:not([disabled])');
-      if (await liveTargets.count()) await liveTargets.first().click();
+      if (await liveTargets.count()) {
+        try {
+          // Enemies can die or leave targeting range between the locator
+          // check and the real click. Do not let Playwright retry a now-disabled
+          // button for the remainder of this natural-combat acceptance test.
+          await liveTargets.first().click({ timeout: 1_500 });
+        } catch (error) {
+          // A short click timeout only means the transient target was no
+          // longer actionable. Re-read live combat state on the next tick;
+          // the quest/death/deadline assertions above still decide success.
+          if (!(error instanceof errors.TimeoutError)) throw error;
+        }
+      }
     }
     previousCount = achieved;
     await page.waitForTimeout(400);
