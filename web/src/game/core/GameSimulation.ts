@@ -772,12 +772,25 @@ export class GameSimulation {
       || this.statusEffects.player.some(e => e.id === 'stunned' || e.id === 'frozen' || e.id === 'rooted');
   }
 
-  private follow(actor: Point, target: Point, speed: number, dt: number, stop = 0): void {
+  private follow(actor: Point, target: Point, speed: number, dt: number,
+    stop = 0, autoRoute = false): void {
     if (actor !== this.player) {
       moveToward(actor, target, speed, dt, stop, this.world.obstacles);
       return;
     }
     if (this.immobilized) { this.movementSpeed = 0; return; }
+    // Existing click-to-move and combat AI already pass A* waypoints to
+    // follow(). Do not run a SECOND pathfinder on those turning points:
+    // snapping a changing enemy/waypoint to stale cached grid centers can
+    // strand a melee character just outside attack range.
+    if (!autoRoute) {
+      this.autoFollowPlan = null;
+      const left = Math.max(0, distance(actor, target) - stop);
+      this.movementSpeed = nextMoveSpeed(this.movementSpeed, speed, left, dt);
+      moveToward(actor, target, this.movementSpeed, dt, stop, this.world.obstacles);
+      if (left <= 0.01) this.movementSpeed = 0;
+      return;
+    }
     if (distance(actor, target) <= stop) { this.movementSpeed = 0; return; }
 
     // Direct movement with collision sliding alone can pin the hero against
@@ -3949,7 +3962,7 @@ export class GameSimulation {
         this.changeZone();
         return;
       }
-      this.follow(this.player, this.portalPosition, speed, dt, 70);
+      this.follow(this.player, this.portalPosition, speed, dt, 70, true);
     } else if (this.pendingTown) {
       const entry = townEntry(this.pendingTown);
       if (!entry || this.zone !== 'wilderness') this.pendingTown = null;
@@ -3958,7 +3971,7 @@ export class GameSimulation {
         if (entry.role === 'waypoint') this.activateTownWaypoint();
         this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
       } else {
-        this.follow(this.player, entry.position, speed, dt, Math.max(1, entry.interactionRange - 10));
+        this.follow(this.player, entry.position, speed, dt, Math.max(1, entry.interactionRange - 10), true);
       }
     } else if (this.pendingNpc) {
       if (nearNpc(this.player, this.pendingNpc)) {
@@ -3968,13 +3981,13 @@ export class GameSimulation {
         if (id === WARDEN_ID) this.recordVesnaReport();
         this.events.push({ type: 'npcDialogue', npcId: id });
       } else {
-        this.follow(this.player, NPC_POSITIONS[this.pendingNpc], speed, dt, NPC_INTERACT_RANGE - 10);
+        this.follow(this.player, NPC_POSITIONS[this.pendingNpc], speed, dt, NPC_INTERACT_RANGE - 10, true);
       }
     } else if (this.pendingCryptPropId) {
       const prop = this.cryptInteractables().find(p => p.id === this.pendingCryptPropId);
       if (!prop) this.pendingCryptPropId = null;
       else if (distance(this.player, prop.position) <= prop.reach) this.tryInteractCrypt();
-      else this.follow(this.player, prop.position, speed, dt, Math.max(6, prop.reach - 12));
+      else this.follow(this.player, prop.position, speed, dt, Math.max(6, prop.reach - 12), true);
     } else if(this.pendingEnvironmentId) {
       const object=planEnvironmentInteraction(this.pendingEnvironmentId,
         this.environmentPlan,[...this.environmentUsed]);
@@ -3989,7 +4002,7 @@ export class GameSimulation {
       const object = getWorldObject(this.pendingObject, this.zone);
       if (!object) this.pendingObject = null;
       else if (distance(this.player, object.position) <= object.reach) this.tryInteractObject();
-      else this.follow(this.player, object.position, speed, dt, object.reach - 10);
+      else this.follow(this.player, object.position, speed, dt, object.reach - 10, true);
     } else if (this.warriorAction?.timeline.movementLocked
       || this.classAction?.timeline.movementLocked) {
       this.movementSpeed = 0;
@@ -4014,12 +4027,12 @@ export class GameSimulation {
       if (aim?.mode === 'GROUND_POSITION' || aim?.mode === 'AREA') {
         if (distance(this.player, aim.position) > skill.range) {
           if (!this.holdPosition) {
-            this.follow(this.player, aim.position, speed, dt, Math.max(0, skill.range - 4));
+            this.follow(this.player, aim.position, speed, dt, Math.max(0, skill.range - 4), true);
           }
         } else this.performCast(this.pendingSkill, aim);
       } else if (distance(this.player, focus.actor) > skill.range) {
         if (!this.holdPosition) {
-          this.follow(this.player, focus.actor, speed, dt, Math.max(0, skill.range - 4));
+          this.follow(this.player, focus.actor, speed, dt, Math.max(0, skill.range - 4), true);
         }
       } else this.performCast(this.pendingSkill);
     } else if (this.attackTarget) {
@@ -4061,7 +4074,7 @@ export class GameSimulation {
       const loot = this.groundLoot.find(item => item.id === this.pickupTarget);
       if (!loot) this.pickupTarget = null;
       else if (distance(this.player, loot) <= 36) this.collectLoot(loot);
-      else this.follow(this.player, loot, speed, dt, 32);
+      else this.follow(this.player, loot, speed, dt, 32, true);
     } else if (this.movePath.length) {
       const point = this.movePath[0]!;
       this.follow(this.player, point, speed, dt);
