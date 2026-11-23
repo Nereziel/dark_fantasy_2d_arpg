@@ -1162,8 +1162,9 @@ export class GameSimulation {
     // objective unlocks. A required story encounter must never be blocked by
     // an unrelated optional fight: retire a dead optional first, otherwise an
     // unselected living optional. This is world streaming, NOT a kill: do not
-    // record a defeat, grant loot/XP or discard the five canonical pack foes.
-    if (this.units.length >= PACK_SIZE + 2) {
+    // record a defeat or grant loot/XP. World-event guards and summons
+    // keep their slots and identities when Morrow uses the story reserve.
+    if (this.units.length >= PACK_SIZE + 2 && !this.units.some(unit => unit.summoned)) {
       const optional = (unit: EnemyUnit, index: number) =>
         index >= PACK_SIZE && unit.actor.id !== 'morrow_gravebound'
         && MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId);
@@ -1184,7 +1185,7 @@ export class GameSimulation {
         }
       }
     }
-    if (this.units.length >= PACK_SIZE + 2) return;
+    if (this.units.length > PACK_SIZE + 2) return;
     const marker = this.storyFeatures.find(feature => feature.id === 'act1.grave_warden');
     if (!marker) return;
     const health = 270 + Math.max(0, this.level - 1) * 24;
@@ -4900,7 +4901,12 @@ export class GameSimulation {
       || !validWaveBState(s)
       || !s.effects || !Array.isArray(s.effects.player)
       || s.effects.player.length > 8 || !s.effects.player.every(isActiveEffect)
-      || !Array.isArray(s.enemies) || s.enemies.length < PACK_SIZE || s.enemies.length > PACK_SIZE + 2
+      || !Array.isArray(s.enemies) || s.enemies.length < PACK_SIZE
+      || (s.enemies.length > PACK_SIZE + 2 && (
+        s.zone !== 'wilderness' || s.enemies.length !== PACK_SIZE + 3
+        || s.enemies.at(-1)?.actor?.id !== 'morrow_gravebound'
+        || s.enemies.slice(0, -1).some(unit => unit?.actor?.id === 'morrow_gravebound')
+      ))
       || !s.enemies.every((unit, index) =>
         !!unit && !!unit.actor && validEnemyType(unit.actor.type)
         && (s.zone === 'crypt'

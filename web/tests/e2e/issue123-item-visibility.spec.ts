@@ -46,7 +46,9 @@ test.describe('touch item preview and loot-label preferences', () => {
     const modal = page.getByRole('dialog', { name: 'Inventory & Equipment' });
     const bag = modal.locator('.bag-slot.occupied').first();
     const inspector = modal.getByTestId('item-inspector');
+    const move = inspector.getByRole('button', { name: 'Move by tap' });
     await bag.tap();
+    await expect(move).toBeVisible();
     await expect(inspector.locator('svg[data-item-art="belt"]')).toBeVisible();
     await expect(inspector.locator('.comparison-grid .item-detail')).toHaveCount(2);
     for (const viewport of [
@@ -57,6 +59,7 @@ test.describe('touch item preview and loot-label preferences', () => {
       await page.setViewportSize(viewport);
       await expect(bag.locator('svg[data-item-art="belt"]')).toBeVisible();
       await expect(inspector).toBeInViewport({ ratio: 0.75 });
+      await expect(move).toBeVisible();
       const cards = await inspector.locator('.item-detail').all();
       const first = await cards[0]!.boundingBox();
       const second = await cards[1]!.boundingBox();
@@ -66,7 +69,6 @@ test.describe('touch item preview and loot-label preferences', () => {
         expect(second.x + second.width).toBeLessThanOrEqual(viewport.width + 1);
       }
     }
-    const move = inspector.getByRole('button', { name: 'Move by tap' });
     await move.tap();
     await modal.locator('[data-equipment-slot="HELMET"]').tap();
     await expect(inspector.locator('.placement-error[role="status"]'))
