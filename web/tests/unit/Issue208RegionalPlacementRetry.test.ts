@@ -22,7 +22,7 @@ vi.mock('../../src/game/world/villagePopulation',async original=>{
 });
 
 describe('Issue #208: alternate regional placement',()=>{
-  it('improves coverage over the seven reproducible incomplete seeds from CI 45482524485',()=>{
+  it('fully populates the seven reproducible incomplete seeds from CI 45482524485',()=>{
     const seeds=[15838,23757,63352,79190,134623,142542,158380];
     const incomplete:number[]=[];
     const topology=vi.mocked(planActOneTopology);
@@ -78,8 +78,6 @@ describe('Issue #208: alternate regional placement',()=>{
           expect(findPath(world.layout.camp,n.position,ACTOR_RADIUS,world.layout.obstacles).length).toBeGreaterThan(0);
       }
     }
-    // This gate is deliberately stronger than the previous 0/7 baseline.
-    // Full coverage remains the separate strict seed sweep acceptance.
-    expect(incomplete.length, 'Still incomplete seeds: '+incomplete.join(', ')).toBeLessThan(seeds.length);
+    expect(incomplete, 'Still incomplete seeds: '+incomplete.join(', ')).toEqual([]);
   },60000);
 });
