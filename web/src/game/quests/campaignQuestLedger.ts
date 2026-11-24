@@ -14,7 +14,14 @@ if(!validateQuestCatalog(CAMPAIGN_QUEST_CATALOG))throw Error('Invalid campaign q
  * Never reconstruct a partially populated new ledger or reset claimed rewards.
  */
 export function createCampaignQuestLedger(source:unknown):QuestLedger|null {
-  if(validateQuestLedger(CAMPAIGN_QUEST_CATALOG,source))return structuredClone(source);
+  if(validateQuestLedger(CAMPAIGN_QUEST_CATALOG,source)){
+    // Svelte views pass reactive proxies, which structuredClone rejects.
+    // Whitelist and detach the validated record exactly as the story ledger does.
+    return {quests:source.quests.map(q=>({
+      questId:q.questId,status:q.status,counters:{...q.counters},
+      processedEventIds:[...q.processedEventIds],rewardClaimed:q.rewardClaimed
+    }))};
+  }
   const old=createActIQuestLedger(source);
   if(!old)return null;
   const local=createQuestLedger(VILLAGE_QUEST_CATALOG);
