@@ -222,6 +222,9 @@ export class IsometricPreviewScene extends Phaser.Scene {
       targets.push({ kind: 'NPC', id: npc.id, position: npc.position,
         hitRadius: Math.max(24, npc.collisionRadius + 12), ...actor });
     }
+    for (const resident of this.villageResidents) {
+      targets.push({kind:'NPC',id:resident.id,position:resident.position,hitRadius:26,...actor});
+    }
     return targets;
   }
 
@@ -521,13 +524,14 @@ export class IsometricPreviewScene extends Phaser.Scene {
           : Math.floor(this.time.now / (pose === 'run' ? 110 : 170)) % PIXEL_ANIMATION_FRAMES;
         this.sprite(key, unit.actor.type, t.position, pose, frame, unit.intent ?? undefined);
         this.lastEnemyPositions.set(t.id, { ...t.position });
+      } else if (t.kind === 'NPC' && this.villageResidents.some(n=>n.id===t.id)) {
+        // Render the resident sprite below, rather than a second proxy actor.
       } else {
         const color = t.kind === 'NPC' ? 0xb0986c : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
         this.entity(key, t.position, color, t.bodyHeight > 0);
       }
     }
-    // Planned village residents are visible but deliberately not clickable NPCs.
-    // Their service actions and dialogue are not connected yet.
+    // Resident hit targets use the same town interaction command as camp services.
     for (const resident of this.villageResidents) {
       const key = 'resident/' + resident.id;
       visible.add(key);

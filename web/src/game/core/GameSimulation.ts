@@ -112,7 +112,8 @@ import {
 } from '../consumables/potionRules';
 import { quotePurchase, quoteSale, quoteTempering, planPurchase, planSale, planService,
   selectVendorStock, type EconomyFailure } from '../trade/economyRules';
-import { townEntry, canInteractTownEntry, getTownManifest } from '../world/townManifest';
+import { townEntry, canInteractTownEntry, getTownManifest, type TownEntry } from '../world/townManifest';
+import { villageTownEntries, resolveRegionalTownEntry, canReachRegionalTownEntry } from '../world/villageDialogue';
 import { activatedWaypoints, planWaypointTravel, waypointDefinition } from '../world/waypointTravel';
 import { planWorldEvents, projectWorldEventViews, worldEventReward,
   type WorldEventPlan, type WorldEventId } from '../world/worldEvents';
@@ -356,6 +357,12 @@ export class GameSimulation {
   private mapTerrain: WildernessRuntimeWorld['terrain'] | null = null;
   private pendingNpc: NpcId | null = null;
   private pendingTown: string | null = null;
+  private regionalTownEntries: TownEntry[] = [];
+  private dialogueEntry(id: string): TownEntry | null { return resolveRegionalTownEntry(id,this.regionalTownEntries); }
+  private canReachDialogue(entry: TownEntry): boolean {
+    return townEntry(entry.id) ? canInteractTownEntry(this.player,entry.id)
+      : canReachRegionalTownEntry(this.player,entry,this.world.obstacles);
+  }
   private pendingSkill: SkillSlot | null = null;
   private pendingAim: SkillAim | null = null;
   private player = spawnPlayer('WARRIOR', this.equipment, { x: 390, y: 470 });
@@ -419,6 +426,7 @@ export class GameSimulation {
   }
 
   private initWorldSystems(world: WildernessRuntimeWorld): void {
+    this.regionalTownEntries = villageTownEntries(world.villages);
     const index = createChunkIndex(world);
     const input = this.mapInput(world);
     const initial = createMapDiscovery(input, CAMP, 105);
@@ -1563,9 +1571,9 @@ export class GameSimulation {
     }
     if (command.type === 'useTownService') {
       // Town services must work while the modal pauses the combat simulation.
-      const entry = townEntry(command.entryId);
+      const entry = this.dialogueEntry(command.entryId);
       if (!entry || !this.player.alive || this.zone !== 'wilderness'
-        || !canInteractTownEntry(this.player, entry.id)) return;
+        || !this.canReachDialogue(entry)) return;
       const healer = entry.role === 'healer';
       const restorer = entry.role === 'potionVendor';
       if (!healer && !restorer) return;
@@ -1694,7 +1702,7 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'interactTown') {
-      const entry = townEntry(command.entryId);
+      const entry = this.dialogueEntry(command.entryId);
       if (!entry || entry.capability === 'existing' || this.zone !== 'wilderness' || !this.player.alive || this.paused) return;
       this.warriorAction = null;
       this.classAction = null;
@@ -1708,7 +1716,7 @@ export class GameSimulation {
       this.pendingPortal = false;
       this.pendingNpc = null;
       this.pendingTown = null;
-      if (canInteractTownEntry(this.player, entry.id)) {
+      if (this.canReachDialogue(entry)) {
         if (entry.role === 'waypoint') this.activateTownWaypoint();
         this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
         this.pendingTown = null;
@@ -4074,14 +4082,17 @@ export class GameSimulation {
       }
       this.follow(this.player, this.portalPosition, speed, dt, 70, true);
     } else if (this.pendingTown) {
-      const entry = townEntry(this.pendingTown);
+      const entry = this.dialogueEntry(this.pendingTown);
       if (!entry || this.zone !== 'wilderness') this.pendingTown = null;
-      else if (canInteractTownEntry(this.player, entry.id)) {
+      else if (this.canReachDialogue(entry)) {
         this.pendingTown = null;
         if (entry.role === 'waypoint') this.activateTownWaypoint();
         this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
       } else {
-        this.follow(this.player, entry.position, speed, dt, Math.max(1, entry.interactionRange - 10), true);
+        // A resident behind a wall may be within nominal range but not reachable.
+        const reach = townEntry(entry.id) || hasLineOfSight(this.player,entry.position,this.world.obstacles)
+          ? Math.max(1, entry.interactionRange - 10) : 1;
+        this.follow(this.player, entry.position, speed, dt, reach, true);
       }
     } else if (this.pendingNpc) {
       if (nearNpc(this.player, this.pendingNpc)) {

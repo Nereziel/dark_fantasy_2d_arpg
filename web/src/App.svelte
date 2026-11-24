@@ -55,6 +55,8 @@
   } from './game/world/npcs';
   import { WARDEN_ID } from './game/quests/firstQuest';
   import { townEntry, type TownEntry } from './game/world/townManifest';
+  import { buildWilderness } from './game/world/wildernessRuntime';
+  import { villageTownEntries, resolveRegionalTownEntry } from './game/world/villageDialogue';
   import { CLASSES, type ClassId } from './game/data/classes';
   import { createCharacterId } from './game/creation/characterCreation';
   import { POTION_IDS, POTIONS } from './game/consumables/potionRules';
@@ -418,7 +420,9 @@
       if (event.type === 'zoneChanged' && playing) messageKey = '';
       if (event.type === 'townInteraction' && playing) {
         rememberModalOrigin();
-        townModal = townEntry(event.entryId);
+        townModal = townEntry(event.entryId) ?? resolveRegionalTownEntry(event.entryId,
+          villageTownEntries(buildWilderness(bridge.snapshot().worldSeed).villages));
+        if (!townModal) return;
         tradeNpc = null;
         dialogueOpen = false;
         inventoryOpen = false;

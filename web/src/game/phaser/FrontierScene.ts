@@ -49,7 +49,8 @@ import { ACT_I_MILESTONES } from '../quests/actIQuestChain';
 import {
   WARDEN_POSITION, NPC_POSITIONS, MERCHANT_ID, BLACKSMITH_ID
 } from '../world/npcs';
-import { getTownManifest, townEntry } from '../world/townManifest';
+import { getTownManifest, townEntry, type TownEntry } from '../world/townManifest';
+import { villageTownEntries, resolveRegionalTownEntry } from '../world/villageDialogue';
 
 const WIDTH = 2200;
 const HEIGHT = 1400;
@@ -92,6 +93,8 @@ export class FrontierScene extends Phaser.Scene {
   private renderedZone: ZoneId | null = null;
   private activeObstacles: readonly Obstacle[] = [];
   private activeStoryFeatures: readonly WildernessFeature[] = [];
+  private villageEntries: TownEntry[] = [];
+  private villageDecor: Phaser.GameObjects.Graphics[] = [];
   private readonly heldMovement = new HeldPointerMovement();
   private hoveredId: string | null = null;
   private interactableVisuals!: Phaser.GameObjects.Graphics;
@@ -332,7 +335,7 @@ export class FrontierScene extends Phaser.Scene {
       }))
     ];
     if (state.zone === 'wilderness') {
-      for (const entry of getTownManifest()) {
+      for (const entry of [...getTownManifest(),...this.villageEntries]) {
         targets.push({ kind: 'NPC', id: entry.id, position: entry.position,
           hitRadius: Math.max(24, entry.collisionRadius + 12) });
       }
@@ -1081,7 +1084,7 @@ export class FrontierScene extends Phaser.Scene {
         .strokeCircle(state.player.x, state.player.y, 27 + Math.sin(progress * 0.12) * 4);
     }
     if (state.zone === 'wilderness' && this.hoveredId) {
-      const npc = townEntry(this.hoveredId)?.position;
+      const npc = resolveRegionalTownEntry(this.hoveredId,this.villageEntries)?.position;
       if (npc) this.statusVisuals.lineStyle(2, 0xf3d49e, 0.86)
         .strokeCircle(npc.x, npc.y, 34);
     }
@@ -1561,6 +1564,16 @@ export class FrontierScene extends Phaser.Scene {
     this.renderedZone = zone;
     this.activeObstacles = layout.obstacles;
     this.activeStoryFeatures = wilderness?.features ?? [];
+    this.villageDecor.forEach(g=>g.destroy());
+    this.villageDecor = [];
+    this.villageEntries = villageTownEntries(wilderness?.villages);
+    for (const entry of this.villageEntries) {
+      const g=this.add.graphics().setPosition(entry.position.x,entry.position.y).setDepth(49);
+      g.fillStyle(0x10151d,.65).fillEllipse(0,12,34,12);
+      g.fillStyle(entry.role==='healer'?0x506d63:0x78614c).fillRoundedRect(-12,-19,24,35,5);
+      g.fillStyle(0xd6b995).fillCircle(0,-22,9);
+      this.villageDecor.push(g);
+    }
     if (zone === 'crypt') {
       this.paintCrypt(ground, worldSeed, layout.obstacles, crypt!.dungeon, crypt!.theme);
       return;

@@ -1,4 +1,22 @@
 {
+  "village": {
+    "north-village-healer": {
+      "name": "Léčitelka Radana",
+      "description": "Za 15 zlatých ti ošetřím zranění."
+    },
+    "north-village-civilian": {
+      "name": "Vesničan Jaromír",
+      "description": "Lesní průsmyky se mění. Drž se cesty, pokud nechceš zabloudit."
+    },
+    "east-village-blacksmith": {
+      "name": "Kovář Vít",
+      "description": "Kovárnu teprve připravuji. Zatím ti pomůže Odan v táboře."
+    },
+    "east-village-quest": {
+      "name": "Průzkumnice Milena",
+      "description": "Z dolů se dlouho nikdo nevrátil. Další výpravu zatím nechystáme."
+    }
+  },
   "dialogue": {
     "vesna": {
       "root": "Strážkyně Vesna se ohlédne ke zčernalým stromům za branou. Chceš znát příčinu zkázy?",

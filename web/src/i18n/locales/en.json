@@ -1,4 +1,22 @@
 {
+  "village": {
+    "north-village-healer": {
+      "name": "Healer Radana",
+      "description": "I can tend your wounds for 15 gold."
+    },
+    "north-village-civilian": {
+      "name": "Villager Jaromir",
+      "description": "The forest passes shift. Stay on the road if you do not want to lose your way."
+    },
+    "east-village-blacksmith": {
+      "name": "Blacksmith Vit",
+      "description": "My forge is not ready yet. Odan at the camp can help you for now."
+    },
+    "east-village-quest": {
+      "name": "Scout Milena",
+      "description": "No one has returned from the mines for a long time. We are not sending another expedition yet."
+    }
+  },
   "dialogue": {
     "vesna": {
       "root": "Warden Vesna looks toward the blackened trees beyond the gate. Do you want to know what started the blight?",
