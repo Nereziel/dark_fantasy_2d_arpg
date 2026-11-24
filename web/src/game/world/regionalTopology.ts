@@ -38,6 +38,18 @@ const OFFSETS:readonly Point[]=[
   {x:80,y:0},{x:-80,y:0},{x:0,y:80},{x:0,y:-80},
   {x:80,y:80},{x:-80,y:80},{x:80,y:-80},{x:-80,y:-80}
 ];
+// Only used when the original local placement fails. Search bounded
+// concentric 40-unit bands, keeping each village in its authored region.
+const FALLBACK_OFFSETS:readonly Point[][]=Array.from({length:4},(_,i)=>{
+  const radius=120+i*40;
+  const points:Point[]=[];
+  for(let y=-radius;y<=radius;y+=40)for(let x=-radius;x<=radius;x+=40){
+    const distance=Math.hypot(x,y);
+    if(distance>radius-40&&distance<=radius
+      &&!OFFSETS.some(p=>p.x===x&&p.y===y))points.push({x,y});
+  }
+  return points;
+});
 const finite=(p:Readonly<Point>)=>Number.isFinite(p.x)&&Number.isFinite(p.y);
 const dist=(a:Readonly<Point>,b:Readonly<Point>)=>Math.hypot(a.x-b.x,a.y-b.y);
 function hash(seed:number,id:string):number {
@@ -152,16 +164,21 @@ export function planActOneTopology(layout:WorldLayout,tiles:readonly TerrainTile
   const {seed,obstacles,camp}=layout;
   const settlements:RegionalSettlement[]=[{id:'camp',anchor:{...camp},position:{...camp},radius:165,nameKey:'region.camp'}];
   for(const spec of ANCHORS){
-    const rotation=hash(seed,spec.id)%OFFSETS.length;
+    const random=hash(seed,spec.id);
     let position:Point|undefined;
-    for(let i=0;i<OFFSETS.length;i++){
-      const offset=OFFSETS[(rotation+i)%OFFSETS.length]!;
-      const p={x:spec.position.x+offset.x,y:spec.position.y+offset.y};
-      if(!canOccupy(p,spec.radius+ACTOR_RADIUS,obstacles)
-        ||[...reserved,...sites.map(s=>s.position),...layout.encounterPositions]
-          .some(q=>dist(p,q)<spec.radius+24)
-        ||!safePath(camp,p,40,obstacles))continue;
-      position=p;break;
+    const protectedPoints=[...reserved,...sites.map(s=>s.position),...layout.encounterPositions];
+    for(const offsets of [OFFSETS,...FALLBACK_OFFSETS]){
+      const rotation=random%offsets.length;
+      for(let i=0;i<offsets.length;i++){
+        const offset=offsets[(rotation+i)%offsets.length]!;
+        const p={x:spec.position.x+offset.x,y:spec.position.y+offset.y};
+        if(!canOccupy(p,spec.radius+ACTOR_RADIUS,obstacles)
+          ||protectedPoints.some(q=>dist(p,q)<spec.radius+24)
+          ||settlements.some(s=>dist(p,s.position)<spec.radius+s.radius+24)
+          ||!safePath(camp,p,40,obstacles))continue;
+        position=p;break;
+      }
+      if(position)break;
     }
     if(!position)return {ok:false,reason:'settlement-blocked',id:spec.id};
     settlements.push({id:spec.id,anchor:{...spec.position},position,radius:spec.radius,nameKey:'region.'+spec.id});

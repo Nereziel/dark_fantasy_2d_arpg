@@ -140,7 +140,7 @@ function withSettlementStructures(world: WildernessRuntimeWorld): WildernessRunt
  * quest targets, events or props. Keep old roads for compatibility in this
  * migration slice; the regional graph is an additive shared road network.
  */
-function withRegionalTopology(world: WildernessRuntimeWorld): WildernessRuntimeWorld {
+function withRegionalTopology(world: WildernessRuntimeWorld, allowLandscape = true): WildernessRuntimeWorld {
   const { layout, terrain, features } = world;
   const { seed } = layout;
   const env = planEnvironmentObjects(seed,layout,features);
@@ -159,18 +159,19 @@ function withRegionalTopology(world: WildernessRuntimeWorld): WildernessRuntimeW
     sites.push({id:feature.id.replaceAll('.','-'),kind:feature.kind==='poi'?'clearing':'ruin',
       position:feature.position,access:'offroad'});
   }
-  const candidate=planRegionalLandscape(layout,terrain.tiles,sites,reserved,terrain.roads);
-  if(!candidate.ok)return world;
-  const unchanged=JSON.stringify(planEnvironmentObjects(seed,candidate.layout,features))===JSON.stringify(env)
+  const candidate=allowLandscape?planRegionalLandscape(layout,terrain.tiles,sites,reserved,terrain.roads):null;
+  const accepted=candidate?.ok
+    && JSON.stringify(planEnvironmentObjects(seed,candidate.layout,features))===JSON.stringify(env)
     && JSON.stringify(planWorldEvents(seed,candidate.layout,features))===JSON.stringify(events)
-    && terrain.roads.every(road=>!routeClear(road.points,layout.obstacles)||routeClear(road.points,candidate.layout.obstacles));
+    && terrain.roads.every(road=>!routeClear(road.points,layout.obstacles)||routeClear(road.points,candidate.layout.obstacles))
+      ?candidate:null;
   // Even if the macro landforms cannot be committed, retain a valid topology
   // on the original geometry. No fallback draws unchecked roads.
-  const topology=unchanged?candidate.topology:planActOneTopology(layout,terrain.tiles,sites,reserved);
+  const topology=accepted?accepted.topology:planActOneTopology(layout,terrain.tiles,sites,reserved);
   if(!topology.ok)return world;
-  const next=unchanged?candidate.layout:layout;
-  const forms=unchanged?candidate.forms:[];
-  const painted=unchanged?candidate.tiles:terrain.tiles;
+  const next=accepted?accepted.layout:layout;
+  const forms=accepted?accepted.forms:[];
+  const painted=accepted?accepted.tiles:terrain.tiles;
   // Existing chunk/map pipeline requires the road- prefix.
   const newRoads=topology.roads.map(road=>({...road,id:'road-'+road.id,
     fromId:road.kind==='trail'?'road-'+road.fromId:road.fromId}));
@@ -185,7 +186,7 @@ function withRegionalTopology(world: WildernessRuntimeWorld): WildernessRuntimeW
     return painted[i]??tile;
   });
   return {...world,layout:next,terrain:{...terrain,layout:next,roads,tiles},
-    region:{...topology,roads:newRoads,forms,usedLandscapeFallback:!unchanged||candidate.usedFallback}};
+    region:{...topology,roads:newRoads,forms,usedLandscapeFallback:!accepted||accepted.usedFallback}};
 }
 
 /** Populate the already connected regional clearings without changing any
@@ -222,7 +223,15 @@ const MAX_CACHED_WORLDS = 8;
 export function buildWilderness(seed: number): WildernessRuntimeWorld {
   const cached = recentWorlds.get(seed);
   if (cached) return structuredClone(cached);
-  const world = withVillagePopulation(withRegionalTopology(withSettlementStructures(generateWilderness(seed))));
+  const base=withSettlementStructures(generateWilderness(seed));
+  let world=withVillagePopulation(withRegionalTopology(base));
+  // Mandatory populated settlements outrank optional macro landforms.
+  // Retry at most once, keeping the better population and original world on
+  // a tie. Both proposals use the same seed and protected story geometry.
+  if((world.villages?.length??0)<2 && world.region?.forms.length){
+    const fallback=withVillagePopulation(withRegionalTopology(base,false));
+    if((fallback.villages?.length??0)>(world.villages?.length??0))world=fallback;
+  }
   if (recentWorlds.size >= MAX_CACHED_WORLDS) {
     recentWorlds.delete(recentWorlds.keys().next().value!);
   }

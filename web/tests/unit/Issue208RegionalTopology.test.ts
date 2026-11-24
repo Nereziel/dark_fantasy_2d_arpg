@@ -48,6 +48,25 @@ describe('Issue #208: first regional topology foundation',()=>{
     for(const site of sites)expect(canOccupy(site.position,ACTOR_RADIUS,world.obstacles)).toBe(true);
     expect(regionalRoadClear([CAMP,{x:1100,y:300}],40,[wall])).toBe(false);
   });
+  it('finds a nearby clearing outside the first anchor search when terrain covers it',()=>{
+    // Every original north anchor offset is covered or lacks the 90-unit
+    // clearing margin. The region immediately south remains accessible.
+    const wall={id:'north-ridge',x:920,y:0,width:400,height:340};
+    const world=layout(123,[wall]);
+    const plan=planActOneTopology(world,[],[]);
+    expect(plan.ok).toBe(true);
+    if(!plan.ok)throw Error(plan.reason+'/'+plan.id);
+    expect(plan.settlements.map(s=>s.id)).toEqual(['camp','north-village','east-village']);
+    const north=plan.settlements[1]!;
+    const shift=Math.hypot(north.position.x-north.anchor.x,north.position.y-north.anchor.y);
+    expect(shift).toBeGreaterThan(120);
+    expect(shift).toBeLessThanOrEqual(240);
+    expect(canOccupy(north.position,north.radius+ACTOR_RADIUS,world.obstacles)).toBe(true);
+    expect(plan.roads.filter(r=>r.kind==='trade')).toHaveLength(2);
+    expect(plan.roads.every(r=>regionalRoadClear(r.points,r.width,world.obstacles))).toBe(true);
+    expect(planActOneTopology(world,[],[])).toEqual(plan);
+    expect(world.obstacles).toEqual([wall]);
+  });
   it('returns an explicit failure for a disconnected world instead of inventing roads',()=>{
     const plan=planActOneTopology(layout(5,[{id:'barrier',x:650,y:0,width:140,height:1400}]),[],[]);
     expect(plan.ok).toBe(false);
