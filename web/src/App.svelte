@@ -401,7 +401,7 @@
         droppedGem = event.gemId;
         messageKey = 'gems.combatLoot';
       }
-      if (event.type === 'dungeonCleared' && playing) messageKey = 'dungeon.clearedToast';
+      if (event.type === 'dungeonCleared' && playing) messageKey = bridge.snapshot().dungeonId ? 'dungeon.optionalClearedToast' : 'dungeon.clearedToast';
       if (event.type === 'worldEventStarted' && playing) messageKey = 'worldEvents.started';
       if (event.type === 'worldEventCompleted' && playing) messageKey = 'worldEvents.completed';
       if (event.type === 'checkpointActivated' && playing) messageKey = 'respawn.checkpointActivated';
@@ -978,7 +978,7 @@
       </div>
     </main>
   {:else}
-    <main class="game-screen" data-world-seed={view.worldSeed} data-zone={view.zone}
+    <main class="game-screen" data-world-seed={view.worldSeed} data-zone={view.zone} data-dungeon-id={view.dungeonId}
       data-player-x={view.player.x} data-player-y={view.player.y}
       data-hold-position={view.holdPosition}>
       <div class="game-play-area">
@@ -989,7 +989,7 @@
 
       <header class="game-header" inert={modalKind !== ''}>
         <div class="brand-mark">AETHER <span>&amp;</span> RUIN</div>
-        <div class="zone-name">{view.zone === 'crypt' ? $t('dungeon.name')
+        <div class="zone-name">{view.zone === 'crypt' ? $t(view.dungeonId==='mine'?'dungeon.mineName':view.dungeonId==='cave'?'dungeon.caveName':'dungeon.name')
           : Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS
           ? $t('hud.camp') : $t('hud.location')}</div>
         <div class="top-actions">
