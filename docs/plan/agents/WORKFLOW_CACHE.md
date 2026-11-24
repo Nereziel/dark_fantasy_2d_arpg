@@ -5,10 +5,12 @@ Tento postup platí pro další agentní vlny. Nemění existující historické
 ## GitHub Actions
 
 - `quality.yml` je jediný validační workflow pro PR i změny v `main`; **job `verify` zachovává existující název required checku**.
-- `pull_request` vždy spouští check, unit testy, build, Chromium E2E a referenční HTML test. PR nikdy nedeployuje.
+- `build` provede check, všechny unit testy, jediný produkční build a kontrolu historického HTML dle scope; uploadne stejný `web/dist` pro další joby. `pull_request` spustí kompletní sadu, PR nikdy nedeployuje.
+- Chromium se dělí na dvě paralelní části běžných testů a samostatný průchod Aktu I (`--grep 'natural first Act I loop:'`). Komplementární `--grep-invert` a sharding zachovají úplné pokrytí, včetně touch-loot scénáře ze stejného souboru. Průchod Aktu I běží bez automatického retry, takže se jedna chyba neopakuje po celém průchodu. Běžné testy zachovávají svůj dosavadní retry.
+- `verify` je povinná souhrnná brána: vyžaduje úspěch buildu a všech tří browser lanes. V případě selhání používej **Re-run failed jobs**, který znovu nespustí úspěšné části a využije výstup přesného buildu v témže runu. Trace neúspěšných browser testů jsou k dispozici jako artefakty jednotlivých lanes. Lokální cílený průchod: `cd web && npm run test:e2e -- --grep 'natural first Act I loop:' --workers=1 --retries=0` (po buildu).
 - `push` do `main` validuje změny v `web/**`, `tests/**`, quality workflow a sdílených Actions. Publikace nastane při změně vstupů hry (`web/src`, `web/public`, hlavních konfigurací/dependencies nebo `.github/actions`) či samotného `quality.yml`. Dokumentace a testy bez změny hry nezpůsobí publikaci.
 - `workflow_dispatch` provede plnou validaci a v případě úspěchu znovu publikuje.
-- `verify` ověří base path a nahraje `web/dist` jako Pages balíček až po úspěšném E2E. Název obsahuje SHA a číslo pokusu. Job `deploy` dostane přesný název z výstupu `verify` a publikuje jej pomocí `actions/deploy-pages`. Při opakování pouze nasazovacího jobu se použije již ověřený balíček.
+- `verify` stáhne přesný produkční balíček z `build`, ověří base path a nahraje `web/dist` jako Pages balíček až po úspěchu všech E2E lanes. Název obsahuje SHA a číslo pokusu. Job `deploy` dostane přesný název z výstupu `verify` a publikuje jej pomocí `actions/deploy-pages`. Při opakování pouze nasazovacího jobu se použije již ověřený balíček.
 - `setup-node` používá npm download cache podle `web/package-lock.json`; `npm ci` stále instaluje soubory z důvěryhodného lockfile. **Nekešovat a nesdílet `node_modules` mezi worktree**.
 - Pro headless Chromium se instaluje jen shell (`npx playwright install --only-shell chromium`). Pokud budoucí E2E začnou vyžadovat headed browser, vraťte plnou instalaci.
 - Při chybějícím push `before` commitu se nasazení raději povolí (fail-safe směrem k publikaci), stále až po GREEN. Cache ani artifact se nepoužívají jako důkaz úspěchu jiného SHA.

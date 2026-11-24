@@ -28,11 +28,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  build:
     runs-on: ubuntu-24.04
     outputs:
       publish: ${{ steps.scope.outputs.publish }}
-      pages_artifact: pages-${{ github.sha }}-${{ github.run_attempt }}
+      bundle: game-dist-${{ github.sha }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -93,14 +93,6 @@ jobs:
         working-directory: web
         run: npm run build
 
-      - name: Install headless Chromium
-        working-directory: web
-        run: npx playwright install --only-shell chromium
-
-      - name: Browser tests
-        working-directory: web
-        run: npm run test:e2e
-
       - name: Check whether the archived HTML reference changed
         id: legacy
         shell: bash
@@ -137,8 +129,104 @@ jobs:
         if: steps.legacy.outputs.run == 'true'
         run: node tests/site.test.mjs
 
+      # One production build is shared by every browser lane, not rebuilt.
+      - name: Upload production bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-dist-${{ github.sha }}-${{ github.run_attempt }}
+          path: web/dist
+          if-no-files-found: error
+          retention-days: 3
+
+  browser:
+    name: Browser (${{ matrix.lane }})
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - lane: quick-1
+            shard: 1/2
+          - lane: quick-2
+            shard: 2/2
+          - lane: act-i
+            shard: ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: web
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Download exact production bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.bundle }}
+          path: web/dist
+
+      - name: Install headless Chromium
+        working-directory: web
+        run: npx playwright install --only-shell chromium
+
+      - name: Browser tests
+        working-directory: web
+        env:
+          LANE: ${{ matrix.lane }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          # Complementary filters: every test runs exactly once across the
+          # lanes. The touch-loot case in the same file stays in quick tests.
+          if [[ "$LANE" == "act-i" ]]; then
+            npm run test:e2e -- --grep 'natural first Act I loop:' --workers=1 --retries=0
+          else
+            npm run test:e2e -- --grep-invert 'natural first Act I loop:' --shard="$SHARD"
+          fi
+
+      - name: Retain failing browser traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure-${{ matrix.lane }}-${{ github.run_attempt }}
+          path: web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Preserve the required check name. No skipped/failed lane can publish.
+  verify:
+    needs: [build, browser]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    outputs:
+      publish: ${{ needs.build.outputs.publish }}
+      pages_artifact: pages-${{ github.sha }}-${{ github.run_attempt }}
+    steps:
+      - name: Require all validation lanes
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+        run: |
+          test "$BUILD_RESULT" = success
+          test "$BROWSER_RESULT" = success
+
+      - name: Download verified production bundle
+        if: needs.build.outputs.publish == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.bundle }}
+          path: web/dist
+
       - name: Verify Pages base path
-        if: steps.scope.outputs.publish == 'true'
+        if: needs.build.outputs.publish == 'true'
         run: |
           test -s web/dist/index.html
           grep -q '/dark_fantasy_2d_arpg/' web/dist/index.html
@@ -146,7 +234,7 @@ jobs:
       # Publish the verified bundle once. Re-running only deploy reuses this
       # exact job output and never creates a duplicate Pages artifact.
       - name: Upload verified Pages artifact
-        if: steps.scope.outputs.publish == 'true'
+        if: needs.build.outputs.publish == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           name: pages-${{ github.sha }}-${{ github.run_attempt }}
