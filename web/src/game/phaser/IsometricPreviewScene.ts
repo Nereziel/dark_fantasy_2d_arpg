@@ -236,7 +236,9 @@ export class IsometricPreviewScene extends Phaser.Scene {
       const p = project(state.player);
       this.cameras.main.centerOn(p.x, p.y);
     }
-    if (this.held.active && this.input.activePointer.isDown) this.hover(this.input.activePointer);
+    if (this.held.active && this.input.activePointer.isDown && state.player.alive) {
+      this.hover(this.input.activePointer);
+    }
     else if (this.held.active) this.release();
     const hero = project(state.player);
     this.anchor.setPosition(hero.x, hero.y);
