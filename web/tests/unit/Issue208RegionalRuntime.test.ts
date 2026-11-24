@@ -8,6 +8,7 @@ import { ACTOR_RADIUS, canOccupy, findPath } from '../../src/game/world/navigati
 describe('Issue #208: shared regional runtime',()=>{
   it('adds real regional roads on representative seeds without disconnecting story targets',()=>{
     let connected=0;
+    const populated=new Set<string>();
     for(const seed of [0,1,123,0xffffffff]){
       const world=buildWilderness(seed);
       expect(world.terrain.layout.obstacles).toEqual(world.layout.obstacles);
@@ -26,6 +27,7 @@ describe('Issue #208: shared regional runtime',()=>{
         expect(findPath(world.layout.camp,point,ACTOR_RADIUS,world.layout.obstacles).length).toBeGreaterThan(0);
       }
       for(const village of world.villages??[]){
+        populated.add(village.id);
         expect(village.residents).toHaveLength(2);
         expect(village.structures.length).toBeGreaterThan(0);
         for(const resident of village.residents){
@@ -39,5 +41,7 @@ describe('Issue #208: shared regional runtime',()=>{
       expect(index.chunks.some(c=>c.roads.some(r=>r.roadId.startsWith('road-trade-')))).toBe(true);
     }
     expect(connected).toBeGreaterThan(0);
+    // Do not allow an always-empty village fallback to pass integration.
+    expect(populated.size).toBeGreaterThan(0);
   },60000);
 });
