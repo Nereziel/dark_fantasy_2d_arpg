@@ -23,6 +23,7 @@ import type { IsometricOccluder } from './isometricOcclusion';
 import { obstacleMaterial, planObstacleArt, type ObstacleMaterial } from './isometricProps';
 import { planBuildingArt } from './isometricBuildings';
 import type { SettlementStructure } from '../world/settlementStructures';
+import type { VillageResident } from '../world/villagePopulation';
 import { heroCutaway } from './isometricCutaway';
 import { activeFacingAim, directionalPixelView, resolveActorFacing, type DirectionalPixelView } from './isometricActorFacing';
 import type { IsometricFacing } from './isometricProjection';
@@ -55,6 +56,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private healthBars!: Phaser.GameObjects.Graphics;
   private anchor!: Phaser.GameObjects.Graphics;
   private label!: Phaser.GameObjects.Text;
+  private villageResidents: readonly VillageResident[] = [];
   private readonly walls: Phaser.GameObjects.Graphics[] = [];
   private readonly occluders: IsometricOccluder[] = [];
   private opaqueOccluders: readonly IsometricOccluder[] = [];
@@ -141,10 +143,12 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.sprites.clear();
     this.lastEnemyPositions.clear();
     this.facingMemory.clear();
+    this.villageResidents = [];
     const buildings = new Map<string, SettlementStructure>();
     if (state.zone === 'wilderness') {
       const world = buildWilderness(state.worldSeed);
       for (const structure of world.structures ?? []) buildings.set(structure.obstacle.id, structure);
+      this.villageResidents = (world.villages ?? []).flatMap(v=>v.residents);
       this.obstacles = world.layout.obstacles;
       this.ground.rebuild(wildernessGroundLayout(world.terrain), ORIGIN);
     } else {
@@ -521,6 +525,15 @@ export class IsometricPreviewScene extends Phaser.Scene {
         const color = t.kind === 'NPC' ? 0xb0986c : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
         this.entity(key, t.position, color, t.bodyHeight > 0);
       }
+    }
+    // Planned village residents are visible but deliberately not clickable NPCs.
+    // Their service actions and dialogue are not connected yet.
+    for (const resident of this.villageResidents) {
+      const key = 'resident/' + resident.id;
+      visible.add(key);
+      const actor: PixelActor = resident.role === 'healer' ? 'MAGE' : 'WARRIOR';
+      this.sprite(key, actor, resident.position, 'idle', Math.floor(this.time.now / 220) % PIXEL_ANIMATION_FRAMES);
+      this.sprites.get(key)?.setTint(resident.role === 'blacksmith' ? 0xb7a18b : 0xd1c8b0);
     }
     // Friendly allies use the same depth/cleanup rules as the other actors.
     for (const summon of state.summons ?? []) {

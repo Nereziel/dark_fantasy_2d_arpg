@@ -8,6 +8,7 @@ import {
 } from './navigation';
 import { getTownManifest } from './townManifest';
 import { WORLD_OBJECTS } from './interactables';
+import { regionalRoadClear } from './regionalTopology';
 
 /**
  * Seed policy: accept only integral uint32 values [0, 0xffffffff], including 0.
@@ -370,24 +371,46 @@ export function validateWildernessTerrain(value: unknown): WildernessValidationI
     }
   }
   const seenRoads = new Set<string>();
+  const validRegional: TerrainRoad[] = [];
+  const samePoint = (a: Point,b: Point) => a.x===b.x && a.y===b.y;
+  const regional = (id: string) => /^road-(trade|trail)-[a-z0-9_-]+$/.test(id);
   for (const road of world.roads) {
+    const isRegional = typeof road?.id === 'string' && regional(road.id);
     if (!road || typeof road.id !== 'string' || !/^road-[a-z0-9_-]+$/.test(road.id)
       || seenRoads.has(road.id) || !Array.isArray(road.points)
       || !finitePoint(road.from) || !finitePoint(road.to)
-      || !Number.isFinite(road.width) || road.width < ACTOR_RADIUS * 2
-      || (!(road.from.x === CAMP.x && road.from.y === CAMP.y)
+      || !Number.isFinite(road.width) || road.width < (isRegional && road.id.startsWith('road-trail-') ? 24 : ACTOR_RADIUS * 2)
+      || (!isRegional && !samePoint(road.from,CAMP)
         && !world.roads.some(main => main && main !== road && main.from?.x === CAMP.x
           && main.from.y === CAMP.y && Array.isArray(main.points)
           && [road.from, road.to].every(junction => main.points.some(
             point => point?.x === junction.x && point.y === junction.y))))
       || !road.points.every(finitePoint)
-      || !road.points.length
-      || road.points[0]!.x !== road.from.x || road.points[0]!.y !== road.from.y
-      || road.points.at(-1)!.x !== road.to.x || road.points.at(-1)!.y !== road.to.y
-      || !routeClear(road.points, walls)) {
+      || road.points.length < 2
+      || !samePoint(road.points[0]!,road.from) || !samePoint(road.points.at(-1)!,road.to)
+      || (isRegional ? !regionalRoadClear(road.points,road.width,walls) : !routeClear(road.points,walls))) {
       add('invalidRoad', road?.id);
-    }
+    } else if (isRegional) validRegional.push(road);
     if (road && typeof road.id === 'string') seenRoads.add(road.id);
+  }
+  // A valid isolated segment is not a connected trade network. Flood only
+  // trade endpoints from camp; branch trails may attach to any point on a
+  // connected trade segment (including interior junctions).
+  const trade = validRegional.filter(r=>r.id.startsWith('road-trade-'));
+  const connected: TerrainRoad[] = [];
+  const junctions: Point[] = [CAMP];
+  for (let i=0;i<trade.length;i++) {
+    let changed=false;
+    for (const road of trade) {
+      if (connected.includes(road) || !junctions.some(p=>samePoint(p,road.from)||samePoint(p,road.to))) continue;
+      connected.push(road);junctions.push(road.from,road.to);changed=true;
+    }
+    if(!changed)break;
+  }
+  for(const road of trade)if(!connected.includes(road))add('invalidRoad',road.id);
+  for(const road of validRegional.filter(r=>r.id.startsWith('road-trail-'))) {
+    if(!connected.some(main=>main.points.slice(1).some((p,i)=>
+      distanceToSegmentSquared(road.from,main.points[i]!,p)<=1e-8)))add('invalidRoad',road.id);
   }
   for (const target of targets(encounters.filter(finitePoint))) {
     if (!world.roads.some(road => road && road.id === 'road-' + target.id

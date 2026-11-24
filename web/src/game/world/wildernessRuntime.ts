@@ -12,6 +12,9 @@ import { planWorldEvents } from './worldEvents';
 import { getTownManifest } from './townManifest';
 import { WORLD_OBJECTS } from './interactables';
 import { planSettlementStructures, type SettlementStructure, type StructureSite } from './settlementStructures';
+import { planRegionalLandscape, type RegionalLandform } from './regionalLandscape';
+import { planActOneTopology, regionalRoadClear, type RegionalSite, type RegionalTopology } from './regionalTopology';
+import { planVillagePopulation, type VillagePopulation } from './villagePopulation';
 
 const STORY_ROAD_FEATURES: ReadonlySet<string> = new Set([
   'act1.corruption_site', 'act1.corrupted_forest', 'act1.abandoned_graveyard'
@@ -69,6 +72,11 @@ export interface WildernessRuntimeWorld {
   usedFeatureFallback: boolean;
   /** Optional for compatibility with existing fixture world manifests. */
   structures?: readonly SettlementStructure[];
+  villages?: readonly VillagePopulation[];
+  region?: Extract<RegionalTopology,{ok:true}> & {
+    readonly forms: readonly RegionalLandform[];
+    readonly usedLandscapeFallback: boolean;
+  };
 }
 
 /** A failed optional forest generation never removes critical quest destinations. */
@@ -128,6 +136,85 @@ function withSettlementStructures(world: WildernessRuntimeWorld): WildernessRunt
   return {...world,layout:next,terrain:{...terrain,layout:next},structures:plan.structures};
 }
 
+/** Extend the validated legacy runtime without altering previously placed
+ * quest targets, events or props. Keep old roads for compatibility in this
+ * migration slice; the regional graph is an additive shared road network.
+ */
+function withRegionalTopology(world: WildernessRuntimeWorld): WildernessRuntimeWorld {
+  const { layout, terrain, features } = world;
+  const { seed } = layout;
+  const env = planEnvironmentObjects(seed,layout,features);
+  const events = planWorldEvents(seed,layout,features);
+  const reserved = [
+    ...getTownManifest().map(n=>n.position), ...WORLD_OBJECTS.map(o=>o.position),
+    ...features.map(f=>f.position), ...env.map(o=>o.position),
+    ...events.map(e=>e.position), ...events.flatMap(e=>e.enemySpawns.map(s=>s.position)),
+    ...(world.structures??[]).map(s=>s.approach)
+  ];
+  const sites: RegionalSite[] = (world.structures??[])
+    .filter(s=>s.kind==='cabin'||s.kind==='mine')
+    .map(s=>({id:s.id.replaceAll('.','-'),kind:s.kind==='mine'?'mine':'cabin',
+      position:s.approach,access:'trail'}));
+  for (const feature of features.filter(f=>f.kind==='poi'||f.kind==='treasure')) {
+    sites.push({id:feature.id.replaceAll('.','-'),kind:feature.kind==='poi'?'clearing':'ruin',
+      position:feature.position,access:'offroad'});
+  }
+  const candidate=planRegionalLandscape(layout,terrain.tiles,sites,reserved,terrain.roads);
+  if(!candidate.ok)return world;
+  const unchanged=JSON.stringify(planEnvironmentObjects(seed,candidate.layout,features))===JSON.stringify(env)
+    && JSON.stringify(planWorldEvents(seed,candidate.layout,features))===JSON.stringify(events)
+    && terrain.roads.every(road=>!routeClear(road.points,layout.obstacles)||routeClear(road.points,candidate.layout.obstacles));
+  // Even if the macro landforms cannot be committed, retain a valid topology
+  // on the original geometry. No fallback draws unchecked roads.
+  const topology=unchanged?candidate.topology:planActOneTopology(layout,terrain.tiles,sites,reserved);
+  if(!topology.ok)return world;
+  const next=unchanged?candidate.layout:layout;
+  const forms=unchanged?candidate.forms:[];
+  const painted=unchanged?candidate.tiles:terrain.tiles;
+  // Existing chunk/map pipeline requires the road- prefix.
+  const newRoads=topology.roads.map(road=>({...road,id:'road-'+road.id,
+    fromId:road.kind==='trail'?'road-'+road.fromId:road.fromId}));
+  if(newRoads.some(road=>!regionalRoadClear(road.points,road.width,next.obstacles)))return world;
+  const roads=[...terrain.roads,...newRoads];
+  const marked=makeWildernessTiles(seed,roads);
+  const tiles=marked.map((tile,i)=>{
+    const center={x:tile.x+tile.width/2,y:tile.y+tile.height/2};
+    if(topology.settlements.some(s=>Math.hypot(center.x-s.position.x,center.y-s.position.y)<=s.radius))
+      return {...tile,terrainId:'town_clearing' as const,variant:0};
+    if(tile.terrainId==='dirt_road'||tile.terrainId==='town_clearing')return tile;
+    return painted[i]??tile;
+  });
+  return {...world,layout:next,terrain:{...terrain,layout:next,roads,tiles},
+    region:{...topology,roads:newRoads,forms,usedLandscapeFallback:!unchanged||candidate.usedFallback}};
+}
+
+/** Populate the already connected regional clearings without changing any
+ * quest or existing service positions. Resident capabilities remain planned.
+ */
+function withVillagePopulation(world: WildernessRuntimeWorld): WildernessRuntimeWorld {
+  if(!world.region)return world;
+  const {layout,terrain,features}=world;
+  const seed=layout.seed;
+  const env=planEnvironmentObjects(seed,layout,features);
+  const events=planWorldEvents(seed,layout,features);
+  const reserved=[
+    ...getTownManifest().map(n=>n.position),...WORLD_OBJECTS.map(o=>o.position),
+    ...features.map(f=>f.position),...env.map(o=>o.position),
+    ...events.map(e=>e.position),...events.flatMap(e=>e.enemySpawns.map(s=>s.position)),
+    ...(world.structures??[]).map(s=>s.approach),
+    ...world.region.forms.flatMap(f=>f.pass?[f.pass]:[])
+  ];
+  const plan=planVillagePopulation(layout,world.region.settlements,terrain.roads,reserved);
+  const next:WorldLayout={...layout,obstacles:[...plan.obstacles]};
+  if(JSON.stringify(planEnvironmentObjects(seed,next,features))!==JSON.stringify(env)
+    ||JSON.stringify(planWorldEvents(seed,next,features))!==JSON.stringify(events)
+    ||terrain.roads.some(r=>routeClear(r.points,layout.obstacles)&&!routeClear(r.points,next.obstacles))
+    ||world.region.forms.some(f=>f.pass&&!canOccupy(f.pass,42,next.obstacles)))
+    return {...world,villages:[]};
+  return {...world,layout:next,terrain:{...terrain,layout:next},villages:plan.villages,
+    structures:[...(world.structures??[]),...plan.villages.flatMap(v=>v.structures)]};
+}
+
 const recentWorlds = new Map<number, WildernessRuntimeWorld>();
 const MAX_CACHED_WORLDS = 8;
 
@@ -135,7 +222,7 @@ const MAX_CACHED_WORLDS = 8;
 export function buildWilderness(seed: number): WildernessRuntimeWorld {
   const cached = recentWorlds.get(seed);
   if (cached) return structuredClone(cached);
-  const world = withSettlementStructures(generateWilderness(seed));
+  const world = withVillagePopulation(withRegionalTopology(withSettlementStructures(generateWilderness(seed))));
   if (recentWorlds.size >= MAX_CACHED_WORLDS) {
     recentWorlds.delete(recentWorlds.keys().next().value!);
   }
