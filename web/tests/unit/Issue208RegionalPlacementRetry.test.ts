@@ -22,8 +22,9 @@ vi.mock('../../src/game/world/villagePopulation',async original=>{
 });
 
 describe('Issue #208: alternate regional placement',()=>{
-  it('fully populates the seven reproducible incomplete seeds from CI 45482524485',()=>{
-    const seeds=[15838,23757,63352,79190,134623,142542,158380];
+  it('fully populates all known incomplete seeds from baseline and extended CI',()=>{
+    const seeds=[15838,23757,63352,79190,134623,142542,158380,
+      1100741,3040896,5361163,6976639];
     const incomplete:number[]=[];
     const topology=vi.mocked(planActOneTopology);
     const structures=vi.mocked(planSettlementStructures);
@@ -52,7 +53,7 @@ describe('Issue #208: alternate regional placement',()=>{
                 ||(Math.hypot(p.x-candidateLayout.camp.x,p.y-candidateLayout.camp.y)>=1
                   &&!findPath(candidateLayout.camp,p,ACTOR_RADIUS,candidateLayout.obstacles).length))
             :[];
-          return {sites:sites.map(q=>q.id),count,unreachable};
+          return {sites:sites.map(q=>({id:q.id,anchor:q.anchor})),count,unreachable};
         });
         populationAttempts.push({anchors:settlements.map(s=>({id:s.id,p:s.position})),
           roads:roads.length,populated:result.villages.map(v=>v.id),skipped:result.skipped,

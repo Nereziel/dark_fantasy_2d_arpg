@@ -64,6 +64,42 @@ function nearbyAnchor(anchor: Point, obstacles: readonly Obstacle[]): Point | un
     .find(point => canOccupy(point, ACTOR_RADIUS + 4, obstacles));
 }
 
+/** When no authored section fits, derive a real branch from a validated
+ * story path. No new obstacles or unchecked straight lines are introduced. */
+function fallbackTrail(layout:WorldLayout,site:Point):{
+  roads:TerrainRoad[];edgeCandidates:Obstacle[];
+}|null {
+  const {camp,obstacles}=layout;
+  const main=joinRoute([camp,site],obstacles);
+  if(!main)return null;
+  const segments=main.slice(1).map((b,i)=>{
+    const a=main[i]!;
+    return {a,b,i,length:Math.hypot(b.x-a.x,b.y-a.y)};
+  }).sort((a,b)=>b.length-a.length||a.i-b.i);
+  const sign=layout.seed%2===0?1:-1;
+  for(const {a,b,i,length} of segments){
+    if(length<100)continue;
+    const at=(t:number):Point=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});
+    const entrance=at(.2),exit=at(.8),mid=at(.5);
+    for(const distance of [70,110,160,210]){
+      for(const direction of [sign,-sign]){
+        const detour={x:Math.round(mid.x-(b.y-a.y)/length*distance*direction),
+          y:Math.round(mid.y+(b.x-a.x)/length*distance*direction)};
+        if(!canOccupy(detour,ACTOR_RADIUS+4,obstacles))continue;
+        const side=joinRoute([entrance,detour,exit],obstacles);
+        if(!side)continue;
+        const points=[...main.slice(0,i+1),entrance,exit,...main.slice(i+1)];
+        if(!routeClear(points,obstacles)||points.some(p=>p.x===detour.x&&p.y===detour.y))continue;
+        return {roads:[
+          {id:CORRUPTION_TRAIL_ID,from:{...camp},to:{...site},width:46,points},
+          {id:FOREST_SIDE_TRAIL_ID,from:entrance,to:exit,width:38,points:side}
+        ],edgeCandidates:[]};
+      }
+    }
+  }
+  return null;
+}
+
 export function planForestTrail(layout: WorldLayout, site: Point): {
   roads: TerrainRoad[];
   edgeCandidates: Obstacle[];
@@ -88,5 +124,5 @@ export function planForestTrail(layout: WorldLayout, site: Point): {
       edgeCandidates: section.edges.map((edge, i) => ({ ...edge, id: `trail-edge-${section.id}-${i}` }))
     };
   }
-  return null;
+  return fallbackTrail(layout,site);
 }

@@ -61,6 +61,25 @@ A failed strict sweep reports the incomplete seeds and a replay command.
 This is sampled evidence, not a mathematical guarantee across all uint32 seeds.
 The replay includes the fixed boundary samples as in the original harness.
 
+## Extended GitHub Actions sweep
+
+The dedicated `.github/workflows/act1-seed-sweep.yml` workflow runs when
+that workflow changes in a PR, or manually using **Actions → Act I extended
+seed sweep → Run workflow** after it is merged. It is not added to the
+normal per-PR acceptance job.
+
+Four independent shards use start seeds 0, 1979750, 3959500 and 5939250,
+each with count 250 and strict village acceptance enabled. This covers
+1000 distinct arithmetic seeds plus the fixed boundary samples (replayed
+in each shard). Fail-fast is disabled so one failing shard does not cancel
+the remaining reports. Logs are uploaded even when a shard fails, with
+seven-day retention; a nonzero test exit remains a failed CI job.
+
+The extended sweep is sampled QA, not exhaustive uint32 validation.
+Wilderness invariant failures are collected per seed before the shard fails.
+The coverage count excludes invariant failures as well as missing villages.
+A successful run requires every shard to finish successfully.
+
 ## Scope and future acts
 
 **This PR is the Act I subset of Issue #113, not the full Prompt 58 acceptance.**

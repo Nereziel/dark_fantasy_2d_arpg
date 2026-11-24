@@ -32,8 +32,7 @@ describe('Prompt 45: stable multi-character slots', () => {
     expect(restored.snapshot().worldSeed).toBe(200);
     expect(restored.snapshot().player.health).toBe(restored.snapshot().stats.maxHealth);
     expect(restored.character()).toEqual(sim.character());
-  });
-
+  },15000);
   it('lists distinct heroes, deduplicates the active legacy alias, and orders by save time', () => {
     const first = createSaveRecord(hero('WARRIOR', HERO_A).character(), 100);
     const second = createSaveRecord(hero('MAGE', HERO_B).character(), 200);

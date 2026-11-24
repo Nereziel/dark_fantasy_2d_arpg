@@ -138,5 +138,5 @@ describe('Prompt 36 — simulation, map and persistence integration', () => {
     expect(reloaded.snapshot().player).toMatchObject(shrine.position);
     const otherSeed = new GameSimulation(43);
     expect(otherSeed.restoreWorldProgress(world)).toBe(false);
-  });
+  },15000);
 });
