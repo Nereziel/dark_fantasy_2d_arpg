@@ -833,6 +833,15 @@
     "noForgeable": "Equip a weapon or armor in your inventory, then return to the blacksmith."
   },
   "dungeon": {
+    "mineName": "Abandoned Mine",
+    "caveName": "Forest Cave",
+    "optionalGuards": "Dungeon guardians",
+    "optionalBoss": "Dungeon ruler",
+    "optionalBossHint": "Defeat the ruler and its guardians.",
+    "optionalCleared": "Dungeon cleared",
+    "optionalClearedHint": "Rewards can only be earned once in this world.",
+    "optionalReturn": "Return to entrance",
+    "optionalClearedToast": "Dungeon cleared.",
     "name": "Crypt of the Hollow Crown",
     "gateHint": "A sealed crypt lies beyond the camp. Enter and purge its darkness.",
     "enter": "Enter the crypt",
