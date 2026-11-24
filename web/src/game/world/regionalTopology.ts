@@ -40,7 +40,7 @@ const OFFSETS:readonly Point[]=[
 ];
 // Only used when the original local placement fails. Search bounded
 // concentric 40-unit bands, keeping each village in its authored region.
-const FALLBACK_OFFSETS:readonly Point[][]=Array.from({length:4},(_,i)=>{
+const FALLBACK_OFFSETS:readonly Point[][]=Array.from({length:8},(_,i)=>{
   const radius=120+i*40;
   const points:Point[]=[];
   for(let y=-radius;y<=radius;y+=40)for(let x=-radius;x<=radius;x+=40){
@@ -171,7 +171,14 @@ export function planActOneTopology(layout:WorldLayout,tiles:readonly TerrainTile
     const random=hash(seed,spec.id);
     let position:Point|undefined;
     const protectedPoints=[...reserved,...sites.map(s=>s.position),...layout.encounterPositions];
-    for(const offsets of [OFFSETS,...FALLBACK_OFFSETS]){
+    // Each retry first explores a different radial band. Merely rotating
+    // the nearest band could repeatedly return equivalent unusable sites.
+    // Attempt zero preserves the historical search order, widening only
+    // after every original candidate fails. The maximum displacement is 400.
+    const bands=[OFFSETS,...FALLBACK_OFFSETS];
+    const preferred=placementAttempt===0?0:Math.min(placementAttempt,bands.length-1);
+    const ordered=[bands[preferred]!,...bands.filter((_,i)=>i!==preferred)];
+    for(const offsets of ordered){
       const rotation=random%offsets.length;
       for(let i=0;i<offsets.length;i++){
         const offset=offsets[(rotation+i)%offsets.length]!;

@@ -157,7 +157,10 @@ function spawnSafe(position:Point,feature:WildernessFeature,layout:WorldLayout,
     || already.some(e=>distance(position,e.position)<ACTOR_RADIUS*2)) return false;
   if (all.some(f=>f.mandatory
     && distance(position,f.position)<=f.radius+20)) return false;
-  return findPath(feature.position,position,ACTOR_RADIUS,layout.obstacles).length>0;
+  // A locally reachable spawn can still be inaccessible from the camp
+  // in the authoritative navigation grid. Preserve both route contracts.
+  return findPath(feature.position,position,ACTOR_RADIUS,layout.obstacles).length>0
+    && findPath(layout.camp,position,ACTOR_RADIUS,layout.obstacles).length>0;
 }
 /** Stable per-seed event choices. Invalid layouts return no events, never a risky fallback. */
 export function planWorldEvents(seed:number,layout:Readonly<WorldLayout>,
