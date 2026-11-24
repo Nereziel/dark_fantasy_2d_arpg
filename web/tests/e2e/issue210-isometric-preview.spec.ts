@@ -11,6 +11,8 @@ test('isometric preview boots, accepts a pointer and keeps the map controls', as
   await expect(canvas).toBeVisible();
   // A successful textured ground rebuild must register every bounded chunk.
   await expect(canvas).toHaveAttribute('data-ground-chunks', '24');
+  await expect(canvas).toHaveAttribute('data-prop-materials', /(?:^|,)ruin(?:,|$)/);
+  await expect(canvas).toHaveAttribute('data-prop-materials', /(?:^|,)timber(?:,|$)/);
   const player = page.locator('[data-minimap="active"] [data-map-marker="player"] circle').first();
   await expect(player).toBeVisible();
   const initial = { x: Number(await player.getAttribute('cx')), y: Number(await player.getAttribute('cy')) };
