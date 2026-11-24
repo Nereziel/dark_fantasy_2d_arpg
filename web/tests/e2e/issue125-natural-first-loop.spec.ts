@@ -385,6 +385,9 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
   const dungeon = page.locator('.dungeon-panel');
   const deadline = Date.now() + timeoutMs;
   let lastTargetAt = 0;
+  let lastProgressAt = Date.now();
+  let previousRoster = '';
+  const game = page.locator('.game-screen');
   while (Date.now() < deadline) {
     const quest = await journal.innerText();
     const chamber = await dungeon.innerText();
@@ -413,6 +416,20 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
         try { await shield.click({ timeout: 1_500 }); }
         catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
       }
+    }
+    // A real boss phase may take time, but a minute without ANY visible
+    // combat progress indicates a stuck approach or attack, not slow DPS.
+    // Fail the same acceptance gate early; do not advance or skip the fight.
+    const progress = (await roster.innerText()).replaceAll('\n', ' ');
+    if (progress !== previousRoster) {
+      previousRoster = progress;
+      lastProgressAt = Date.now();
+    } else if (Date.now() - lastProgressAt >= 60_000) {
+      throw new Error('Natural crypt battle stalled for 60s; seed='
+        + await game.getAttribute('data-world-seed') + '; player='
+        + await game.getAttribute('data-player-x') + ','
+        + await game.getAttribute('data-player-y') + '; roster='
+        + progress + '; dungeon=' + chamber);
     }
     const live = roster.locator('button:not([disabled])');
     const kings = live.filter({ hasText: 'The Hollow King' });
@@ -495,7 +512,10 @@ async function defeatMorrowNaturally(page: Page, timeoutMs: number): Promise<voi
 test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, equip, turn-in', async ({ page }) => {
   // Continuous natural run: real first quest, corruption, boar hunt, graveyard,
   // then a fresh real Save/Load proving the unique Morrow encounter persists.
-  test.setTimeout(1_350_000);
+  test.setTimeout(900_000);
+  // A missing HUD control must fail at the specific action, not consume
+  // the entire fifteen-minute playthrough allowance.
+  page.setDefaultTimeout(8_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
