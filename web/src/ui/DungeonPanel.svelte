@@ -4,10 +4,11 @@
   import type { GameBridge } from '../game/bridge/GameBridge';
 
   let { view, bridge }: { view: GameSnapshot; bridge: GameBridge } = $props();
+  const nameKey = $derived(view.dungeonId==='mine'?'dungeon.mineName':view.dungeonId==='cave'?'dungeon.caveName':'dungeon.name');
 </script>
 
-<aside class="dungeon-panel" aria-label={$t('dungeon.name')}>
-  <div class="dungeon-label">{$t('dungeon.name')}</div>
+<aside class="dungeon-panel" aria-label={$t(nameKey)}>
+  <div class="dungeon-label">{$t(nameKey)}</div>
   {#if view.zone === 'wilderness'}
     <p>{$t('dungeon.gateHint')}</p>
     <button class="travel-action" disabled={!view.player.alive || view.paused}
@@ -16,14 +17,14 @@
     </button>
   {:else}
     {#if view.dungeonCleared}
-      <strong class="clear-status">{$t('dungeon.cleared')}</strong>
-      <p>{$t('dungeon.clearedHint')}</p>
+      <strong class="clear-status">{$t(view.dungeonId?'dungeon.optionalCleared':'dungeon.cleared')}</strong>
+      <p>{$t(view.dungeonId?'dungeon.optionalClearedHint':'dungeon.clearedHint')}</p>
     {:else if view.dungeonStage === 0}
-      <strong>{$t('dungeon.guards')}</strong>
+      <strong>{$t(view.dungeonId?'dungeon.optionalGuards':'dungeon.guards')}</strong>
       <p>{$t('dungeon.guardsHint')} ·
         {view.enemies.filter(u => !u.actor.alive).length}/{view.enemies.length}</p>
     {:else}
-      <strong>{$t('boss.hollowKing.name')}</strong>
+      <strong>{$t(view.dungeonId?'dungeon.optionalBoss':'boss.hollowKing.name')}</strong>
       {#if view.hollowKing}
         <div class="king-phase">{$t('boss.hollowKing.phase' + view.hollowKing.phase)}
           · {Math.ceil(100 * view.hollowKing.health / view.hollowKing.maxHealth)}%</div>
@@ -33,11 +34,11 @@
             · {view.hollowKing.warning.remainingSeconds.toFixed(1)} s</p>
         {/if}
       {/if}
-      <p>{$t('dungeon.bossHint')}</p>
+      <p>{$t(view.dungeonId?'dungeon.optionalBossHint':'dungeon.bossHint')}</p>
     {/if}
     <button class="travel-action" disabled={!view.player.alive || view.paused}
       onclick={() => bridge.command({ type: 'usePortal' })}>
-      {$t('dungeon.return')}
+      {$t(view.dungeonId?'dungeon.optionalReturn':'dungeon.return')}
     </button>
   {/if}
 </aside>
