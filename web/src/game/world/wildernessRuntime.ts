@@ -39,6 +39,8 @@ function withStoryRoads(
   const environment = planEnvironmentObjects(seed, terrain.layout, features);
   const events = planWorldEvents(seed, terrain.layout, features);
   const destinations = [
+    camp,
+    ...terrain.layout.encounterPositions,
     ...features.map(feature => feature.position),
     ...environment.map(object => object.position),
     ...events.flatMap(event => event.enemySpawns.map(spawn => spawn.position))

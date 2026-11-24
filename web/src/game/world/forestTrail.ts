@@ -1,4 +1,4 @@
-/** Hand-authored trail sections assembled against the current wilderness seed. */
+/** Hand-authored trail sections assembled against the current wilderness seed. GPL-3.0-only. */
 import type { Point } from '../core/types';
 import { ACTOR_RADIUS, canOccupy, findPath, type Obstacle } from './navigation';
 import type { WorldLayout } from './generator';

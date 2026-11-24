@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { CAMP } from '../../src/game/world/generator';
+import { ACTOR_RADIUS, canOccupy, findPath } from '../../src/game/world/navigation';
 import { createMapDiscovery, revealAtPosition } from '../../src/game/world/mapDiscovery';
 import { getTownManifest } from '../../src/game/world/townManifest';
 import { createChunkIndex, createWorldFactLedger, makeWorldFact } from '../../src/game/world/chunkStreaming';
@@ -25,6 +26,14 @@ describe('Act I forest trail', () => {
       expect(routeClear(side.points, world.layout.obstacles)).toBe(true);
       const edges = world.layout.obstacles.filter(wall => wall.id.startsWith('trail-edge-'));
       expect(edges.length).toBeGreaterThan(0);
+      // The new forest boundary may never trap the player or an encounter
+      // spawn, even though older character coordinates need no migration.
+      expect(canOccupy(world.layout.camp, ACTOR_RADIUS, world.layout.obstacles)).toBe(true);
+      for (const position of world.layout.encounterPositions) {
+        expect(canOccupy(position, ACTOR_RADIUS, world.layout.obstacles)).toBe(true);
+        expect(findPath(world.layout.camp, position, ACTOR_RADIUS, world.layout.obstacles).length)
+          .toBeGreaterThan(0);
+      }
       expect(validateWildernessTerrain(world.terrain)).toEqual([]);
       return edges.map(wall => wall.id).join(',');
     });
