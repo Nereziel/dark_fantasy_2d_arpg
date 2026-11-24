@@ -8,7 +8,7 @@ export function villageTownEntries(villages:readonly VillagePopulation[]|undefin
   return (villages??[]).flatMap(v=>v.residents.map(n=>({
     id:n.id,role:n.role,position:{...n.position},interactionRange:72,collisionRadius:12,
     nameKey:'village.'+n.id+'.name',descriptionKey:'village.'+n.id+'.description',
-    capability:n.role==='blacksmith'||n.role==='quest'?'planned' as const:'decorative' as const
+    capability:n.role==='quest'?'planned' as const:'decorative' as const
   })));
 }
 export function resolveRegionalTownEntry(id:unknown,entries:readonly TownEntry[]):TownEntry|null {
