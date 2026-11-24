@@ -1,6 +1,7 @@
 // GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 import { buildWilderness } from '../../src/game/world/wildernessRuntime';
+import { validateWildernessTerrain } from '../../src/game/world/wildernessTerrain';
 import { regionalRoadClear } from '../../src/game/world/regionalTopology';
 import { createChunkIndex } from '../../src/game/world/chunkStreaming';
 import { ACTOR_RADIUS, canOccupy, findPath } from '../../src/game/world/navigation';
@@ -12,6 +13,7 @@ describe('Issue #208: shared regional runtime',()=>{
     for(const seed of [0,1,123,0xffffffff]){
       const world=buildWilderness(seed);
       expect(world.terrain.layout.obstacles).toEqual(world.layout.obstacles);
+      expect(validateWildernessTerrain(world.terrain)).toEqual([]);
       expect(buildWilderness(seed)).toEqual(world);
       if(!world.region)continue;
       connected++;
@@ -36,6 +38,13 @@ describe('Issue #208: shared regional runtime',()=>{
         }
         for(const structure of village.structures)expect(world.structures).toContainEqual(structure);
       }
+      const detached=structuredClone(world.terrain);
+      const trade=detached.roads.find(r=>r.id==='road-trade-camp-north-village');
+      expect(trade).toBeDefined();
+      detached.roads=detached.roads.filter(r=>r!==trade);
+      expect(validateWildernessTerrain(detached)).toContainEqual({
+        code:'invalidRoad',id:'road-trade-north-village-east-village'
+      });
       // The existing map/chunk renderer accepts the same road IDs and geometry.
       const index=createChunkIndex(world);
       expect(index.chunks.some(c=>c.roads.some(r=>r.roadId.startsWith('road-trade-')))).toBe(true);
