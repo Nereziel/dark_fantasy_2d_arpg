@@ -71,6 +71,37 @@ export function hasLineOfSight(
     && lineClear(from, to, 3, obstacles);
 }
 
+/** Stable min-heap with the existing score/key ordering. Repeated sorting of
+ * the entire frontier dominated multi-destination procedural validation. */
+class PathFrontier {
+  private readonly entries: Array<{key:number;score:number}> = [];
+  get length():number { return this.entries.length; }
+  private before(a:{key:number;score:number},b:{key:number;score:number}):boolean {
+    return a.score < b.score || (a.score===b.score && a.key<b.key);
+  }
+  push(entry:{key:number;score:number}):void {
+    const a=this.entries; let i=a.length; a.push(entry);
+    while(i>0){
+      const p=(i-1)>>1;
+      if(!this.before(entry,a[p]!))break;
+      a[i]=a[p]!;i=p;
+    }
+    a[i]=entry;
+  }
+  pop():{key:number;score:number}|undefined {
+    const a=this.entries,first=a[0],last=a.pop();
+    if(!last||!a.length)return first;
+    let i=0;
+    while(i*2+1<a.length){
+      let child=i*2+1;
+      if(child+1<a.length&&this.before(a[child+1]!,a[child]!))child++;
+      if(!this.before(a[child]!,last))break;
+      a[i]=a[child]!;i=child;
+    }
+    a[i]=last;return first;
+  }
+}
+
 /** Bounded, deterministic A* on the static walkability grid. */
 export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS, obstacles: readonly Obstacle[] = OBSTACLES): Point[] {
   if (!canOccupy(goal, radius, obstacles)) return [];
@@ -81,14 +112,20 @@ export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS, obstac
   const cost = new Float64Array(COLS * ROWS).fill(Infinity);
   const parent = new Int32Array(COLS * ROWS).fill(-1);
   const closed = new Uint8Array(COLS * ROWS);
-  const frontier: Array<{ key: number; score: number }> = [];
+  const frontier = new PathFrontier();
+  // Query-local cache: collision arrays can change between calls.
+  const walkability = new Uint8Array(COLS * ROWS);
+  const walkable = (x:number,y:number):boolean => {
+    const k=KEY(x,y);
+    if(walkability[k]===0)walkability[k]=canOccupy(center(x,y),radius,obstacles)?1:2;
+    return walkability[k]===1;
+  };
   const heuristic = (x: number, y: number) => Math.hypot(x - endX, y - endY);
   cost[start] = 0;
   frontier.push({ key: start, score: heuristic(startX, startY) });
   let attempts = 0;
   while (frontier.length && attempts++ < COLS * ROWS * 5) {
-    frontier.sort((a, b) => a.score - b.score || a.key - b.key);
-    const current = frontier.shift()!.key;
+    const current = frontier.pop()!.key;
     if (closed[current]) continue;
     if (current === end) {
       const points: Point[] = [];
@@ -117,9 +154,9 @@ export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS, obstac
       const nx = x + vx, ny = y + vy;
       if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
       const candidate = KEY(nx, ny);
-      if (closed[candidate] || !canOccupy(center(nx, ny), radius, obstacles)) continue;
+      if (closed[candidate] || !walkable(nx,ny)) continue;
       if (vx !== 0 && vy !== 0 &&
-        (!canOccupy(center(x + vx, y), radius, obstacles) || !canOccupy(center(x, y + vy), radius, obstacles))) continue;
+        (!walkable(x+vx,y) || !walkable(x,y+vy))) continue;
       const updated = cost[current]! + Math.hypot(vx, vy);
       if (updated >= cost[candidate]!) continue;
       cost[candidate] = updated;
