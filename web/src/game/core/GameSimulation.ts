@@ -61,6 +61,8 @@ import {
 import { monsterActions, monsterAction, type MonsterAction } from '../enemies/monsterRuntime';
 import { getEnemyArchetype } from '../enemies/archetypeCatalog';
 import { defaultHotbarLayout, validateHotbarLayout } from '../input/hotbarRegistry';
+import { copyBuildPresets, emptyBuildPresets, isBuildPresetIndex, validateBuildPresets,
+  type BuildPresetSlots } from '../progression/buildPresets';
 import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, canApproachAttackDirectly, findAttackApproachPath, findPath, findPickupPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
@@ -387,6 +389,7 @@ export class GameSimulation {
   private talentPoints = 0;
   private talentRanks: TalentRanks = {};
   private hotbarLayout: string[] | undefined;
+  private buildPresets: BuildPresetSlots = emptyBuildPresets();
   private gold = 75;
   private materials: Materials = {};
   private gems: GemWallet = {};
@@ -1333,6 +1336,23 @@ export class GameSimulation {
   }
 
   command(command: GameCommand): void {
+    // Presets are character-owned plans, not a second economy or equip path.
+    if (command.type === 'captureBuildPreset' || command.type === 'applyBuildPreset'
+      || command.type === 'clearBuildPreset') {
+      if (!this.player.alive || this.paused || !isBuildPresetIndex(command.index)) return;
+      if (command.type === 'captureBuildPreset') {
+        this.buildPresets[command.index] = {
+          layout: [...(this.hotbarLayout ?? defaultHotbarLayout(this.classId))],
+          talentRanks: { ...this.talentRanks }
+        };
+      } else if (command.type === 'clearBuildPreset') {
+        this.buildPresets[command.index] = null;
+      } else {
+        const preset = this.buildPresets[command.index];
+        if (preset) this.command({ type: 'setHotbarLayout', layout: preset.layout });
+      }
+      return;
+    }
     // Presentation-only placement never cancels a cast, consumes resources
     // or resets a cooldown. Validate before touching ANY runtime state.
     if (command.type === 'setHotbarLayout') {
@@ -4477,6 +4497,7 @@ export class GameSimulation {
       skillPoints: this.skillPoints,
       talentPoints: this.talentPoints,
       ...(this.hotbarLayout ? { hotbarLayout: [...this.hotbarLayout] } : {}),
+      ...(this.buildPresets.some(p => p !== null) ? { buildPresets: copyBuildPresets(this.buildPresets) } : {}),
       ...(Object.keys(this.talentRanks).length
         ? { talentRanks: { ...this.talentRanks } } : {}),
       ...(Object.keys(this.materials).length
@@ -4527,6 +4548,7 @@ export class GameSimulation {
       talentPoints: progress.talentPoints ?? Math.floor(Math.min(MAX_LEVEL, progress.level) / 5),
       talentRanks: progress.talentRanks ?? {},
       ...(progress.hotbarLayout !== undefined ? { hotbarLayout: progress.hotbarLayout } : {}),
+      ...(progress.buildPresets !== undefined ? { buildPresets: progress.buildPresets } : {}),
       materials: progress.materials ?? {},
       gems: progress.gems ?? {},
       potions: {
@@ -4555,6 +4577,7 @@ export class GameSimulation {
     this.talentPoints = scratch.talentPoints;
     this.talentRanks = { ...scratch.talentRanks };
     this.hotbarLayout = scratch.hotbarLayout ? [...scratch.hotbarLayout] : undefined;
+    this.buildPresets = copyBuildPresets(scratch.buildPresets);
     this.materials = { ...scratch.materials };
     this.gems = { ...scratch.gems };
     this.potions = { ...scratch.potions, charges: { ...scratch.potions.charges },
@@ -4621,6 +4644,7 @@ export class GameSimulation {
       talentPoints: this.talentPoints,
       talentRanks: { ...this.talentRanks },
       ...(this.hotbarLayout ? { hotbarLayout: [...this.hotbarLayout] } : {}),
+      ...(this.buildPresets.some(p => p !== null) ? { buildPresets: copyBuildPresets(this.buildPresets) } : {}),
       materials: { ...this.materials },
       gems: { ...this.gems },
       potions: { ...this.potions, charges: { ...this.potions.charges },
@@ -4901,6 +4925,7 @@ export class GameSimulation {
       || (s.skillPoints !== undefined && (!Number.isSafeInteger(s.skillPoints)
         || s.skillPoints < 0 || s.skillPoints > s.level - 1))
       || (s.hotbarLayout !== undefined && !validateHotbarLayout(s.classId, s.hotbarLayout))
+      || (s.buildPresets !== undefined && !validateBuildPresets(s.classId, s.level, s.buildPresets))
       || !validateTalentBuild(s.classId, s.level,
         s.talentPoints ?? Math.floor(s.level / 5), s.talentRanks ?? {})
       || !validateMaterials(s.materials ?? {})
@@ -5090,6 +5115,7 @@ export class GameSimulation {
     const defaultLayout = defaultHotbarLayout(s.classId);
     this.hotbarLayout = s.hotbarLayout && !s.hotbarLayout.every((id, index) => id === defaultLayout[index])
       ? [...s.hotbarLayout] : undefined;
+    this.buildPresets = s.buildPresets ? copyBuildPresets(s.buildPresets) : emptyBuildPresets();
     this.materials = { ...(s.materials ?? {}) };
     this.gems = { ...(s.gems ?? {}) };
     this.potions = s.potions ? { ...s.potions, charges: { ...s.potions.charges },
@@ -5226,6 +5252,7 @@ export class GameSimulation {
     this.talentPoints = 0;
     this.talentRanks = {};
     this.hotbarLayout = undefined;
+    this.buildPresets = emptyBuildPresets();
     this.materials = {};
     this.gems = {};
     this.potions = freshPotions();
