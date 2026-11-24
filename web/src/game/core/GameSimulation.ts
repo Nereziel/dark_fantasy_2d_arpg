@@ -73,6 +73,7 @@ import { villageSanctuaries, inVillageSanctuary, type VillageSanctuary } from '.
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonRuntime';
 import { planOptionalDungeonEntry, planOptionalDungeonExit, type OptionalDungeonVisit } from '../world/optionalDungeonVisit';
 import { planActIDungeonEntrances } from '../world/actIDungeonEntrances';
+import {optionalDungeonRewardId,validOptionalDungeonRewardIds,type OptionalDungeonRewardId} from '../world/optionalDungeonRewards';
 import {
   applyTalentStats, planSpendTalent, planRespecTalents, projectTalentBonuses,
   validateTalentBuild, type TalentRanks, type TalentId
@@ -331,6 +332,7 @@ export class GameSimulation {
   private dungeonCleared = false;
   private pendingPortal = false;
   private optionalVisit: OptionalDungeonVisit | null = null;
+  private optionalDungeonRewards = new Set<OptionalDungeonRewardId>();
   private units: EnemyUnit[] = createPack(0, 1);
   private selectedTargetId: string | null = null;
   private quest: QuestProgress = freshQuest();
@@ -700,6 +702,7 @@ export class GameSimulation {
       mapDiscovery: this.mapDiscovery, worldFacts: this.worldFacts,
       cryptUsedPropIds: [...this.cryptUsedPropIds],
       cryptTriggeredTrapIds: [...this.cryptTriggeredTrapIds],
+      ...(this.optionalDungeonRewards.size ? {optionalDungeonRewardIds:[...this.optionalDungeonRewards]} : {}),
       miniBossDefeatedIds: [...this.defeatedMiniBossIds],
       activatedCheckpointIds: [...this.activatedCheckpointIds],
       ...(this.environmentUsed.size ? {environmentUsedIds:[...this.environmentUsed]} : {})
@@ -711,6 +714,7 @@ export class GameSimulation {
       || progress.seed !== this.mapWorld.seed
       || !validateMapDiscovery(progress.mapDiscovery, this.mapWorld)
       || !validateWorldFactLedger(this.worldIndex, progress.worldFacts)) return false;
+    if (!validOptionalDungeonRewardIds(progress.optionalDungeonRewardIds ?? [])) return false;
     const theme = buildCryptWorld(progress.seed).theme;
     const allowedProps = new Set(theme.interactables.map(prop => prop.id));
     const allowedTraps = new Set(theme.traps.map(trap => trap.id));
@@ -735,6 +739,7 @@ export class GameSimulation {
     this.mapDiscovery = structuredClone(progress.mapDiscovery);
     this.worldFacts = structuredClone(progress.worldFacts);
     this.environmentUsed = new Set(progress.environmentUsedIds ?? []);
+    this.optionalDungeonRewards = new Set(progress.optionalDungeonRewardIds ?? []);
     this.shrineBlessings = [];
     this.pendingEnvironmentId = null;
     this.activeWorldEventId = null;
@@ -3906,6 +3911,15 @@ export class GameSimulation {
     this.events.push({ type: 'enemyWindup', enemyId: actor.id, pattern: def.attack });
   }
 
+  /** Commit before awarding. Optional summons and duplicate slots are never rewarded. */
+  private claimDungeonReward(slot:string):boolean {
+    if (!this.optionalVisit) return true;
+    const id=optionalDungeonRewardId(this.optionalVisit.identity.dungeonId,slot);
+    if (!id || this.optionalDungeonRewards.has(id)) return false;
+    this.optionalDungeonRewards.add(id);
+    return true;
+  }
+
   private get dungeonBossPositions(): readonly Readonly<Point>[] {
     const interior = this.optionalVisit?.interior;
     return interior ? [interior.bossSpawn, ...interior.bossGuardSpawns] : CRYPT_RUNTIME_BOSS_POSITIONS;
@@ -4116,8 +4130,10 @@ export class GameSimulation {
       } else {
         this.dungeonCleared = true;
         this.respawnTimer = 0;
-        this.gold += 200;
-        this.awardExperience(rewardForActivity('dungeon', this.level, this.level));
+        if (this.claimDungeonReward('clear')) {
+          this.gold += 200;
+          this.awardExperience(rewardForActivity('dungeon', this.level, this.level));
+        }
         this.events.push({ type: 'dungeonCleared' });
       }
     }
@@ -4476,9 +4492,10 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
     }
-    if(!eventEnemy)this.kills++;
-    // Partial event kills yield no per-enemy gold, XP or loot.
-    if(!eventEnemy) {
+    const rewarded = !eventEnemy && (!this.optionalVisit || (!unit.summoned && this.claimDungeonReward(unit.actor.id)));
+    if(rewarded)this.kills++;
+    // Partial event kills and already claimed dungeon slots yield no gold, XP or loot.
+    if(rewarded) {
       this.gold += 12 + this.level * 3;
       this.awardExperience(Math.round(rewardForActivity('enemy', this.level, this.level)
         * (unit.elite ? 1.75 : 1)));
@@ -4498,10 +4515,12 @@ export class GameSimulation {
     }
     if (unit.actor.type === 'crypt_lord') {
       if (this.zone === 'crypt' && !this.optionalVisit) this.storyEvent('crypt_lord_fallen', 'crypt_lord_slain', 'crypt_lord_defeat');
-      this.gold += 100;
-      this.awardExperience(rewardForActivity('boss', this.level, this.level));
+      if (!this.optionalVisit || rewarded) {
+        this.gold += 100;
+        this.awardExperience(rewardForActivity('boss', this.level, this.level));
+      }
     }
-    if(!eventEnemy)this.dropEnemyLoot(unit);
+    if(rewarded)this.dropEnemyLoot(unit);
     this.events.push({ type: 'defeat', targetId: unit.actor.id, kills: this.kills });
     if(eventEnemy)this.finishWorldEventIfReady(unit.actor.id);
     if (this.aliveEnemies.length === 0) this.respawnTimer = this.zone === 'crypt' && this.dungeonStage === 1 ? 0 : 3.2;
@@ -4763,6 +4782,7 @@ export class GameSimulation {
       cryptInteractables: this.cryptInteractables(),
       cryptUsedPropIds: [...this.cryptUsedPropIds],
       cryptTriggeredTrapIds: [...this.cryptTriggeredTrapIds],
+      ...(this.optionalDungeonRewards.size ? {optionalDungeonRewardIds:[...this.optionalDungeonRewards]} : {}),
       miniBossStates: Object.fromEntries([...this.miniBossStates]
         .map(([id, state]) => [id, structuredClone(state)])),
       miniBossDefeatedIds: [...this.defeatedMiniBossIds],
@@ -4788,6 +4808,7 @@ export class GameSimulation {
     const entry = s.dungeonId ? planActIDungeonEntrances(restoredWilderness).find(e => e.id === s.dungeonId) : null;
     const restoredVisit = entry ? planOptionalDungeonEntry(restoredWilderness, s.dungeonId, {...entry.position,alive:true}) : null;
     if (s.dungeonId && !restoredVisit) return false;
+    if (!validOptionalDungeonRewardIds(s.optionalDungeonRewardIds ?? [])) return false;
     const layout = s.zone === 'crypt' ? (restoredVisit?.layout ?? buildCryptWorld(s.worldSeed).layout) : restoredWilderness.layout;
     const restoredIndex = restoredWilderness ? createChunkIndex(restoredWilderness) : null;
     const restoredMapWorld = restoredWilderness ? this.mapInput(restoredWilderness) : null;
@@ -5113,6 +5134,7 @@ export class GameSimulation {
 
     this.world = layout;
     this.optionalVisit = restoredVisit;
+    this.optionalDungeonRewards = new Set(s.optionalDungeonRewardIds ?? []);
     this.cryptTheme = s.zone === 'crypt' && !restoredVisit ? buildCryptWorld(s.worldSeed).theme : null;
     this.cryptArmedTraps.clear();
     this.pendingCryptPropId = null;
@@ -5239,6 +5261,7 @@ export class GameSimulation {
   reset(classId: ClassId = 'WARRIOR', seed = this.world.seed): void {
     this.zone = 'wilderness';
     this.optionalVisit = null;
+    this.optionalDungeonRewards.clear();
     this.cryptTheme = null;
     this.cryptUsedPropIds.clear();
     this.cryptTriggeredTrapIds.clear();
