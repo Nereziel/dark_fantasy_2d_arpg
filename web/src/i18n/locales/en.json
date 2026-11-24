@@ -1,5 +1,6 @@
 {
   "village": {
+    "services": "Village services",
     "north-village-healer": {
       "name": "Healer Radana",
       "description": "I can tend your wounds for 15 gold."
@@ -10,7 +11,7 @@
     },
     "east-village-blacksmith": {
       "name": "Blacksmith Vit",
-      "description": "My forge is not ready yet. Odan at the camp can help you for now."
+      "description": "Bring your equipment, gold and materials. I can temper your weapon or work your materials."
     },
     "east-village-quest": {
       "name": "Scout Milena",
