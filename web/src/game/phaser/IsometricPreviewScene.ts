@@ -19,6 +19,7 @@ import { HeldPointerMovement } from '../input/heldMovement';
 import { projectIsometric, isometricFootprint, isometricBounds, isometricDepth } from './isometricProjection';
 import { pickIsometricPointer, type IsometricTarget } from './isometricPicking';
 import { playerAnimation } from '../entities/playerAnimation';
+import { projectCombatCircle, projectCombatCone, combatHealthBar } from './isometricCombat';
 import {
   PIXEL_ANIMATIONS, PIXEL_ANIMATION_FRAMES, PIXEL_FRAME_WIDTH, PIXEL_FRAME_HEIGHT,
   pixelAtlasKey, pixelFrame, pixelTimelineFrame, renderPixelAtlas,
@@ -34,6 +35,9 @@ const PALETTE: Record<string, number> = {
 
 export class IsometricPreviewScene extends Phaser.Scene {
   private floor!: Phaser.GameObjects.Graphics;
+  private warnings!: Phaser.GameObjects.Graphics;
+  private missiles!: Phaser.GameObjects.Graphics;
+  private healthBars!: Phaser.GameObjects.Graphics;
   private anchor!: Phaser.GameObjects.Graphics;
   private label!: Phaser.GameObjects.Text;
   private readonly walls: Phaser.GameObjects.Graphics[] = [];
@@ -49,6 +53,9 @@ export class IsometricPreviewScene extends Phaser.Scene {
 
   create(): void {
     this.floor = this.add.graphics().setDepth(-100);
+    this.warnings = this.add.graphics().setDepth(-90);
+    this.missiles = this.add.graphics().setDepth(9000);
+    this.healthBars = this.add.graphics().setDepth(9100);
     const state = this.bridge.snapshot();
     this.rebuild(state);
     const p = project(state.player);
@@ -268,6 +275,59 @@ export class IsometricPreviewScene extends Phaser.Scene {
       .setFrame(pixelFrame(pose, frame)).setVisible(true);
   }
 
+  private combatArea(points: readonly Point[], color: number, alpha: number): void {
+    const vertices = points.map(p => new Phaser.Math.Vector2(p.x, p.y));
+    this.warnings.fillStyle(color, alpha).fillPoints(vertices, true);
+    this.warnings.lineStyle(3, color, 0.95).strokePoints(vertices, true);
+  }
+
+  private renderCombat(state: GameSnapshot): void {
+    this.warnings.clear();
+    this.missiles.clear();
+    this.healthBars.clear();
+    for (const unit of state.enemies) {
+      if (!unit.actor.alive) continue;
+      if (unit.intent && unit.intent.radius > 0) {
+        const intent = unit.intent;
+        const progress = Math.max(0, Math.min(1, 1 - intent.remaining / Math.max(0.01, intent.total)));
+        this.combatArea(projectCombatCircle(intent, intent.radius, ORIGIN),
+          0xe96569, 0.12 + progress * 0.24);
+      }
+      const bar = combatHealthBar(unit.actor, unit.actor.health, unit.actor.maxHealth, ORIGIN);
+      this.healthBars.fillStyle(0x080a10, 0.9).fillRect(bar.x, bar.y, bar.width, bar.height);
+      this.healthBars.fillStyle(unit.elite ? 0xd2ab64 : 0xa3494c)
+        .fillRect(bar.x + 2, bar.y + 2, (bar.width - 4) * bar.fraction, bar.height - 4);
+      if (state.selectedTargetId === unit.actor.id) {
+        const outline = projectCombatCircle(unit.actor, ACTOR_RADIUS + 10, ORIGIN);
+        this.warnings.lineStyle(2, 0xf0c783, 0.95)
+          .strokePoints(outline.map(p => new Phaser.Math.Vector2(p.x, p.y)), true);
+      }
+    }
+    const king = state.zone === 'crypt' ? state.hollowKing : undefined;
+    if (king?.warning) {
+      const warning = king.warning;
+      const g = warning.geometry;
+      const points = g.shape === 'circle'
+        ? projectCombatCircle(g.position, g.radius, ORIGIN)
+        : projectCombatCone(g.position, g.radius, g.angleRadians, g.arcDegrees, ORIGIN);
+      const progress = Math.max(0, Math.min(1,
+        1 - warning.remainingSeconds / Math.max(0.01, warning.windupSeconds)));
+      this.combatArea(points, 0xffb18d, 0.12 + 0.32 * progress);
+    }
+    for (const hazard of king?.hazards ?? []) {
+      this.combatArea(projectCombatCircle(hazard.position, hazard.radius, ORIGIN),
+        hazard.type === 'rune_storm' ? 0xb085ea : 0x8cc8a3, 0.24);
+    }
+    for (const missile of state.projectiles) {
+      const p = project(missile, 14);
+      const color = missile.type === 'shadow' ? 0xa78bcd
+        : missile.type === 'frost' ? 0x7fd6f4 : missile.type === 'poison' ? 0x80d48a
+        : missile.type === 'holy' ? 0xf2d887 : 0xe8a25f;
+      this.missiles.fillStyle(color, 0.25).fillCircle(p.x, p.y, 12);
+      this.missiles.fillStyle(color, 0.95).fillCircle(p.x, p.y, 5);
+    }
+  }
+
   update(_time: number, delta: number): void {
     this.bridge.tick(delta);
     const state = this.bridge.snapshot();
@@ -327,6 +387,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     for (const id of this.lastEnemyPositions.keys()) {
       if (!visible.has('ENEMY/' + id)) this.lastEnemyPositions.delete(id);
     }
+    this.renderCombat(state);
     this.label.setText(get(locale) === 'cs'
       ? '2,5D – vývojový náhled' : '2.5D – development preview');
   }
