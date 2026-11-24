@@ -1,9 +1,9 @@
 // GPL-3.0-only — opt-in engineering preview, not the production renderer.
 import Phaser from 'phaser';
 import { get } from 'svelte/store';
-import { locale } from 'svelte-i18n';
+import { _ as translate, locale } from 'svelte-i18n';
 import type { GameBridge } from '../bridge/GameBridge';
-import type { GameSnapshot, Point, ZoneId } from '../core/types';
+import type { GameEvent, GameSnapshot, Point, ZoneId } from '../core/types';
 import { ENEMY_DEFINITIONS } from '../enemies/enemies';
 import { CRYPT_GATE, CRYPT_EXIT } from '../world/generator';
 import { buildWilderness } from '../world/wildernessRuntime';
@@ -21,6 +21,8 @@ import { pickIsometricPointer, type IsometricTarget } from './isometricPicking';
 import { playerAnimation } from '../entities/playerAnimation';
 import { projectCombatCircle, projectCombatCone, combatHealthBar } from './isometricCombat';
 import { classGroundEffects, summonPresentation } from './isometricClassEffects';
+import { planIsometricImpact } from './isometricImpactFeedback';
+import { getVisualPreferences, shouldReduceMotion } from '../ui/visualPreferences';
 import {
   PIXEL_ANIMATIONS, PIXEL_ANIMATION_FRAMES, PIXEL_FRAME_WIDTH, PIXEL_FRAME_HEIGHT,
   pixelAtlasKey, pixelFrame, pixelTimelineFrame, renderPixelAtlas,
@@ -34,7 +36,14 @@ const PALETTE: Record<string, number> = {
   corrupted_soil: 0x47333b, broken_stone: 0x48494b, dirt_road: 0x655542
 };
 
+type ImpactVisual = {
+  object: Phaser.GameObjects.Graphics | Phaser.GameObjects.Text;
+  position: Readonly<Point>; started: number; duration: number; rise: number;
+};
+const MAX_IMPACT_VISUALS = 64;
+
 export class IsometricPreviewScene extends Phaser.Scene {
+  private readonly impacts: ImpactVisual[] = [];
   private floor!: Phaser.GameObjects.Graphics;
   private warnings!: Phaser.GameObjects.Graphics;
   private missiles!: Phaser.GameObjects.Graphics;
@@ -73,7 +82,13 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.input.on('pointermove', this.hover, this);
     this.input.on('pointerup', this.release, this);
     this.input.on('gameout', this.release, this);
+    const unsubscribe = this.bridge.onEvent(event => this.onImpactEvent(event));
+    const onDestroy = () => { unsubscribe(); this.impacts.length = 0; };
+    this.events.once(Phaser.Scenes.Events.DESTROY, onDestroy);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      unsubscribe();
+      this.events.off(Phaser.Scenes.Events.DESTROY, onDestroy);
+      this.clearImpacts();
       this.input.off('pointerdown', this.click, this);
       this.input.off('pointermove', this.hover, this);
       this.input.off('pointerup', this.release, this);
@@ -98,6 +113,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.seed = state.worldSeed;
     this.zone = state.zone;
     this.floor.clear();
+    this.clearImpacts();
     for (const wall of this.walls) wall.destroy();
     this.walls.length = 0;
     for (const actor of this.actors.values()) actor.destroy();
@@ -338,6 +354,80 @@ export class IsometricPreviewScene extends Phaser.Scene {
     }
   }
 
+  private clearImpacts(): void {
+    for (const impact of this.impacts) impact.object.destroy();
+    this.impacts.length = 0;
+  }
+
+  private onImpactEvent(event: GameEvent): void {
+    if (event.type === 'zoneChanged' || event.type === 'playerRespawn' || event.type === 'waypointTravel') {
+      this.clearImpacts();
+      return;
+    }
+    if (event.type !== 'damageResolved') return;
+    const state = this.bridge.snapshot();
+    if (state.zone !== this.zone || state.worldSeed !== this.seed) return;
+    const target = event.targetId === 'hero' ? state.player
+      : state.enemies.find(unit => unit.actor.id === event.targetId)?.actor
+        ?? state.summons?.find(summon => summon.id === event.targetId);
+    if (!target) return;
+    const settings = getVisualPreferences();
+    const reducedMotion = shouldReduceMotion(settings,
+      typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const cues = planIsometricImpact(event, target, ORIGIN, {
+      floatingCombatText: settings.floatingCombatText, reducedMotion
+    });
+    for (const cue of cues) {
+      let object: ImpactVisual['object'];
+      let rise = 0;
+      if (cue.type === 'floatText') {
+        const text = cue.content.kind === 'damage' ? '-' + cue.content.amount
+          : get(translate)(cue.content.key);
+        object = this.add.text(cue.position.x, cue.position.y, text, {
+          fontFamily: 'Georgia, serif', fontSize: cue.emphasis === 'critical' ? '21px' : '17px',
+          color: event.targetId === 'hero' ? '#ff8d8d'
+            : cue.emphasis === 'critical' ? '#ffe2a0' : '#f6d29a',
+          stroke: '#070b11', strokeThickness: 3
+        }).setOrigin(0.5).setDepth(9200);
+        rise = cue.rise;
+      } else {
+        const g = this.add.graphics().setPosition(cue.position.x, cue.position.y)
+          .setDepth(isometricDepth(target) + 0.75);
+        if (cue.type === 'impactFlash') {
+          const color = cue.tone === 'critical' ? 0xffedaa
+            : cue.tone === 'blocked' ? 0x9fbde5 : 0xf1b88b;
+          g.lineStyle(3, color, 0.9).strokeCircle(0, 0, 13);
+        } else {
+          const count = Math.min(32, cue.count);
+          for (let n = 0; n < count; n++) {
+            const angle = n * 2 * Math.PI / count;
+            const radius = 10 + n % 5 * 4;
+            g.fillStyle(0xf1b88b, 0.7)
+              .fillCircle(Math.cos(angle) * radius, Math.sin(angle) * radius, 2);
+          }
+        }
+        object = g;
+      }
+      if (this.impacts.length >= MAX_IMPACT_VISUALS) this.impacts.shift()?.object.destroy();
+      this.impacts.push({ object, position: cue.position, started: this.time.now,
+        duration: cue.durationMs, rise });
+    }
+  }
+
+  private updateImpacts(): void {
+    for (let i = this.impacts.length - 1; i >= 0; i--) {
+      const impact = this.impacts[i]!;
+      const progress = Math.max(0, (this.time.now - impact.started) / impact.duration);
+      if (progress >= 1) {
+        impact.object.destroy();
+        this.impacts.splice(i, 1);
+      } else {
+        impact.object.setPosition(impact.position.x, impact.position.y - impact.rise * progress)
+          .setAlpha(1 - progress);
+      }
+    }
+  }
+
   update(_time: number, delta: number): void {
     this.bridge.tick(delta);
     const state = this.bridge.snapshot();
@@ -409,6 +499,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       if (!visible.has('ENEMY/' + id)) this.lastEnemyPositions.delete(id);
     }
     this.renderCombat(state);
+    this.updateImpacts();
     this.label.setText(get(locale) === 'cs'
       ? '2,5D – vývojový náhled' : '2.5D – development preview');
   }
