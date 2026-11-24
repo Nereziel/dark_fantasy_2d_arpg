@@ -503,7 +503,8 @@ export class GameSimulation {
       const state = this.questStatus(quest.id);
       if (state !== 'active' && state !== 'ready') continue;
       const target = this.regionalTownEntries.find(entry => entry.id === (state === 'ready' ? quest.giverId : quest.targetId));
-      if (target) hints.push({id:quest.id,status:'active',position:{...target.position},presentationKey:'map.quest'});
+      if (target) hints.push({id:quest.id,status:'active',position:{...target.position},
+        presentationKey:'quest.village.' + quest.id + '.title'});
     }
     const result = projectMap(this.mapDiscovery, this.mapWorld, this.player, hints, { mode,
       ...(mode === 'world' ? options : {})
