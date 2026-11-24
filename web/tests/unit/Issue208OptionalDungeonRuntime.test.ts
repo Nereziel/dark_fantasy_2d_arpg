@@ -24,7 +24,7 @@ describe('Issue #208 C2.2: optional dungeon runtime',()=>{
     expect(entered.questLedger).toEqual(story);
     expect(entered.cryptInteractables).toEqual([]);
     expect(sim.restore(entered)).toBe(true);
-    expect(sim.restore({...entered,dungeonId:'forged'} as typeof entered)).toBe(false);
+    expect(sim.restore({...entered,dungeonId:'forged'} as unknown as typeof entered)).toBe(false);
     const internals=sim as unknown as {units:EnemyUnit[];defeatEnemy:(u:EnemyUnit)=>void};
     for(const u of [...internals.units])internals.defeatEnemy(u);
     for(let i=0;i<40&&sim.snapshot().dungeonStage===0;i++)sim.advance(100);
