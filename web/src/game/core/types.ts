@@ -131,6 +131,8 @@ export interface GameSnapshot {
   worldSeed: number;
   /** All area and dungeon fields are transient and excluded from character saves. */
   zone: ZoneId;
+  /** Present only during an optional dungeon visit; legacy story crypt has no ID. */
+  dungeonId?: 'mine' | 'cave';
   dungeonStage: 0 | 1;
   dungeonCleared: boolean;
   classId: ClassId;
@@ -276,7 +278,7 @@ export type GameCommand =
   | { type: 'stashWithdraw'; index: number; tab?: number }
   | { type: 'stashMove'; fromTab: number; index: number; toTab: number }
   | { type: 'stashSort'; tab: number }
-  | { type: 'usePortal' }
+  | { type: 'usePortal'; dungeonId?: 'mine' | 'cave' }
   | { type: 'interactObject'; id: WorldObjectId }
   | { type: 'interactEnvironment'; id: EnvironmentObjectId }
   | { type: 'interactCrypt'; id: string }
