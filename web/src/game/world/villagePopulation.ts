@@ -31,7 +31,8 @@ const distance=(a:Readonly<Point>,b:Readonly<Point>)=>Math.hypot(a.x-b.x,a.y-b.y
  * resident rejects that village only; prior settlements stay unchanged.
  */
 export function planVillagePopulation(layout:WorldLayout,settlements:readonly RegionalSettlement[],
-  roads:readonly StructureRoad[],reserved:readonly Readonly<Point>[]):VillagePlan {
+  roads:readonly StructureRoad[],reserved:readonly Readonly<Point>[],
+  acceptObstacles:(obstacles:readonly Obstacle[])=>boolean=()=>true):VillagePlan {
   if(settlements.length>3||new Set(settlements.map(s=>s.id)).size!==settlements.length)
     throw new RangeError('Invalid village manifest');
   let obstacles=layout.obstacles.map(o=>({...o}));
@@ -77,7 +78,7 @@ export function planVillagePopulation(layout:WorldLayout,settlements:readonly Re
           residents.push({id:id+'-'+role,role,position,capability:'planned'});break;
         }
       }
-      if(residents.length!==roles.length)continue;
+      if(residents.length!==roles.length||!acceptObstacles(plan.obstacles))continue;
       villages.push({id,structures:plan.structures,residents});
       obstacles=[...plan.obstacles];
       protectedPoints.push(...residents.map(n=>n.position),...plan.structures.map(s=>s.approach));
