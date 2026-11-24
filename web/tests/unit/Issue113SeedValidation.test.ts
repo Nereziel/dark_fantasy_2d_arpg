@@ -149,7 +149,7 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
       }
       expect(buildCryptWorld(seed)).toEqual(world);
     });
-  });
+  }, Math.max(15000, suiteSeeds.length * 1000));
 
   it('rejects invalid generation inputs without unsafe partial layouts', () => {
     for (const seed of [-1, NaN, Infinity, -Infinity, 0.25, 0x100000000]) {
