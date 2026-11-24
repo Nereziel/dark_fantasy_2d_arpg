@@ -1883,7 +1883,10 @@ export class GameSimulation {
   }
 
   private shopAllowed(npcId: NpcId): boolean {
-    return this.zone === 'wilderness' && this.player.alive && nearNpc(this.player, npcId);
+    if (this.zone !== 'wilderness' || !this.player.alive) return false;
+    if (nearNpc(this.player,npcId)) return true;
+    return npcId===BLACKSMITH_ID && this.regionalTownEntries.some(entry=>
+      entry.role==='blacksmith' && this.canReachDialogue(entry));
   }
 
   private rejectTrade(reason: EconomyFailure): void {
