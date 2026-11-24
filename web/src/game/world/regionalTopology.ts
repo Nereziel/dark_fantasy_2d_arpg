@@ -152,8 +152,9 @@ function nearestPoint(roads:readonly RegionalRoad[],target:Readonly<Point>):{roa
  * protected quest/service placement, and runtime integration.
  */
 export function planActOneTopology(layout:WorldLayout,tiles:readonly TerrainTile[],
-  sites:readonly RegionalSite[],reserved:readonly Readonly<Point>[]=[]):RegionalTopology {
-  if(!Number.isInteger(layout.seed)||layout.seed<0||layout.seed>0xffffffff
+  sites:readonly RegionalSite[],reserved:readonly Readonly<Point>[]=[],placementAttempt=0):RegionalTopology {
+  if(!Number.isInteger(placementAttempt)||placementAttempt<0||placementAttempt>8
+    ||!Number.isInteger(layout.seed)||layout.seed<0||layout.seed>0xffffffff
     ||!finite(layout.camp)||layout.obstacles.length>512||tiles.length>4096||sites.length>64||reserved.length>512
     ||reserved.some(p=>!finite(p))||new Set(sites.map(s=>s.id)).size!==sites.length
     ||sites.some(s=>! /^[a-z][a-z0-9-]{0,48}$/.test(s.id)||!finite(s.position)
@@ -161,7 +162,10 @@ export function planActOneTopology(layout:WorldLayout,tiles:readonly TerrainTile
     ||layout.obstacles.some(w=>!finite(w)||!Number.isFinite(w.width)||!Number.isFinite(w.height)
       ||w.width<=0||w.height<=0||w.x<0||w.y<0||w.x+w.width>WORLD_WIDTH||w.y+w.height>WORLD_HEIGHT))
     throw new RangeError('Invalid regional topology inputs');
-  const {seed,obstacles,camp}=layout;
+  const {obstacles,camp}=layout;
+  // Change only placement/road ordering on retries, not the session seed
+  // or any quest, environment, event or collision inputs.
+  const seed=(layout.seed^Math.imul(placementAttempt,0x9e3779b1))>>>0;
   const settlements:RegionalSettlement[]=[{id:'camp',anchor:{...camp},position:{...camp},radius:165,nameKey:'region.camp'}];
   for(const spec of ANCHORS){
     const random=hash(seed,spec.id);
