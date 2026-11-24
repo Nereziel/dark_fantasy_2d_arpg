@@ -6,13 +6,18 @@
 
 Cílem je původní browserové ARPG s ovládáním myší, šesti třídami, pěti akty, seedovanými lokacemi a češtinou i angličtinou. V této etapě hra běží pro jednoho hráče na statickém hostingu. Změny počtu tříd a síťová hra vyžadují samostatné produktové rozhodnutí.
 
+## Závazná priorita — pouze Akt I (24. 11. 2026)
+
+Akt I musí být plnohodnotný, vyladěný samostatný celek. Dokud uživatel výslovně neschválí jeho úplnou přejímku (#125), **neplánovat, nepřipravovat data, neimplementovat ani neintegrovat Akt II–V**. Zelené CI ani dokončitelný hlavní quest samotné nejsou přejímkou. Tato podmínka má přednost před staršími plány.
+
 ## Pořadí práce
 
 | Fáze | Obsah a rozhodující ověření |
 | --- | --- |
 | **F0 · Stabilní Akt I** | Dokončit [přejímku Aktu I #125](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/125). Doložit celý příběh běžnými herními příkazy, kontrolu HUDu, inventáře a čitelnosti boje. Ověřit funkční veřejné nasazení oprav. |
 | **F1 · Ovládání, výbava a prezentace** | Dokončit [doplňky vstupu #153](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/153), [hotbar a presety #126](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/126), [výtvarný směr #124](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/124) a přejímku audia (48). Souběžně lze měřit výkon (57), doplňovat regresní testy (58–59) a izolované vývojové nástroje (60). Rozsah obtížnosti (53) a legendárních předmětů (55) postupně odvozovat z ověřených herních scénářů. |
-| **F2 · Akty II–V** | Prompty 49 → 50 → 51 → 52. Každý akt dodá průchozí region, vlastní herní mechaniku, dokončitelnou linii, bosse a uložení postupu. Před integrací Aktu II ověřit návaznost na F0, kompatibilitu uložení (45) a seedovou validaci (58) pro nový region. |
+| **F1.5 · Kompletní procedurální Akt I** | [#208](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/208) celá topologie, sídla, NPC, questy, cesty, dungeony, eventy, svatyně a nový seed po spuštění; [#207](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/207) populace; [#121](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/121) fog; [#124](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/124) tilemapy a art. Následně skutečný balance #108, loot, UI, audio, výkon a plná přejímka. Tato fáze má nejvyšší aktuální prioritu. |
+| **F2 · Akty II–V** | STOP — žádná práce do výslovného schválení kompletního Aktu I uživatelem. |
 | **F3 · Hloubka a endgame** | Frakce (54) a [reaktivní svět #127](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/127) podle potřeb kampaně. Opakovatelná výzva (56) až po dokončení Aktu V a funkčním škálování a odměnách (53, 55). |
 | **F4 · Přejímka vydání** | Výkon a regresní sady (57–59), oddělení vývojových nástrojů (60), architektonická revize bez netcode (61), celý vydávací průchod (62) a audit (63). |
 
@@ -25,10 +30,12 @@ Cílem je původní browserové ARPG s ovládáním myší, šesti třídami, p�
 - [ ] **HUD a výbava.** Ověřit ovladatelný HUD, dialogy a inventář na desktopu, fyzickém Androidu a iPhonu v portrétu i na šířku. Projít vybavení a výměnu obouruční zbraně, plný batoh, přesun mezi batohem a úschovnou, srovnání prstenů a identitu po načtení. [#101](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/101) · [#123](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/123) · [#173](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/173)
 - [ ] **Přístupnost a čitelnost.** Klávesnicí a čtečkou ověřit dosažitelnost akcí, pojmenování a návrat fokusu. V boji ověřit varování útoků, zásahy, změnu fáze bosse a omezené efekty při zapnutém nastavení sníženého pohybu. [#125](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/125) · [#128](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/128)
 
-## První přírůstek Aktu II
+## F1.5 · Rozhodující požadavky na Akt I
 
-1. Propojit dokončený rozhovor s Vesnou s dosažitelným vstupem do The Rotting Marshes. Ověřit zamčený vstup před dokončením Aktu I a jeho odemčení i po Save/Load.
-2. Dodat jeden průchozí úsek s úvodním úkolem, novou čitelnou mechanikou oblasti a reprezentativním setkáním. Použít stávající simulaci, projekce HUDu, uložení a lokalizaci.
-3. Doplnit zbytek regionu, minibossy a Mother of Decay z [Promptu 49](../2d_arpg_implementation_prompts.md#prompt-49--act-ii-region). Celý prompt uzavřít až s přirozeným průchodem, zachováním odměn po načtení a doloženými průchozími seedy.
+- [ ] Každá nová herní relace po spuštění má nový seed; stejný seed reprodukuje celý svět. Během relace se svět nemění kvůli smrti, cestování, ukládání nebo vstupu do dungeonu. Zachovat postavu a jednorázový quest postup, oddělit session stav. Historické pozice není nutné migrovat.
+- [ ] Generovaný region propojuje několik sídel, biomy, cesty, hlavní i vedlejší úkoly, NPC, různorodé dungeony, eventy, svatyně a waypointy. Všechny povinné cíle dosažitelné pro různé seedy. Žádné pevné globální souřadnice jako jediný herní kontrakt.
+- [ ] Běžní nepřátelé tvoří skupiny rozmístěné v regionu a dungeonech; běžné globální vlny odstranit, zachovat je jen u explicitních událostí. Aktivní budget, stabilní ID a žádná duplikace jednorázových odměn.
+- [ ] Skutečné vrstvené tilemapy, jednotný pixel art, čitelné prostředí. Neprozkoumaný terén v herní scéně, mapě i minimapě neodhaluje cesty, objekty ani nepřátele; známé oblasti zůstávají vidět.
+- [ ] Vyladěné třídy, loot, ekonomika, questy, AI, bossové, audio, UI, ovládání, výkon a přístupnost. Kompletní přirozený průchod na několika seedech, desktop i fyzická mobilní zařízení, CS/EN, přesný CI a veřejný build. Výslovná hráčská přejímka #125.
 
 U každé přejímky evidovat commit, rozsah testu a výsledek. V poznámkách uvádět, zda je změna v draftu, integrovaná v `main`, ověřená skutečným hraním a nasazená na Pages. Jeden údaj nenahrazuje ostatní.
