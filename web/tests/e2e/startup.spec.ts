@@ -109,7 +109,7 @@ test('retains character-only save v11 and resumes separate seed-scoped world rec
           db.close();
           resolve(record?.format === 11 && record.character?.classId === 'ROGUE'
             && record.character.stash?.length === 24
-            && record.character.questLedger?.quests?.length === 9 ? 11 : null);
+            && record.character.questLedger?.quests?.length === 11 ? 11 : null);
         };
       };
     });

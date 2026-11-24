@@ -57,6 +57,7 @@
   import { townEntry, type TownEntry } from './game/world/townManifest';
   import { buildWilderness } from './game/world/wildernessRuntime';
   import { villageTownEntries, resolveRegionalTownEntry } from './game/world/villageDialogue';
+  import { VILLAGE_QUESTS } from './game/quests/villageQuests';
   import { CLASSES, type ClassId } from './game/data/classes';
   import { createCharacterId } from './game/creation/characterCreation';
   import { POTION_IDS, POTIONS } from './game/consumables/potionRules';
@@ -1232,9 +1233,26 @@
                   </div>
                 {/each}
               </div>
-            {:else if townModal.capability === 'planned'}
+            {:else if townModal.capability === 'planned' && !VILLAGE_QUESTS.some(q => q.giverId === townModal?.id)}
               <p>{$t('town.futureService')}</p>
             {/if}
+            {#each VILLAGE_QUESTS.filter(q => q.giverId === townModal?.id) as localQuest (localQuest.id)}
+              {@const state = view.questLedger?.quests.find(q => q.questId === localQuest.id)}
+              {@const prefix = 'quest.village.' + localQuest.id}
+              <h3>{$t(prefix + '.title')}</h3>
+              <p>{$t(prefix + '.briefing')}</p>
+              <p>{$t(prefix + '.objective')}</p>
+              <p>{localQuest.gold} {$t('hud.gold')} · {localQuest.xp} XP</p>
+              {#if state?.status === 'available'}
+                <button class="primary" data-testid={'village-accept-' + localQuest.id}
+                  onclick={() => acceptQuest(localQuest.id)}>{$t(prefix + '.accept')}</button>
+              {:else if state?.status === 'ready'}
+                <button class="primary" data-testid={'village-turnin-' + localQuest.id}
+                  onclick={() => turnInQuest(localQuest.id)}>{$t(prefix + '.turnIn')}</button>
+              {:else if state?.status === 'completed'}
+                <p>{$t('quest.ashes.completed')}</p>
+              {/if}
+            {/each}
             <button class="secondary" onclick={closeDialogue}>{$t('npc.leave')}</button>
           </section>
         </div>

@@ -5,7 +5,8 @@
     QUEST_REWARD_GOLD, QUEST_REWARD_XP, QUEST_REQUIRED_KILLS, WARDEN_ID
   } from '../game/quests/firstQuest';
   import { evaluateDialogue, chooseDialogueOption } from '../game/quests/questDialogue';
-  import { ACT_I_QUEST_CATALOG, createActIQuestLedger } from '../game/quests/actIQuestChain';
+  import { ACT_I_QUEST_CATALOG } from '../game/quests/actIQuestChain';
+  import { CAMPAIGN_QUEST_CATALOG, createCampaignQuestLedger } from '../game/quests/campaignQuestLedger';
   import type { QuestLedger } from '../game/quests/questDialogue';
   import { FIRST_QUEST_ID } from '../game/quests/firstQuest';
 
@@ -21,10 +22,11 @@
 
   let nodeId = $state('vesna.root');
   const context = { npcId: WARDEN_ID };
-  const ledger = $derived(createActIQuestLedger(questLedger ?? quest));
+  const ledger = $derived(createCampaignQuestLedger(questLedger ?? quest));
   const dialogue = $derived(ledger
-    ? evaluateDialogue(ACT_I_QUEST_CATALOG, ledger, nodeId, context) : null);
+    ? evaluateDialogue(CAMPAIGN_QUEST_CATALOG, ledger, nodeId, context) : null);
   const activeStory = $derived(ledger?.quests.find(entry => entry.questId !== FIRST_QUEST_ID
+    && ACT_I_QUEST_CATALOG.quests.some(q => q.id === entry.questId)
     && (entry.status === 'active' || entry.status === 'ready')) ?? null);
   const storyDefinition = $derived(ACT_I_QUEST_CATALOG.quests.find(entry =>
     entry.id === activeStory?.questId));
@@ -33,7 +35,7 @@
     if (!ledger) return;
     // Always recheck option visibility/availability against the current
     // ledger. UI never changes quest state or awards gold/XP itself.
-    const option = chooseDialogueOption(ACT_I_QUEST_CATALOG,
+    const option = chooseDialogueOption(CAMPAIGN_QUEST_CATALOG,
       ledger, nodeId, optionId, context);
     if (!option) return;
     if (option.action?.type === 'acceptQuest') accept(option.action.questId);
