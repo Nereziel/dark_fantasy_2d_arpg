@@ -71,6 +71,8 @@ import {
 import { buildWilderness, type WildernessRuntimeWorld } from '../world/wildernessRuntime';
 import { villageSanctuaries, inVillageSanctuary, type VillageSanctuary } from '../world/villageSanctuary';
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonRuntime';
+import { planOptionalDungeonEntry, planOptionalDungeonExit, type OptionalDungeonVisit } from '../world/optionalDungeonVisit';
+import { planActIDungeonEntrances } from '../world/actIDungeonEntrances';
 import {
   applyTalentStats, planSpendTalent, planRespecTalents, projectTalentBonuses,
   validateTalentBuild, type TalentRanks, type TalentId
@@ -328,6 +330,7 @@ export class GameSimulation {
   private dungeonStage: 0 | 1 = 0;
   private dungeonCleared = false;
   private pendingPortal = false;
+  private optionalVisit: OptionalDungeonVisit | null = null;
   private units: EnemyUnit[] = createPack(0, 1);
   private selectedTargetId: string | null = null;
   private quest: QuestProgress = freshQuest();
@@ -1281,6 +1284,7 @@ export class GameSimulation {
       this.zone, this.player, [...this.activatedCheckpointIds], wilderness.layout
     );
     this.zone = 'wilderness';
+    this.optionalVisit = null;
     this.shrineBlessings=[];
     this.pendingEnvironmentId=null;
     this.activeWorldEventId = null;
@@ -1714,6 +1718,12 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'usePortal') {
+      if (command.dungeonId !== undefined) {
+        if (this.zone !== 'wilderness' || this.paused) return;
+        const visit = planOptionalDungeonEntry(buildWilderness(this.world.seed), command.dungeonId, this.player);
+        if (visit) this.changeZone(visit);
+        return;
+      }
       this.warriorAction = null;
       this.classAction = null;
       this.warriorPending = null;
@@ -1726,7 +1736,7 @@ export class GameSimulation {
       this.pendingTown = null;
       this.pendingObject = null;
       this.pendingPortal = true;
-      if (distance(this.player, this.portalPosition) <= 78) this.changeZone();
+      if (distance(this.player, this.portalPosition) <= (this.optionalVisit ? 72 : 78)) this.changeZone();
       return;
     }
     if (command.type === 'interactTown') {
@@ -3661,7 +3671,7 @@ export class GameSimulation {
     if (!profile || !actor.alive || !this.player.alive) return;
     const index = this.units.indexOf(unit);
     const spawn = this.zone === 'crypt' && this.dungeonStage === 1 && index < PACK_SIZE
-      ? CRYPT_RUNTIME_BOSS_POSITIONS[index]
+      ? this.dungeonBossPositions[index]
       : this.world.encounterPositions[index] ?? (unit.summoned ? actor : undefined);
     if (!spawn) return;
     const origin = { x: spawn.x, y: spawn.y + (this.wave % 2) * 25 };
@@ -3896,25 +3906,36 @@ export class GameSimulation {
     this.events.push({ type: 'enemyWindup', enemyId: actor.id, pattern: def.attack });
   }
 
+  private get dungeonBossPositions(): readonly Readonly<Point>[] {
+    const interior = this.optionalVisit?.interior;
+    return interior ? [interior.bossSpawn, ...interior.bossGuardSpawns] : CRYPT_RUNTIME_BOSS_POSITIONS;
+  }
+
   private get portalPosition(): Point {
-    return this.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT;
+    return this.zone === 'wilderness' ? CRYPT_GATE : this.optionalVisit?.interior.exitPosition ?? CRYPT_EXIT;
   }
 
   /** Switch areas without persisting any dungeon, enemy or world state. */
-  private changeZone(): void {
+  private changeZone(visit: OptionalDungeonVisit | null = null): void {
     const destination: ZoneId = this.zone === 'wilderness' ? 'crypt' : 'wilderness';
     const seed = this.world.seed;
+    const wilderness = destination === 'wilderness' ? buildWilderness(seed) : null;
+    const returnPosition = wilderness && this.optionalVisit
+      ? planOptionalDungeonExit(wilderness, this.optionalVisit.identity, this.player) : null;
+    if (wilderness && this.optionalVisit && !returnPosition) { this.pendingPortal = false; return; }
+    this.optionalVisit = destination === 'crypt' ? visit : null;
     this.zone = destination;
     this.shrineBlessings=[];
     this.pendingEnvironmentId=null;
     this.activeWorldEventId = null;
-    const wilderness = destination === 'wilderness' ? buildWilderness(seed) : null;
-    const crypt = destination === 'crypt' ? buildCryptWorld(seed) : null;
-    this.world = wilderness?.layout ?? crypt!.layout;
+    const crypt = destination === 'crypt' && !visit ? buildCryptWorld(seed) : null;
+    this.world = wilderness?.layout ?? visit?.layout ?? crypt!.layout;
+    // Optional prop/trap rewards remain disabled until their separate persistence contract.
     this.cryptTheme = crypt?.theme ?? null;
     this.storyFeatures = wilderness?.features ?? [];
-    this.player.x = destination === 'crypt' ? CRYPT_EXIT.x : CAMP.x;
-    this.player.y = destination === 'crypt' ? CRYPT_EXIT.y : CAMP.y;
+    const spawn = destination === 'crypt' ? (visit?.interior.playerSpawn ?? CRYPT_EXIT) : (returnPosition ?? CAMP);
+    this.player.x = spawn.x;
+    this.player.y = spawn.y;
     this.dungeonStage = 0;
     this.dungeonCleared = false;
     this.shield = 0;
@@ -3966,7 +3987,7 @@ export class GameSimulation {
     this.pendingPortal = false;
     this.selectedTargetId = null;
     if (destination === 'crypt') {
-      this.storyEvent('crypt_descent', 'crypt_gate_entered', 'crypt_entry');
+      if (!this.optionalVisit) this.storyEvent('crypt_descent', 'crypt_gate_entered', 'crypt_entry');
     } else this.spawnMorrow();
     this.events.push({ type: 'zoneChanged', zone: destination });
   }
@@ -4080,10 +4101,10 @@ export class GameSimulation {
         if (this.respawnTimer <= 0) {
           this.dungeonStage = 1;
           this.wave = 1;
-          this.units = createCryptPack(1, this.level, CRYPT_RUNTIME_BOSS_POSITIONS);
+          this.units = createCryptPack(1, this.level, this.dungeonBossPositions);
           this.seedElitePack();
           const king = this.units.find(unit => unit.actor.id === 'crypt_lord-4');
-          if (king) {
+          if (king && !this.optionalVisit) {
             this.hollowKing = buildHollowKingRuntime(this.world.seed, king.actor.maxHealth).initial;
           }
           this.hollowKingAddActors.clear();
@@ -4106,11 +4127,11 @@ export class GameSimulation {
       * Math.max(0.25, Math.min(1.6, 1 + haste));
     const focus = this.focusedUnit;
     if (this.pendingPortal) {
-      if (distance(this.player, this.portalPosition) <= 78) {
+      if (distance(this.player, this.portalPosition) <= (this.optionalVisit ? 72 : 78)) {
         this.changeZone();
         return;
       }
-      this.follow(this.player, this.portalPosition, speed, dt, 70, true);
+      this.follow(this.player, this.portalPosition, speed, dt, this.optionalVisit ? 60 : 70, true);
     } else if (this.pendingTown) {
       const entry = this.dialogueEntry(this.pendingTown);
       if (!entry || this.zone !== 'wilderness') this.pendingTown = null;
@@ -4242,7 +4263,7 @@ export class GameSimulation {
     this.tickCryptTraps(dt);
     if (this.player.alive) {
       for (const unit of this.units) {
-        if (unit.actor.id === 'crypt_lord-4' && this.zone === 'crypt' && this.dungeonStage === 1) {
+        if (unit.actor.id === 'crypt_lord-4' && this.zone === 'crypt' && this.dungeonStage === 1 && !this.optionalVisit) {
           this.updateHollowKing(unit, dt);
         } else if (this.miniBossStates.has(unit.actor.id)) this.updateMiniBoss(unit, dt);
         else this.updateEnemyAI(unit, dt);
@@ -4476,7 +4497,7 @@ export class GameSimulation {
       }
     }
     if (unit.actor.type === 'crypt_lord') {
-      if (this.zone === 'crypt') this.storyEvent('crypt_lord_fallen', 'crypt_lord_slain', 'crypt_lord_defeat');
+      if (this.zone === 'crypt' && !this.optionalVisit) this.storyEvent('crypt_lord_fallen', 'crypt_lord_slain', 'crypt_lord_defeat');
       this.gold += 100;
       this.awardExperience(rewardForActivity('boss', this.level, this.level));
     }
@@ -4655,6 +4676,7 @@ export class GameSimulation {
       version: 5,
       worldSeed: this.world.seed,
       zone: this.zone,
+      ...(this.optionalVisit ? {dungeonId:this.optionalVisit.identity.dungeonId} : {}),
       dungeonStage: this.dungeonStage,
       dungeonCleared: this.dungeonCleared,
       classId: this.classId,
@@ -4759,12 +4781,14 @@ export class GameSimulation {
   }
 
   restore(s: GameSnapshot): boolean {
-    const layout = s && Number.isSafeInteger(s.worldSeed)
-      && s.worldSeed >= 0 && s.worldSeed <= 0xffffffff
-      && (s.zone === 'wilderness' || s.zone === 'crypt')
-      ? (s.zone === 'crypt' ? buildCryptWorld(s.worldSeed).layout : buildWilderness(s.worldSeed).layout)
-      : null;
-    const restoredWilderness = layout ? buildWilderness(s.worldSeed) : null;
+    if (!s || !Number.isSafeInteger(s.worldSeed) || s.worldSeed < 0 || s.worldSeed > 0xffffffff
+      || (s.zone !== 'wilderness' && s.zone !== 'crypt')
+      || (s.dungeonId !== undefined && (s.zone !== 'crypt' || (s.dungeonId !== 'mine' && s.dungeonId !== 'cave')))) return false;
+    const restoredWilderness = buildWilderness(s.worldSeed);
+    const entry = s.dungeonId ? planActIDungeonEntrances(restoredWilderness).find(e => e.id === s.dungeonId) : null;
+    const restoredVisit = entry ? planOptionalDungeonEntry(restoredWilderness, s.dungeonId, {...entry.position,alive:true}) : null;
+    if (s.dungeonId && !restoredVisit) return false;
+    const layout = s.zone === 'crypt' ? (restoredVisit?.layout ?? buildCryptWorld(s.worldSeed).layout) : restoredWilderness.layout;
     const restoredIndex = restoredWilderness ? createChunkIndex(restoredWilderness) : null;
     const restoredMapWorld = restoredWilderness ? this.mapInput(restoredWilderness) : null;
     const cryptManifest = layout && (s.zone === 'crypt'
@@ -4772,7 +4796,7 @@ export class GameSimulation {
       ? buildCryptWorld(s.worldSeed).theme : null;
     const validHollowKing = (state: unknown): boolean => {
       if (state === undefined || state === null) return true;
-      if (!validateHollowKingState(state) || s.zone !== 'crypt'
+      if (restoredVisit || !validateHollowKingState(state) || s.zone !== 'crypt'
         || s.dungeonStage !== 1 || state.seed !== s.worldSeed) return false;
       const unit = Array.isArray(s.enemies) ? s.enemies.find(enemy =>
         enemy?.actor?.id === 'crypt_lord-4') : null;
@@ -4949,7 +4973,7 @@ export class GameSimulation {
         cryptManifest?.traps.map(trap => trap.id) ?? [])
       || (s.cryptInteractables !== undefined && (!Array.isArray(s.cryptInteractables)
         || JSON.stringify(s.cryptInteractables) !== JSON.stringify(
-          s.zone === 'crypt' ? (cryptManifest?.interactables ?? []).filter(prop =>
+          s.zone === 'crypt' && !restoredVisit ? (cryptManifest?.interactables ?? []).filter(prop =>
             prop.initiallyVisible && !(s.cryptUsedPropIds ?? []).includes(prop.id)) : [])))
       || (s.dungeonStage !== 0 && s.dungeonStage !== 1)
       || typeof s.dungeonCleared !== 'boolean'
@@ -5088,7 +5112,8 @@ export class GameSimulation {
     ) return false;
 
     this.world = layout;
-    this.cryptTheme = s.zone === 'crypt' ? buildCryptWorld(s.worldSeed).theme : null;
+    this.optionalVisit = restoredVisit;
+    this.cryptTheme = s.zone === 'crypt' && !restoredVisit ? buildCryptWorld(s.worldSeed).theme : null;
     this.cryptArmedTraps.clear();
     this.pendingCryptPropId = null;
     this.cryptUsedPropIds.clear();
@@ -5213,6 +5238,7 @@ export class GameSimulation {
 
   reset(classId: ClassId = 'WARRIOR', seed = this.world.seed): void {
     this.zone = 'wilderness';
+    this.optionalVisit = null;
     this.cryptTheme = null;
     this.cryptUsedPropIds.clear();
     this.cryptTriggeredTrapIds.clear();
