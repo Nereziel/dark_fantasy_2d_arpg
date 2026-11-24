@@ -60,6 +60,7 @@ import {
 } from '../enemies/miniBossRules';
 import { monsterActions, monsterAction, type MonsterAction } from '../enemies/monsterRuntime';
 import { getEnemyArchetype } from '../enemies/archetypeCatalog';
+import { defaultHotbarLayout, validateHotbarLayout } from '../input/hotbarRegistry';
 import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, findPath, findPickupPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
@@ -381,6 +382,7 @@ export class GameSimulation {
   private skillPoints = 0;
   private talentPoints = 0;
   private talentRanks: TalentRanks = {};
+  private hotbarLayout: string[] | undefined;
   private gold = 75;
   private materials: Materials = {};
   private gems: GemWallet = {};
@@ -1296,6 +1298,15 @@ export class GameSimulation {
   }
 
   command(command: GameCommand): void {
+    // Presentation-only placement never cancels a cast, consumes resources
+    // or resets a cooldown. Validate before touching ANY runtime state.
+    if (command.type === 'setHotbarLayout') {
+      if (!this.player.alive || this.paused || !validateHotbarLayout(this.classId, command.layout)) return;
+      const defaults = defaultHotbarLayout(this.classId);
+      this.hotbarLayout = command.layout.every((id, index) => id === defaults[index])
+        ? undefined : [...command.layout];
+      return;
+    }
     // A new click/action cancels any pending auto-approach.
     if(command.type!=='interactEnvironment')this.pendingEnvironmentId=null;
     if (command.type === 'createCharacter') {
@@ -4434,6 +4445,7 @@ export class GameSimulation {
       xp: this.xp,
       skillPoints: this.skillPoints,
       talentPoints: this.talentPoints,
+      ...(this.hotbarLayout ? { hotbarLayout: [...this.hotbarLayout] } : {}),
       ...(Object.keys(this.talentRanks).length
         ? { talentRanks: { ...this.talentRanks } } : {}),
       ...(Object.keys(this.materials).length
@@ -4483,6 +4495,7 @@ export class GameSimulation {
       skillPoints: progress.skillPoints ?? Math.max(0, Math.min(MAX_LEVEL - 1, progress.level - 1)),
       talentPoints: progress.talentPoints ?? Math.floor(Math.min(MAX_LEVEL, progress.level) / 5),
       talentRanks: progress.talentRanks ?? {},
+      ...(progress.hotbarLayout !== undefined ? { hotbarLayout: progress.hotbarLayout } : {}),
       materials: progress.materials ?? {},
       gems: progress.gems ?? {},
       potions: {
@@ -4510,6 +4523,7 @@ export class GameSimulation {
     this.skillPoints = scratch.skillPoints;
     this.talentPoints = scratch.talentPoints;
     this.talentRanks = { ...scratch.talentRanks };
+    this.hotbarLayout = scratch.hotbarLayout ? [...scratch.hotbarLayout] : undefined;
     this.materials = { ...scratch.materials };
     this.gems = { ...scratch.gems };
     this.potions = { ...scratch.potions, charges: { ...scratch.potions.charges },
@@ -4575,6 +4589,7 @@ export class GameSimulation {
       skillPoints: this.skillPoints,
       talentPoints: this.talentPoints,
       talentRanks: { ...this.talentRanks },
+      ...(this.hotbarLayout ? { hotbarLayout: [...this.hotbarLayout] } : {}),
       materials: { ...this.materials },
       gems: { ...this.gems },
       potions: { ...this.potions, charges: { ...this.potions.charges },
@@ -4854,6 +4869,7 @@ export class GameSimulation {
       || (s.level === MAX_LEVEL ? s.xp !== 0 : s.xp >= xpRequiredForLevel(s.level))
       || (s.skillPoints !== undefined && (!Number.isSafeInteger(s.skillPoints)
         || s.skillPoints < 0 || s.skillPoints > s.level - 1))
+      || (s.hotbarLayout !== undefined && !validateHotbarLayout(s.classId, s.hotbarLayout))
       || !validateTalentBuild(s.classId, s.level,
         s.talentPoints ?? Math.floor(s.level / 5), s.talentRanks ?? {})
       || !validateMaterials(s.materials ?? {})
@@ -5040,6 +5056,9 @@ export class GameSimulation {
     this.skillPoints = s.skillPoints ?? s.level - 1;
     this.talentPoints = s.talentPoints ?? Math.floor(s.level / 5);
     this.talentRanks = { ...(s.talentRanks ?? {}) };
+    const defaultLayout = defaultHotbarLayout(s.classId);
+    this.hotbarLayout = s.hotbarLayout && !s.hotbarLayout.every((id, index) => id === defaultLayout[index])
+      ? [...s.hotbarLayout] : undefined;
     this.materials = { ...(s.materials ?? {}) };
     this.gems = { ...(s.gems ?? {}) };
     this.potions = s.potions ? { ...s.potions, charges: { ...s.potions.charges },
@@ -5175,6 +5194,7 @@ export class GameSimulation {
     this.skillPoints = 0;
     this.talentPoints = 0;
     this.talentRanks = {};
+    this.hotbarLayout = undefined;
     this.materials = {};
     this.gems = {};
     this.potions = freshPotions();

@@ -56,6 +56,6 @@ export function dispatchCombatAction(
     bridge.command({ type: 'evade' });
     return true;
   }
-  const entry = resolveHotbarEntry(state.classId, action, layout);
+  const entry = resolveHotbarEntry(state.classId, action, layout === undefined ? state.hotbarLayout : layout);
   return entry ? dispatchEntry(bridge, state, entry, clickedEnemyId) : false;
 }

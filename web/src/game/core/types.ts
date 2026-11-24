@@ -79,6 +79,8 @@ export interface CharacterProgress {
   /** Unspent points, reconstructible on migration from v8 characters. */
   skillPoints?: number;
   talentPoints?: number;
+  /** Optional character-owned skill placement; absent means canonical defaults. */
+  hotbarLayout?: string[];
   /** Persistent rank investment, empty on legacy v11 records. */
   talentRanks?: TalentRanks;
   /** Optional character-only crafting ledger; absent on legacy v11 saves. */
@@ -140,6 +142,8 @@ export interface GameSnapshot {
   selectedTargetId: string | null;
   wave: number;
   respawnTimer: number;
+  /** A copy of the custom character layout; default placement is implicit. */
+  hotbarLayout?: string[];
   /** Session-only movement and dodge input state. */
   holdPosition: boolean;
   evadeCooldown: number;
@@ -243,6 +247,7 @@ export interface GameSnapshot {
 }
 export type GameCommand =
   | { type: 'createCharacter'; classId: ClassId; characterId: string; seed?: number }
+  | { type: 'setHotbarLayout'; layout: readonly string[] }
   | { type: 'move'; destination: Point }
   | { type: 'holdPosition'; value: boolean }
   | { type: 'evade' }

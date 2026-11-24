@@ -6,6 +6,7 @@ test('hotbar supports drag, keyboard activation, reset and per-hero reload', asy
   page.setDefaultTimeout(12_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
+  await page.getByRole('button', { name: /Warrior/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const toolbar = page.locator('.skill-toolbar');
   const slots = toolbar.locator('[data-hotbar-ability]');
@@ -19,7 +20,6 @@ test('hotbar supports drag, keyboard activation, reset and per-hero reload', asy
   await page.getByTestId('edit-hotbar').click();
   await expect(slots.nth(1)).toHaveAttribute('data-hotbar-ability', 'warCry');
   await expect(slots.nth(1)).toHaveAttribute('data-hotbar-slot', 'SLOT_1');
-  await page.locator('.game-screen').click({ position: { x: 4, y: 4 }, button: 'left' });
   await page.keyboard.press('1');
   await expect(slots.nth(1)).toHaveClass(/cooldown/);
   await page.getByRole('button', { name: 'Save', exact: true }).click();
@@ -34,12 +34,13 @@ test('hotbar supports drag, keyboard activation, reset and per-hero reload', asy
 });
 
 test('touch hotbar slot selection fits a 320px viewport without casting', async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 320, height: 740 }, hasTouch: true, isMobile: true });
+  const context = await browser.newContext({ baseURL: 'http://127.0.0.1:4173/dark_fantasy_2d_arpg/', viewport: { width: 320, height: 740 }, hasTouch: true, isMobile: true });
   try {
     const page = await context.newPage();
     await page.goto('./');
     await page.locator('#menu-language').selectOption('en');
-    await page.getByRole('button', { name: 'Enter the world' }).tap();
+    await page.getByRole('button', { name: /Warrior/ }).click();
+  await page.getByRole('button', { name: 'Enter the world' }).tap();
     await page.getByTestId('edit-hotbar').tap();
     const editor = page.getByTestId('hotbar-editor');
     await expect(editor).toBeVisible();
