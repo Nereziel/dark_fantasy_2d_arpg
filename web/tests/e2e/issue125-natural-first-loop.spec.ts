@@ -300,20 +300,35 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
   while (Date.now() < deadline) {
     if (await inspect.count() > 0) return;
     if (await page.getByTestId('death-overlay').count()) {
-      throw new Error('Natural Act I evidence search: hero died');
+      throw new Error('Natural Act I evidence search: hero died; seed=' + await game.getAttribute('data-world-seed')
+        + '; last steps=' + lastSteps.join(' | '));
     }
     const x = Number(await game.getAttribute('data-player-x'));
     const y = Number(await game.getAttribute('data-player-y'));
     expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
     const hp = (await page.locator('.vital-top').first().innerText())
       .match(/(\d+)\s*\/\s*(\d+)/);
-    if (hp && Number(hp[1]) / Number(hp[2]) < 0.67) {
+    if (hp && Number(hp[1]) / Number(hp[2]) < 0.78) {
       const heal = page.locator('[data-paladin-ability="healingLight"]');
       if (await heal.isEnabled()) await heal.click();
       else {
         const potion = page.getByTestId('use-potion');
         if (await potion.isEnabled()) await potion.click();
       }
+    }
+    // Same ordinary defensive HUD action used in the earlier forest search.
+    // The route crosses hostile territory after Morrow; do not wait for
+    // critical health before protecting the travelling Paladin.
+    if (hp && Number(hp[1]) / Number(hp[2]) < 0.85) {
+      const shield = page.locator('[data-paladin-ability="divineShield"]');
+      if (await shield.isEnabled()) {
+        try { await shield.click({ timeout: 1_500 }); }
+        catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
+      }
+    }
+    if (await page.getByTestId('death-overlay').count()) {
+      throw new Error('Natural Act I evidence search: hero died before map check; seed='
+        + await game.getAttribute('data-world-seed') + '; last steps=' + lastSteps.join(' | '));
     }
     // A player can consult the discovered-only map. Do not inspect the
     // generator, reveal fog, or read undiscovered target coordinates.

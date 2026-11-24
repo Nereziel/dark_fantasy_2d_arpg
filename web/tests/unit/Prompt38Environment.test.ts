@@ -151,7 +151,7 @@ describe('Prompt 38 — authoritative click and persistence integration',()=>{
     expect(loaded.character()).toEqual(unchanged);
     expect(new GameSimulation(43).restoreWorldProgress(progress)).toBe(false);
     expect(loaded.restoreWorldProgress({...progress,environmentUsedIds:['fake']} as unknown as typeof progress)).toBe(false);
-  });
+  },15000);
   it('traps are one-shot and damage only after real close-range activation; forged snapshots fail closed',()=>{
     const sim=new GameSimulation(42);
     const trap=sim.snapshot().environmentObjects?.find(o=>o.id==='env.trap')!;

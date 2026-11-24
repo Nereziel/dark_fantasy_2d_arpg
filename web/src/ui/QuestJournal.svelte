@@ -3,12 +3,13 @@
   import type { GameSnapshot } from '../game/core/types';
   import { QUEST_REQUIRED_KILLS, FIRST_QUEST_ID } from '../game/quests/firstQuest';
   import { ACT_I_QUEST_CATALOG } from '../game/quests/actIQuestChain';
+  import { VILLAGE_QUESTS } from '../game/quests/villageQuests';
   import { storyNeedsWardenTurnIn } from '../game/ui/onboardingGuide';
   import { activeStoryRegionHint } from '../game/ui/storyRegionHints';
 
   let { view, talk, inspectEvidence }: { view: GameSnapshot; talk: () => void; inspectEvidence: () => void } = $props();
   const storyState = $derived(view.questLedger?.quests.find(quest =>
-    quest.questId !== FIRST_QUEST_ID && (quest.status === 'active' || quest.status === 'ready')) ?? null);
+    quest.questId !== FIRST_QUEST_ID && ACT_I_QUEST_CATALOG.quests.some(q => q.id === quest.questId) && (quest.status === 'active' || quest.status === 'ready')) ?? null);
   const storyDefinition = $derived(ACT_I_QUEST_CATALOG.quests.find(quest =>
     quest.id === storyState?.questId) ?? null);
   const regionHintKey = $derived(activeStoryRegionHint(
@@ -59,6 +60,15 @@
       <div class="quest-ready">{$t('quest.ashes.readyHint')}</div>
     {/if}
   {/if}
+  {#each VILLAGE_QUESTS as localQuest (localQuest.id)}
+    {@const state = view.questLedger?.quests.find(q => q.questId === localQuest.id)}
+    {#if state?.status === 'active' || state?.status === 'ready'}
+      <div class="quest-region" data-testid={'village-journal-' + localQuest.id}>
+        <strong>{$t('quest.village.' + localQuest.id + '.title')}</strong>
+        <div class="quest-progress">{$t('quest.village.' + localQuest.id + '.objective')} · {state.counters.visit}/1</div>
+      </div>
+    {/if}
+  {/each}
   {#if view.canInspectStoryEvidence}
     <button type="button" class="quest-inspect" data-testid="story-inspect-evidence"
       onclick={inspectEvidence}>{$t('quest.actI.inspectEvidence')}</button>

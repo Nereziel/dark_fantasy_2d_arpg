@@ -7,7 +7,7 @@ import { FIRST_QUEST_ID, QUEST_REWARD_GOLD, QUEST_REWARD_XP } from '../../src/ga
 describe('Wave E Act I quest runtime and character-only save v11', () => {
   it('starts all quests in one ledger and retains the historical quest API', () => {
     const game = new GameSimulation(0);
-    expect(game.snapshot().questLedger?.quests).toHaveLength(9);
+    expect(game.snapshot().questLedger?.quests).toHaveLength(11);
     expect(game.snapshot().quest.id).toBe(FIRST_QUEST_ID);
     game.command({ type: 'questAccept' });
     expect(game.snapshot().quest.status).toBe('active');
@@ -22,13 +22,13 @@ describe('Wave E Act I quest runtime and character-only save v11', () => {
     const game = new GameSimulation(42);
     const saved = createSaveRecord(game.character(), 456);
     expect(saved?.format).toBe(11);
-    expect(saved?.character.questLedger?.quests).toHaveLength(9);
+    expect(saved?.character.questLedger?.quests).toHaveLength(11);
     expect(saved && readSaveRecord(saved)).toEqual(saved?.character);
     const { questLedger: _dropLedger, ...oldCharacter } = saved!.character;
     const legacy = { ...saved!, format: 10, character: oldCharacter };
     const loaded = readSaveRecord(legacy);
     expect(loaded?.quest.id).toBe(FIRST_QUEST_ID);
-    expect(loaded?.questLedger?.quests).toHaveLength(9);
+    expect(loaded?.questLedger?.quests).toHaveLength(11);
     expect(loaded?.stash).toEqual(oldCharacter.stash);
     expect(readSaveRecord({ ...saved!, character: oldCharacter })).toBeNull();
     expect(readSaveRecord({ ...saved!, character: { ...saved!.character, questLedger: { quests: [] } } }))

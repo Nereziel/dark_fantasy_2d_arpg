@@ -116,7 +116,7 @@ describe('Issue #125 — Hollow King boss and Vesna report handoff', () => {
     expect(questStatus(game, 'vesnas_report')).toBe('completed');
     expect(finished.actIIUnlocked).toBe(true);
     expect(finished.gold).toBe(beforeReport + 280);
-    expect(finished.questLedger?.quests.at(-1)?.rewardClaimed).toBe(true);
+    expect(finished.questLedger?.quests.find(q => q.questId === 'vesnas_report')?.rewardClaimed).toBe(true);
     game.command({ type: 'questTurnIn', questId: 'vesnas_report' });
     game.command({ type: 'interactNpc', npcId: 'warden_vesna' });
     expect(game.snapshot().gold).toBe(finished.gold);
