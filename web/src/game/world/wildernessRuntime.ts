@@ -140,7 +140,7 @@ function withSettlementStructures(world: WildernessRuntimeWorld): WildernessRunt
  * quest targets, events or props. Keep old roads for compatibility in this
  * migration slice; the regional graph is an additive shared road network.
  */
-function withRegionalTopology(world: WildernessRuntimeWorld, allowLandscape = true): WildernessRuntimeWorld {
+function withRegionalTopology(world: WildernessRuntimeWorld, allowLandscape = true, placementAttempt = 0): WildernessRuntimeWorld {
   const { layout, terrain, features } = world;
   const { seed } = layout;
   const env = planEnvironmentObjects(seed,layout,features);
@@ -167,7 +167,7 @@ function withRegionalTopology(world: WildernessRuntimeWorld, allowLandscape = tr
       ?candidate:null;
   // Even if the macro landforms cannot be committed, retain a valid topology
   // on the original geometry. No fallback draws unchecked roads.
-  const topology=accepted?accepted.topology:planActOneTopology(layout,terrain.tiles,sites,reserved);
+  const topology=accepted?accepted.topology:planActOneTopology(layout,terrain.tiles,sites,reserved,placementAttempt);
   if(!topology.ok)return world;
   const next=accepted?accepted.layout:layout;
   const forms=accepted?accepted.forms:[];
@@ -233,11 +233,19 @@ export function buildWilderness(seed: number): WildernessRuntimeWorld {
   const base=withSettlementStructures(generateWilderness(seed));
   let world=withVillagePopulation(withRegionalTopology(base));
   // Mandatory populated settlements outrank optional macro landforms.
-  // Retry at most once, keeping the better population and original world on
+  // First retry without landforms, keeping the better population and original world on
   // a tie. Both proposals use the same seed and protected story geometry.
   if((world.villages?.length??0)<2 && world.region?.forms.length){
     const fallback=withVillagePopulation(withRegionalTopology(base,false));
     if((fallback.villages?.length??0)>(world.villages?.length??0))world=fallback;
+  }
+  // If the same anchors cannot be populated, retry the regional placement
+  // order on the unchanged protected base. Complete initial worlds are
+  // untouched; ties retain the earlier proposal. Bounded, deterministic.
+  for(let attempt=1;attempt<=6&&(world.villages?.length??0)<2;attempt++){
+    const fallback=withVillagePopulation(withRegionalTopology(base,false,attempt));
+    if((fallback.villages?.length??0)>(world.villages?.length??0)
+      ||(!world.region&&fallback.region))world=fallback;
   }
   if (recentWorlds.size >= MAX_CACHED_WORLDS) {
     recentWorlds.delete(recentWorlds.keys().next().value!);
