@@ -434,15 +434,17 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
     const live = roster.locator('button:not([disabled])');
     const kings = live.filter({ hasText: 'The Hollow King' });
     const candidate = (await kings.count()) ? kings.first() : live.first();
-    if (await live.count() > 0) {
-      const targeted = await candidate.getAttribute('aria-pressed') === 'true';
-      if (!targeted || Date.now() - lastTargetAt > 10_000) {
-        try {
-          await candidate.click({ timeout: 1_500 });
-          lastTargetAt = Date.now();
-        } catch (error) {
-          if (!(error instanceof errors.TimeoutError)) throw error;
-        }
+    // Read the current selection without waiting for a target that may have
+    // died between the roster query and the attribute read. The next loop
+    // still requires the real quest transition AND Crypt cleared.
+    const pressed = await candidate.evaluateAll(nodes =>
+      nodes.length ? nodes[0]!.getAttribute('aria-pressed') : null);
+    if (pressed !== null && (pressed !== 'true' || Date.now() - lastTargetAt > 10_000)) {
+      try {
+        await candidate.click({ timeout: 1_500 });
+        lastTargetAt = Date.now();
+      } catch (error) {
+        if (!(error instanceof errors.TimeoutError)) throw error;
       }
     }
     await page.waitForTimeout(400);

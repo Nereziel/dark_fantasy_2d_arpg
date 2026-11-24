@@ -11,6 +11,7 @@ import type { CombatTimelineState } from '../animation/combatTimeline';
 import type { ClassId } from '../data/classes';
 import type { EnemyType } from '../enemies/enemies';
 import { pixelClassCombatMarks } from './classCombatGlyphs';
+import type { DirectionalPixelView } from './isometricActorFacing';
 
 export const PIXEL_ANIMATIONS = [
   'idle', 'walk', 'run', 'attack', 'cast', 'channel', 'hit', 'block', 'dodge', 'death'
@@ -78,6 +79,10 @@ export const PIXEL_ACTOR_LOOKS: Readonly<Record<PixelActor, PixelActorLook>> = O
 });
 
 export function pixelAtlasKey(actor: PixelActor): string { return 'ar-pixel-' + actor; }
+/** Distinct lazy texture cache keys; the orthographic atlas stays untouched. */
+export function directionalPixelAtlasKey(actor: PixelActor, view: DirectionalPixelView): string {
+  return pixelAtlasKey(actor) + '-iso-' + view;
+}
 export function pixelFrame(animation: PixelAnimation, frame: number): string {
   return animation + '-' + Math.max(0, Math.min(3, Math.floor(Number.isFinite(frame) ? frame : 0)));
 }
@@ -93,7 +98,7 @@ function line(ctx: CanvasRenderingContext2D,color:string,x:number,y:number,w:num
 
 /** One 48×56 pixel-art frame, rooted at feet for collision/health-bar alignment. */
 function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: PixelActorLook,
-  animation: PixelAnimation, frame: number): void {
+  animation: PixelAnimation, frame: number, view: DirectionalPixelView): void {
   const run = animation === 'run' || animation === 'dodge';
   const stride = animation === 'walk' || run ? [-3,1,4,-1][frame]! : 0;
   const bob = animation === 'idle' || animation === 'channel' ? [0,-1,0,1][frame]!
@@ -122,22 +127,35 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
       rect(ctx,look.body,x-25-i%2*3,29+i*4+y,4,11);
       rect(ctx,look.body,x+21+i%2*3,29+i*4+y,4,11);
     }
-    rect(ctx,look.accent,x-6,36+y,4,4);
-    rect(ctx,look.accent,x+3,36+y,4,4);
+    if (view === 's') {
+      rect(ctx,look.accent,x-6,36+y,4,4);
+      rect(ctx,look.accent,x+3,36+y,4,4);
+    } else if (view === 'n' || view === 'ne') {
+      rect(ctx,look.highlight,x-4,29+y,8,6);
+      if (view === 'ne') rect(ctx,look.accent,x+9,29+y,3,3);
+    } else {
+      rect(ctx,look.accent,x+10,view === 'e' ? 32+y : 37+y,4,4);
+    }
     return;
   }
   if (look.shape === 'beast' || look.shape === 'boar') {
     rect(ctx,look.shadow,x-17,31+y,31,15);
     rect(ctx,look.body,x-15,29+y,30,15);
     rect(ctx,look.highlight,x-7,28+y,18,5);
-    rect(ctx,look.body,x+8,23+y,15,15);
-    rect(ctx,look.skin,x+16,30+y,8,6);
-    rect(ctx,look.accent,x+15,28+y,4,3);
+    // The existing south view retains the legacy silhouette. Other views
+    // move the muzzle/head rather than rotating the complete upright sprite.
+    const headX = view === 'n' ? x-7 : view === 'ne' ? x+3 : x+8;
+    const headY = view === 'n' ? 19+y : view === 'ne' ? 20+y : view === 'se' ? 28+y : 23+y;
+    rect(ctx,look.body,headX,headY,15,15);
+    if (view !== 'n') {
+      rect(ctx,look.skin,headX+8,headY+7,8,6);
+      rect(ctx,look.accent,headX+7,headY+5,4,3);
+    }
     rect(ctx,look.shadow,x-14-stride,41+y,7,10);
     rect(ctx,look.shadow,x+7+stride,41+y,7,10);
-    rect(ctx,look.body,x+10,19+y,6,7);
-    rect(ctx,look.body,x+18,20+y,5,7);
-    if (look.shape==='boar') rect(ctx,BONE,x+20,36+y,7,3);
+    rect(ctx,look.body,headX+2,headY-4,6,7);
+    rect(ctx,look.body,headX+10,headY-3,5,7);
+    if (look.shape==='boar' && view !== 'n') rect(ctx,BONE,headX+12,headY+13,7,3);
     else rect(ctx,look.shadow,x-23,30+y,9,4);
     return;
   }
@@ -146,9 +164,17 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
     rect(ctx,look.body,x-12,16+y,24,30);
     rect(ctx,look.highlight,x-9,13+y,18,20);
     for(let i=0;i<4;i++) rect(ctx,look.body,x-12+i*7,43+y+(frame+i)%3,5,5);
-    rect(ctx,look.accent,x-7,22+y,5,4);
-    rect(ctx,look.accent,x+3,22+y,5,4);
-    rect(ctx,look.shadow,x-3,30+y,6,11);
+    if (view === 's') {
+      rect(ctx,look.accent,x-7,22+y,5,4);
+      rect(ctx,look.accent,x+3,22+y,5,4);
+      rect(ctx,look.shadow,x-3,30+y,6,11);
+    } else if (view === 'n' || view === 'ne') {
+      rect(ctx,look.body,x-6,20+y,12,16);
+      if (view === 'ne') rect(ctx,look.accent,x+7,21+y,3,3);
+    } else {
+      rect(ctx,look.accent,x+(view === 'e' ? 7 : 4),23+y,5,4);
+      rect(ctx,look.shadow,x+4,30+y,6,11);
+    }
     return;
   }
   const skeleton = look.shape==='skeleton' || look.shape==='archer'
@@ -169,18 +195,34 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
     rect(ctx,look.body,x-11,22+y,22,21);
   }
   rect(ctx,look.highlight,x-9,23+y,18,5);
-  rect(ctx,look.accent,x-3,26+y,6,13);
+  if (view === 'n' || view === 'ne') rect(ctx,look.shadow,x-3,26+y,6,13);
+  else rect(ctx,look.accent,x-3,26+y,6,13);
   if (skeleton) {
     for(let i=0;i<3;i++) rect(ctx,look.shadow,x-8,28+i*4+y,16,2);
+  } else if (view === 'n' || view === 'ne') {
+    rect(ctx,look.highlight,x-7,27+y,14,2);
+    rect(ctx,look.shadow,x-8,35+y,16,3);
   }
   rect(ctx,look.shadow,x-10,10+y,20,15);
   rect(ctx,hood?look.shadow:look.skin,x-8,11+y,16,15);
-  rect(ctx,skeleton?BONE:look.skin,x-6,14+y,12,10);
+  if (view === 's') rect(ctx,skeleton?BONE:look.skin,x-6,14+y,12,10);
+  else if (view === 'se' || view === 'e') rect(ctx,skeleton?BONE:look.skin,x+1,14+y,view === 'e' ? 7 : 10,10);
+  else rect(ctx,look.body,x-7,13+y,14,11);
   rect(ctx,hood?look.body:look.highlight,x-11,8+y,22,8);
   if(look.shape==='cleric') rect(ctx,look.accent,x-2,7+y,4,18);
   if(look.shape==='brute') rect(ctx,look.accent,x-14,9+y,28,5);
-  rect(ctx,skeleton?'#252b34':'#24232d',x-6,17+y,4,3);
-  rect(ctx,skeleton?'#252b34':'#24232d',x+3,17+y,4,3);
+  const eye = skeleton?'#252b34':'#24232d';
+  if (view === 's') {
+    rect(ctx,eye,x-6,17+y,4,3);
+    rect(ctx,eye,x+3,17+y,4,3);
+  } else if (view === 'se') {
+    rect(ctx,eye,x+1,17+y,3,3);
+    rect(ctx,eye,x+7,17+y,3,3);
+  } else if (view === 'e') {
+    rect(ctx,eye,x+6,17+y,3,3);
+  } else if (view === 'ne') {
+    rect(ctx,look.skin,x+7,16+y,3,5);
+  }
   rect(ctx,look.shadow,x-16,26+y,6,15);
   rect(ctx,look.body,x-16,25+y,5,13);
   const armLift = striking || casting ? -10 : 0;
@@ -217,7 +259,7 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
 }
 
 /** Generates a complete Phaser-ready atlas canvas with named frames. */
-export function renderPixelAtlas(actor: PixelActor): HTMLCanvasElement {
+export function renderPixelAtlas(actor: PixelActor, view: DirectionalPixelView = 's'): HTMLCanvasElement {
   const look = PIXEL_ACTOR_LOOKS[actor];
   const canvas = document.createElement('canvas');
   canvas.width = PIXEL_FRAME_WIDTH * PIXEL_ANIMATION_FRAMES;
@@ -229,7 +271,7 @@ export function renderPixelAtlas(actor: PixelActor): HTMLCanvasElement {
     for(let frame=0;frame<PIXEL_ANIMATION_FRAMES;frame++) {
       ctx.save();
       ctx.translate(frame*PIXEL_FRAME_WIDTH,row*PIXEL_FRAME_HEIGHT);
-      paintFrame(ctx,actor,look,animation,frame);
+      paintFrame(ctx,actor,look,animation,frame,view);
       ctx.restore();
     }
   });

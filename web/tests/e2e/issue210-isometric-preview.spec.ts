@@ -9,6 +9,8 @@ test('isometric preview boots, accepts a pointer and keeps the map controls', as
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
+  // A successful textured ground rebuild must register every bounded chunk.
+  await expect(canvas).toHaveAttribute('data-ground-chunks', '24');
   const player = page.locator('[data-minimap="active"] [data-map-marker="player"] circle').first();
   await expect(player).toBeVisible();
   const initial = { x: Number(await player.getAttribute('cx')), y: Number(await player.getAttribute('cy')) };
