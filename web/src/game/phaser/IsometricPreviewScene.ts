@@ -531,7 +531,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     for (const resident of this.villageResidents) {
       const key = 'resident/' + resident.id;
       visible.add(key);
-      const actor: PixelActor = resident.role === 'healer' ? 'mage' : 'warrior';
+      const actor: PixelActor = resident.role === 'healer' ? 'MAGE' : 'WARRIOR';
       this.sprite(key, actor, resident.position, 'idle', Math.floor(this.time.now / 220) % PIXEL_ANIMATION_FRAMES);
       this.sprites.get(key)?.setTint(resident.role === 'blacksmith' ? 0xb7a18b : 0xd1c8b0);
     }
