@@ -31,6 +31,7 @@ import type { MiniBossState, MiniBossId, MiniBossShape } from '../enemies/miniBo
 import type { HollowKingState } from '../bosses/hollowKingPhases';
 import type { RespawnCheckpointId, RespawnDestination } from './deathRespawn';
 import type { TalentRanks, TalentId } from '../progression/talentTree';
+import type { BuildPresetSlots } from '../progression/buildPresets';
 import type { WorldFactLedger } from '../world/chunkStreaming';
 import type { Materials, CraftKind } from '../crafting/craftingRules';
 import type { GemAction, GemWallet } from '../gems/gemRules';
@@ -81,6 +82,8 @@ export interface CharacterProgress {
   talentPoints?: number;
   /** Optional character-owned skill placement; absent means canonical defaults. */
   hotbarLayout?: string[];
+  /** Optional three saved skill layouts and read-only talent plans. */
+  buildPresets?: BuildPresetSlots;
   /** Persistent rank investment, empty on legacy v11 records. */
   talentRanks?: TalentRanks;
   /** Optional character-only crafting ledger; absent on legacy v11 saves. */
@@ -144,6 +147,8 @@ export interface GameSnapshot {
   respawnTimer: number;
   /** A copy of the custom character layout; default placement is implicit. */
   hotbarLayout?: string[];
+  /** Optional three saved skill layouts and read-only talent plans. */
+  buildPresets?: BuildPresetSlots;
   /** Session-only movement and dodge input state. */
   holdPosition: boolean;
   evadeCooldown: number;
@@ -248,6 +253,7 @@ export interface GameSnapshot {
 export type GameCommand =
   | { type: 'createCharacter'; classId: ClassId; characterId: string; seed?: number }
   | { type: 'setHotbarLayout'; layout: readonly string[] }
+  | { type: 'captureBuildPreset' | 'applyBuildPreset' | 'clearBuildPreset'; index: number }
   | { type: 'move'; destination: Point }
   | { type: 'holdPosition'; value: boolean }
   | { type: 'evade' }

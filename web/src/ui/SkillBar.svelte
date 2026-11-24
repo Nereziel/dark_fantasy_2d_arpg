@@ -18,6 +18,7 @@
   import { WARLOCK_EXTRA_SPELLS } from '../game/skills/warlockKit';
   import { projectEquippedSkill } from '../game/skills/skillModifiers';
   import { projectTalentBonuses } from '../game/progression/talentTree';
+  import { BUILD_PRESET_COUNT, previewBuildPreset } from '../game/progression/buildPresets';
   let { bridge, view, bindings }: {
     bridge: GameBridge; view: GameSnapshot; bindings: readonly InputBinding[];
   } = $props();
@@ -29,10 +30,27 @@
   let editing = $derived(editorOwner === owner && !view.paused && view.player.alive);
   let selectedSlot = $state<HotbarInput | null>(null);
   let dragSlot = $state<HotbarInput | null>(null);
+  let presetIndex = $state(0);
+  let preset = $derived(view.buildPresets?.[presetIndex] ?? null);
+  let presetPreview = $derived(preset ? previewBuildPreset(view, preset) : null);
+  let confirmReplace = $state(false);
+
+  function presetCommand(type: 'captureBuildPreset' | 'applyBuildPreset' | 'clearBuildPreset'): void {
+    if (!editing) return;
+    if (type === 'captureBuildPreset' && preset && !confirmReplace) {
+      confirmReplace = true;
+      return;
+    }
+    bridge.command({ type, index: presetIndex });
+    confirmReplace = false;
+    cancelDrag();
+  }
 
   $effect(() => {
     if (editorOwner !== null && (editorOwner !== owner || view.paused || !view.player.alive)) {
       editorOwner = null;
+      confirmReplace = false;
+      presetIndex = 0;
       selectedSlot = null;
       dragSlot = null;
     }
@@ -40,6 +58,8 @@
 
   function toggleEditor(): void {
     editorOwner = editing ? null : owner;
+    confirmReplace = false;
+    presetIndex = 0;
     selectedSlot = null;
     dragSlot = null;
   }
@@ -136,6 +156,38 @@
         </button>
       {/each}
     </div>
+    <div class="preset-controls" role="group" aria-label={$locale === 'cs' ? 'Sestavy' : 'Build presets'}>
+      <select data-testid="build-preset-select" aria-label={$locale === 'cs' ? 'Slot sestavy' : 'Preset slot'}
+        bind:value={presetIndex} onchange={() => { confirmReplace = false; }} onkeydown={editorKey}>
+        {#each Array.from({length: BUILD_PRESET_COUNT}, (_, i) => i) as index}
+          <option value={index}>{$locale === 'cs' ? 'Sestava' : 'Build'} {index + 1}{view.buildPresets?.[index] ? ' ✓' : ' —'}</option>
+        {/each}
+      </select>
+      <button type="button" data-testid="build-preset-capture" onclick={() => presetCommand('captureBuildPreset')} onkeydown={editorKey}>
+        {confirmReplace ? ($locale === 'cs' ? 'Přepsat?' : 'Overwrite?') : ($locale === 'cs' ? 'Uložit' : 'Capture')}
+      </button>
+      <button type="button" data-testid="build-preset-apply" disabled={!preset}
+        onclick={() => presetCommand('applyBuildPreset')} onkeydown={editorKey}>{$locale === 'cs' ? 'Načíst lištu' : 'Load bar'}</button>
+      <button type="button" data-testid="build-preset-clear" disabled={!preset}
+        onclick={() => presetCommand('clearBuildPreset')} onkeydown={editorKey}>{$locale === 'cs' ? 'Smazat' : 'Clear'}</button>
+    </div>
+    {#if presetPreview}
+      <details class="preset-preview" data-testid="build-preset-preview">
+        <summary onkeydown={editorKey}>{$locale === 'cs' ? 'Plán talentů' : 'Talent plan'} · {presetPreview.planned}/{presetPreview.available}</summary>
+        <div class="preset-preview-content">
+          <span>{$locale === 'cs' ? 'Talenty se nemění. Použij strom talentů.' : 'Talents stay unchanged. Use the talent tree.'}</span>
+          {#if presetPreview.respecRequired}
+            <span>{$locale === 'cs' ? 'Cena resetu' : 'Respec cost'}: {presetPreview.respecGold} G
+              {#if !presetPreview.canAffordRespec} · {$locale === 'cs' ? 'Nedostatek zlata' : 'Not enough gold'}{/if}
+            </span>
+          {/if}
+          {#if !presetPreview.sufficientPoints}<span>{$locale === 'cs' ? 'Nedostatek bodů' : 'Not enough points'}</span>{/if}
+          {#each presetPreview.ranks as rank (rank.id)}
+            <span>{$t('talents.nodes.' + rank.id + '.name')}: {rank.current} → {rank.planned}</span>
+          {/each}
+        </div>
+      </details>
+    {/if}
   {:else}
   <div class="skill-toolbar" aria-label={$t('combat.skills')}>
     {#each layout as abilityId (abilityId)}
@@ -387,6 +439,14 @@
   .skill-ui { position:relative; z-index:1; display:flex; flex-direction:column;
     align-items:stretch; justify-content:center; width:100%; min-width:0; gap:3px;
     pointer-events:auto; }
+  .preset-controls { display:flex; align-items:center; flex-wrap:wrap; gap:3px; min-width:0; }
+  .preset-controls button,.preset-controls select { flex:1 1 auto; min-width:0; min-height:25px;
+    background:#201e21; color:#e8d8ba; border:1px solid #77674d; border-radius:3px;
+    font-size:.62rem; padding:3px 5px; }
+  .preset-controls button:disabled { opacity:.5; }
+  .preset-preview { font-size:.62rem; color:#e8d8ba; min-width:0; }
+  .preset-preview summary { cursor:pointer; padding:2px 4px; }
+  .preset-preview-content { display:grid; gap:2px; max-height:76px; overflow:auto; padding:3px 4px; }
   .hotbar-controls { display:flex; align-items:center; justify-content:flex-end; gap:4px; min-width:0; }
   .hotbar-controls button { color:#e8d8ba; background:#201e21eb; border:1px solid #77674d;
     border-radius:3px; padding:2px 6px; font-size:.59rem; min-height:20px; }
