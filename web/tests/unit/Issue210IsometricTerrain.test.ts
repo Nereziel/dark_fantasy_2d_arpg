@@ -1,6 +1,6 @@
 // GPL-3.0-only
 import { describe, expect, it } from 'vitest';
-import { terrainTexture, planTerrainChunks, type GroundTile } from '../../src/game/phaser/isometricTerrain';
+import { terrainTexture, planTerrainChunks, wildernessGroundLayout, cryptGroundLayout, type GroundTile } from '../../src/game/phaser/isometricTerrain';
 import { projectIsometric } from '../../src/game/phaser/isometricProjection';
 
 const origin = { x: 1400, y: 100 };
@@ -55,5 +55,29 @@ describe('Issue #210/#124: textured isometric terrain', () => {
     expect(() => terrainTexture('dark_grass', -1)).toThrow(RangeError);
     expect(() => planTerrainChunks({ width: 0, height: 80, tiles, roads: [] }, origin)).toThrow(RangeError);
     expect(() => planTerrainChunks({ width: 200, height: 80, tiles, roads: [] }, origin, 0)).toThrow(RangeError);
+  });
+});
+
+describe('authoritative terrain adapters', () => {
+  it('passes wilderness material, variant and roads through unchanged', () => {
+    const world = { width: 200, height: 80,
+      tiles: [{x:0,y:0,width:80,height:80,terrainId:'dark_grass' as const,variant:3}],
+      roads: [road] };
+    const result = wildernessGroundLayout(world);
+    expect(result).toEqual(world);
+    expect(result.tiles[0]).toBe(world.tiles[0]);
+    expect(result.roads[0]).toBe(road);
+  });
+  it('uses only the crypt geometry to choose floor and wall material', () => {
+    const dungeon = { seed: 123, width: 80, height: 40, tiles: [
+      {id:'floor',x:0,y:0,kind:'floor' as const},
+      {id:'wall',x:40,y:0,kind:'wall' as const}
+    ] };
+    const layout = cryptGroundLayout(dungeon);
+    expect(layout.tiles.map(t=>[t.x,t.y,t.width,t.height,t.terrainId]))
+      .toEqual([[0,0,40,40,'crypt_floor'],[40,0,40,40,'crypt_wall']]);
+    expect(layout.roads).toEqual([]);
+    expect(cryptGroundLayout(dungeon)).toEqual(layout);
+    expect(layout.tiles.every(t=>t.variant>=0 && t.variant<4)).toBe(true);
   });
 });
