@@ -294,6 +294,8 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
   let index = 0;
   let ticks = 0;
   let stalled = 0;
+  let knownEvidence: { x: number; y: number } | null = null;
+  let nextMapCheck = 0;
   const lastSteps: string[] = [];
   while (Date.now() < deadline) {
     if (await inspect.count() > 0) return;
@@ -313,15 +315,30 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
         if (await potion.isEnabled()) await potion.click();
       }
     }
+    // A player can consult the discovered-only map. Do not inspect the
+    // generator, reveal fog, or read undiscovered target coordinates.
+    if (!knownEvidence && Date.now() >= nextMapCheck) {
+      await page.getByRole('button', { name: 'View discovered map' }).click();
+      const map = page.getByTestId('world-map-dialog');
+      const marker = map.locator('[data-map-marker="act1.evidence_lead"] circle').first();
+      if (await marker.count()) {
+        const mx = Number(await marker.getAttribute('cx'));
+        const my = Number(await marker.getAttribute('cy'));
+        if (Number.isFinite(mx) && Number.isFinite(my)) knownEvidence = { x: mx, y: my };
+      }
+      await map.getByTestId('map-close').click();
+      nextMapCheck = Date.now() + 10_000;
+    }
     const rect = await canvas.boundingBox();
     if (!rect) throw new Error('Phaser canvas missing while finding story evidence');
     const { width, height } = await canvas.evaluate(node => ({
       width: node.width, height: node.height
     }));
+    const destination = knownEvidence ?? waypoints[index]!;
     const waypoint = stalled >= 2
       ? { x: Math.max(120, Math.min(2080, x + (index % 2 ? 155 : -155))),
         y: y >= 860 ? Math.max(140, y - 200) : Math.min(1250, y + 245) }
-      : waypoints[index]!;
+      : destination;
     const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
     const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
     const screenX = Math.max(width * 0.35,
@@ -338,8 +355,8 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
     if (lastSteps.length > 8) lastSteps.shift();
     stalled = Math.hypot(nextX - x, nextY - y) < 6 ? stalled + 1 : 0;
     ticks++;
-    if (Math.hypot(nextX - waypoint.x, nextY - waypoint.y) < 48
-      || ticks >= 9 || stalled >= 3) {
+    if (!knownEvidence && (Math.hypot(nextX - destination.x, nextY - destination.y) < 32
+      || ticks >= 9 || stalled >= 3)) {
       index = (index + 1) % waypoints.length;
       ticks = 0;
       stalled = 0;
@@ -348,6 +365,8 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
   throw new Error('Natural Act I evidence search timed out at ('
     + await game.getAttribute('data-player-x') + ','
     + await game.getAttribute('data-player-y') + '), waypoint=' + index
+    + ', seed=' + await game.getAttribute('data-world-seed')
+    + ', discovered evidence=' + JSON.stringify(knownEvidence)
     + ', last steps=' + lastSteps.join(' | ')
     + ', journal=' + await page.locator('.quest-journal').innerText());
 }
