@@ -69,6 +69,7 @@ import {
   type WorldLayout
 } from '../world/generator';
 import { buildWilderness, type WildernessRuntimeWorld } from '../world/wildernessRuntime';
+import { villageSanctuaries, inVillageSanctuary, type VillageSanctuary } from '../world/villageSanctuary';
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonRuntime';
 import {
   applyTalentStats, planSpendTalent, planRespecTalents, projectTalentBonuses,
@@ -358,6 +359,11 @@ export class GameSimulation {
   private pendingNpc: NpcId | null = null;
   private pendingTown: string | null = null;
   private regionalTownEntries: TownEntry[] = [];
+  private villageSafeZones: VillageSanctuary[] = [];
+  private inVillageSafety(): boolean { return inVillageSanctuary(this.zone,this.player,this.villageSafeZones); }
+  private inSettlementSafety(): boolean {
+    return (this.zone === 'wilderness' && distance(this.player,this.world.camp) <= CAMP_RADIUS) || this.inVillageSafety();
+  }
   private dialogueEntry(id: string): TownEntry | null { return resolveRegionalTownEntry(id,this.regionalTownEntries); }
   private canReachDialogue(entry: TownEntry): boolean {
     return townEntry(entry.id) ? canInteractTownEntry(this.player,entry.id)
@@ -427,6 +433,7 @@ export class GameSimulation {
 
   private initWorldSystems(world: WildernessRuntimeWorld): void {
     this.regionalTownEntries = villageTownEntries(world.villages);
+    this.villageSafeZones = villageSanctuaries(world);
     const index = createChunkIndex(world);
     const input = this.mapInput(world);
     const initial = createMapDiscovery(input, CAMP, 105);
@@ -538,7 +545,7 @@ export class GameSimulation {
 
   /** Simulation-only spawn at an optional seed-validated event marker. */
   private activateNearbyWorldEvent():void {
-    if(this.zone!=='wilderness'||!this.player.alive||this.paused
+    if(this.zone!=='wilderness'||!this.player.alive||this.paused||this.inVillageSafety()
       ||this.activeWorldEventId||this.units.length!==PACK_SIZE)return;
     for(const plan of this.worldEventPlans) {
       if(this.worldFacts?.entries.some(fact=>
@@ -1148,8 +1155,7 @@ export class GameSimulation {
     const actor = unit.actor;
     const state = this.miniBossStates.get(actor.id);
     if (!state || !actor.alive || distance(this.player, actor) > 490
-      || (this.zone === 'wilderness'
-        && distance(this.player, this.world.camp) <= CAMP_RADIUS)) return;
+      || (this.inSettlementSafety())) return;
     if (this.statusEffects.enemies[actor.id]?.some(effect =>
       effect.id === 'stunned' || effect.id === 'frozen')) return;
     const result = stepMiniBoss(state, {
@@ -2269,6 +2275,7 @@ export class GameSimulation {
   ): void {
     const rule = statusRule(id, magnitude, duration);
     if (recipient === 'player') {
+      if (sourceId !== this.player.id && this.inVillageSafety()) return;
       this.statusEffects.player = applyStatus(this.statusEffects.player, rule, sourceId);
       if (id === 'shielded') this.shield = Math.max(this.shield, Math.round(rule.magnitude));
     } else if (unit?.actor.alive) {
@@ -2679,7 +2686,7 @@ export class GameSimulation {
   private tickRogueTraps(dt:number):void{
     if(!this.rogueTraps.length)return;
     const result=tickRogueTraps(this.rogueTraps,dt,this.zone,
-      this.zone==='wilderness' && distance(this.player,this.world.camp)<=CAMP_RADIUS
+      this.inSettlementSafety()
         ?[]:this.units.map(u=>({
           id:u.actor.id,x:u.actor.x,y:u.actor.y,alive:u.actor.alive
         })),this.world.obstacles);
@@ -2922,8 +2929,7 @@ export class GameSimulation {
     const result=stepOwnedSummons(this.summons,{
       dt,ownerId:this.player.id,ownerPosition:this.player,
       ownerAlive:this.player.alive,zone:this.zone,
-      enemies: this.zone==='wilderness'
-        && distance(this.player,this.world.camp)<=CAMP_RADIUS ? []
+      enemies: this.inSettlementSafety() ? []
         : this.units.map(u=>({
           id:u.actor.id,x:u.actor.x,y:u.actor.y,alive:u.actor.alive
         })),obstacles:this.world.obstacles
@@ -3243,7 +3249,7 @@ export class GameSimulation {
   }
 
   private dealPlayerDamage(base: number, type: DamageType, sourceId: string): boolean {
-    if (!this.player.alive || this.respawnProtectionSeconds > 0
+    if (!this.player.alive || this.respawnProtectionSeconds > 0 || this.inVillageSafety()
       || (this.classId==='ROGUE' && this.rogueStealthSeconds>0)) return false;
     const stats = this.currentStats();
     const resistance = type === 'fire' ? stats.fireResist
@@ -3313,8 +3319,7 @@ export class GameSimulation {
         remaining.push(shot);
         continue;
       }
-      const sanctuary = this.zone === 'wilderness'
-        && distance(this.player, this.world.camp) <= CAMP_RADIUS;
+      const sanctuary = this.inSettlementSafety();
       const impact = !blocked && landed && !sanctuary
         && distance(this.player, shot.target) <= shot.radius && this.player.alive;
       const hit = impact && (shot.base <= 0
@@ -3635,8 +3640,7 @@ export class GameSimulation {
     if (!spawn) return;
     const origin = { x: spawn.x, y: spawn.y + (this.wave % 2) * 25 };
     const role = enemyArchetype(actor.type);
-    const sanctuary = this.zone === 'wilderness'
-      && distance(this.player, this.world.camp) <= CAMP_RADIUS;
+    const sanctuary = this.inSettlementSafety();
     const target = sanctuary ? null : this.player;
     const toPlayer = distance(actor, this.player);
     const lineOfSight = hasLineOfSight(actor, this.player, this.world.obstacles);
@@ -3774,7 +3778,7 @@ export class GameSimulation {
   private updateEnemyAI(unit: EnemyUnit, dt: number): void {
     if (!unit.actor.alive || !this.player.alive) { unit.intent = null; return; }
     // The starter camp is a sanctuary even if the player retreats mid-combat.
-    if (this.zone === 'wilderness' && distance(this.player, this.world.camp) <= CAMP_RADIUS) {
+    if (this.inSettlementSafety()) {
       unit.intent = null;
       if (this.wave >= 2) this.updateMonsterTactics(unit, dt);
       return;
@@ -4262,7 +4266,7 @@ export class GameSimulation {
           source.actor.y = target.y;
         }
       } else if (this.player.alive
-        && !(this.zone === 'wilderness' && distance(this.player, this.world.camp) <= CAMP_RADIUS)
+        && !(this.inSettlementSafety())
         && distance(this.player, entry.position) <= entry.radius) {
         const base = ENEMY_DEFINITIONS[source.actor.type].baseDamage + this.level * 2;
         this.dealPlayerDamage(base * entry.multiplier * (source.elite?.damageMultiplier ?? 1),
