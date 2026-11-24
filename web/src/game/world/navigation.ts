@@ -132,11 +132,16 @@ export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS, obstac
 
 /** Route to a usable reach position even when the exact item coordinate is blocked. */
 export function findPickupPath(
-  from: Point, loot: Point, range: number, obstacles: readonly Obstacle[]
+  from: Point, loot: Point, range: number, obstacles: readonly Obstacle[],
+  requireSight = false
 ): Point[] {
   if (!canOccupy(from, ACTOR_RADIUS, obstacles) || !Number.isFinite(loot.x)
     || !Number.isFinite(loot.y) || !Number.isFinite(range) || range <= 0
-    || Math.hypot(from.x - loot.x, from.y - loot.y) <= range) return [];
+    || (Math.hypot(from.x - loot.x, from.y - loot.y) <= range
+      && (!requireSight || hasLineOfSight(from, loot, obstacles)))) return [];
+  const validGoal = (point: Point): boolean => canOccupy(point, ACTOR_RADIUS, obstacles)
+    && Math.hypot(point.x - loot.x, point.y - loot.y) <= range
+    && (!requireSight || hasLineOfSight(point, loot, obstacles));
   const angle = Math.atan2(from.y - loot.y, from.x - loot.x);
   const offset = Math.max(0, range - 4);
   const destinations = [0, -1, 1, -2, 2, -3, 3, 4].map(turn => ({
@@ -144,6 +149,7 @@ export function findPickupPath(
     y: loot.y + Math.sin(angle + turn * Math.PI / 4) * offset
   }));
   for (const destination of [...destinations, loot]) {
+    if (!validGoal(destination)) continue;
     const path = findPath(from, destination, ACTOR_RADIUS, obstacles);
     if (path.length && path.every((point, index) =>
       lineClear(index === 0 ? from : path[index - 1]!, point, ACTOR_RADIUS, obstacles))) return path;
@@ -163,9 +169,9 @@ export function findPickupPath(
       });
     }
   }
-  const usable = approaches.filter(point => canOccupy(point, ACTOR_RADIUS, obstacles));
+  const usable = approaches.filter(validGoal);
   const finish = (point: Point): Point | undefined => {
-    if (Math.hypot(point.x - loot.x, point.y - loot.y) <= range) return point;
+    if (validGoal(point)) return point;
     return usable.find(goal => Math.hypot(point.x - goal.x, point.y - goal.y) <= CELL * 2
       && lineClear(point, goal, ACTOR_RADIUS, obstacles));
   };
@@ -204,6 +210,27 @@ export function findPickupPath(
     }
   }
   return [];
+}
+
+/** A basic attack must finish in both range AND line of sight. */
+export function findAttackApproachPath(
+  from: Point, target: Point, range: number, obstacles: readonly Obstacle[]
+): Point[] {
+  return findPickupPath(from, target, range, obstacles, true);
+}
+
+/** Check the actual actor-radius approach segment, not merely projectile sight. */
+export function canApproachAttackDirectly(
+  from: Point, target: Point, range: number, obstacles: readonly Obstacle[]
+): boolean {
+  const distance = Math.hypot(target.x - from.x, target.y - from.y);
+  if (!hasLineOfSight(from, target, obstacles)) return false;
+  if (distance <= range) return true;
+  const fraction = (distance - Math.max(0, range - 4)) / distance;
+  const goal = { x: from.x + (target.x - from.x) * fraction,
+    y: from.y + (target.y - from.y) * fraction };
+  return lineClear(from, goal, ACTOR_RADIUS, obstacles)
+    && hasLineOfSight(goal, target, obstacles);
 }
 
 /** Resolve one click to a reachable destination without altering the existing pathfinder. */
