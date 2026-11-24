@@ -29,6 +29,21 @@ describe('Issue #208: regional village population proposal',()=>{
     expect(planVillagePopulation(layout,settlements,roads,[])).toEqual(result);
     expect(layout.obstacles).toEqual([]);
   });
+  it('relocates the east forge when its usual building quadrant is blocked',()=>{
+    const blocked={...layout,obstacles:[
+      {id:'forge-block',x:1960,y:1000,width:240,height:400}
+    ]};
+    const east=settlements.find(s=>s.id==='east-village')!;
+    const result=planVillagePopulation(blocked,[settlements[0]!,east],[],[]);
+    const village=result.villages.find(v=>v.id===east.id);
+    expect(village).toBeDefined();
+    const forge=village?.structures.find(s=>s.kind==='smithy');
+    expect(forge).toBeDefined();
+    expect(village?.residents.some(n=>n.role==='blacksmith')).toBe(true);
+    expect(findPath(CAMP,forge!.approach,ACTOR_RADIUS,result.obstacles).length).toBeGreaterThan(0);
+    expect(planVillagePopulation(blocked,[settlements[0]!,east],[],[])).toEqual(result);
+    expect(blocked.obstacles).toHaveLength(1);
+  });
   it('skips a blocked village rather than exposing invalid services or footprints',()=>{
     const blocked={...layout,obstacles:[{id:'blocked',x:900,y:0,width:440,height:450}]};
     const result=planVillagePopulation(blocked,settlements,[],[]);
