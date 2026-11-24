@@ -9,6 +9,9 @@ import { ACTOR_RADIUS, canOccupy, findPath } from './navigation';
 import { planForestTrail } from './forestTrail';
 import { planEnvironmentObjects } from './environmentInteractions';
 import { planWorldEvents } from './worldEvents';
+import { getTownManifest } from './townManifest';
+import { WORLD_OBJECTS } from './interactables';
+import { planSettlementStructures, type SettlementStructure, type StructureSite } from './settlementStructures';
 
 const STORY_ROAD_FEATURES: ReadonlySet<string> = new Set([
   'act1.corruption_site', 'act1.corrupted_forest', 'act1.abandoned_graveyard'
@@ -64,6 +67,8 @@ export interface WildernessRuntimeWorld {
   terrain: WildernessTerrainResult;
   features: readonly WildernessFeature[];
   usedFeatureFallback: boolean;
+  /** Optional for compatibility with existing fixture world manifests. */
+  structures?: readonly SettlementStructure[];
 }
 
 /** A failed optional forest generation never removes critical quest destinations. */
@@ -90,6 +95,39 @@ function generateWilderness(seed: number): WildernessRuntimeWorld {
   return { layout: terrain.layout, terrain, features: retry.features, usedFeatureFallback: true };
 }
 
+/** Exterior-only structures, accepted as a single collision-safe extension of
+ * the already validated world. Existing story, environment and event positions
+ * must not move even when a new candidate changes a placement search result.
+ */
+function withSettlementStructures(world: WildernessRuntimeWorld): WildernessRuntimeWorld {
+  const { layout, terrain, features } = world;
+  const { seed, camp } = layout;
+  const env = planEnvironmentObjects(seed, layout, features);
+  const events = planWorldEvents(seed, layout, features);
+  const reserved = [
+    ...getTownManifest().map(n=>n.position), ...WORLD_OBJECTS.map(o=>o.position),
+    ...features.map(f=>f.position), ...env.map(o=>o.position),
+    ...events.map(e=>e.position), ...events.flatMap(e=>e.enemySpawns.map(s=>s.position))
+  ];
+  // Keep the original town centre open; cluster exterior buildings near its rim.
+  const sites: StructureSite[] = [
+    {id:'camp.house',kind:'house',anchor:{x:camp.x-150,y:camp.y-100}},
+    {id:'camp.smithy',kind:'smithy',anchor:{x:camp.x+190,y:camp.y+80}},
+    {id:'camp.storehouse',kind:'house',anchor:{x:camp.x-150,y:camp.y+125}}
+  ];
+  for (const [i,poi] of features.filter(f=>f.kind==='poi').slice(0,2).entries()) {
+    sites.push({id:'wild.'+(i===0?'cabin':'mine'),kind:i===0?'cabin':'mine',
+      anchor:{x:poi.position.x+100,y:poi.position.y-55}});
+  }
+  const plan = planSettlementStructures(layout,terrain.roads,reserved,sites);
+  const next: WorldLayout = {...layout,obstacles:[...plan.obstacles]};
+  const unchanged = JSON.stringify(planEnvironmentObjects(seed,next,features)) === JSON.stringify(env)
+    && JSON.stringify(planWorldEvents(seed,next,features)) === JSON.stringify(events)
+    && terrain.roads.every(road=>!routeClear(road.points,layout.obstacles)||routeClear(road.points,next.obstacles));
+  if (!unchanged) return {...world,structures:[]};
+  return {...world,layout:next,terrain:{...terrain,layout:next},structures:plan.structures};
+}
+
 const recentWorlds = new Map<number, WildernessRuntimeWorld>();
 const MAX_CACHED_WORLDS = 8;
 
@@ -97,7 +135,7 @@ const MAX_CACHED_WORLDS = 8;
 export function buildWilderness(seed: number): WildernessRuntimeWorld {
   const cached = recentWorlds.get(seed);
   if (cached) return structuredClone(cached);
-  const world = generateWilderness(seed);
+  const world = withSettlementStructures(generateWilderness(seed));
   if (recentWorlds.size >= MAX_CACHED_WORLDS) {
     recentWorlds.delete(recentWorlds.keys().next().value!);
   }
