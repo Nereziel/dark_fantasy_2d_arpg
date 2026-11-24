@@ -59,7 +59,9 @@ function criticalPath(
 describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
   it(`validates wilderness roads, town services, quests and encounters for ${suiteSeeds.length} seeds`, () => {
     const missing: {seed:number; stage:'topology'|'population'; villages:string[]}[]=[];
-    for (const seed of suiteSeeds) checkedSeed(seed, 'wilderness', () => {
+    const failures:{seed:number;reason:string}[]=[];
+    for (const seed of suiteSeeds) {
+      try { checkedSeed(seed, 'wilderness', () => {
       const world = buildWilderness(seed);
       const { layout, terrain, features } = world;
       expect(terrain.validation.valid).toBe(true);
@@ -99,7 +101,7 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
       }
       const side = terrain.roads.find(road => road.id === 'road-forest-side');
       const trail = terrain.roads.find(road => road.id === 'road-story-corruption_site');
-      expect(side).toBeDefined();
+      expect(side, 'Missing forest side trail').toBeDefined();
       expect(trail?.points).toContainEqual(side?.from);
       expect(trail?.points).toContainEqual(side?.to);
       for (const road of terrain.roads) {
@@ -111,10 +113,15 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
       }
       // Pure generation with the same inputs must preserve every item ID and position.
       expect(buildWilderness(seed)).toEqual(world);
-    });
+      }); } catch(error) {
+        failures.push({seed,reason:error instanceof Error?error.message:String(error)});
+      }
+    }
+    const failedSeeds=new Set([...missing.map(m=>m.seed),...failures.map(f=>f.seed)]);
     console.info('[Act I village coverage] '+JSON.stringify({
-      total:suiteSeeds.length,complete:suiteSeeds.length-missing.length,missing
+      total:suiteSeeds.length,complete:suiteSeeds.length-failedSeeds.size,missing,failures
     }));
+    if(failures.length)throw new Error('Act I wilderness invariant failures: '+JSON.stringify(failures));
     // Full population is now required by default. Only explicit diagnostic
     // sweeps may opt out to inspect additional incomplete seeds.
     if(REQUIRE_VILLAGES&&missing.length)
@@ -149,7 +156,7 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
       }
       expect(buildCryptWorld(seed)).toEqual(world);
     });
-  });
+  }, Math.max(15000, suiteSeeds.length * 1000));
 
   it('rejects invalid generation inputs without unsafe partial layouts', () => {
     for (const seed of [-1, NaN, Infinity, -Infinity, 0.25, 0x100000000]) {
