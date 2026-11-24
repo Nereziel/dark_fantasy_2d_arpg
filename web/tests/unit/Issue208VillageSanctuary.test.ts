@@ -1,6 +1,8 @@
 // GPL-3.0-only
 import { describe, expect, it } from 'vitest';
 import { buildWilderness } from '../../src/game/world/wildernessRuntime';
+import { ENEMY_DEFINITIONS } from '../../src/game/enemies/enemies';
+import { ACTOR_RADIUS, canOccupy } from '../../src/game/world/navigation';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { villageSanctuaries, inVillageSanctuary } from '../../src/game/world/villageSanctuary';
 
@@ -26,10 +28,15 @@ describe('Issue #208 B2: village sanctuaries',()=>{
     expect(world).toBeDefined();
     const zone=villageSanctuaries(world)[0]!;
     const sim=new GameSimulation(world.layout.seed),s=sim.snapshot();
-    s.player={...s.player,...zone.center};
+    const village=world.villages!.find(v=>v.id===zone.id)!;
+    const position=village.residents.map(n=>n.position).find(p=>
+      inVillageSanctuary('wilderness',p,[zone])&&canOccupy(p,ACTOR_RADIUS,world.layout.obstacles));
+    expect(position).toBeDefined();
+    if(!position)throw Error('No walkable point in populated sanctuary');
+    s.player={...s.player,...position};
     const source=s.enemies[0]!.actor.id;
-    s.enemies[0]!.intent={pattern:'sweep',...zone.center,radius:65,remaining:.1,total:.2};
-    s.projectiles=[{id:'projectile-1',sourceId:source,...zone.center,target:{...zone.center},
+    s.enemies[0]!.intent={pattern:ENEMY_DEFINITIONS[s.enemies[0]!.actor.type].attack,...position,radius:65,remaining:.1,total:.2};
+    s.projectiles=[{id:'projectile-1',sourceId:source,...position,target:{...position},
       type:'shadow',speed:560,radius:65,remaining:1,base:500}];
     expect(sim.restore(s)).toBe(true);
     sim.drainEvents();
