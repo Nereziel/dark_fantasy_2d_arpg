@@ -40,6 +40,7 @@ import type { PotionCharges, PotionId, PotionState } from '../consumables/potion
 import type { WaypointId } from '../world/waypointTravel';
 import type { WorldEventKind, WorldEventId, WorldEventView } from '../world/worldEvents';
 import type { StashTabs } from '../inventory/stashRules';
+import type {OptionalDungeonRewardId} from '../world/optionalDungeonRewards';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
@@ -53,6 +54,8 @@ export interface WorldSessionProgress {
   /** Stable one-shot crypt facts. Never an enemy/map/world snapshot. */
   cryptUsedPropIds?: string[];
   cryptTriggeredTrapIds?: string[];
+  /** Seed-scoped claims, not character data or combat snapshots. */
+  optionalDungeonRewardIds?: OptionalDungeonRewardId[];
   /** Seed-scoped one-shot miniboss victories, not enemy state snapshots. */
   miniBossDefeatedIds?: MiniBossId[];
   /** Optional one-shot outdoor environmental interactions; never character data. */
@@ -131,6 +134,8 @@ export interface GameSnapshot {
   worldSeed: number;
   /** All area and dungeon fields are transient and excluded from character saves. */
   zone: ZoneId;
+  /** Present only during an optional dungeon visit; legacy story crypt has no ID. */
+  dungeonId?: 'mine' | 'cave';
   dungeonStage: 0 | 1;
   dungeonCleared: boolean;
   classId: ClassId;
@@ -233,6 +238,8 @@ export interface GameSnapshot {
   cryptInteractables?: CryptInteractable[];
   cryptUsedPropIds?: string[];
   cryptTriggeredTrapIds?: string[];
+  /** Seed-scoped claims, not character data or combat snapshots. */
+  optionalDungeonRewardIds?: OptionalDungeonRewardId[];
   /** Session-only miniboss planner states; not written to character/world saves. */
   miniBossStates?: Record<string, MiniBossState>;
   miniBossDefeatedIds?: MiniBossId[];
@@ -276,7 +283,7 @@ export type GameCommand =
   | { type: 'stashWithdraw'; index: number; tab?: number }
   | { type: 'stashMove'; fromTab: number; index: number; toTab: number }
   | { type: 'stashSort'; tab: number }
-  | { type: 'usePortal' }
+  | { type: 'usePortal'; dungeonId?: 'mine' | 'cave' }
   | { type: 'interactObject'; id: WorldObjectId }
   | { type: 'interactEnvironment'; id: EnvironmentObjectId }
   | { type: 'interactCrypt'; id: string }
