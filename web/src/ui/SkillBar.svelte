@@ -2,65 +2,34 @@
   import { _ as t } from 'svelte-i18n';
   import type { GameBridge } from '../game/bridge/GameBridge';
   import type { GameSnapshot } from '../game/core/types';
-  import type { InputAction, InputBinding } from '../game/input/bindings';
+  import type { InputBinding } from '../game/input/bindings';
+  import { dispatchHotbarAbility } from '../game/input/combatActionDispatcher';
+  import { hotbarInputForAbility } from '../game/input/hotbarRegistry';
   import { shortcutHint } from '../game/ui/shortcutHints';
   import { SKILLS, SKILL_SLOTS } from '../game/skills/skills';
   import { CLASSES } from '../game/data/classes';
   import { POTION_IDS } from '../game/consumables/potionRules';
-  import { WARRIOR_ABILITIES, type WarriorAbilityId } from '../game/skills/warriorKit';
-  import { PALADIN_EXTRA_IDS, PALADIN_EXTRA_SKILLS, type PaladinAbilityId } from '../game/skills/paladinKit';
-  import { MAGE_EXTRA_IDS, MAGE_EXTRA_SPELLS, type MageExtraSpellId } from '../game/skills/mageKit';
-  import { NECRO_EXTRA_IDS, NECRO_EXTRA_SPELLS, type NecroExtraSpellId } from '../game/skills/necromancerKit';
-  import { ROGUE_EXTRA_IDS, ROGUE_EXTRA_SKILLS, type RogueExtraAbilityId } from '../game/skills/rogueKit';
-  import { WARLOCK_EXTRA_IDS, WARLOCK_EXTRA_SPELLS, type WarlockExtraSpellId } from '../game/skills/warlockKit';
+  import { WARRIOR_ABILITIES } from '../game/skills/warriorKit';
+  import { PALADIN_EXTRA_IDS, PALADIN_EXTRA_SKILLS } from '../game/skills/paladinKit';
+  import { MAGE_EXTRA_IDS, MAGE_EXTRA_SPELLS } from '../game/skills/mageKit';
+  import { NECRO_EXTRA_IDS, NECRO_EXTRA_SPELLS } from '../game/skills/necromancerKit';
+  import { ROGUE_EXTRA_IDS, ROGUE_EXTRA_SKILLS } from '../game/skills/rogueKit';
+  import { WARLOCK_EXTRA_IDS, WARLOCK_EXTRA_SPELLS } from '../game/skills/warlockKit';
   import { projectEquippedSkill } from '../game/skills/skillModifiers';
   import { projectTalentBonuses } from '../game/progression/talentTree';
   const extraWarriorSkills = ['groundSlam', 'warCry', 'whirlwind', 'execute', 'basicAttack'] as const;
-  const warriorShortcuts: Record<typeof extraWarriorSkills[number], InputAction> = {
-    groundSlam: 'SLOT_2', warCry: 'SLOT_3', whirlwind: 'SLOT_4',
-    execute: 'SLOT_5', basicAttack: 'SLOT_6'
-  };
-  const extraSlotActions = ['SLOT_2', 'SLOT_3', 'SLOT_4', 'SLOT_5', 'SLOT_6'] as const;
-
   let { bridge, view, bindings }: {
     bridge: GameBridge; view: GameSnapshot; bindings: readonly InputBinding[];
   } = $props();
   let mageCostDiscount = $derived(projectTalentBonuses(view.talentRanks ?? {}).manaEfficiency);
 
-  function castWarrior(id: WarriorAbilityId): void {
-    bridge.command({ type: 'warriorAbility', id, targetId: view.selectedTargetId ?? view.enemy.id });
-  }
-  function castPaladin(id: PaladinAbilityId): void {
-    bridge.command({type:'paladinAbility',id,targetId:view.selectedTargetId??view.enemy.id});
+  function activate(id: string): void {
+    dispatchHotbarAbility(bridge, id);
   }
 
-  function castMage(id: MageExtraSpellId): void {
-    const position = bridge.pointerPosition();
-    bridge.command({ type: 'mageAbility', id,
-      targetId: view.selectedTargetId ?? view.enemy.id,
-      ...(position ? { position } : {}) });
-  }
-
-  function castNecro(id: NecroExtraSpellId): void {
-    const position = bridge.pointerPosition();
-    bridge.command({ type: 'necroAbility', id,
-      targetId: view.selectedTargetId ?? view.enemy.id,
-      ...(position ? { position } : {}) });
-  }
-
-  function castRogue(id:RogueExtraAbilityId):void{
-    const position=bridge.pointerPosition();
-    bridge.command({type:'rogueAbility',id,
-      targetId:view.selectedTargetId??view.enemy.id,
-      ...(position?{position}:{})});
-  }
-  function castWarlock(id:WarlockExtraSpellId):void {
-    bridge.command({type:'warlockAbility',id,
-      targetId:view.selectedTargetId??view.enemy.id});
-  }
-  function cast(slot: 'rmb' | 'slot1'): void {
-    const aim = bridge.skillAim(slot);
-    bridge.command({ type: 'cast', slot, ...(aim ? { aim } : {}) });
+  function abilityShortcut(id: string): string {
+    const action = hotbarInputForAbility(view.classId, id);
+    return action ? shortcutHint(bindings, action) : '—';
   }
 </script>
 
@@ -75,9 +44,9 @@
         disabled={view.paused || !view.player.alive || remaining > 0 || view.resource + 0.001 < skill.cost}
         aria-label={$t('skills.' + skill.id + '.name')}
         title={$t('skills.' + skill.id + '.desc') + ' · ' + skill.cost + ' ' + $t('resource.' + CLASSES[view.classId].resourceId)}
-        onclick={() => cast(slot)}
+        onclick={() => activate(skill.id)}
       >
-        <span class="skill-shortcut">{shortcutHint(bindings, slot === 'rmb' ? 'SECONDARY' : 'SLOT_1')}</span>
+        <span class="skill-shortcut">{abilityShortcut(skill.id)}</span>
         <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
         <span class="skill-title">{$t('skills.' + skill.id + '.name')}</span>
         <span class="skill-cost">{skill.cost === 0 ? '—' : skill.cost}</span>
@@ -105,9 +74,9 @@
                   ? ' · ' + $t('skillModifiers.pull') + ': ' + modified.pullDistance : '')
                 + (modified.statuses.some(status => status.id === 'bleeding')
                   ? ' · ' + $t('skillModifiers.bleeding') : '') : '')}
-          onclick={() => castWarrior(id)}
+          onclick={() => activate(id)}
         >
-          <span class="skill-shortcut">{shortcutHint(bindings, warriorShortcuts[id])}</span>
+          <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{id === 'warCry' ? '✦' : id === 'groundSlam' ? '✹' : id === 'whirlwind' ? '⟳' : id === 'execute' ? '⚔' : '✧'}</span>
           <span class="skill-title">{$t('skills.' + id + '.name')}</span>
           {#if modified.modifierIds.length}
@@ -121,7 +90,7 @@
       {/each}
     {/if}
     {#if view.classId === 'PALADIN'}
-      {#each PALADIN_EXTRA_IDS as id,index (id)}
+      {#each PALADIN_EXTRA_IDS as id (id)}
         {@const skill=PALADIN_EXTRA_SKILLS[id]}
         {@const remaining=view.paladinCooldowns?.[id]??0}
         <button
@@ -132,9 +101,9 @@
             !!view.classAction || view.resource + 0.001 < skill.cost}
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.faith')}
-          onclick={() => castPaladin(id)}
+          onclick={() => activate(id)}
         >
-          <span class="skill-shortcut">{shortcutHint(bindings, extraSlotActions[index])}</span>
+          <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
           <span class="skill-cost">{skill.cost}</span>
@@ -145,7 +114,7 @@
       {/each}
     {/if}
     {#if view.classId === 'MAGE'}
-      {#each MAGE_EXTRA_IDS as id,index (id)}
+      {#each MAGE_EXTRA_IDS as id (id)}
         {@const skill = MAGE_EXTRA_SPELLS[id]}
         {@const remaining = view.mageCooldowns?.[id] ?? 0}
         {@const actualCost = Math.max(1, Math.ceil(skill.cost * (1 - mageCostDiscount)))}
@@ -157,9 +126,9 @@
             !!view.classAction || view.resource + 0.001 < actualCost}
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+actualCost+' '+$t('resource.mana')}
-          onclick={() => castMage(id)}
+          onclick={() => activate(id)}
         >
-          <span class="skill-shortcut">{shortcutHint(bindings, extraSlotActions[index])}</span>
+          <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
           <span class="skill-cost">{actualCost}</span>
@@ -168,7 +137,7 @@
       {/each}
     {/if}
     {#if view.classId === 'ROGUE'}
-      {#each ROGUE_EXTRA_IDS as id,index (id)}
+      {#each ROGUE_EXTRA_IDS as id (id)}
         {@const skill=ROGUE_EXTRA_SKILLS[id]}
         {@const remaining=view.rogueCooldowns?.[id]??0}
         <button class="skill-button extra" class:cooldown={remaining>0}
@@ -178,8 +147,8 @@
             || id==='trap' && (view.rogueTraps?.length??0)>=3}
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.energy')}
-          onclick={()=>castRogue(id)}>
-          <span class="skill-shortcut">{shortcutHint(bindings, extraSlotActions[index])}</span>
+          onclick={()=>activate(id)}>
+          <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
           <span class="skill-cost">{skill.cost}</span>
@@ -188,7 +157,7 @@
       {/each}
     {/if}
     {#if view.classId === 'NECROMANCER'}
-      {#each NECRO_EXTRA_IDS as id,index (id)}
+      {#each NECRO_EXTRA_IDS as id (id)}
         {@const skill = NECRO_EXTRA_SPELLS[id]}
         {@const remaining = view.necroCooldowns?.[id] ?? 0}
         <button class="skill-button extra" class:cooldown={remaining>0}
@@ -198,8 +167,8 @@
             || id === 'summonGolem' && (view.summons ?? []).some(a=>a.kind==='golem')}
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.essence')}
-          onclick={() => castNecro(id)}>
-          <span class="skill-shortcut">{shortcutHint(bindings, extraSlotActions[index])}</span>
+          onclick={() => activate(id)}>
+          <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
           <span class="skill-cost">{skill.cost}</span>
@@ -208,7 +177,7 @@
       {/each}
     {/if}
     {#if view.classId === 'WARLOCK'}
-      {#each WARLOCK_EXTRA_IDS as id,index (id)}
+      {#each WARLOCK_EXTRA_IDS as id (id)}
         {@const skill = WARLOCK_EXTRA_SPELLS[id]}
         {@const remaining = view.warlockCooldowns?.[id] ?? 0}
         <button class="skill-button extra" class:cooldown={remaining>0}
@@ -218,8 +187,8 @@
             || id==='demonSummoning' && (view.summons??[]).length>=3}
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.soul')}
-          onclick={() => castWarlock(id)}>
-          <span class="skill-shortcut">{shortcutHint(bindings, extraSlotActions[index])}</span>
+          onclick={() => activate(id)}>
+          <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
           <span class="skill-cost">{skill.cost}</span>
