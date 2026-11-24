@@ -421,8 +421,8 @@
       if (event.type === 'townInteraction' && playing) {
         rememberModalOrigin();
         townModal = townEntry(event.entryId) ?? resolveRegionalTownEntry(event.entryId,
-          villageTownEntries(buildWilderness(view.worldSeed).villages));
-        if (!townModal) continue;
+          villageTownEntries(buildWilderness(bridge.snapshot().worldSeed).villages));
+        if (!townModal) return;
         tradeNpc = null;
         dialogueOpen = false;
         inventoryOpen = false;
