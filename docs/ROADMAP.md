@@ -32,6 +32,8 @@ Akt I musí být plnohodnotný, vyladěný samostatný celek. Dokud uživatel v�
 
 ## F1.5 · Rozhodující požadavky na Akt I
 
+- [ ] [#210](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/210): přechod na 2.5D izometrickou prezentaci (2:1), ověřit obousměrnou projekci, kameru, pointer picking, řazení podle hloubky, izometrické assety a všechny efekty. Simulace zůstává v Cartesian world-space; produkční renderer přepnout až po ověření. Datový generátor #208 může pracovat nezávisle, runtime a art integrace až po ověření izometrie.
+
 - [ ] Každá nová herní relace po spuštění má nový seed; stejný seed reprodukuje celý svět. Během relace se svět nemění kvůli smrti, cestování, ukládání nebo vstupu do dungeonu. Zachovat postavu a jednorázový quest postup, oddělit session stav. Historické pozice není nutné migrovat.
 - [ ] Generovaný region má předem určené přibližné kotvy hlavních sídel a NPC, proměnlivé biomy, terén, cesty, hlavní i vedlejší úkoly, dungeony, eventy, svatyně a waypointy. Hory, lesy a další překážky mohou vynutit obchvat; hlavní cesty propojují sídla, vedlejší stezky mohou slepě končit u srubu, dolu, domu či mýtiny. Některé jeskyně a POI leží mimo cesty. Všechny povinné cíle jsou dosažitelné pěšky, ne nutně po silnici. Stejná geometrie řídí cesty, kolize i vykreslení.
 - [ ] Běžní nepřátelé tvoří skupiny rozmístěné v regionu a dungeonech; běžné globální vlny odstranit, zachovat je jen u explicitních událostí. Aktivní budget, stabilní ID a žádná duplikace jednorázových odměn.
