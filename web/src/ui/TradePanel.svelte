@@ -16,12 +16,14 @@
   } from '../game/world/npcs';
 
   let {
-    view, bridge, npc, close
+    view, bridge, npc, close, regionalNameKey, regionalDescriptionKey
   }: {
     view: GameSnapshot;
     bridge: GameBridge;
     npc: TradeNpcId;
     close: () => void;
+    regionalNameKey?: string;
+    regionalDescriptionKey?: string;
   } = $props();
 
   let bagFull = $derived(view.inventory.every(item => item !== null));
@@ -59,12 +61,12 @@
 
 <div class="trade-overlay">
   <div class="trade-window" role="dialog" aria-modal="true"
-    aria-label={$t(npc === MERCHANT_ID ? 'npc.merchant.name' : 'npc.blacksmith.name')}>
+    aria-label={$t(regionalNameKey ?? (npc === MERCHANT_ID ? 'npc.merchant.name' : 'npc.blacksmith.name'))}>
     <header class="trade-header">
       <div>
-        <div class="trade-kicker">{$t('trade.campServices')}</div>
-        <h2>{$t(npc === MERCHANT_ID ? 'npc.merchant.name' : 'npc.blacksmith.name')}</h2>
-        <p>{$t(npc === MERCHANT_ID ? 'npc.merchant.description' : 'npc.blacksmith.description')}</p>
+        <div class="trade-kicker">{$t(regionalNameKey ? 'village.services' : 'trade.campServices')}</div>
+        <h2>{$t(regionalNameKey ?? (npc === MERCHANT_ID ? 'npc.merchant.name' : 'npc.blacksmith.name'))}</h2>
+        <p>{$t(regionalDescriptionKey ?? (npc === MERCHANT_ID ? 'npc.merchant.description' : 'npc.blacksmith.description'))}</p>
       </div>
       <button class="trade-close" aria-label={$t('inventory.close')} onclick={close}>✕</button>
     </header>

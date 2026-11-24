@@ -1197,6 +1197,9 @@
             </div>
           </section>
         </div>
+      {:else if townModal?.role === 'blacksmith'}
+        <TradePanel {view} {bridge} npc={BLACKSMITH_ID} close={closeDialogue}
+          regionalNameKey={townModal.nameKey} regionalDescriptionKey={townModal.descriptionKey} />
       {:else if townModal}
         <div class="modal-shield town-service-shield" role="dialog" aria-modal="true" aria-label={$t(townModal.nameKey)}>
           <section class="pause-card town-service-card">
