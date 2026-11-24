@@ -130,7 +130,9 @@ import {
 } from '../quests/firstQuest';
 import { acceptQuest, advanceObjective, turnInQuest, type QuestLedger, type QuestTransition } from '../quests/questDialogue';
 import { firstQuestFromLedger } from '../quests/starterQuestRegistry';
-import { ACT_I_QUEST_CATALOG, ACT_I_MILESTONES, createActIQuestLedger, type ActIStoryQuestId } from '../quests/actIQuestChain';
+import { ACT_I_MILESTONES, type ActIStoryQuestId } from '../quests/actIQuestChain';
+import { CAMPAIGN_QUEST_CATALOG, createCampaignQuestLedger } from '../quests/campaignQuestLedger';
+import { VILLAGE_QUESTS, advanceVillageVisit } from '../quests/villageQuests';
 import type { WildernessFeature } from '../world/wildernessFeatures';
 import {
   SeededRng, createEquipment, deriveStats, isEquipmentSlot, isItem, rollItem, rollItemForBase,
@@ -329,7 +331,7 @@ export class GameSimulation {
   private units: EnemyUnit[] = createPack(0, 1);
   private selectedTargetId: string | null = null;
   private quest: QuestProgress = freshQuest();
-  private actILedger: QuestLedger = createActIQuestLedger(freshQuest())!;
+  private actILedger: QuestLedger = createCampaignQuestLedger(freshQuest())!;
   private storyFeatures: readonly WildernessFeature[] = [];
   private environmentPlan: EnvironmentObject[] = [];
   private environmentUsed = new Set<EnvironmentObjectId>();
@@ -497,6 +499,12 @@ export class GameSimulation {
         presentationKey: 'map.quest'
       }];
     });
+    for (const quest of VILLAGE_QUESTS) {
+      const state = this.questStatus(quest.id);
+      if (state !== 'active' && state !== 'ready') continue;
+      const target = this.regionalTownEntries.find(entry => entry.id === (state === 'ready' ? quest.giverId : quest.targetId));
+      if (target) hints.push({id:quest.id,status:'active',position:{...target.position},presentationKey:'map.quest'});
+    }
     const result = projectMap(this.mapDiscovery, this.mapWorld, this.player, hints, { mode,
       ...(mode === 'world' ? options : {})
     });
@@ -939,7 +947,7 @@ export class GameSimulation {
         : reward.xp);
       const next = ACT_I_MILESTONES.find(beat => beat.prerequisiteQuestId === reward.questId);
       if (next) this.commitQuestTransition(
-        acceptQuest(ACT_I_QUEST_CATALOG, this.actILedger, next.questId), next.questId
+        acceptQuest(CAMPAIGN_QUEST_CATALOG, this.actILedger, next.questId), next.questId
       );
       if (reward.questId === 'forgotten_graves') this.spawnMorrow();
     }
@@ -949,13 +957,21 @@ export class GameSimulation {
   private storyEvent(questId: ActIStoryQuestId, eventId: string, occurrenceId: string): void {
     if (this.questStatus(questId) !== 'active') return;
     this.commitQuestTransition(
-      advanceObjective(ACT_I_QUEST_CATALOG, this.actILedger, questId, eventId, occurrenceId), questId
+      advanceObjective(CAMPAIGN_QUEST_CATALOG, this.actILedger, questId, eventId, occurrenceId), questId
     );
     // Authoritative discovery/kill/zone events can complete world objectives.
     // Vesna's final report requires a deliberate return and a dialogue turn-in.
     if (questId !== 'vesnas_report' && this.questStatus(questId) === 'ready') {
-      this.commitQuestTransition(turnInQuest(ACT_I_QUEST_CATALOG, this.actILedger, questId), questId);
+      this.commitQuestTransition(turnInQuest(CAMPAIGN_QUEST_CATALOG, this.actILedger, questId), questId);
     }
+  }
+
+  private recordVillageVisit(entry: TownEntry): void {
+    if (this.zone !== 'wilderness' || !this.player.alive || !this.canReachDialogue(entry)) return;
+    const quest = VILLAGE_QUESTS.find(q => q.targetId === entry.id);
+    if (!quest) return;
+    this.commitQuestTransition(advanceVillageVisit(CAMPAIGN_QUEST_CATALOG, this.actILedger,
+      entry.id, `village_visit_${quest.id}`), quest.id);
   }
 
   private recordVesnaReport(): void {
@@ -1554,11 +1570,16 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'questAccept' || command.type === 'questTurnIn') {
-      if (this.zone !== 'wilderness' || !this.player.alive || !nearWarden(this.player)) return;
+      if (this.zone !== 'wilderness' || !this.player.alive) return;
       const id = command.questId ?? FIRST_QUEST_ID;
+      const local = VILLAGE_QUESTS.find(q => q.id === id);
+      if (local) {
+        const giver = this.regionalTownEntries.find(entry => entry.id === local.giverId);
+        if (!giver || !this.canReachDialogue(giver)) return;
+      } else if (!nearWarden(this.player)) return;
       const result = command.type === 'questAccept'
-        ? acceptQuest(ACT_I_QUEST_CATALOG, this.actILedger, id)
-        : turnInQuest(ACT_I_QUEST_CATALOG, this.actILedger, id);
+        ? acceptQuest(CAMPAIGN_QUEST_CATALOG, this.actILedger, id)
+        : turnInQuest(CAMPAIGN_QUEST_CATALOG, this.actILedger, id);
       this.commitQuestTransition(result, id);
       return;
     }
@@ -1724,6 +1745,7 @@ export class GameSimulation {
       this.pendingTown = null;
       if (this.canReachDialogue(entry)) {
         if (entry.role === 'waypoint') this.activateTownWaypoint();
+        this.recordVillageVisit(entry);
         this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
         this.pendingTown = null;
       } else {
@@ -4094,6 +4116,7 @@ export class GameSimulation {
       else if (this.canReachDialogue(entry)) {
         this.pendingTown = null;
         if (entry.role === 'waypoint') this.activateTownWaypoint();
+        this.recordVillageVisit(entry);
         this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
       } else {
         // A resident behind a wall may be within nominal range but not reachable.
@@ -4440,7 +4463,7 @@ export class GameSimulation {
     }
     if (this.zone === 'wilderness' && !eventEnemy) {
       this.commitQuestTransition(
-        advanceObjective(ACT_I_QUEST_CATALOG, this.actILedger,
+        advanceObjective(CAMPAIGN_QUEST_CATALOG, this.actILedger,
           FIRST_QUEST_ID, 'enemy_defeated', 'enemy_' + this.kills), FIRST_QUEST_ID
       );
       if (unit.actor.type === 'corruptedBoar') {
@@ -4583,7 +4606,7 @@ export class GameSimulation {
       ...(progress.stashTabs !== undefined ? { stashTabs: progress.stashTabs } : {}),
       itemFlags: progress.itemFlags,
       quest: progress.quest,
-      questLedger: progress.questLedger ?? createActIQuestLedger(progress.quest)!
+      questLedger: progress.questLedger ?? createCampaignQuestLedger(progress.quest)!
     };
     if (!scratch.restore(candidate)) return false;
 
@@ -4611,7 +4634,7 @@ export class GameSimulation {
     this.equipment = cloneEquipment(progress.equipment);
     this.itemFlags = { ...scratch.itemFlags };
     this.quest = { ...progress.quest };
-    this.actILedger = createActIQuestLedger(progress.questLedger ?? progress.quest)!;
+    this.actILedger = createCampaignQuestLedger(progress.questLedger ?? progress.quest)!;
     this.refreshHealthLimit();
     this.player.health = this.player.maxHealth;
     this.units = createPack(0, this.level, this.world.encounterPositions);
@@ -4951,9 +4974,9 @@ export class GameSimulation {
       || (s.potions !== undefined && !isPotionState(s.potions))
       || !Number.isSafeInteger(s.gold) || s.gold < 0
       || !validQuest(s.quest)
-      || !createActIQuestLedger(s.questLedger ?? s.quest)
+      || !createCampaignQuestLedger(s.questLedger ?? s.quest)
       || (() => {
-        const ledger = createActIQuestLedger(s.questLedger ?? s.quest);
+        const ledger = createCampaignQuestLedger(s.questLedger ?? s.quest);
         const original = ledger && firstQuestFromLedger({ quests: [ledger.quests[0]!] });
         return !original || original.id !== s.quest.id
           || original.status !== s.quest.status || original.defeated !== s.quest.defeated;
@@ -5077,7 +5100,7 @@ export class GameSimulation {
     this.shrineBlessings=(s.environmentBlessings??[]).map(b=>({...b}));
     if (s.mapDiscovery) this.mapDiscovery = structuredClone(s.mapDiscovery);
     if (s.worldFacts) this.worldFacts = structuredClone(s.worldFacts);
-    this.actILedger = createActIQuestLedger(s.questLedger ?? s.quest)!;
+    this.actILedger = createCampaignQuestLedger(s.questLedger ?? s.quest)!;
     this.eliteQueue = [];
     this.zone = s.zone;
     this.dungeonStage = s.dungeonStage;
@@ -5250,7 +5273,7 @@ export class GameSimulation {
     this.statusEffects = { player: [], enemies: {} };
     this.effects = emptyEffects();
     this.quest = freshQuest();
-    this.actILedger = createActIQuestLedger(this.quest)!;
+    this.actILedger = createCampaignQuestLedger(this.quest)!;
     this.pendingNpc = null;
     this.pendingTown = null;
     this.units = createPack(0, 1, this.world.encounterPositions);
