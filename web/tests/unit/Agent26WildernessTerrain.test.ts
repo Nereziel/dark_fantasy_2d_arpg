@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { CAMP, CAMP_RADIUS, CRYPT_GATE } from '../../src/game/world/generator';
 import { ACTOR_RADIUS, canOccupy, findPath, OBSTACLES, WORLD_HEIGHT, WORLD_WIDTH } from '../../src/game/world/navigation';
+import { buildWilderness } from '../../src/game/world/wildernessRuntime';
 import { getTownManifest } from '../../src/game/world/townManifest';
 import { NPC_POSITIONS } from '../../src/game/world/npcs';
 import { WORLD_OBJECTS } from '../../src/game/world/interactables';
@@ -40,6 +41,19 @@ function pointsOnRoute(world: WildernessTerrainResult, points: readonly { x: num
 }
 
 describe('Agent 26: deterministic corrupted-frontier wilderness terrain', () => {
+  it('connects the seeded story landmarks to camp on the rendered road network', () => {
+    for (const seed of [...seeds, 7919]) {
+      const world = buildWilderness(seed);
+      for (const id of ['corruption_site', 'corrupted_forest', 'abandoned_graveyard']) {
+        const road = world.terrain.roads.find(route => route.id === 'road-story-' + id);
+        const target = world.features.find(feature => feature.id === 'act1.' + id);
+        expect(road?.from).toEqual(CAMP);
+        expect(road?.to).toEqual(target?.position);
+        pointsOnRoute(world.terrain, road!.points);
+      }
+    }
+  });
+
   it('reproduces bit-for-bit JSON and structured output for the same seed', () => {
     for (const seed of seeds) {
       const first = generateWildernessTerrain(seed);

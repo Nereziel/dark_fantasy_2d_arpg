@@ -5,6 +5,7 @@ import { FIRST_QUEST_ID } from '../../src/game/quests/firstQuest';
 import { validateQuestLedger } from '../../src/game/quests/questDialogue';
 import { createMiniBossState, getMiniBossDefinition } from '../../src/game/enemies/miniBossRules';
 import { buildWilderness } from '../../src/game/world/wildernessRuntime';
+import { planWorldEvents } from '../../src/game/world/worldEvents';
 import type { EnemyUnit } from '../../src/game/enemies/enemies';
 
 function morrowHunt() {
@@ -86,6 +87,43 @@ describe('Issue #125 — recoverable Morrow spawn on graveyard progression', () 
     game.advance(16.667);
     expect(game.snapshot().enemies.filter(unit => unit.actor.id === 'morrow_gravebound'))
       .toHaveLength(1);
+  });
+
+  it('spawns Morrow while both optional world-event guards are still alive', () => {
+    const game = morrowHunt();
+    const world = buildWilderness(0);
+    const plan = planWorldEvents(0, world.layout, world.features)[0]!;
+    const eventGame = new GameSimulation(0);
+    const start = eventGame.snapshot();
+    expect(eventGame.restore({ ...start, player: { ...start.player, ...plan.position } }))
+      .toBe(true);
+    eventGame.advance(150);
+    const eventSnapshot = eventGame.snapshot();
+    expect(eventSnapshot.worldEvents).toContainEqual(
+      expect.objectContaining({ id: plan.id, status: 'active', remaining: 2 }));
+    const hunt = game.snapshot();
+    expect(game.restore({ ...eventSnapshot, quest: hunt.quest, questLedger: hunt.questLedger }))
+      .toBe(true);
+    const internal = game as unknown as { units: EnemyUnit[]; defeatEnemy(unit: EnemyUnit): void };
+    const before = game.snapshot();
+    game.advance(16.667);
+    const after = game.snapshot();
+
+    expect(after.enemies.filter(unit => unit.actor.id === 'morrow_gravebound')).toHaveLength(1);
+    expect(after.enemies.slice(0, before.enemies.length).map(unit => unit.actor.id))
+      .toEqual(before.enemies.map(unit => unit.actor.id));
+    expect(after.gold).toBe(before.gold);
+    expect(after.worldEvents).toEqual(before.worldEvents);
+    expect(game.restore(after)).toBe(true);
+
+    for (const guard of internal.units.filter(unit => unit.actor.id.startsWith('world-event.'))) {
+      internal.defeatEnemy(guard);
+    }
+    expect(game.worldProgress()?.worldFacts.entries).toContainEqual(expect.objectContaining({
+      kind: 'eventCompleted', entityId: plan.id
+    }));
+    expect(game.snapshot().enemies.some(unit => unit.actor.id === 'morrow_gravebound')).toBe(true);
+    expect(game.restore(game.snapshot())).toBe(true);
   });
 
   it('reclaims only a dead optional miniboss slot, retaining the living encounter and the story boss', () => {

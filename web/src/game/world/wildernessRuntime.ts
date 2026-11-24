@@ -2,9 +2,32 @@
  * Identical pure world assembly is used by simulation and renderer.
  * GPL-3.0-only.
  */
-import { generateWildernessTerrain, type WildernessTerrainResult } from './wildernessTerrain';
+import { generateWildernessTerrain, routeClear, type WildernessTerrainResult } from './wildernessTerrain';
 import { planWildernessFeatures, type WildernessFeature } from './wildernessFeatures';
 import type { WorldLayout } from './generator';
+import { ACTOR_RADIUS, findPath } from './navigation';
+
+const STORY_ROAD_FEATURES: ReadonlySet<string> = new Set([
+  'act1.corruption_site', 'act1.corrupted_forest', 'act1.abandoned_graveyard'
+]);
+
+function withStoryRoads(
+  terrain: WildernessTerrainResult, features: readonly WildernessFeature[]
+): WildernessTerrainResult {
+  const { camp, obstacles } = terrain.layout;
+  const storyRoads = features.filter(feature => STORY_ROAD_FEATURES.has(feature.id))
+    .flatMap(feature => {
+      for (const radius of [ACTOR_RADIUS, ACTOR_RADIUS + 4]) {
+        const points = [{ ...camp }, ...findPath(camp, feature.position, radius, obstacles)];
+        if (routeClear(points, obstacles)) return [{
+          id: 'road-story-' + feature.id.slice('act1.'.length),
+          from: { ...camp }, to: { ...feature.position }, width: 38, points
+        }];
+      }
+      return [];
+    });
+  return { ...terrain, roads: [...terrain.roads, ...storyRoads] };
+}
 
 export interface WildernessRuntimeWorld {
   layout: WorldLayout;
@@ -18,7 +41,7 @@ export function buildWilderness(seed: number): WildernessRuntimeWorld {
   const initial = generateWildernessTerrain(seed);
   const plan = planWildernessFeatures(seed, initial.layout);
   if (plan.ok) {
-    return { layout: initial.layout, terrain: initial, features: plan.features,
+    return { layout: initial.layout, terrain: withStoryRoads(initial, plan.features), features: plan.features,
       usedFeatureFallback: false };
   }
   // Deterministic tested seed-zero clearing, with the caller's session seed.
@@ -34,6 +57,6 @@ export function buildWilderness(seed: number): WildernessRuntimeWorld {
     'Wilderness has no reachable story layout: ' + plan.error.code + '/' + retry.error.code
   );
   return {
-    layout, terrain: { ...safe, layout }, features: retry.features, usedFeatureFallback: true
+    layout, terrain: withStoryRoads({ ...safe, layout }, retry.features), features: retry.features, usedFeatureFallback: true
   };
 }

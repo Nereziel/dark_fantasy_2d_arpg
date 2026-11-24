@@ -169,9 +169,9 @@
     "move": "Move: click or hold left mouse",
     "attack": "Attack: click an enemy",
     "pause": "Pause: Esc",
-    "hint": "Space: evade · Shift: stand still · Q/RMB and 1: cursor-aimed skills · Esc → Controls to remap",
+    "hint": "{evade}: evade · {hold}: stand still · {menu} → Controls to remap",
     "pickup": "Loot: click a glowing item",
-    "skills": "Skills: Q / right mouse button and key 1",
+    "skills": "Skills: {skills} · Potion: {potion}",
     "avoid": "Dodge the red warning circle before the strike lands.",
     "navigate": "Hold left click to follow the cursor; click solid ground to move beside obstacles. Middle click forces movement."
   },
@@ -1311,6 +1311,7 @@
     "completed": "Blacksmith crafting completed."
   },
   "gems": {
+    "combatLoot": "Added to gem pouch: {gem} · tier {tier}.",
     "title": "Gems and Runes",
     "description": "Forge gems from materials, combine three identical stones into a higher tier, and insert them into empty sockets. Effects depend on the equipment category. Extraction costs gold and returns the stone to your wallet.",
     "forgeTitle": "Gem and Rune Forging",

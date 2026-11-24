@@ -262,7 +262,7 @@ function makeTiles(seed: number, roads: readonly TerrainRoad[]): TerrainTile[] {
   return tiles;
 }
 
-function routeClear(points: readonly Point[], obstacles: readonly Obstacle[]): boolean {
+export function routeClear(points: readonly Point[], obstacles: readonly Obstacle[]): boolean {
   if (points.length < 2) return false;
   for (let index = 1; index < points.length; index++) {
     const from = points[index - 1]!, to = points[index]!;

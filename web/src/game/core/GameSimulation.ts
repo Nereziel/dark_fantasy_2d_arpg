@@ -60,7 +60,7 @@ import {
 } from '../enemies/miniBossRules';
 import { monsterActions, monsterAction, type MonsterAction } from '../enemies/monsterRuntime';
 import { getEnemyArchetype } from '../enemies/archetypeCatalog';
-import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, findPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
+import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, findPath, findPickupPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
   type WorldLayout
@@ -100,7 +100,8 @@ import {
   planCraft, validateMaterials, type Materials, type CraftRequest
 } from '../crafting/craftingRules';
 import {
-  planGemAction, isValidGemWallet, type GemWallet, type GemAction
+  planGemAction, isValidGemWallet, type GemWallet, type GemAction,
+  grantCombatGem, rollCombatGem
 } from '../gems/gemRules';
 import {
   POTIONS, freshPotions, isPotionState, planPotionUse, planPotionRefill,
@@ -136,6 +137,8 @@ const MAX_FRAME_SECONDS = 0.1;
 const PLAYER_SPEED = 190;
 const INVENTORY_SIZE = 24;
 const ENEMY_SEPARATION = 44;
+
+const PICKUP_RANGE = 36;
 
 function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -362,7 +365,7 @@ export class GameSimulation {
     stalledTicks: number;
   } | null = null;
   private attackTarget: string | null = null;
-  private pickupTarget: string | null = null;
+  private pickupTarget: { id: string; path: Point[] } | null = null;
   private pendingObject: WorldObjectId | null = null;
   private usedObjects = new Set<WorldObjectId>();
   private shield = 0;
@@ -1159,8 +1162,9 @@ export class GameSimulation {
     // objective unlocks. A required story encounter must never be blocked by
     // an unrelated optional fight: retire a dead optional first, otherwise an
     // unselected living optional. This is world streaming, NOT a kill: do not
-    // record a defeat, grant loot/XP or discard the five canonical pack foes.
-    if (this.units.length >= PACK_SIZE + 2) {
+    // record a defeat or grant loot/XP. World-event guards and summons
+    // keep their slots and identities when Morrow uses the story reserve.
+    if (this.units.length >= PACK_SIZE + 2 && !this.units.some(unit => unit.summoned)) {
       const optional = (unit: EnemyUnit, index: number) =>
         index >= PACK_SIZE && unit.actor.id !== 'morrow_gravebound'
         && MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId);
@@ -1181,7 +1185,7 @@ export class GameSimulation {
         }
       }
     }
-    if (this.units.length >= PACK_SIZE + 2) return;
+    if (this.units.length > PACK_SIZE + 2) return;
     const marker = this.storyFeatures.find(feature => feature.id === 'act1.grave_warden');
     if (!marker) return;
     const health = 270 + Math.max(0, this.level - 1) * 24;
@@ -1749,8 +1753,11 @@ export class GameSimulation {
       this.pendingTown = null;
       this.pendingObject = null;
       this.pendingPortal = false;
-    } else if (command.type === 'pickup' && this.groundLoot.some(loot => loot.id === command.id)) {
-      this.pickupTarget = command.id;
+    } else if (command.type === 'pickup') {
+      const loot = this.groundLoot.find(item => item.id === command.id);
+      if (!loot) return;
+      this.pickupTarget = { id: loot.id,
+        path: findPickupPath(this.player, loot, PICKUP_RANGE, this.world.obstacles) };
       this.movePath = [];
       this.attackTarget = null;
       this.pendingSkill = null;
@@ -4107,10 +4114,18 @@ export class GameSimulation {
         }
       }
     } else if (this.pickupTarget) {
-      const loot = this.groundLoot.find(item => item.id === this.pickupTarget);
+      const { id, path } = this.pickupTarget;
+      const loot = this.groundLoot.find(item => item.id === id);
       if (!loot) this.pickupTarget = null;
-      else if (distance(this.player, loot) <= 36) this.collectLoot(loot);
-      else this.follow(this.player, loot, speed, dt, 32, true);
+      else if (distance(this.player, loot) <= PICKUP_RANGE) this.collectLoot(loot);
+      else {
+        const waypoint = path[0];
+        if (!waypoint) this.pickupTarget = null;
+        else {
+          this.follow(this.player, waypoint, speed, dt);
+          if (distance(this.player, waypoint) <= 1) path.shift();
+        }
+      }
     } else if (this.movePath.length) {
       const point = this.movePath[0]!;
       this.follow(this.player, point, speed, dt);
@@ -4369,6 +4384,15 @@ export class GameSimulation {
   /** The one runtime path for normal, elite and boss drops; rolls share catalog+affixes. */
   private dropEnemyLoot(unit: EnemyUnit): void {
     const boss = unit.actor.type === 'crypt_lord' || this.defeatedMiniBossIds.has(unit.actor.id as MiniBossId);
+    if (boss || this.zone === 'crypt' || this.wave >= 2) {
+      const rank = boss ? 'boss' : unit.elite ? 'elite' : 'normal';
+      const gem = rollCombatGem(this.world.seed, this.kills, rank);
+      const nextWallet = gem && grantCombatGem(this.gems, gem);
+      if (gem && nextWallet) {
+        this.gems = nextWallet;
+        this.events.push({ type: 'gemLoot', gemId: gem });
+      }
+    }
     const context: LootContext = {
       playerLevel: this.level, monsterLevel: this.level, enemyType: unit.actor.type,
       zone: this.zone, isBoss: boss, difficulty: 'normal',
@@ -4877,7 +4901,12 @@ export class GameSimulation {
       || !validWaveBState(s)
       || !s.effects || !Array.isArray(s.effects.player)
       || s.effects.player.length > 8 || !s.effects.player.every(isActiveEffect)
-      || !Array.isArray(s.enemies) || s.enemies.length < PACK_SIZE || s.enemies.length > PACK_SIZE + 2
+      || !Array.isArray(s.enemies) || s.enemies.length < PACK_SIZE
+      || (s.enemies.length > PACK_SIZE + 2 && (
+        s.zone !== 'wilderness' || s.enemies.length !== PACK_SIZE + 3
+        || s.enemies.at(-1)?.actor?.id !== 'morrow_gravebound'
+        || s.enemies.slice(0, -1).some(unit => unit?.actor?.id === 'morrow_gravebound')
+      ))
       || !s.enemies.every((unit, index) =>
         !!unit && !!unit.actor && validEnemyType(unit.actor.type)
         && (s.zone === 'crypt'

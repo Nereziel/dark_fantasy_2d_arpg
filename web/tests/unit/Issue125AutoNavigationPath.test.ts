@@ -1,14 +1,55 @@
 // F0: the live auto-approach must route around the dungeon rooms, not run
 // a collision-constrained straight line forever. GPL-3.0-only.
 import { describe, expect, it } from 'vitest';
+import { rollItem, SeededRng } from '../../src/game/data/items';
+import { buildWilderness } from '../../src/game/world/wildernessRuntime';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { createCryptPack } from '../../src/game/enemies/enemies';
 import type { Point } from '../../src/game/core/types';
 import { CRYPT_EXIT, CRYPT_GATE, CRYPT_BOSS_POSITIONS } from '../../src/game/world/generator';
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../../src/game/world/dungeonRuntime';
-import { ACTOR_RADIUS, canOccupy, findPath, hasLineOfSight } from '../../src/game/world/navigation';
+import { ACTOR_RADIUS, canOccupy, findPath, findPickupPath, hasLineOfSight, moveActor } from '../../src/game/world/navigation';
 
 describe('F0 — click-to-interact auto-navigation around solid walls', () => {
+  it('reaches a drop at the outer edge of pickup range when closer samples are blocked', () => {
+    const walls = [{ id: 'wall', x: 450, y: 450, width: 67, height: 100 }];
+    const start = { x: 600, y: 500 };
+    // A secondary drop can be offset inside a solid object. The first legal
+    // hero position is x=535, 34 units away: a 32-unit approach cannot work.
+    const loot = { x: 501, y: 500 };
+    const path = findPickupPath(start, loot, 36, walls);
+    expect(path.length).toBeGreaterThan(0);
+    const actor = { ...start };
+    for (const point of path) {
+      expect(canOccupy(point, ACTOR_RADIUS, walls)).toBe(true);
+      moveActor(actor, point, Math.hypot(actor.x - point.x, actor.y - point.y), ACTOR_RADIUS, walls);
+      expect(actor.x).toBeCloseTo(point.x);
+      expect(actor.y).toBeCloseTo(point.y);
+    }
+    expect(Math.hypot(actor.x - loot.x, actor.y - loot.y)).toBeLessThanOrEqual(36);
+  });
+
+  it('walks to pickup range for a drop too close to a wall for the hero to stand on it', () => {
+    const game = new GameSimulation(0);
+    const snapshot = game.snapshot();
+    const { obstacles } = buildWilderness(0).layout;
+    const origin = { x: 1100, y: 690 };
+    const item = rollItem(1, snapshot.level, new SeededRng(42));
+    const loot = { id: 'wall-drop', x: 1258, y: 690, item };
+    expect(canOccupy(loot, 0, obstacles)).toBe(true);
+    expect(canOccupy(loot, ACTOR_RADIUS, obstacles)).toBe(false);
+    expect(game.restore({ ...snapshot, player: { ...snapshot.player, ...origin },
+      groundLoot: [loot] })).toBe(true);
+
+    game.command({ type: 'pickup', id: loot.id });
+    for (let tick = 0; tick < 120 && game.snapshot().groundLoot.length; tick++) {
+      game.advance(33.334);
+      expect(canOccupy(game.snapshot().player, ACTOR_RADIUS, obstacles)).toBe(true);
+    }
+    expect(game.snapshot().groundLoot).toEqual([]);
+    expect(game.snapshot().inventory.filter(entry => entry?.id === item.id)).toHaveLength(1);
+  });
+
   it.each([0, 42, 901])(
     'completes a genuine portal command around crypt walls on seed %i',
     (seed) => {

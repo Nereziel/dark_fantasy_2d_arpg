@@ -5,6 +5,8 @@
   import type { GameBridge } from '../game/bridge/GameBridge';
   import type { Item, RarityId } from '../game/data/items';
   import ItemArt from './ItemArt.svelte';
+  import GemArt from './GemArt.svelte';
+  import { GEM_IDS, baseOf, tierOf } from '../game/gems/gemCatalog';
   import { DEFAULT_GROUND_LOOT_FILTER, normalizeGroundLootFilter, type GroundLootFilter,
     type GroundLootCategory } from '../game/items/groundLootVisibility';
   import { RARITIES } from '../game/data/items';
@@ -21,6 +23,7 @@
     'BOOTS', 'RING_1', 'AMULET', 'RING_2', 'RELIC', 'CHARM'
   ];
   let rarityFilter = $state('ALL');
+  let ownedGems = $derived(GEM_IDS.filter(gemId => (view.gems?.[gemId] ?? 0) > 0));
   // Read initial props through a closure, then keep selection as independent UI state.
   function initialSelection(): Source | null {
     const index = view.inventory.findIndex(Boolean);
@@ -80,11 +83,23 @@
       && dropHover.slot === target.slot;
   }
   function clearDrag(): void { dragged = null; dropHover = null; }
+  function previewWithMouse(event: PointerEvent, source: Source | null): void {
+    if (event.pointerType !== 'mouse' || moveArmed) return;
+    // A resize can put a stationary cursor over a slot after a touch tap.
+    if (touchInput && (event.type === 'pointerenter'
+      || (event.movementX === 0 && event.movementY === 0))) return;
+    hovered = source;
+  }
+  function selectPointer(event: PointerEvent): void {
+    touchInput = event.pointerType !== 'mouse';
+    if (touchInput) hovered = null;
+  }
+
   /** Commit the last real mouse preview before crossing into the inspector.
    * Otherwise clearing hovered on leave silently retargets action buttons to
    * an older selected item. Never modify a touch selection or armed move. */
   function pinMousePreviewOnLeave(event: PointerEvent, source: Source, item: Item | null): void {
-    if (event.pointerType === 'mouse' && item && !moveArmed && !dragged) {
+    if (event.pointerType === 'mouse' && item && hovered && !moveArmed && !dragged) {
       selected = source;
     }
     hovered = null;
@@ -99,7 +114,7 @@
     placementMessage = '';
   }
 
-  let displayed = $derived(touchInput ? selected : (hovered ?? selected));
+  let displayed = $derived(moveArmed ? selected : (hovered ?? selected));
   let inspected = $derived.by((): Item | null => {
     if (!displayed) return null;
     return displayed.kind === 'bag' ? view.inventory[displayed.index] ?? null
@@ -331,7 +346,6 @@
   <div class="inventory-window" role="dialog" aria-modal="true" aria-label={$t('inventory.title')}>
     <header class="inventory-header">
       <div>
-        <span class="kicker">AETHER &amp; RUIN / EQUIPMENT</span>
         <h2>{$t('inventory.title')}</h2>
       </div>
       <div class="header-controls">
@@ -367,16 +381,16 @@
               data-equipment-slot={slot}
               data-item-id={item?.id}
               draggable={!!item}
-              onpointerdown={(event) => { touchInput = event.pointerType !== 'mouse'; }}
+              onpointerdown={selectPointer}
               ondragstart={(event) => startDrag(event, { kind: 'gear', slot })}
               ondragend={clearDrag}
               ondragover={(event) => permitDrop(event, { kind: 'gear', slot })}
                ondragleave={() => { if (isDropHover({ kind: 'gear', slot })) dropHover = null; }}
               ondrop={(event) => dropGear(event, slot)}
-              onpointerenter={(event) => { if (event.pointerType === 'mouse') touchInput = false; hovered = { kind: 'gear', slot }; }}
-              onpointermove={(event) => { if (event.pointerType === 'mouse') { touchInput = false; hovered = { kind: 'gear', slot }; } }}
+              onpointerenter={(event) => previewWithMouse(event, { kind: 'gear', slot })}
+              onpointermove={(event) => previewWithMouse(event, { kind: 'gear', slot })}
               onpointerleave={(event) => pinMousePreviewOnLeave(event, { kind: 'gear', slot }, item)}
-              onfocus={() => { hovered = { kind: 'gear', slot }; }}
+              onfocus={() => { if (!touchInput) hovered = { kind: 'gear', slot }; }}
               onclick={() => pickGear(slot)}
               ondblclick={() => { if (!touchInput) unequip(slot); }}
               aria-label={$t('item.slot.' + slot) + (item ? ': ' + itemName(item) : ': ' + $t('inventory.empty'))}
@@ -421,6 +435,59 @@
             {$t('inventory.sort')}
           </button>
         </div>
+        <div class="bag-grid" role="group" aria-label={$t('inventory.bag')}>
+          {#each view.inventory as item,index (index)}
+            {@const filtered = !!item && rarityFilter !== 'ALL' && item.rarity !== rarityFilter}
+            <button type="button" class="bag-slot"
+              class:occupied={!!item}
+              class:filtered-out={filtered}
+              class:selected={!filtered && selected?.kind === 'bag' && selected.index === index}
+              class:favorite={!!(item && view.itemFlags?.[item.id]?.favorite)}
+              class:locked={!!(item && view.itemFlags?.[item.id]?.locked)}
+               class:drop-valid={!filtered && !!placementSource && canPlace({ kind: 'bag', index })}
+               class:drop-hover-valid={!filtered && !!placementSource && isDropHover({ kind: 'bag', index }) && canPlace({ kind: 'bag', index })}
+               class:drop-invalid={!!placementSource && isDropHover({ kind: 'bag', index }) && !canPlace({ kind: 'bag', index })}
+              style:border-color={item ? RARITIES[item.rarity].color : undefined}
+              data-bag-index={index}
+              data-item-id={item?.id}
+              disabled={filtered}
+              draggable={!!item && !filtered}
+              onpointerdown={selectPointer}
+              ondragstart={(event) => { if (filtered) event.preventDefault(); else startDrag(event, { kind: 'bag', index }); }}
+              ondragend={clearDrag}
+              ondragover={(event) => { if (!filtered) permitDrop(event, { kind: 'bag', index }); }}
+               ondragleave={() => { if (isDropHover({ kind: 'bag', index })) dropHover = null; }}
+              ondrop={(event) => { if (!filtered) dropBag(event,index); }}
+              onpointerenter={(event) => previewWithMouse(event, item && !filtered ? { kind: 'bag', index } : null)}
+              onpointermove={(event) => previewWithMouse(event, item && !filtered ? { kind: 'bag', index } : null)}
+              onpointerleave={(event) => pinMousePreviewOnLeave(event, { kind: 'bag', index }, filtered ? null : item)}
+              onfocus={() => { if (!touchInput) hovered = item && !filtered ? { kind: 'bag', index } : null; }}
+              onclick={() => { if (!filtered) pickBag(index); }}
+              ondblclick={() => { if (item && !filtered && !touchInput) equip(index); }}
+              oncontextmenu={(event) => { if (item && !filtered) { event.preventDefault(); if (!touchInput) equip(index); } }}
+              aria-label={item ? itemName(item) : $t('inventory.empty')}
+              title={item ? itemName(item) : $t('inventory.empty')}>
+              {#if item}
+                <span class="bag-item-icon" style:color={RARITIES[item.rarity].color}>
+                  <ItemArt {item} />
+                </span>
+                <span class="sr-only">{itemName(item)}</span>
+                <span class="item-level">{item.level}</span>
+                {#if view.itemFlags?.[item.id]?.favorite}<span class="favorite-mark">★</span>{/if}
+                {#if view.itemFlags?.[item.id]?.locked}<span class="lock-mark">◆</span>{/if}
+              {:else}
+                <span class="empty-icon" aria-hidden="true">·</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+        <div class="bag-footer">
+          <span class="desktop-hint">{$locale === 'cs' ? 'Kliknutím zobrazíš detail · dvojklik nebo přetažení přesune předmět' : 'Click to inspect · double-click or drag to move gear'}</span>
+          <span class="touch-hint">{$locale === 'cs' ? 'Klepni pro náhled · přesun přes tlačítko výše' : 'Tap to inspect · use Move by tap'}</span>
+          {#if selected?.kind === 'bag'}
+            <button onclick={() => clearMoveSelection()}>{$locale === 'cs' ? 'Zrušit výběr' : 'Clear selection'}</button>
+          {/if}
+        </div>
         <div class="ground-loot-settings" data-testid="ground-loot-filter">
           <strong>{$t('inventory.groundLootFilter')}</strong>
           <label>
@@ -451,59 +518,18 @@
             {$t('inventory.alwaysShowFavorites')}
           </label>
         </div>
-        <div class="bag-grid" role="group" aria-label={$t('inventory.bag')}>
-          {#each view.inventory as item,index (index)}
-            {@const filtered = !!item && rarityFilter !== 'ALL' && item.rarity !== rarityFilter}
-            <button type="button" class="bag-slot"
-              class:occupied={!!item}
-              class:filtered-out={filtered}
-              class:selected={!filtered && selected?.kind === 'bag' && selected.index === index}
-              class:favorite={!!(item && view.itemFlags?.[item.id]?.favorite)}
-              class:locked={!!(item && view.itemFlags?.[item.id]?.locked)}
-               class:drop-valid={!filtered && !!placementSource && canPlace({ kind: 'bag', index })}
-               class:drop-hover-valid={!filtered && !!placementSource && isDropHover({ kind: 'bag', index }) && canPlace({ kind: 'bag', index })}
-               class:drop-invalid={!!placementSource && isDropHover({ kind: 'bag', index }) && !canPlace({ kind: 'bag', index })}
-              style:border-color={item ? RARITIES[item.rarity].color : undefined}
-              data-bag-index={index}
-              data-item-id={item?.id}
-              disabled={filtered}
-              draggable={!!item && !filtered}
-              onpointerdown={(event) => { touchInput = event.pointerType !== 'mouse'; }}
-              ondragstart={(event) => { if (filtered) event.preventDefault(); else startDrag(event, { kind: 'bag', index }); }}
-              ondragend={clearDrag}
-              ondragover={(event) => { if (!filtered) permitDrop(event, { kind: 'bag', index }); }}
-               ondragleave={() => { if (isDropHover({ kind: 'bag', index })) dropHover = null; }}
-              ondrop={(event) => { if (!filtered) dropBag(event,index); }}
-              onpointerenter={(event) => { if (event.pointerType === 'mouse') touchInput = false; hovered = item && !filtered ? { kind: 'bag', index } : null; }}
-              onpointermove={(event) => { if (event.pointerType === 'mouse') { touchInput = false; hovered = item && !filtered ? { kind: 'bag', index } : null; } }}
-              onpointerleave={(event) => pinMousePreviewOnLeave(event, { kind: 'bag', index }, filtered ? null : item)}
-              onfocus={() => { hovered = item && !filtered ? { kind: 'bag', index } : null; }}
-              onclick={() => { if (!filtered) pickBag(index); }}
-              ondblclick={() => { if (item && !filtered && !touchInput) equip(index); }}
-              oncontextmenu={(event) => { if (item && !filtered) { event.preventDefault(); if (!touchInput) equip(index); } }}
-              aria-label={item ? itemName(item) : $t('inventory.empty')}
-              title={item ? itemName(item) : $t('inventory.empty')}>
-              {#if item}
-                <span class="bag-item-icon" style:color={RARITIES[item.rarity].color}>
-                  <ItemArt {item} />
-                </span>
-                <span class="sr-only">{itemName(item)}</span>
-                <span class="item-level">{item.level}</span>
-                {#if view.itemFlags?.[item.id]?.favorite}<span class="favorite-mark">★</span>{/if}
-                {#if view.itemFlags?.[item.id]?.locked}<span class="lock-mark">◆</span>{/if}
-              {:else}
-                <span class="empty-icon" aria-hidden="true">·</span>
-              {/if}
-            </button>
-          {/each}
-        </div>
-        <div class="bag-footer">
-          <span class="desktop-hint">{$locale === 'cs' ? 'Kliknutím zobrazíš detail · dvojklik nebo přetažení přesune předmět' : 'Click to inspect · double-click or drag to move gear'}</span>
-          <span class="touch-hint">{$locale === 'cs' ? 'Klepni pro náhled · přesun přes tlačítko výše' : 'Tap to inspect · use Move by tap'}</span>
-          {#if selected?.kind === 'bag'}
-            <button onclick={() => clearMoveSelection()}>{$locale === 'cs' ? 'Zrušit výběr' : 'Clear selection'}</button>
-          {/if}
-        </div>
+        {#if ownedGems.length}
+          <section class="inventory-gems" aria-label={$t('gems.wallet')}>
+            <h4>{$t('gems.wallet')}</h4>
+            <ul>
+              {#each ownedGems as gemId (gemId)}
+                <li><GemArt {gemId} compact />
+                  <span>{$t('gems.names.' + baseOf(gemId).id)} · {tierOf(gemId)} × {view.gems?.[gemId]}</span>
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
       </section>
 
       <aside class="item-inspector" data-testid="item-inspector"
@@ -649,7 +675,6 @@
   .inventory-overlay{position:absolute;inset:0;z-index:40;display:grid;place-items:center;background:#03060bdf;padding:clamp(8px,2vh,24px)}
   .inventory-window{width:min(1320px,100%);max-height:min(850px,96dvh);min-height:0;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(155deg,#20242c,#0b111a 70%);border:1px solid #9d845d;box-shadow:0 25px 90px #000e}
   .inventory-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid #61513b}
-  .kicker{font-size:.58rem;letter-spacing:.2em;color:#a59678}
   h2{font:1.5rem Georgia,serif;color:#ecdcc0;margin:3px 0 0}
   h3{font:1.1rem Georgia,serif;color:#d8bd8e;margin:0 0 12px}
   .header-controls{display:flex;gap:7px}
@@ -681,6 +706,10 @@
   .bag-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;font-size:.72rem;color:#b2b5ae}
   .bag-toolbar label{display:flex;align-items:center;gap:6px;min-width:0}
   .bag-toolbar select{min-width:0;max-width:125px;padding:5px;color:#ddd1b9;border:1px solid #77674d;background:#192027;font-size:.72rem}
+  .inventory-gems{margin-top:10px;padding:8px;border:1px solid #465563;background:#111d27}
+  .inventory-gems h4{color:#e7d6b1;font-size:.76rem;margin:0 0 5px}
+  .inventory-gems ul{list-style:none;display:flex;flex-wrap:wrap;gap:5px;margin:0;padding:0}
+  .inventory-gems li{display:flex;align-items:center;gap:3px;font-size:.7rem;color:#e7d6b1}
   .ground-loot-settings {
     display:flex;align-items:center;flex-wrap:wrap;gap:7px 11px;
     margin:8px 0 12px;padding:9px;
@@ -744,7 +773,6 @@
     .inventory-overlay{padding:4px}
     .inventory-window{max-height:99dvh}
     .inventory-header{padding:9px 10px;gap:7px}
-    .kicker{display:none}
     h2{font-size:clamp(1rem,4.5vw,1.3rem)}
     .header-controls{flex-shrink:0;gap:5px}
     .header-controls button{font-size:.65rem;min-height:40px;padding:6px 8px}

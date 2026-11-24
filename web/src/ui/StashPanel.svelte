@@ -210,7 +210,7 @@
 
 <div class="stash-columns">
   <section>
-    <h3>{$t('town.stashBag')} ({view.inventory.filter(Boolean).length}/24)</h3>
+    <h3>{$t('town.stashBag')} ({view.inventory.filter(Boolean).length}/{view.inventory.length})</h3>
     <div class="stash-list" data-stash-bag role="region" aria-label={$t('town.stashBag')}
       class:drop-ready={canDropBag()}
       class:drop-hover={dropHover === 'bag' && canDropBag()}
@@ -219,13 +219,16 @@
       ondrop={dropIntoBag}>
       {#each view.inventory as item, index (index)}
         {#if item}
-          <div class="stash-row" role="group" aria-label={item.id} data-item-id={item.id} data-bag-index={index}
+          <div class="stash-row" role="group" aria-label={itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))} data-item-id={item.id} data-bag-index={index}
             class:move-source={pendingMove?.id === item.id}
             draggable={!view.itemFlags?.[item.id]?.locked && !view.itemFlags?.[item.id]?.favorite}
             ondragstart={(event) => dragStart(event, { kind: 'bag', index, id: item.id })}
             ondragend={clearDrag}>
             <span class="stash-item-ident" style:color={RARITIES[item.rarity].color}>
-              <span class="stash-art"><ItemArt {item} /></span>
+              <span class="stash-art" style:border-color={RARITIES[item.rarity].color}>
+                <ItemArt {item} />
+                {#if item.upgrades}<small>+{item.upgrades}</small>{/if}
+              </span>
               <span class="stash-item-label">{itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</span>
             </span>
             <button type="button" class="stash-move-select"
@@ -294,12 +297,15 @@
       ondragleave={() => { if (dropHover === 'stash') dropHover = null; }}
       ondrop={(event) => dropIntoTab(event, activeTab)}>
       {#each storedRows as { index, item } (item.id)}
-        <div class="stash-row" role="group" aria-label={item.id} data-item-id={item.id} data-slot-index={index} draggable="true"
+        <div class="stash-row" role="group" aria-label={itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))} data-item-id={item.id} data-slot-index={index} draggable="true"
           class:move-source={pendingMove?.id === item.id}
           ondragstart={(event) => dragStart(event, { kind: 'stash', tab: activeTab, index, id: item.id })}
           ondragend={clearDrag}>
           <span class="stash-item-ident" style:color={RARITIES[item.rarity].color}>
-              <span class="stash-art"><ItemArt {item} /></span>
+              <span class="stash-art" style:border-color={RARITIES[item.rarity].color}>
+                <ItemArt {item} />
+                {#if item.upgrades}<small>+{item.upgrades}</small>{/if}
+              </span>
               <span class="stash-item-label">{itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</span>
             </span>
           <div class="stash-row-actions">
@@ -349,25 +355,27 @@
   .stash-columns{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:850px}
   .stash-columns section{min-width:0}
   .stash-columns h3{color:#f0d5a3;font-size:.85rem;margin:4px 0 10px}
-  .stash-list{max-height:240px;overflow:auto;display:flex;flex-direction:column;gap:7px;min-height:80px;border:1px solid transparent;padding:4px}
+  .stash-list{max-height:320px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));align-content:start;gap:7px;min-height:80px;border:1px solid transparent;padding:4px}
   .stash-list.drop-ready{border:2px dashed #81cfa2;box-shadow:inset 0 0 14px #356d4c88}
   .stash-list.drop-hover{border-style:solid;background:#24403277;box-shadow:inset 0 0 18px #4ca36a66}
-  .stash-row{display:flex;gap:8px;align-items:center;justify-content:space-between;background:#17202ab8;padding:8px}
+  .stash-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:#17202ab8;border:1px solid #44535d;padding:6px}
   .stash-row[draggable="true"]{cursor:grab}
   .stash-row[draggable="true"]:active{cursor:grabbing}
   .stash-row[draggable="false"]{cursor:not-allowed}
   .stash-row span{font-size:.75rem;min-width:0;overflow:hidden;text-overflow:ellipsis}
   .stash-item-ident{display:flex;flex:1 1 140px;align-items:center;gap:8px;min-width:0}
-  .stash-art{width:32px;height:32px;flex:0 0 32px}
+  .stash-art{position:relative;width:38px;height:38px;flex:0 0 38px;border:1px solid;background:radial-gradient(#26313a,#111820 75%)}
+  .stash-art small{position:absolute;right:1px;bottom:0;color:#fae0a8;background:#111820;font-size:.58rem}
   .stash-item-label{min-width:0;white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
   .stash-row button,.stash-organize{white-space:nowrap;font-size:.72rem;border:1px solid #8b7a5f;background:#2d3137;color:#e7dac0;padding:7px;cursor:pointer}
   .stash-row button:disabled{opacity:.45;cursor:not-allowed}
-  .stash-row-actions{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end}
+  .stash-row-actions{display:flex;flex-wrap:wrap;gap:5px;width:100%}
   .stash-row select{max-width:105px;font-size:.72rem;border:1px solid #8b7a5f;background:#2d3137;color:#e7dac0;padding:6px}
   .stash-controls{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin:0 0 8px}
   .stash-controls label{display:flex;flex-direction:column;gap:3px;min-width:84px;flex:1;font-size:.66rem;color:#cdbb9b}
   .stash-controls select,.stash-controls input{box-sizing:border-box;width:100%;min-width:0;color:#eee2c7;border:1px solid #675845;background:#17202a;padding:6px;font-size:.7rem}
   .stash-organize{margin-bottom:8px}
+  .stash-empty{grid-column:1/-1}
   .stash-empty,.stash-hint{color:#c4b8a6;font-size:.76rem}
   @media(max-width:660px){.stash-columns{grid-template-columns:1fr}.stash-list{max-height:145px}.stash-tabs button{padding:7px 9px}.stash-controls label{min-width:105px}.stash-row{flex-wrap:wrap}.stash-row-actions{margin-left:auto}}
 </style>

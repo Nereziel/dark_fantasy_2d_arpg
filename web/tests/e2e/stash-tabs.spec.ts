@@ -1,13 +1,19 @@
 import { test, expect } from '@playwright/test';
 
 test('multi-tab stash transfers, filters and persists stable item IDs in character v11', async ({ page }) => {
-  await page.goto('./');
-  await page.locator('#menu-language').selectOption('en');
-  await page.getByRole('button', { name: 'Enter the world' }).click();
-  await page.getByRole('button', { name: 'Browse wares' }).click();
-  const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
-  await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
-  await merchant.getByRole('button', { name: 'Leave' }).click();
+  // Two startup/restore cycles and all three stash tabs share this scenario.
+  // Keep individual actions bounded so a slow seed is not a silent 30s failure.
+  test.setTimeout(90_000);
+  page.setDefaultTimeout(12_000);
+  await test.step('Create hero and buy a real armor item', async () => {
+    await page.goto('./');
+    await page.locator('#menu-language').selectOption('en');
+    await page.getByRole('button', { name: 'Enter the world' }).click();
+    await page.getByRole('button', { name: 'Browse wares' }).click();
+    const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
+    await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
+    await merchant.getByRole('button', { name: 'Leave' }).click();
+  });
 
   await page.getByRole('button', { name: 'Open stash' }).click();
   const stash = page.getByRole('dialog', { name: 'Camp Stash' });
@@ -32,10 +38,12 @@ test('multi-tab stash transfers, filters and persists stable item IDs in charact
   await expect(stash.locator('[data-stash-items="2"] [data-item-id]')).toHaveAttribute('data-item-id', itemId!);
   await stash.getByRole('button', { name: 'Leave' }).click();
 
-  await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByRole('status')).toContainText('Hero saved');
-  await page.reload();
-  await page.getByRole('button', { name: 'Load' }).click();
+  await test.step('Save and reload the hero with moved item', async () => {
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('status')).toContainText('Hero saved');
+    await page.reload();
+    await page.getByRole('button', { name: 'Load' }).click();
+  });
   await page.getByRole('button', { name: 'Open stash' }).click();
   const recovered = page.getByRole('dialog', { name: 'Camp Stash' });
   await recovered.locator('[data-stash-tab="2"]').click();

@@ -4,11 +4,12 @@
   import type { GameBridge } from '../game/bridge/GameBridge';
   import type { EquipmentSlot, Item } from '../game/data/items';
   import {
-    GEM_BASES, GEM_IDS, isGemId, socketBonus, socketCategory, tierOf,
+    GEM_BASES, GEM_IDS, baseOf, isGemId, nextTier, socketBonus, socketCategory, tierOf,
     type GemBaseId, type GemId
   } from '../game/gems/gemCatalog';
   import { quoteGemRecipe } from '../game/gems/gemRules';
   import GemArt from './GemArt.svelte';
+  import ItemArt from './ItemArt.svelte';
 
   let { view, bridge }: {view:GameSnapshot; bridge:GameBridge} = $props();
 
@@ -25,7 +26,7 @@
   let heldGems = $derived(GEM_IDS.filter(id=>(view.gems?.[id]??0)>0));
 
   function name(id:GemId):string {
-    return $t('gems.names.'+id.slice(0,-2))+' '+$t('gems.tier')+' '+tierOf(id);
+    return $t('gems.names.'+baseOf(id).id)+' '+$t('gems.tier')+' '+tierOf(id);
   }
   function gemCost(baseId:GemBaseId):string {
     const quote=quoteGemRecipe(baseId);
@@ -69,6 +70,27 @@
 <section class="gem-forge">
   <h3>{$t('gems.title')}</h3>
   <p class="gem-note">{$t('gems.description')}</p>
+  <h4>{$t('gems.wallet')}</h4>
+  <div class="gem-wallet" data-testid="gem-wallet">
+    {#each heldGems as gemId (gemId)}
+      {@const targetTier = nextTier(gemId)}
+      {#if (view.gems?.[gemId]??0)>0}
+        <div class="gem-wallet-item" data-gem-id={gemId}>
+          <span class="gem-wallet-preview"><GemArt {gemId} compact />{name(gemId)}</span>
+          <strong>{view.gems?.[gemId]}</strong>
+          {#if targetTier}
+            <button disabled={(view.gems?.[gemId]??0)<3 || view.gold<tierOf(gemId)*15
+              || (view.gems?.[targetTier]??0)>=9999}
+              onclick={()=>bridge.command({type:'upgradeGem',gemId})}>
+              {$t('gems.combine')} (3:1 · {tierOf(gemId)*15} {$t('hud.gold')})
+            </button>
+          {/if}
+        </div>
+      {/if}
+    {/each}
+    {#if heldGems.length===0}<p class="gem-note">{$t('gems.emptyWallet')}</p>{/if}
+  </div>
+
   <h4>{$t('gems.forgeTitle')}</h4>
   <div class="gem-catalog">
     {#each GEM_BASES as base (base.id)}
@@ -90,31 +112,12 @@
     {/each}
   </div>
 
-  <h4>{$t('gems.wallet')}</h4>
-  <div class="gem-wallet" data-testid="gem-wallet">
-    {#each GEM_IDS as gemId (gemId)}
-      {#if (view.gems?.[gemId]??0)>0}
-        <div class="gem-wallet-item" data-gem-id={gemId}>
-          <span class="gem-wallet-preview"><GemArt {gemId} compact />{name(gemId)}</span>
-          <strong>{view.gems?.[gemId]}</strong>
-          {#if tierOf(gemId)<3}
-            <button disabled={(view.gems?.[gemId]??0)<3 || view.gold<tierOf(gemId)*15
-              || (view.gems?.[(gemId.slice(0,-1)+(tierOf(gemId)+1)) as GemId]??0)>=9999}
-              onclick={()=>bridge.command({type:'upgradeGem',gemId})}>
-              {$t('gems.combine')} (3:1 · {tierOf(gemId)*15} {$t('hud.gold')})
-            </button>
-          {/if}
-        </div>
-      {/if}
-    {/each}
-    {#if heldGems.length===0}<p class="gem-note">{$t('gems.emptyWallet')}</p>{/if}
-  </div>
-
   <h4>{$t('gems.socketsTitle')}</h4>
   <div class="socket-list">
     {#each targets as target (target.item.id)}
       <div class="socket-item" data-testid={'socket-item-'+target.item.id}>
-        <strong>{target.item.icon} {$t('item.base.'+target.item.templateId)}
+        <strong><span class="socket-item-art"><ItemArt item={target.item} /></span>
+          {$t('item.base.'+target.item.templateId)}
           <small>({$t('gems.categories.'+(socketCategory(target.item)??'armor'))})</small>
         </strong>
         {#if view.itemFlags?.[target.item.id]?.locked || view.itemFlags?.[target.item.id]?.favorite}
@@ -172,7 +175,8 @@
   .gem-wallet-item{display:flex;gap:8px;align-items:center;font-size:.74rem;flex-wrap:wrap}
   .gem-wallet-item strong{color:#eccc88}
   .socket-list{display:flex;flex-direction:column;gap:8px}
-  .socket-item>strong{display:block;margin-bottom:8px;font-size:.82rem}
+  .socket-item-art{display:block;width:32px;height:32px;flex:0 0 32px}
+  .socket-item>strong{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;font-size:.82rem}
   .socket-rows{display:flex;flex-direction:column;gap:5px}
   .socket-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px;
     background:#1b2730;border:1px solid #36444e;font-size:.7rem}

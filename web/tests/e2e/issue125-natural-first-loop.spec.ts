@@ -155,7 +155,7 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
     const screenX = Math.max(width * 0.35,
       Math.min(width * 0.67, waypoint.x - scrollX));
     const screenY = Math.max(height * 0.23,
-      Math.min(height * 0.68, waypoint.y - scrollY));
+      Math.min(height * 0.94, waypoint.y - scrollY));
     await page.mouse.click(rect.x + rect.width * screenX / width,
       rect.y + rect.height * screenY / height, { button: 'middle' });
     await page.waitForTimeout(1200);
@@ -188,6 +188,7 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
   let index = 0;
   let ticks = 0;
   let stalled = 0;
+  const lastSteps: string[] = [];
   const waypoints = [
     // Survey the authored graveyard area from the northern approach and
     // sweep south. Keep intermediate waypoints reachable with normal input;
@@ -228,10 +229,11 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     }));
     // Recover if a procedural obstacle blocks a specific eastward click.
     // This uses real viewport movement; it does not inspect map obstacles.
+    const destination = waypoints[index]!;
     const waypoint = stalled >= 2
-      ? { x: Math.max(100, x - 160),
-        y: y >= 570 ? Math.max(130, y - 330) : Math.min(1260, y + 310) }
-      : waypoints[index]!;
+      ? { x: x - (stalled % 2 ? 95 : 175),
+        y: Math.max(130, Math.min(1260, y + (stalled % 2 ? -165 : 245))) }
+      : destination;
     const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
     const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
     // At the east world edge the camera can no longer follow the hero.
@@ -240,18 +242,22 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     // 78% stays left of the right HUD but reaches the graveyard at x≈1900.
     const screenX = Math.max(width * 0.35,
       Math.min(width * 0.78, waypoint.x - scrollX));
-    const screenY = Math.max(height * 0.23,
-      Math.min(height * 0.68, waypoint.y - scrollY));
+    // The combat controls sit below the canvas, so southern clicks can use
+    // its lower rows. Leave a small edge margin and keep clear of the side HUD.
+    const screenY = Math.max(height * 0.18,
+      Math.min(height * 0.94, waypoint.y - scrollY));
     await page.mouse.click(rect.x + rect.width * screenX / width,
       rect.y + rect.height * screenY / height, { button: 'middle' });
     await page.waitForTimeout(1200);
 
     const nextX = Number(await game.getAttribute('data-player-x'));
     const nextY = Number(await game.getAttribute('data-player-y'));
+    lastSteps.push(`${index}: ${Math.round(x)},${Math.round(y)} → ${Math.round(nextX)},${Math.round(nextY)}`);
+    if (lastSteps.length > 8) lastSteps.shift();
     stalled = Math.hypot(nextX - x, nextY - y) < 6 ? stalled + 1 : 0;
     ticks += 1;
-    if (Math.hypot(nextX - waypoint.x, nextY - waypoint.y) < 48
-      || ticks >= 7 || stalled >= 3) {
+    if (Math.hypot(nextX - destination.x, nextY - destination.y) < 48
+      || ticks >= 9 || stalled >= 4) {
       index = (index + 1) % waypoints.length;
       ticks = 0;
       stalled = 0;
@@ -261,7 +267,9 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
     + await game.getAttribute('data-player-x') + ','
     + await game.getAttribute('data-player-y') + '), waypoint: '
     + index + ' (' + waypoints[index]!.x + ',' + waypoints[index]!.y
-    + '), journal: ' + await journal.innerText());
+    + '), seed: ' + await game.getAttribute('data-world-seed')
+    + ', last steps: ' + lastSteps.join(' | ')
+    + ', journal: ' + await journal.innerText());
 }
 
 /** Continue from Morrow using ordinary world clicks, not a prepared save.
@@ -286,6 +294,8 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
   let index = 0;
   let ticks = 0;
   let stalled = 0;
+  let knownEvidence: { x: number; y: number } | null = null;
+  let nextMapCheck = 0;
   const lastSteps: string[] = [];
   while (Date.now() < deadline) {
     if (await inspect.count() > 0) return;
@@ -305,21 +315,40 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
         if (await potion.isEnabled()) await potion.click();
       }
     }
+    // A player can consult the discovered-only map. Do not inspect the
+    // generator, reveal fog, or read undiscovered target coordinates.
+    if (!knownEvidence && Date.now() >= nextMapCheck) {
+      // The onboarding guide can disappear after its last milestone. The
+      // ordinary HUD map remains available throughout the wilderness.
+      await page.locator('.game-header').getByRole('button', { name: 'Map', exact: true })
+        .click({ timeout: 8_000 });
+      const map = page.getByTestId('world-map-dialog');
+      await expect(map).toBeVisible({ timeout: 8_000 });
+      const marker = map.locator('[data-map-marker="act1.evidence_lead"] circle').first();
+      if (await marker.count()) {
+        const mx = Number(await marker.getAttribute('cx'));
+        const my = Number(await marker.getAttribute('cy'));
+        if (Number.isFinite(mx) && Number.isFinite(my)) knownEvidence = { x: mx, y: my };
+      }
+      await map.getByTestId('map-close').click();
+      nextMapCheck = Date.now() + 10_000;
+    }
     const rect = await canvas.boundingBox();
     if (!rect) throw new Error('Phaser canvas missing while finding story evidence');
     const { width, height } = await canvas.evaluate(node => ({
       width: node.width, height: node.height
     }));
+    const destination = knownEvidence ?? waypoints[index]!;
     const waypoint = stalled >= 2
       ? { x: Math.max(120, Math.min(2080, x + (index % 2 ? 155 : -155))),
         y: y >= 860 ? Math.max(140, y - 200) : Math.min(1250, y + 245) }
-      : waypoints[index]!;
+      : destination;
     const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
     const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
     const screenX = Math.max(width * 0.35,
       Math.min(width * 0.78, waypoint.x - scrollX));
     const screenY = Math.max(height * 0.23,
-      Math.min(height * 0.68, waypoint.y - scrollY));
+      Math.min(height * 0.94, waypoint.y - scrollY));
     await page.mouse.click(rect.x + rect.width * screenX / width,
       rect.y + rect.height * screenY / height, { button: 'middle' });
     await page.waitForTimeout(1200);
@@ -330,8 +359,8 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
     if (lastSteps.length > 8) lastSteps.shift();
     stalled = Math.hypot(nextX - x, nextY - y) < 6 ? stalled + 1 : 0;
     ticks++;
-    if (Math.hypot(nextX - waypoint.x, nextY - waypoint.y) < 48
-      || ticks >= 9 || stalled >= 3) {
+    if (!knownEvidence && (Math.hypot(nextX - destination.x, nextY - destination.y) < 32
+      || ticks >= 9 || stalled >= 3)) {
       index = (index + 1) % waypoints.length;
       ticks = 0;
       stalled = 0;
@@ -340,6 +369,8 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
   throw new Error('Natural Act I evidence search timed out at ('
     + await game.getAttribute('data-player-x') + ','
     + await game.getAttribute('data-player-y') + '), waypoint=' + index
+    + ', seed=' + await game.getAttribute('data-world-seed')
+    + ', discovered evidence=' + JSON.stringify(knownEvidence)
     + ', last steps=' + lastSteps.join(' | ')
     + ', journal=' + await page.locator('.quest-journal').innerText());
 }
@@ -354,6 +385,9 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
   const dungeon = page.locator('.dungeon-panel');
   const deadline = Date.now() + timeoutMs;
   let lastTargetAt = 0;
+  let lastProgressAt = Date.now();
+  let previousRoster = '';
+  const game = page.locator('.game-screen');
   while (Date.now() < deadline) {
     const quest = await journal.innerText();
     const chamber = await dungeon.innerText();
@@ -382,6 +416,20 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
         try { await shield.click({ timeout: 1_500 }); }
         catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
       }
+    }
+    // A real boss phase may take time, but a minute without ANY visible
+    // combat progress indicates a stuck approach or attack, not slow DPS.
+    // Fail the same acceptance gate early; do not advance or skip the fight.
+    const progress = (await roster.innerText()).replaceAll('\n', ' ');
+    if (progress !== previousRoster) {
+      previousRoster = progress;
+      lastProgressAt = Date.now();
+    } else if (Date.now() - lastProgressAt >= 60_000) {
+      throw new Error('Natural crypt battle stalled for 60s; seed='
+        + await game.getAttribute('data-world-seed') + '; player='
+        + await game.getAttribute('data-player-x') + ','
+        + await game.getAttribute('data-player-y') + '; roster='
+        + progress + '; dungeon=' + chamber);
     }
     const live = roster.locator('button:not([disabled])');
     const kings = live.filter({ hasText: 'The Hollow King' });
@@ -464,7 +512,10 @@ async function defeatMorrowNaturally(page: Page, timeoutMs: number): Promise<voi
 test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, equip, turn-in', async ({ page }) => {
   // Continuous natural run: real first quest, corruption, boar hunt, graveyard,
   // then a fresh real Save/Load proving the unique Morrow encounter persists.
-  test.setTimeout(1_350_000);
+  test.setTimeout(900_000);
+  // A missing HUD control must fail at the specific action, not consume
+  // the entire fifteen-minute playthrough allowance.
+  page.setDefaultTimeout(8_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();

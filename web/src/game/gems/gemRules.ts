@@ -1,13 +1,13 @@
 // GPL-3.0-only — Prompt 33. Atomic, deterministic, inventory-owned gem transactions.
 // The caller must enforce NPC proximity; this layer validates the full ledger.
 import {
-  createEquipment, isEquipmentSlot, isItem,
+  createEquipment, isEquipmentSlot, isItem, SeededRng,
   type Equipment, type EquipmentSlot, type Item
 } from '../data/items';
 import type { ItemFlags } from '../inventory/equipmentRules';
 import { validateMaterials, type Materials } from '../crafting/craftingRules';
 import {
-  baseOf, isGemBaseId, isGemId, nextTier, tierOf,
+  GEM_BASES, baseOf, isGemBaseId, isGemId, nextTier, tierOf,
   type GemBaseId, type GemId
 } from './gemCatalog';
 
@@ -55,6 +55,20 @@ export function isValidGemWallet(value:unknown):value is GemWallet {
     isGemId(id) && Number.isSafeInteger(count)
     && count>=0 && count<=MAX_GEM_STACK);
 }
+/** The gem stream is independent of gear rolls and needs no new save field. */
+export function rollCombatGem(seed: number, kills: number, rank: 'normal' | 'elite' | 'boss'): GemId | null {
+  const rng = new SeededRng((seed ^ Math.imul(kills, 0x9e3779b9)) >>> 0);
+  const chance = rank === 'boss' ? 1 : rank === 'elite' ? 0.25 : 0.125;
+  if (rng.next() >= chance) return null;
+  const pool = GEM_BASES.filter(base => base.kind === (rank === 'boss' ? 'rune' : 'gem'));
+  return `${pool[rng.index(pool.length)]!.id}.1`;
+}
+
+export function grantCombatGem(gems: Readonly<GemWallet>, id: GemId): GemWallet | null {
+  const count = gems[id] ?? 0;
+  return count < MAX_GEM_STACK ? { ...gems, [id]: count + 1 } : null;
+}
+
 export function quoteGemRecipe(baseId:unknown):GemRecipe|null {
   if(!isGemBaseId(baseId))return null;
   const def=baseOf(`${baseId}.1` as GemId);
