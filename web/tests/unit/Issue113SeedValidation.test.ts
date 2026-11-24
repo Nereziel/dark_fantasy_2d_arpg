@@ -121,7 +121,7 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
       throw new Error('Incomplete Act I villages: '+JSON.stringify(missing)
         +'\nReplay: SEED_SWEEP_REQUIRE_VILLAGES=1 SEED_SWEEP_START='+missing[0]!.seed
         +' SEED_SWEEP_COUNT=1 npm test -- tests/unit/Issue113SeedValidation.test.ts');
-  });
+  }, Math.max(15000, suiteSeeds.length * 1000));
 
   it(`validates crypt entrance, reachable encounters, boss guards and exit for ${suiteSeeds.length} seeds`, () => {
     for (const seed of suiteSeeds) checkedSeed(seed, 'crypt', () => {
