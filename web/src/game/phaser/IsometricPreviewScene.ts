@@ -4,7 +4,6 @@ import { get } from 'svelte/store';
 import { locale } from 'svelte-i18n';
 import type { GameBridge } from '../bridge/GameBridge';
 import type { GameSnapshot, Point, ZoneId } from '../core/types';
-import { CLASSES } from '../data/classes';
 import { ENEMY_DEFINITIONS } from '../enemies/enemies';
 import { CRYPT_GATE, CRYPT_EXIT } from '../world/generator';
 import { buildWilderness } from '../world/wildernessRuntime';
@@ -19,6 +18,12 @@ import { dispatchCombatAction } from '../input/combatActionDispatcher';
 import { HeldPointerMovement } from '../input/heldMovement';
 import { projectIsometric, isometricFootprint, isometricBounds, isometricDepth } from './isometricProjection';
 import { pickIsometricPointer, type IsometricTarget } from './isometricPicking';
+import { playerAnimation } from '../entities/playerAnimation';
+import {
+  PIXEL_ANIMATIONS, PIXEL_ANIMATION_FRAMES, PIXEL_FRAME_WIDTH, PIXEL_FRAME_HEIGHT,
+  pixelAtlasKey, pixelFrame, pixelTimelineFrame, renderPixelAtlas,
+  type PixelActor, type PixelAnimation
+} from './pixelSpriteAtlas';
 
 const ORIGIN = { x: WORLD_HEIGHT, y: 100 };
 const project = (p: Readonly<Point>, z = 0) => projectIsometric(p, z, ORIGIN);
@@ -33,6 +38,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private label!: Phaser.GameObjects.Text;
   private readonly walls: Phaser.GameObjects.Graphics[] = [];
   private readonly actors = new Map<string, Phaser.GameObjects.Graphics>();
+  private readonly sprites = new Map<string, Phaser.GameObjects.Sprite>();
+  private readonly lastEnemyPositions = new Map<string, Point>();
   private obstacles: readonly Obstacle[] = [];
   private seed: number | undefined;
   private zone: ZoneId | undefined;
@@ -65,6 +72,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
       this.input.off('gameout', this.release, this);
       this.release();
       this.actors.clear();
+      this.sprites.clear();
+      this.lastEnemyPositions.clear();
       this.walls.length = 0;
       if (this.game.canvas) {
         delete this.game.canvas.dataset.renderer;
@@ -85,6 +94,9 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.walls.length = 0;
     for (const actor of this.actors.values()) actor.destroy();
     this.actors.clear();
+    for (const sprite of this.sprites.values()) sprite.destroy();
+    this.sprites.clear();
+    this.lastEnemyPositions.clear();
     if (state.zone === 'wilderness') {
       const world = buildWilderness(state.worldSeed);
       this.obstacles = world.layout.obstacles;
@@ -146,7 +158,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
         id: p.id, position: { x: p.x, y: p.y }, hitRadius: 30, ...ground })),
       ...state.enemies.map(({ actor: e }) => ({ kind: 'ENEMY' as const, id: e.id,
         position: { x: e.x, y: e.y }, hitRadius: e.type === 'crypt_lord' ? 58 : 43,
-        alive: e.alive, ...actor }))
+        alive: e.alive, bodyHeight: 50, bodyHalfWidth: 24 }))
     ];
     if (state.zone === 'wilderness') for (const npc of getTownManifest()) {
       targets.push({ kind: 'NPC', id: npc.id, position: npc.position,
@@ -227,6 +239,35 @@ export class IsometricPreviewScene extends Phaser.Scene {
     }
   }
 
+  private ensureAtlas(actor: PixelActor): string {
+    const key = pixelAtlasKey(actor);
+    if (this.textures.exists(key)) return key;
+    const texture = this.textures.addCanvas(key, renderPixelAtlas(actor));
+    if (!texture) throw new Error('Unable to register pixel atlas: ' + key);
+    PIXEL_ANIMATIONS.forEach((animation, row) => {
+      for (let frame = 0; frame < PIXEL_ANIMATION_FRAMES; frame++) {
+        texture.add(pixelFrame(animation, frame), 0,
+          frame * PIXEL_FRAME_WIDTH, row * PIXEL_FRAME_HEIGHT,
+          PIXEL_FRAME_WIDTH, PIXEL_FRAME_HEIGHT);
+      }
+    });
+    return key;
+  }
+
+  private sprite(key: string, actor: PixelActor, point: Readonly<Point>,
+    pose: PixelAnimation, frame: number): void {
+    const texture = this.ensureAtlas(actor);
+    let sprite = this.sprites.get(key);
+    if (!sprite) {
+      sprite = this.add.sprite(0, 0, texture, pixelFrame(pose, frame)).setOrigin(0.5, 0.9);
+      this.sprites.set(key, sprite);
+    } else if (sprite.texture.key !== texture) sprite.setTexture(texture);
+    sprite.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    const p = project(point);
+    sprite.setPosition(p.x, p.y).setDepth(isometricDepth(point) + 0.5)
+      .setFrame(pixelFrame(pose, frame)).setVisible(true);
+  }
+
   update(_time: number, delta: number): void {
     this.bridge.tick(delta);
     const state = this.bridge.snapshot();
@@ -243,20 +284,48 @@ export class IsometricPreviewScene extends Phaser.Scene {
     const hero = project(state.player);
     this.anchor.setPosition(hero.x, hero.y);
     const visible = new Set<string>(['hero']);
-    this.entity('hero', state.player, CLASSES[state.classId].color, true);
-    this.actors.get('hero')?.setVisible(state.player.alive);
-    const enemies = new Map(state.enemies.map(({ actor }) => [actor.id, actor]));
+    const heroPose = playerAnimation(state);
+    const pose: PixelAnimation = heroPose === 'running' ? 'run'
+      : heroPose === 'attacking' ? 'attack' : heroPose === 'casting' ? 'cast'
+      : heroPose === 'channeling' ? 'channel' : heroPose === 'evading' ? 'dodge'
+      : heroPose === 'stunned' ? 'hit' : heroPose === 'dead' ? 'death' : 'idle';
+    const timeline = state.warriorAction?.timeline ?? state.classAction?.timeline;
+    const frame = !state.player.alive ? PIXEL_ANIMATION_FRAMES - 1
+      : timeline && (pose === 'attack' || pose === 'cast' || pose === 'channel')
+        ? pixelTimelineFrame(timeline)
+        : Math.floor(this.time.now / (pose === 'run' ? 95 : 150)) % PIXEL_ANIMATION_FRAMES;
+    this.sprite('hero', state.classId, state.player, pose, frame);
+    const enemies = new Map(state.enemies.map(unit => [unit.actor.id, unit]));
     for (const t of this.targets(state)) {
       if (t.alive === false) continue;
       const key = t.kind + '/' + t.id;
       visible.add(key);
-      const enemy = enemies.get(t.id);
-      const color = t.kind === 'ENEMY' && enemy ? ENEMY_DEFINITIONS[enemy.type].color
-        : t.kind === 'NPC' ? 0xb0986c : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
-      this.entity(key, t.position, color, t.bodyHeight > 0);
+      const unit = enemies.get(t.id);
+      if (t.kind === 'ENEMY' && unit) {
+        const previous = this.lastEnemyPositions.get(t.id);
+        const moving = previous && Math.hypot(previous.x - t.position.x, previous.y - t.position.y) > 0.3;
+        const pose: PixelAnimation = unit.intent
+          ? ENEMY_DEFINITIONS[unit.actor.type].attack === 'bolt' ? 'cast' : 'attack'
+          : moving ? 'run' : 'idle';
+        const frame = unit.intent
+          ? Math.max(0, Math.min(3, Math.floor(4 * (unit.intent.total - unit.intent.remaining)
+              / Math.max(1, unit.intent.total))))
+          : Math.floor(this.time.now / (pose === 'run' ? 110 : 170)) % PIXEL_ANIMATION_FRAMES;
+        this.sprite(key, unit.actor.type, t.position, pose, frame);
+        this.lastEnemyPositions.set(t.id, { ...t.position });
+      } else {
+        const color = t.kind === 'NPC' ? 0xb0986c : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
+        this.entity(key, t.position, color, t.bodyHeight > 0);
+      }
     }
     for (const [key, g] of this.actors) {
       if (!visible.has(key)) { g.destroy(); this.actors.delete(key); }
+    }
+    for (const [key, sprite] of this.sprites) {
+      if (!visible.has(key)) { sprite.destroy(); this.sprites.delete(key); }
+    }
+    for (const id of this.lastEnemyPositions.keys()) {
+      if (!visible.has('ENEMY/' + id)) this.lastEnemyPositions.delete(id);
     }
     this.label.setText(get(locale) === 'cs'
       ? '2,5D – vývojový náhled' : '2.5D – development preview');
