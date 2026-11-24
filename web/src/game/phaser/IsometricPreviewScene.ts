@@ -20,6 +20,7 @@ import { projectIsometric, isometricFootprint, isometricBounds, isometricDepth }
 import { pickIsometricPointer, type IsometricTarget } from './isometricPicking';
 import { playerAnimation } from '../entities/playerAnimation';
 import { projectCombatCircle, projectCombatCone, combatHealthBar } from './isometricCombat';
+import { classGroundEffects, summonPresentation } from './isometricClassEffects';
 import {
   PIXEL_ANIMATIONS, PIXEL_ANIMATION_FRAMES, PIXEL_FRAME_WIDTH, PIXEL_FRAME_HEIGHT,
   pixelAtlasKey, pixelFrame, pixelTimelineFrame, renderPixelAtlas,
@@ -285,6 +286,15 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.warnings.clear();
     this.missiles.clear();
     this.healthBars.clear();
+    const effectStyles = {
+      frost: [0x7fd6f4, 0.18], fire: [0xe89a56, 0.2],
+      'trap-range': [0x81c58a, 0.04], trap: [0xc2ef9b, 0.22],
+      corpse: [0x81c1a4, 0.2]
+    } as const;
+    for (const effect of classGroundEffects(state, ORIGIN)) {
+      const [color, alpha] = effectStyles[effect.kind];
+      this.combatArea(effect.points, color, alpha);
+    }
     for (const unit of state.enemies) {
       if (!unit.actor.alive) continue;
       if (unit.intent && unit.intent.radius > 0) {
@@ -377,6 +387,17 @@ export class IsometricPreviewScene extends Phaser.Scene {
         const color = t.kind === 'NPC' ? 0xb0986c : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
         this.entity(key, t.position, color, t.bodyHeight > 0);
       }
+    }
+    // Friendly allies use the same depth/cleanup rules as the other actors.
+    for (const summon of state.summons ?? []) {
+      if (summon.zone !== state.zone || summon.remaining <= 0 || summon.health <= 0) continue;
+      const key = 'summon/' + summon.id;
+      visible.add(key);
+      const style = summonPresentation(summon.kind, summon.remaining);
+      const moving = summon.targetId !== null;
+      this.sprite(key, style.actor, summon, moving ? 'run' : 'idle',
+        Math.floor(this.time.now / (moving ? 110 : 170)) % PIXEL_ANIMATION_FRAMES);
+      this.sprites.get(key)?.setTint(style.tint).setAlpha(style.alpha);
     }
     for (const [key, g] of this.actors) {
       if (!visible.has(key)) { g.destroy(); this.actors.delete(key); }
