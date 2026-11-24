@@ -19,6 +19,7 @@ import { HeldPointerMovement } from '../input/heldMovement';
 import { projectIsometric, isometricFootprint, isometricBounds, isometricDepth } from './isometricProjection';
 import { pickIsometricPointer, type IsometricTarget } from './isometricPicking';
 import { createIsometricPrism, type IsometricOccluder } from './isometricOcclusion';
+import { heroCutaway } from './isometricCutaway';
 import { playerAnimation } from '../entities/playerAnimation';
 import { projectCombatCircle, projectCombatCone, combatHealthBar } from './isometricCombat';
 import { classGroundEffects, summonPresentation } from './isometricClassEffects';
@@ -53,6 +54,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private label!: Phaser.GameObjects.Text;
   private readonly walls: Phaser.GameObjects.Graphics[] = [];
   private readonly occluders: IsometricOccluder[] = [];
+  private opaqueOccluders: readonly IsometricOccluder[] = [];
+  private lastCutawayHero: Point | undefined;
   private readonly actors = new Map<string, Phaser.GameObjects.Graphics>();
   private readonly sprites = new Map<string, Phaser.GameObjects.Sprite>();
   private readonly lastEnemyPositions = new Map<string, Point>();
@@ -101,6 +104,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
       this.lastEnemyPositions.clear();
       this.walls.length = 0;
       this.occluders.length = 0;
+      this.opaqueOccluders = [];
+      this.lastCutawayHero = undefined;
       if (this.game.canvas) {
         delete this.game.canvas.dataset.renderer;
         this.game.canvas.style.cursor = 'default';
@@ -120,6 +125,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
     for (const wall of this.walls) wall.destroy();
     this.walls.length = 0;
     this.occluders.length = 0;
+    this.opaqueOccluders = [];
+    this.lastCutawayHero = undefined;
     for (const actor of this.actors.values()) actor.destroy();
     this.actors.clear();
     for (const sprite of this.sprites.values()) sprite.destroy();
@@ -167,6 +174,18 @@ export class IsometricPreviewScene extends Phaser.Scene {
         this.occluders.push(prism);
       }
     }
+    this.updateCutaway(state.player);
+  }
+
+  private updateCutaway(hero: Readonly<Point>): void {
+    if (this.lastCutawayHero?.x === hero.x && this.lastCutawayHero.y === hero.y) return;
+    const result = heroCutaway(hero, ORIGIN, this.occluders);
+    this.lastCutawayHero = { x: hero.x, y: hero.y };
+    this.opaqueOccluders = result.opaque;
+    this.walls.forEach((wall, i) => {
+      const alpha = result.alphas[i]!;
+      if (wall.alpha !== alpha) wall.setAlpha(alpha);
+    });
   }
 
   private targets(state: GameSnapshot): IsometricTarget[] {
@@ -203,7 +222,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     return pickIsometricPointer({
       projected: this.cameras.main.getWorldPoint(pointer.x, pointer.y), origin: ORIGIN,
       uiCaptured: this.captured(), targets: this.targets(this.bridge.snapshot()),
-      occluders: this.occluders,
+      occluders: this.opaqueOccluders,
       canWalk: point => canOccupy(point, ACTOR_RADIUS, this.obstacles)
     });
   }
@@ -441,6 +460,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       const p = project(state.player);
       this.cameras.main.centerOn(p.x, p.y);
     }
+    this.updateCutaway(state.player);
     if (this.held.active && this.input.activePointer.isDown && state.player.alive) {
       this.hover(this.input.activePointer);
     }
