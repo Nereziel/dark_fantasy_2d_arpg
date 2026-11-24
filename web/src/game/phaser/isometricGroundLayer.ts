@@ -18,6 +18,8 @@ export class IsometricGroundLayer {
 
   constructor(private readonly scene: Phaser.Scene) {}
 
+  get count(): number { return this.images.length; }
+
   rebuild(layout: GroundLayout, origin: Readonly<Point>): void {
     this.clear();
     this.atlas ??= createGroundAtlas();
