@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { buildWilderness } from '../../src/game/world/wildernessRuntime';
 import { villageTownEntries } from '../../src/game/world/villageDialogue';
+import { ACTOR_RADIUS, canOccupy } from '../../src/game/world/navigation';
 import { quoteTempering } from '../../src/game/trade/economyRules';
 
 function resident(role:'healer'|'blacksmith'){
@@ -32,14 +33,19 @@ describe('Issue #208 B2: regional services',()=>{
   it('allows the same atomic temper transaction at a real regional forge, but not at a distant player',()=>{
     const {seed,entry}=resident('blacksmith'),sim=new GameSimulation(seed);
     const snapshot=sim.snapshot();
-    const item=snapshot.equipment.weapon!;
+    const item=snapshot.equipment.MAIN_HAND!;
     const quote=quoteTempering(item);
     expect(quote.ok).toBe(true);
     if(!quote.ok)throw Error('starter weapon cannot be tempered');
     snapshot.gold=10000;
-    snapshot.player={...snapshot.player,x:100,y:100};
+    snapshot.player={...snapshot.player};
+    // At camp the original smith is reachable, so choose a validated distant point.
+    const layout=buildWilderness(seed).layout;
+    const distant=[{x:100,y:100},{x:200,y:100},{x:100,y:200}].find(p=>canOccupy(p,ACTOR_RADIUS,layout.obstacles))!;
+    expect(distant).toBeDefined();
+    snapshot.player={...snapshot.player,...distant};
     expect(sim.restore(snapshot)).toBe(true);
-    sim.command({type:'temperItem',slot:'weapon'});
+    sim.command({type:'temperItem',slot:'MAIN_HAND'});
     expect(sim.snapshot().gold).toBe(10000);
     const near=sim.snapshot();
     near.player={...near.player,...entry.position};
@@ -47,9 +53,9 @@ describe('Issue #208 B2: regional services',()=>{
     sim.command({type:'interactTown',entryId:entry.id});
     expect(sim.drainEvents()).toContainEqual({type:'townInteraction',entryId:entry.id,role:'blacksmith'});
     sim.command({type:'pause',value:true});
-    sim.command({type:'temperItem',slot:'weapon'});
+    sim.command({type:'temperItem',slot:'MAIN_HAND'});
     expect(sim.snapshot().gold).toBe(10000-quote.price);
-    expect(sim.snapshot().equipment.weapon?.id).toBe(item.id);
-    expect(sim.snapshot().equipment.weapon?.upgrades).toBe(item.upgrades+1);
+    expect(sim.snapshot().equipment.MAIN_HAND?.id).toBe(item.id);
+    expect(sim.snapshot().equipment.MAIN_HAND?.upgrades).toBe(item.upgrades+1);
   });
 });
