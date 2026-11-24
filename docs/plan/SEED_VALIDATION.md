@@ -48,9 +48,10 @@ forge, building entrances and pedestrian paths. It logs a JSON
 `[Act I village coverage]` report with the total, complete count and missing
 seeds, distinguishing topology from population failure.
 
-The existing baseline remains green while missing villages are being fixed.
-Use the strict acceptance gate to require both populated villages for every
-sampled seed:
+Both populated villages are required by default, including the 31-seed PR
+baseline and the seven historical regression seeds. Larger sweeps are strict
+by default as well; use `SEED_SWEEP_REQUIRE_VILLAGES=0` only for diagnostic
+coverage collection (not acceptance). For a larger acceptance sample:
 
 ```sh
 SEED_SWEEP_REQUIRE_VILLAGES=1 SEED_SWEEP_START=0 SEED_SWEEP_COUNT=1000 npm test -- tests/unit/Issue113SeedValidation.test.ts
