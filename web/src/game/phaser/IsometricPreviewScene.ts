@@ -5,7 +5,8 @@ import { _ as translate, locale } from 'svelte-i18n';
 import type { GameBridge } from '../bridge/GameBridge';
 import type { GameEvent, GameSnapshot, Point, ZoneId } from '../core/types';
 import { ENEMY_DEFINITIONS } from '../enemies/enemies';
-import { CRYPT_GATE, CRYPT_EXIT } from '../world/generator';
+import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
+import { dungeonPortalTargets, dungeonPortalCommand, dungeonRenderSeed } from '../world/dungeonPortalPresentation';
 import { buildWilderness } from '../world/wildernessRuntime';
 import { buildCryptWorld } from '../world/dungeonRuntime';
 import { IsometricGroundLayer } from './isometricGroundLayer';
@@ -68,6 +69,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private obstacles: readonly Obstacle[] = [];
   private seed: number | undefined;
   private zone: ZoneId | undefined;
+  private dungeonId: GameSnapshot['dungeonId'];
+  private dungeonEntrances: ActIDungeonEntrance[] = [];
   private readonly held = new HeldPointerMovement();
 
   constructor(private readonly bridge: GameBridge) { super({ key: 'IsometricPreview' }); }
@@ -131,6 +134,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private rebuild(state: GameSnapshot): void {
     this.seed = state.worldSeed;
     this.zone = state.zone;
+    this.dungeonId = state.dungeonId;
+    this.dungeonEntrances = [];
     this.clearImpacts();
     for (const wall of this.walls) wall.destroy();
     this.walls.length = 0;
@@ -147,12 +152,13 @@ export class IsometricPreviewScene extends Phaser.Scene {
     const buildings = new Map<string, SettlementStructure>();
     if (state.zone === 'wilderness') {
       const world = buildWilderness(state.worldSeed);
+      this.dungeonEntrances=planActIDungeonEntrances(world);
       for (const structure of world.structures ?? []) buildings.set(structure.obstacle.id, structure);
       this.villageResidents = (world.villages ?? []).flatMap(v=>v.residents);
       this.obstacles = world.layout.obstacles;
       this.ground.rebuild(wildernessGroundLayout(world.terrain), ORIGIN);
     } else {
-      const world = buildCryptWorld(state.worldSeed);
+      const world = buildCryptWorld(dungeonRenderSeed(state));
       this.obstacles = world.layout.obstacles;
       this.ground.rebuild(cryptGroundLayout(world.dungeon), ORIGIN);
     }
@@ -204,8 +210,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     const ground = { bodyHeight: 0, bodyHalfWidth: 0 };
     const actor = { bodyHeight: 42, bodyHalfWidth: 18 };
     const targets: IsometricTarget[] = [
-      { kind: 'INTERACTABLE', id: 'crypt-portal',
-        position: state.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT, hitRadius: 64, ...ground },
+      ...dungeonPortalTargets(state,this.dungeonEntrances).map(p=>({...p,...ground})),
       ...(state.cryptInteractables ?? []).map(p => ({ kind: 'INTERACTABLE' as const,
         id: p.id, position: p.position, hitRadius: p.hitRadius, ...ground })),
       ...(state.environmentObjects ?? []).map(p => ({ kind: 'INTERACTABLE' as const,
@@ -278,7 +283,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
     } else if (context.kind === 'INTERACTABLE' && context.id.startsWith('crypt/')) {
       this.bridge.command({ type: 'interactCrypt', id: context.id });
     } else {
-      const command = contextToCommand(context);
+      const command = context.kind==='INTERACTABLE'
+        ? dungeonPortalCommand(context.id) ?? contextToCommand(context) : contextToCommand(context);
       if (command) this.bridge.command(command);
     }
   }
@@ -408,7 +414,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     }
     if (event.type !== 'damageResolved') return;
     const state = this.bridge.snapshot();
-    if (state.zone !== this.zone || state.worldSeed !== this.seed) return;
+    if (state.zone !== this.zone || state.worldSeed !== this.seed || state.dungeonId!==this.dungeonId) return;
     const target = event.targetId === 'hero' ? state.player
       : state.enemies.find(unit => unit.actor.id === event.targetId)?.actor
         ?? state.summons?.find(summon => summon.id === event.targetId);
@@ -473,7 +479,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     this.bridge.tick(delta);
     const state = this.bridge.snapshot();
-    if (state.worldSeed !== this.seed || state.zone !== this.zone) {
+    if (state.worldSeed !== this.seed || state.zone !== this.zone || state.dungeonId!==this.dungeonId) {
       this.release();
       this.rebuild(state);
       const p = project(state.player);
@@ -527,7 +533,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
       } else if (t.kind === 'NPC' && this.villageResidents.some(n=>n.id===t.id)) {
         // Render the resident sprite below, rather than a second proxy actor.
       } else {
-        const color = t.kind === 'NPC' ? 0xb0986c : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
+        const color = t.id==='dungeon-portal:mine'?0xd8af75:t.id==='dungeon-portal:cave'?0x83c3a0
+          : t.kind === 'NPC' ? 0xb0986c : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
         this.entity(key, t.position, color, t.bodyHeight > 0);
       }
     }
