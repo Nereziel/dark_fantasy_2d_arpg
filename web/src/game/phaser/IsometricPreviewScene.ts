@@ -74,7 +74,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
   }
 
   private polygon(g: Phaser.GameObjects.Graphics, points: readonly Point[], color: number): void {
-    g.fillStyle(color).fillPoints([...points], true);
+    g.fillStyle(color).fillPoints(points.map(p => new Phaser.Math.Vector2(p.x, p.y)), true);
   }
 
   private rebuild(state: GameSnapshot): void {
@@ -222,8 +222,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
       g.fillStyle(color).fillRoundedRect(-12, -32, 24, 30, 4);
       g.fillStyle(0xd4bea2).fillCircle(0, -36, 8);
     } else {
-      g.fillStyle(color).fillPoints([{ x: -12, y: 0 }, { x: 0, y: -9 },
-        { x: 12, y: 0 }, { x: 0, y: 9 }], true);
+      this.polygon(g, [{ x: -12, y: 0 }, { x: 0, y: -9 },
+        { x: 12, y: 0 }, { x: 0, y: 9 }], color);
     }
   }
 
