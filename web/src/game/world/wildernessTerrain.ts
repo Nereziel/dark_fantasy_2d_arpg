@@ -78,6 +78,8 @@ export interface WildernessTerrainResult {
   layout: WorldLayout;
   tiles: TerrainTile[];
   roads: TerrainRoad[];
+  /** Absent means the original radial-road contract; regional mode is explicit. */
+  roadNetwork?: 'regional';
   validation: WildernessValidationReport;
 }
 
@@ -300,6 +302,7 @@ export function validateWildernessTerrain(value: unknown): WildernessValidationI
     || !Array.isArray(world.tiles) || !Array.isArray(world.roads)) {
     return [{ code: 'invalidLayout' }];
   }
+  if (world.roadNetwork !== undefined && world.roadNetwork !== 'regional') add('invalidLayout');
   if (!validSeed(layout.seed)) add('invalidSeed');
   if (world.width !== WORLD_WIDTH || world.height !== WORLD_HEIGHT
     || world.tileSize !== TERRAIN_TILE_SIZE || world.biomeId !== 'corrupted_frontier') add('invalidBounds');
@@ -412,7 +415,22 @@ export function validateWildernessTerrain(value: unknown): WildernessValidationI
     if(!connected.some(main=>main.points.slice(1).some((p,i)=>
       distanceToSegmentSquared(road.from,main.points[i]!,p)<=1e-8)))add('invalidRoad',road.id);
   }
-  for (const target of targets(encounters.filter(finitePoint))) {
+  // Regional roads connect settlements, not every individual destination.
+  // The pedestrian validation above remains mandatory in BOTH modes.
+  if (world.roadNetwork === 'regional') {
+    const firstId='road-trade-camp-north-village';
+    const secondId='road-trade-north-village-east-village';
+    const first=connected.find(r=>r.id===firstId);
+    const second=connected.find(r=>r.id===secondId);
+    if(!first||!samePoint(first.from,CAMP)||samePoint(first.from,first.to))
+      add('invalidRoad',firstId);
+    if(!second||!first||!samePoint(second.from,first.to)
+      ||samePoint(second.from,second.to)||samePoint(second.to,CAMP))
+      add('invalidRoad',secondId);
+  }
+  const roadTargets=targets(encounters.filter(finitePoint)).filter(target=>
+    world.roadNetwork!=='regional'||target.id==='crypt-gate');
+  for (const target of roadTargets) {
     if (!world.roads.some(road => road && road.id === 'road-' + target.id
       && finitePoint(road.to)
       && road.to.x === target.position.x && road.to.y === target.position.y)) {
