@@ -1,6 +1,7 @@
 // GPL-3.0-only — original procedural pixel textures, no simulation authority.
 import type { Point } from '../core/types';
-import type { TerrainId } from '../world/wildernessTerrain';
+import type { TerrainId, WildernessTerrainResult } from '../world/wildernessTerrain';
+import { DUNGEON_TILE_SIZE, type ProceduralDungeonResult } from '../world/proceduralDungeon';
 import { isometricFootprint, type IsometricRect } from './isometricProjection';
 
 export type GroundMaterial = TerrainId | 'crypt_floor' | 'crypt_wall';
@@ -51,7 +52,7 @@ function checkVariant(variant: number): void {
 }
 
 /** RGBA texture in Cartesian material space; projected by the chunk painter.
- * Each variant is tileable at the borders and entirely opaque.
+ * Each variant is entirely opaque and uses bounded periodic detail coordinates.
  */
 export function terrainTexture(material: GroundMaterial, variant: number): Uint8ClampedArray {
   checkVariant(variant);
@@ -176,4 +177,17 @@ export function paintTerrainChunk(chunk: TerrainChunk, origin: Readonly<Point>,
     ctx.strokeStyle=gravelPattern || '#65523b';ctx.lineWidth=road.width*0.88;ctx.stroke();
   }
   return canvas;
+}
+
+/** Rendering consumes the same immutable geometry as the existing world. */
+export function wildernessGroundLayout(terrain: Pick<WildernessTerrainResult, 'width'|'height'|'tiles'|'roads'>): GroundLayout {
+  return { width:terrain.width,height:terrain.height,tiles:terrain.tiles,roads:terrain.roads };
+}
+
+export function cryptGroundLayout(dungeon: Pick<ProceduralDungeonResult, 'seed'|'width'|'height'|'tiles'>): GroundLayout {
+  return {width:dungeon.width,height:dungeon.height,roads:[],tiles:dungeon.tiles.map(tile=>({
+    x:tile.x,y:tile.y,width:DUNGEON_TILE_SIZE,height:DUNGEON_TILE_SIZE,
+    terrainId:tile.kind==='floor'?'crypt_floor':'crypt_wall',
+    variant:hash(dungeon.seed,tile.x,tile.y)%GROUND_VARIANTS
+  }))};
 }
