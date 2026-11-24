@@ -1,5 +1,6 @@
 {
   "village": {
+    "services": "Vesnické služby",
     "north-village-healer": {
       "name": "Léčitelka Radana",
       "description": "Za 15 zlatých ti ošetřím zranění."
@@ -10,7 +11,7 @@
     },
     "east-village-blacksmith": {
       "name": "Kovář Vít",
-      "description": "Kovárnu teprve připravuji. Zatím ti pomůže Odan v táboře."
+      "description": "Přines výzbroj, zlato a materiál. Zocelím ti zbraň nebo zpracuji suroviny."
     },
     "east-village-quest": {
       "name": "Průzkumnice Milena",
