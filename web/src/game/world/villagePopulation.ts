@@ -46,10 +46,24 @@ export function planVillagePopulation(layout:WorldLayout,settlements:readonly Re
       {id:id.replaceAll('-','')+'.house',kind:'house',anchor:{x:p.x-108,y:p.y-90}},
       {id:id.replaceAll('-','')+'.service',kind:north?'house':'smithy',anchor:{x:p.x+108,y:p.y+90}}
     ];
-    const plan=planSettlementStructures({...layout,obstacles},roads,protectedPoints,sites);
-    if(!plan.structures.length||clearRoads.some(r=>!regionalRoadClear(r.points,r.width,plan.obstacles))){
-      skipped.push(id);continue;
+    const localLayout={...layout,obstacles};
+    const usable=(plan:ReturnType<typeof planSettlementStructures>)=>
+      plan.structures.length>0
+      && (north || plan.structures.some(s=>s.kind==='smithy'))
+      && clearRoads.every(r=>regionalRoadClear(r.points,r.width,plan.obstacles));
+    let plan=planSettlementStructures(localLayout,roads,protectedPoints,sites);
+    // Preserve the original layout whenever possible. A forge is a required
+    // service in the east village: try alternative quadrants before rejecting
+    // it, never advertise a blacksmith at a missing building.
+    if(!north&&!usable(plan)){
+      for(const [dx,dy] of [[-108,-90],[-108,90],[108,-90],[108,90]] as const){
+        const service:StructureSite={...sites[1]!,anchor:{x:p.x+dx,y:p.y+dy}};
+        const house:StructureSite={...sites[0]!,anchor:{x:p.x-dx,y:p.y-dy}};
+        const candidate=planSettlementStructures(localLayout,roads,protectedPoints,[service,house]);
+        if(usable(candidate)){plan=candidate;break;}
+      }
     }
+    if(!usable(plan)){skipped.push(id);continue;}
     const roles:VillageResident['role'][]=north?['healer','civilian']:['blacksmith','quest'];
     const residents:VillageResident[]=[];
     for(const role of roles){

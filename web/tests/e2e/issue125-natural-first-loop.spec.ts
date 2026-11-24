@@ -551,9 +551,11 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   const target = loot.locator('[data-loot-id]').first();
   const lootId = await target.getAttribute('data-loot-id');
   expect(lootId).not.toBeNull();
-  await target.click();
-  await expect(loot.locator('[data-loot-id="' + lootId + '"]'))
-    .toHaveCount(0, { timeout: 12_000 });
+  // The nearby list is distance-sorted and can gain a closer drop during
+  // combat. Resolve the click by the SAME ID used in the assertion.
+  const chosenDrop = loot.locator('[data-loot-id="' + lootId + '"]');
+  await chosenDrop.click();
+  await expect(chosenDrop).toHaveCount(0, { timeout: 12_000 });
 
   await page.locator('[data-quick-action="inventory"]').click();
   const inventory = page.getByRole('dialog', { name: 'Inventory & Equipment' });
@@ -905,18 +907,16 @@ test.describe('touch input', () => {
   await expect.poll(() => activeQuestCount(page), { timeout: 55_000 })
     .toBeGreaterThan(0);
   const loot = page.getByTestId('nearby-loot');
-  const button = loot.locator('[data-loot-id]').first();
+  const lootId = await loot.locator('[data-loot-id]').first().getAttribute('data-loot-id');
+  expect(lootId).not.toBeNull();
+  // Pin identity before any asynchronous viewport or geometry checks.
+  const button = loot.locator('[data-loot-id="' + lootId + '"]');
   await expect(button).toBeInViewport({ ratio: 0.85 });
   const bounds = await button.boundingBox();
   expect(bounds).not.toBeNull();
   expect(bounds!.height).toBeGreaterThanOrEqual(43);
-  const lootId = await button.getAttribute('data-loot-id');
-  expect(lootId).not.toBeNull();
   await button.tap();
-  // Another drop may immediately become the new first button. Assert the
-  // original item ID was collected, not that the nearest-list is empty.
-  await expect(loot.locator('[data-loot-id="' + lootId + '"]'))
-    .toHaveCount(0, { timeout: 12_000 });
+  await expect(button).toHaveCount(0, { timeout: 12_000 });
   await page.locator('[data-quick-action="inventory"]').tap();
   await expect(page.getByRole('dialog', { name: 'Inventář a výbava' })).toBeVisible();
 });
