@@ -1,45 +1,152 @@
 <script lang="ts">
-  import { _ as t } from 'svelte-i18n';
+  import { _ as t, locale } from 'svelte-i18n';
   import type { GameBridge } from '../game/bridge/GameBridge';
   import type { GameSnapshot } from '../game/core/types';
   import type { InputBinding } from '../game/input/bindings';
   import { dispatchHotbarAbility } from '../game/input/combatActionDispatcher';
-  import { hotbarInputForAbility } from '../game/input/hotbarRegistry';
+  import { defaultHotbarLayout, HOTBAR_INPUTS, hotbarInputForAbility, resolveHotbarAbility,
+    swapHotbarSlots, type HotbarInput } from '../game/input/hotbarRegistry';
   import { shortcutHint } from '../game/ui/shortcutHints';
-  import { SKILLS, SKILL_SLOTS } from '../game/skills/skills';
+  import { SKILLS } from '../game/skills/skills';
   import { CLASSES } from '../game/data/classes';
   import { POTION_IDS } from '../game/consumables/potionRules';
   import { WARRIOR_ABILITIES } from '../game/skills/warriorKit';
-  import { PALADIN_EXTRA_IDS, PALADIN_EXTRA_SKILLS } from '../game/skills/paladinKit';
-  import { MAGE_EXTRA_IDS, MAGE_EXTRA_SPELLS } from '../game/skills/mageKit';
-  import { NECRO_EXTRA_IDS, NECRO_EXTRA_SPELLS } from '../game/skills/necromancerKit';
-  import { ROGUE_EXTRA_IDS, ROGUE_EXTRA_SKILLS } from '../game/skills/rogueKit';
-  import { WARLOCK_EXTRA_IDS, WARLOCK_EXTRA_SPELLS } from '../game/skills/warlockKit';
+  import { PALADIN_EXTRA_SKILLS } from '../game/skills/paladinKit';
+  import { MAGE_EXTRA_SPELLS } from '../game/skills/mageKit';
+  import { NECRO_EXTRA_SPELLS } from '../game/skills/necromancerKit';
+  import { ROGUE_EXTRA_SKILLS } from '../game/skills/rogueKit';
+  import { WARLOCK_EXTRA_SPELLS } from '../game/skills/warlockKit';
   import { projectEquippedSkill } from '../game/skills/skillModifiers';
   import { projectTalentBonuses } from '../game/progression/talentTree';
-  const extraWarriorSkills = ['groundSlam', 'warCry', 'whirlwind', 'execute', 'basicAttack'] as const;
   let { bridge, view, bindings }: {
     bridge: GameBridge; view: GameSnapshot; bindings: readonly InputBinding[];
   } = $props();
   let mageCostDiscount = $derived(projectTalentBonuses(view.talentRanks ?? {}).manaEfficiency);
+
+  let layout = $derived(view.hotbarLayout ?? defaultHotbarLayout(view.classId));
+  let owner = $derived((view.characterId ?? 'hero') + ':' + view.classId);
+  let editorOwner = $state<string | null>(null);
+  let editing = $derived(editorOwner === owner && !view.paused && view.player.alive);
+  let selectedSlot = $state<HotbarInput | null>(null);
+  let dragSlot = $state<HotbarInput | null>(null);
+
+  $effect(() => {
+    if (editorOwner !== null && (editorOwner !== owner || view.paused || !view.player.alive)) {
+      editorOwner = null;
+      selectedSlot = null;
+      dragSlot = null;
+    }
+  });
+
+  function toggleEditor(): void {
+    editorOwner = editing ? null : owner;
+    selectedSlot = null;
+    dragSlot = null;
+  }
+
+  function swap(from: HotbarInput, to: HotbarInput): void {
+    if (!editing) return;
+    const state = bridge.snapshot();
+    if ((state.characterId ?? 'hero') + ':' + state.classId !== owner) return;
+    const next = swapHotbarSlots(state.classId, state.hotbarLayout ?? defaultHotbarLayout(state.classId), from, to);
+    if (next) bridge.command({ type: 'setHotbarLayout', layout: next });
+    selectedSlot = null;
+    dragSlot = null;
+  }
+
+  function selectSlot(slot: HotbarInput): void {
+    if (selectedSlot === null) selectedSlot = slot;
+    else swap(selectedSlot, slot);
+  }
+
+  function startDrag(event: DragEvent, slot: HotbarInput): void {
+    if (!editing || !event.dataTransfer) return;
+    dragSlot = slot;
+    selectedSlot = slot;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', 'aether-hotbar');
+  }
+
+  function allowDrop(event: DragEvent): void {
+    if (!editing || dragSlot === null) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  }
+
+  function dropSlot(event: DragEvent, to: HotbarInput): void {
+    event.preventDefault();
+    const from = dragSlot;
+    if (from !== null) swap(from, to);
+  }
+
+  function cancelDrag(): void {
+    dragSlot = null;
+    selectedSlot = null;
+  }
+
+  function editorKey(event: KeyboardEvent): void {
+    event.stopPropagation();
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      editorOwner = null;
+      cancelDrag();
+    }
+  }
 
   function activate(id: string): void {
     dispatchHotbarAbility(bridge, id);
   }
 
   function abilityShortcut(id: string): string {
-    const action = hotbarInputForAbility(view.classId, id);
+    const action = hotbarInputForAbility(view.classId, id, layout);
     return action ? shortcutHint(bindings, action) : '—';
   }
 </script>
 
 <div class="skill-ui">
+  <div class="hotbar-controls">
+    {#if editing}
+      <span class="hotbar-hint">{$locale === 'cs' ? 'Vyber dva sloty nebo přetáhni.' : 'Select two slots or drag.'}</span>
+      <button type="button" data-testid="reset-hotbar" onclick={() => {
+        bridge.command({ type: 'setHotbarLayout', layout: defaultHotbarLayout(view.classId) });
+        cancelDrag();
+      }} onkeydown={editorKey}>{$locale === 'cs' ? 'Výchozí' : 'Reset'}</button>
+    {/if}
+    <button type="button" data-testid="edit-hotbar" aria-pressed={editing}
+      disabled={view.paused || !view.player.alive} onclick={toggleEditor}
+      onkeydown={editing ? editorKey : undefined}>
+      {editing ? ($locale === 'cs' ? 'Hotovo' : 'Done') : ($locale === 'cs' ? 'Upravit schopnosti' : 'Edit skills')}
+    </button>
+  </div>
+  {#if editing}
+    <div class="hotbar-editor" data-testid="hotbar-editor" role="group"
+      aria-label={$locale === 'cs' ? 'Rozložení schopností' : 'Skill layout'}>
+      {#each HOTBAR_INPUTS as input, index (input)}
+        {@const id = layout[index]!}
+        <button type="button" draggable="true" data-hotbar-edit-slot={input}
+          data-hotbar-edit-ability={id} aria-pressed={selectedSlot === input}
+          aria-label={shortcutHint(bindings, input) + ' · ' + $t('skills.' + id + '.name')}
+          title={$t('skills.' + id + '.name')}
+          onclick={() => selectSlot(input)} onkeydown={editorKey}
+          ondragstart={event => startDrag(event, input)}
+          ondragover={allowDrop} ondrop={event => dropSlot(event, input)}
+          ondragend={cancelDrag}>
+          <strong>{shortcutHint(bindings, input)}</strong>
+          <span>{$t('skills.' + id + '.name')}</span>
+        </button>
+      {/each}
+    </div>
+  {:else}
   <div class="skill-toolbar" aria-label={$t('combat.skills')}>
-    {#each SKILL_SLOTS as slot (slot)}
+    {#each layout as abilityId (abilityId)}
+      {@const route = resolveHotbarAbility(view.classId, abilityId)!.route}
+      {#if route.type === 'cast'}
+      {@const slot = route.slot}
       {@const skill = SKILLS[view.classId][slot]}
       {@const remaining = view.cooldowns[slot]}
       <button
         class="skill-button"
+        data-hotbar-ability={abilityId} data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)}
         class:cooldown={remaining > 0}
         disabled={view.paused || !view.player.alive || remaining > 0 || view.resource + 0.001 < skill.cost}
         aria-label={$t('skills.' + skill.id + '.name')}
@@ -54,15 +161,15 @@
           <span class="skill-cooldown">{Math.ceil(remaining)}s</span>
         {/if}
       </button>
-    {/each}
-    {#if view.classId === 'WARRIOR'}
-      {#each extraWarriorSkills as id (id)}
+      {:else if route.type === 'warriorAbility'}
+        {@const id = route.id}
         {@const ability = WARRIOR_ABILITIES[id]}
         {@const modified = projectEquippedSkill(
           id, ability.radius ?? 0, view.talentRanks ?? {}, view.equipment
         )}
         {@const remaining = view.warriorCooldowns?.[id] ?? 0}
-        <button class="skill-button extra" class:cooldown={remaining > 0}
+        <button class="skill-button extra" data-hotbar-ability={abilityId}
+          data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)} class:cooldown={remaining > 0}
           disabled={view.paused || !view.player.alive || remaining > 0
             || view.warriorAction !== null && view.warriorAction !== undefined
             || view.resource + 0.001 < ability.rageCost}
@@ -87,14 +194,13 @@
           <span class="skill-cost">{ability.rageCost === 0 ? '—' : ability.rageCost}</span>
           {#if remaining > 0}<span class="skill-cooldown">{Math.ceil(remaining)}s</span>{/if}
         </button>
-      {/each}
-    {/if}
-    {#if view.classId === 'PALADIN'}
-      {#each PALADIN_EXTRA_IDS as id (id)}
+      {:else if route.type === 'paladinAbility'}
+        {@const id = route.id}
         {@const skill=PALADIN_EXTRA_SKILLS[id]}
         {@const remaining=view.paladinCooldowns?.[id]??0}
         <button
-          class="skill-button extra"
+          class="skill-button extra" data-hotbar-ability={abilityId}
+          data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)}
           class:cooldown={remaining>0}
           data-paladin-ability={id}
           disabled={view.paused || !view.player.alive || remaining>0 ||
@@ -111,15 +217,14 @@
             <span class="skill-cooldown">{Math.ceil(remaining)}s</span>
           {/if}
         </button>
-      {/each}
-    {/if}
-    {#if view.classId === 'MAGE'}
-      {#each MAGE_EXTRA_IDS as id (id)}
+      {:else if route.type === 'mageAbility'}
+        {@const id = route.id}
         {@const skill = MAGE_EXTRA_SPELLS[id]}
         {@const remaining = view.mageCooldowns?.[id] ?? 0}
         {@const actualCost = Math.max(1, Math.ceil(skill.cost * (1 - mageCostDiscount)))}
         <button
-          class="skill-button extra"
+          class="skill-button extra" data-hotbar-ability={abilityId}
+          data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)}
           class:cooldown={remaining > 0}
           data-mage-ability={id}
           disabled={view.paused || !view.player.alive || remaining > 0 ||
@@ -134,13 +239,12 @@
           <span class="skill-cost">{actualCost}</span>
           {#if remaining > 0}<span class="skill-cooldown">{Math.ceil(remaining)}s</span>{/if}
         </button>
-      {/each}
-    {/if}
-    {#if view.classId === 'ROGUE'}
-      {#each ROGUE_EXTRA_IDS as id (id)}
+      {:else if route.type === 'rogueAbility'}
+        {@const id = route.id}
         {@const skill=ROGUE_EXTRA_SKILLS[id]}
         {@const remaining=view.rogueCooldowns?.[id]??0}
-        <button class="skill-button extra" class:cooldown={remaining>0}
+        <button class="skill-button extra" data-hotbar-ability={abilityId}
+          data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)} class:cooldown={remaining>0}
           data-rogue-ability={id}
           disabled={view.paused || !view.player.alive || remaining>0
             || !!view.classAction || view.resource+0.001<skill.cost
@@ -154,13 +258,12 @@
           <span class="skill-cost">{skill.cost}</span>
           {#if remaining>0}<span class="skill-cooldown">{Math.ceil(remaining)}s</span>{/if}
         </button>
-      {/each}
-    {/if}
-    {#if view.classId === 'NECROMANCER'}
-      {#each NECRO_EXTRA_IDS as id (id)}
+      {:else if route.type === 'necroAbility'}
+        {@const id = route.id}
         {@const skill = NECRO_EXTRA_SPELLS[id]}
         {@const remaining = view.necroCooldowns?.[id] ?? 0}
-        <button class="skill-button extra" class:cooldown={remaining>0}
+        <button class="skill-button extra" data-hotbar-ability={abilityId}
+          data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)} class:cooldown={remaining>0}
           data-necro-ability={id}
           disabled={view.paused || !view.player.alive || remaining>0
             || !!view.classAction || view.resource + 0.001 < skill.cost
@@ -174,13 +277,12 @@
           <span class="skill-cost">{skill.cost}</span>
           {#if remaining>0}<span class="skill-cooldown">{Math.ceil(remaining)}s</span>{/if}
         </button>
-      {/each}
-    {/if}
-    {#if view.classId === 'WARLOCK'}
-      {#each WARLOCK_EXTRA_IDS as id (id)}
+      {:else if route.type === 'warlockAbility'}
+        {@const id = route.id}
         {@const skill = WARLOCK_EXTRA_SPELLS[id]}
         {@const remaining = view.warlockCooldowns?.[id] ?? 0}
-        <button class="skill-button extra" class:cooldown={remaining>0}
+        <button class="skill-button extra" data-hotbar-ability={abilityId}
+          data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)} class:cooldown={remaining>0}
           data-warlock-ability={id}
           disabled={view.paused || !view.player.alive || remaining>0
             || !!view.classAction || view.resource + 0.001 < skill.cost
@@ -194,9 +296,10 @@
           <span class="skill-cost">{skill.cost}</span>
           {#if remaining>0}<span class="skill-cooldown">{Math.ceil(remaining)}s</span>{/if}
         </button>
-      {/each}
-    {/if}
+      {/if}
+    {/each}
   </div>
+  {/if}
   {#if view.classId === 'WARLOCK'}
     <div class="necro-minions" data-testid="warlock-demons"
       aria-label={$t('warlock.demons')}>
@@ -284,6 +387,18 @@
   .skill-ui { position:relative; z-index:1; display:flex; flex-direction:column;
     align-items:stretch; justify-content:center; width:100%; min-width:0; gap:3px;
     pointer-events:auto; }
+  .hotbar-controls { display:flex; align-items:center; justify-content:flex-end; gap:4px; min-width:0; }
+  .hotbar-controls button { color:#e8d8ba; background:#201e21eb; border:1px solid #77674d;
+    border-radius:3px; padding:2px 6px; font-size:.59rem; min-height:20px; }
+  .hotbar-hint { color:#ddccaf; font-size:.58rem; min-width:0; margin-right:auto; }
+  .hotbar-editor { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:3px; width:100%; }
+  .hotbar-editor button { min-width:0; min-height:46px; display:flex; flex-direction:column;
+    justify-content:center; align-items:center; gap:3px; padding:3px 1px;
+    background:#283340; color:#f1e2c6; border:1px solid #88704e; border-radius:3px; overflow:hidden; }
+  .hotbar-editor button[aria-pressed="true"] { border-color:#f0c879; background:#524334; }
+  .hotbar-editor strong { color:#efca91; font-size:.59rem; }
+  .hotbar-editor span { font-size:.56rem; max-width:100%; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
   .skill-toolbar { display:flex; justify-content:center; align-items:stretch;
     gap:clamp(2px, .45vw, 6px); width:100%; min-width:0; flex-wrap:nowrap; }
   .skill-button, .skill-button.extra {
