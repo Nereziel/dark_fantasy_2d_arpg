@@ -1,6 +1,7 @@
 import { addMessages, init, locale } from 'svelte-i18n';
 import cs from './locales/cs.json';
 import en from './locales/en.json';
+import { VILLAGE_QUEST_TEXT } from '../game/quests/villageQuests';
 
 export type Language = 'cs' | 'en';
 export const languageOptions: ReadonlyArray<{ code: Language; label: string }> = [
@@ -24,6 +25,15 @@ export function initLocalization(): void {
   initialized = true;
   addMessages('cs', cs);
   addMessages('en', en);
+  // Convert dotted catalog keys to the nested shape used by svelte-i18n.
+  for(const language of ['cs','en'] as const){
+    const village:Record<string,Record<string,string>>={};
+    for(const [key,value] of Object.entries(VILLAGE_QUEST_TEXT[language])){
+      const [, , id, field]=key.split('.');
+      (village[id!]??={})[field!]=value;
+    }
+    addMessages(language,{quest:{village}});
+  }
   const chosen = initialLanguage();
   init({ fallbackLocale: 'en', initialLocale: chosen });
   if (typeof document !== 'undefined') document.documentElement.lang = chosen;
