@@ -103,8 +103,9 @@ export function planRegionalLandscape(base:WorldLayout,tiles:readonly TerrainTil
         ||targets.some(p=>distance(p,w)<ACTOR_RADIUS+24)))continue;
       const next:WorldLayout={...layout,obstacles:[...layout.obstacles,...form.obstacles]};
       const passes=[...forms,form].flatMap(f=>f.pass?[f.pass]:[]);
-      if(targets.some(p=>!reachable(next,p))||passes.some(p=>!reachable(next,p,42))
-        ||roads.some(r=>!regionalRoadClear(r.points,r.width,next.obstacles)))continue;
+      // Reject cheap geometry failures before running multiple A* queries.
+      if(roads.some(r=>!regionalRoadClear(r.points,r.width,next.obstacles))
+        ||targets.some(p=>!reachable(next,p))||passes.some(p=>!reachable(next,p,42)))continue;
       const painted=materialBands(tiles,[...forms,form]);
       const planned=planActOneTopology(next,painted,sites,reserved);
       if(!planned.ok)continue;
