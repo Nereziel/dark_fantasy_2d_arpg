@@ -2,7 +2,7 @@
  * Identical pure world assembly is used by simulation and renderer.
  * GPL-3.0-only.
  */
-import { generateWildernessTerrain, makeWildernessTiles, routeClear, type WildernessTerrainResult } from './wildernessTerrain';
+import { generateWildernessTerrain, makeWildernessTiles, routeClear, validateWildernessTerrain, type WildernessTerrainResult } from './wildernessTerrain';
 import { planWildernessFeatures, type WildernessFeature } from './wildernessFeatures';
 import type { WorldLayout } from './generator';
 import { ACTOR_RADIUS, canOccupy, findPath } from './navigation';
@@ -216,6 +216,28 @@ function withVillagePopulation(world: WildernessRuntimeWorld): WildernessRuntime
     structures:[...(world.structures??[]),...plan.villages.flatMap(v=>v.structures)]};
 }
 
+/** Publish the regional graph only after both settlements are populated.
+ * Pruning roads is a presentation change: protected geometry and all
+ * pedestrian destinations stay unchanged. A failed validation keeps legacy.
+ */
+function withRegionalRoadNetwork(world: WildernessRuntimeWorld): WildernessRuntimeWorld {
+  if(!world.region||world.villages?.length!==2)return world;
+  const {terrain,layout}=world;
+  const roads=terrain.roads.filter(r=>r.id==='road-crypt-gate'||r.id==='road-forest-side'
+    ||r.id.startsWith('road-story-')||/^road-(trade|trail)-/.test(r.id));
+  const marked=makeWildernessTiles(layout.seed,roads);
+  const tiles=marked.map((tile,i)=>{
+    const previous=terrain.tiles[i];
+    if(previous?.terrainId==='town_clearing')return previous;
+    if(tile.terrainId==='dirt_road'||tile.terrainId==='town_clearing')return tile;
+    // Reuse macro material bands only when they were not a removed road.
+    return previous&&previous.terrainId!=='dirt_road'?previous:tile;
+  });
+  const regional:WildernessTerrainResult={...terrain,roads,tiles,roadNetwork:'regional'};
+  if(validateWildernessTerrain(regional).length)return world;
+  return {...world,terrain:regional};
+}
+
 const recentWorlds = new Map<number, WildernessRuntimeWorld>();
 const MAX_CACHED_WORLDS = 8;
 
@@ -235,6 +257,7 @@ export function buildWilderness(seed: number): WildernessRuntimeWorld {
   if (recentWorlds.size >= MAX_CACHED_WORLDS) {
     recentWorlds.delete(recentWorlds.keys().next().value!);
   }
-  recentWorlds.set(seed, world);
-  return structuredClone(world);
+  const published=withRegionalRoadNetwork(world);
+  recentWorlds.set(seed, published);
+  return structuredClone(published);
 }
