@@ -4,6 +4,7 @@ import { validateMapDiscovery } from '../game/world/mapDiscovery';
 import { MINI_BOSS_IDS } from '../game/enemies/miniBossRules';
 import { validCheckpointIds } from '../game/core/deathRespawn';
 import { validEnvironmentUsedIds } from '../game/world/environmentInteractions';
+import {validOptionalDungeonRewardIds} from '../game/world/optionalDungeonRewards';
 
 /**
  * Separate versioned world-instance record; never modifies character-only v11.
@@ -38,6 +39,8 @@ export function readWorldRecord(raw: unknown, expectedCharacterId = 'hero'): Wor
       && !validCheckpointIds(record.progress.activatedCheckpointIds))
     || (record.progress.environmentUsedIds !== undefined
       && !validEnvironmentUsedIds(record.progress.environmentUsedIds))
+    || (record.progress.optionalDungeonRewardIds !== undefined
+      && !validOptionalDungeonRewardIds(record.progress.optionalDungeonRewardIds))
     || ![record.progress.cryptUsedPropIds, record.progress.cryptTriggeredTrapIds]
       .every(list => list === undefined || (Array.isArray(list) && list.length <= 128
         && list.every(id => typeof id === 'string' && id.length <= 160)
