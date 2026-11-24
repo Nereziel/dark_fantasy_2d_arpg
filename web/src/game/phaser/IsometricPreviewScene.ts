@@ -20,6 +20,8 @@ import { projectIsometric, isometricFootprint, isometricBounds, isometricDepth }
 import { pickIsometricPointer, type IsometricTarget } from './isometricPicking';
 import { createIsometricPrism, type IsometricOccluder } from './isometricOcclusion';
 import { heroCutaway } from './isometricCutaway';
+import { activeFacingAim, directionalPixelView, resolveActorFacing, type DirectionalPixelView } from './isometricActorFacing';
+import type { IsometricFacing } from './isometricProjection';
 import { playerAnimation } from '../entities/playerAnimation';
 import { projectCombatCircle, projectCombatCone, combatHealthBar } from './isometricCombat';
 import { classGroundEffects, summonPresentation } from './isometricClassEffects';
@@ -27,7 +29,7 @@ import { planIsometricImpact } from './isometricImpactFeedback';
 import { getVisualPreferences, shouldReduceMotion } from '../ui/visualPreferences';
 import {
   PIXEL_ANIMATIONS, PIXEL_ANIMATION_FRAMES, PIXEL_FRAME_WIDTH, PIXEL_FRAME_HEIGHT,
-  pixelAtlasKey, pixelFrame, pixelTimelineFrame, renderPixelAtlas,
+  directionalPixelAtlasKey, pixelFrame, pixelTimelineFrame, renderPixelAtlas,
   type PixelActor, type PixelAnimation
 } from './pixelSpriteAtlas';
 
@@ -59,6 +61,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private readonly actors = new Map<string, Phaser.GameObjects.Graphics>();
   private readonly sprites = new Map<string, Phaser.GameObjects.Sprite>();
   private readonly lastEnemyPositions = new Map<string, Point>();
+  private readonly facingMemory = new Map<string, { point: Point; facing: IsometricFacing }>();
   private obstacles: readonly Obstacle[] = [];
   private seed: number | undefined;
   private zone: ZoneId | undefined;
@@ -102,6 +105,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       this.actors.clear();
       this.sprites.clear();
       this.lastEnemyPositions.clear();
+      this.facingMemory.clear();
       this.walls.length = 0;
       this.occluders.length = 0;
       this.opaqueOccluders = [];
@@ -132,6 +136,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     for (const sprite of this.sprites.values()) sprite.destroy();
     this.sprites.clear();
     this.lastEnemyPositions.clear();
+    this.facingMemory.clear();
     if (state.zone === 'wilderness') {
       const world = buildWilderness(state.worldSeed);
       this.obstacles = world.layout.obstacles;
@@ -286,10 +291,10 @@ export class IsometricPreviewScene extends Phaser.Scene {
     }
   }
 
-  private ensureAtlas(actor: PixelActor): string {
-    const key = pixelAtlasKey(actor);
+  private ensureAtlas(actor: PixelActor, view: DirectionalPixelView): string {
+    const key = directionalPixelAtlasKey(actor, view);
     if (this.textures.exists(key)) return key;
-    const texture = this.textures.addCanvas(key, renderPixelAtlas(actor));
+    const texture = this.textures.addCanvas(key, renderPixelAtlas(actor, view));
     if (!texture) throw new Error('Unable to register pixel atlas: ' + key);
     PIXEL_ANIMATIONS.forEach((animation, row) => {
       for (let frame = 0; frame < PIXEL_ANIMATION_FRAMES; frame++) {
@@ -302,8 +307,12 @@ export class IsometricPreviewScene extends Phaser.Scene {
   }
 
   private sprite(key: string, actor: PixelActor, point: Readonly<Point>,
-    pose: PixelAnimation, frame: number): void {
-    const texture = this.ensureAtlas(actor);
+    pose: PixelAnimation, frame: number, aim?: Readonly<Point>): void {
+    const memory = this.facingMemory.get(key);
+    const facing = resolveActorFacing({ position: point, previous: memory?.point, last: memory?.facing, aim });
+    this.facingMemory.set(key, { point: { x: point.x, y: point.y }, facing });
+    const { view, flipX } = directionalPixelView(facing);
+    const texture = this.ensureAtlas(actor, view);
     let sprite = this.sprites.get(key);
     if (!sprite) {
       sprite = this.add.sprite(0, 0, texture, pixelFrame(pose, frame)).setOrigin(0.5, 0.9);
@@ -312,7 +321,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     sprite.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
     const p = project(point);
     sprite.setPosition(p.x, p.y).setDepth(isometricDepth(point) + 0.5)
-      .setFrame(pixelFrame(pose, frame)).setVisible(true);
+      .setFlipX(flipX).setFrame(pixelFrame(pose, frame)).setVisible(true);
   }
 
   private combatArea(points: readonly Point[], color: number, alpha: number): void {
@@ -478,8 +487,16 @@ export class IsometricPreviewScene extends Phaser.Scene {
       : timeline && (pose === 'attack' || pose === 'cast' || pose === 'channel')
         ? pixelTimelineFrame(timeline)
         : Math.floor(this.time.now / (pose === 'run' ? 95 : 150)) % PIXEL_ANIMATION_FRAMES;
-    this.sprite('hero', state.classId, state.player, pose, frame);
     const enemies = new Map(state.enemies.map(unit => [unit.actor.id, unit]));
+    const liveEnemy = (id: string) => {
+      const actor = enemies.get(id)?.actor;
+      return actor?.alive ? actor : undefined;
+    };
+    const action = state.warriorAction ?? state.classAction;
+    const combatPose = pose === 'attack' || pose === 'cast' || pose === 'channel';
+    const aim = combatPose ? activeFacingAim(state.player, action?.aim,
+      action ? action.targetId : state.selectedTargetId, liveEnemy) : undefined;
+    this.sprite('hero', state.classId, state.player, pose, frame, aim);
     for (const t of this.targets(state)) {
       if (t.alive === false) continue;
       const key = t.kind + '/' + t.id;
@@ -495,7 +512,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
           ? Math.max(0, Math.min(3, Math.floor(4 * (unit.intent.total - unit.intent.remaining)
               / Math.max(1, unit.intent.total))))
           : Math.floor(this.time.now / (pose === 'run' ? 110 : 170)) % PIXEL_ANIMATION_FRAMES;
-        this.sprite(key, unit.actor.type, t.position, pose, frame);
+        this.sprite(key, unit.actor.type, t.position, pose, frame, unit.intent ?? undefined);
         this.lastEnemyPositions.set(t.id, { ...t.position });
       } else {
         const color = t.kind === 'NPC' ? 0xb0986c : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
@@ -510,14 +527,15 @@ export class IsometricPreviewScene extends Phaser.Scene {
       const style = summonPresentation(summon.kind, summon.remaining);
       const moving = summon.targetId !== null;
       this.sprite(key, style.actor, summon, moving ? 'run' : 'idle',
-        Math.floor(this.time.now / (moving ? 110 : 170)) % PIXEL_ANIMATION_FRAMES);
+        Math.floor(this.time.now / (moving ? 110 : 170)) % PIXEL_ANIMATION_FRAMES,
+        summon.targetId ? liveEnemy(summon.targetId) : undefined);
       this.sprites.get(key)?.setTint(style.tint).setAlpha(style.alpha);
     }
     for (const [key, g] of this.actors) {
       if (!visible.has(key)) { g.destroy(); this.actors.delete(key); }
     }
     for (const [key, sprite] of this.sprites) {
-      if (!visible.has(key)) { sprite.destroy(); this.sprites.delete(key); }
+      if (!visible.has(key)) { sprite.destroy(); this.sprites.delete(key); this.facingMemory.delete(key); }
     }
     for (const id of this.lastEnemyPositions.keys()) {
       if (!visible.has('ENEMY/' + id)) this.lastEnemyPositions.delete(id);
