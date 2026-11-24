@@ -32,6 +32,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       publish: ${{ steps.scope.outputs.publish }}
+      pages_artifact: pages-${{ github.sha }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,7 +62,7 @@ jobs:
           publish=false
           while IFS= read -r -d '' changed; do
             case "$changed" in
-              web/index.html|web/src/*|web/public/*|web/package.json|web/package-lock.json|web/npm-shrinkwrap.json|web/vite.config.*|web/svelte.config.*|web/tsconfig*.json|web/postcss.config.*|web/tailwind.config.*|web/scripts/*|.github/actions/*)
+              web/index.html|web/src/*|web/public/*|web/package.json|web/package-lock.json|web/npm-shrinkwrap.json|web/vite.config.*|web/svelte.config.*|web/tsconfig*.json|web/postcss.config.*|web/tailwind.config.*|web/scripts/*|.github/actions/*|.github/workflows/quality.yml)
                 publish=true
                 break
                 ;;
@@ -136,14 +137,20 @@ jobs:
         if: steps.legacy.outputs.run == 'true'
         run: node tests/site.test.mjs
 
-      # Uploaded only from a fully verified push/dispatch, not from PRs or tests-only commits.
-      - name: Save verified build for Pages
+      - name: Verify Pages base path
         if: steps.scope.outputs.publish == 'true'
-        uses: actions/upload-artifact@v4
+        run: |
+          test -s web/dist/index.html
+          grep -q '/dark_fantasy_2d_arpg/' web/dist/index.html
+
+      # Publish the verified bundle once. Re-running only deploy reuses this
+      # exact job output and never creates a duplicate Pages artifact.
+      - name: Upload verified Pages artifact
+        if: steps.scope.outputs.publish == 'true'
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: pages-dist-${{ github.sha }}
+          name: pages-${{ github.sha }}-${{ github.run_attempt }}
           path: web/dist
-          if-no-files-found: error
           retention-days: 3
 
   deploy:
@@ -162,42 +169,11 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Download verified build for this exact SHA
-        uses: actions/download-artifact@v4
-        with:
-          name: pages-dist-${{ github.sha }}
-          path: web/dist
-
-      - name: Verify Pages base path
-        run: |
-          test -s web/dist/index.html
-          grep -q '/dark_fantasy_2d_arpg/' web/dist/index.html
-
       - name: Configure Pages
         uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: web/dist
-
-      # Preserve the API indexing guard from the previous Pages workflow.
-      - name: Wait for Pages artifact to appear in GitHub API
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for attempt in $(seq 1 12); do
-            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
-                --jq '.artifacts[] | select(.name == "github-pages") | .id' | grep -q .; then
-              echo 'Pages artifact indexed'
-              exit 0
-            fi
-            echo "Pages artifact not indexed yet (attempt $attempt)"
-            sleep 5
-          done
-          echo '::error::GitHub Pages artifact did not become visible'
-          exit 1
 
       - name: Deploy game
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: ${{ needs.verify.outputs.pages_artifact }}
