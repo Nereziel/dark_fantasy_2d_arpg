@@ -4,6 +4,7 @@ import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { buildWilderness } from '../../src/game/world/wildernessRuntime';
 import { villageTownEntries } from '../../src/game/world/villageDialogue';
 import { ACTOR_RADIUS, canOccupy } from '../../src/game/world/navigation';
+import { SHOP_OFFERS, createShopItem } from '../../src/game/trade/commerce';
 import { quoteTempering } from '../../src/game/trade/economyRules';
 
 function resident(role:'healer'|'blacksmith'){
@@ -32,8 +33,19 @@ describe('Issue #208 B2: regional services',()=>{
   });
   it('allows the same atomic temper transaction at a real regional forge, but not at a distant player',()=>{
     const {seed,entry}=resident('blacksmith'),sim=new GameSimulation(seed);
+    const offer=SHOP_OFFERS.find(o=>createShopItem(o,'preview').slot==='MAIN_HAND')!;
+    expect(offer).toBeDefined();
+    const funded=sim.snapshot();
+    funded.gold=10000;
+    expect(sim.restore(funded)).toBe(true);
+    // Purchase through the original merchant and equip through the public command.
+    sim.command({type:'buyItem',offerId:offer.id});
+    const index=sim.snapshot().inventory.findIndex(item=>item?.templateId===offer.templateId);
+    expect(index).toBeGreaterThanOrEqual(0);
+    sim.command({type:'equip',index});
     const snapshot=sim.snapshot();
     const item=snapshot.equipment.MAIN_HAND!;
+    expect(item).not.toBeNull();
     const quote=quoteTempering(item);
     expect(quote.ok).toBe(true);
     if(!quote.ok)throw Error('starter weapon cannot be tempered');
