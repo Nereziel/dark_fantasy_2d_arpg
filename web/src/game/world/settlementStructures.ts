@@ -115,7 +115,13 @@ export function planSettlementStructures(layout:WorldLayout, roads:readonly Stru
         ||y+height>WORLD_HEIGHT-ACTOR_RADIUS
         ||obstacles.some(b=>b.id===obstacle.id||overlaps(obstacle,b,ACTOR_RADIUS*2))
         ||roads.some(road=>crossesRoad(obstacle,road))
-        ||protectedPoints.some(p=>!canOccupy(p,ACTOR_RADIUS+18,[obstacle])))continue;
+        // The extra buffer is relative to the NEW building only.
+        // canOccupy also applies world bounds, incorrectly rejecting all
+        // buildings when an unrelated protected point is near the map edge.
+        ||protectedPoints.some(p=>p.x+ACTOR_RADIUS+18>obstacle.x
+          &&p.x-ACTOR_RADIUS-18<obstacle.x+obstacle.width
+          &&p.y+ACTOR_RADIUS+18>obstacle.y
+          &&p.y-ACTOR_RADIUS-18<obstacle.y+obstacle.height))continue;
       const trial=[...obstacles,obstacle];
       const doors=approaches(obstacle);
       let entrance:typeof doors[number]|undefined;
