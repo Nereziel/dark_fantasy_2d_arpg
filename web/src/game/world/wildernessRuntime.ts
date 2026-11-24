@@ -7,6 +7,7 @@ import { planWildernessFeatures, type WildernessFeature } from './wildernessFeat
 import type { WorldLayout } from './generator';
 import { ACTOR_RADIUS, canOccupy, findPath } from './navigation';
 import { planForestTrail } from './forestTrail';
+import { validateWildernessTerrain as validateRegionalProposal } from './wildernessTerrain';
 import { planEnvironmentObjects } from './environmentInteractions';
 import { planWorldEvents } from './worldEvents';
 import { getTownManifest } from './townManifest';
@@ -192,7 +193,7 @@ function withRegionalTopology(world: WildernessRuntimeWorld, allowLandscape = tr
 /** Populate the already connected regional clearings without changing any
  * quest or existing service positions. Resident capabilities remain planned.
  */
-function withVillagePopulation(world: WildernessRuntimeWorld): WildernessRuntimeWorld {
+function withVillagePopulation(world: WildernessRuntimeWorld, regionalOnly=false): WildernessRuntimeWorld {
   if(!world.region)return world;
   const {layout,terrain,features}=world;
   const seed=layout.seed;
@@ -206,7 +207,11 @@ function withVillagePopulation(world: WildernessRuntimeWorld): WildernessRuntime
     ...world.region.forms.flatMap(f=>f.pass?[f.pass]:[])
   ];
   const forms=world.region.forms;
-  const clearRoads=terrain.roads.filter(r=>routeClear(r.points,layout.obstacles));
+  // Obsolete radial corridors must not prevent village placement in a
+  // proposal which will publish only the retained regional network.
+  const roads=regionalOnly?terrain.roads.filter(r=>r.id==='road-crypt-gate'||r.id==='road-forest-side'
+    ||r.id.startsWith('road-story-')||/^road-(trade|trail)-/.test(r.id)):terrain.roads;
+  const clearRoads=roads.filter(r=>routeClear(r.points,layout.obstacles));
   const expectedEnv=JSON.stringify(env),expectedEvents=JSON.stringify(events);
   const acceptObstacles=(obstacles:readonly WorldLayout['obstacles'][number][]):boolean=>{
     const trial:WorldLayout={...layout,obstacles:[...obstacles]};
@@ -215,10 +220,15 @@ function withVillagePopulation(world: WildernessRuntimeWorld): WildernessRuntime
       &&clearRoads.every(r=>routeClear(r.points,trial.obstacles))
       &&forms.every(f=>!f.pass||canOccupy(f.pass,42,trial.obstacles));
   };
-  const plan=planVillagePopulation(layout,world.region.settlements,terrain.roads,reserved,acceptObstacles);
+  const plan=planVillagePopulation(layout,world.region.settlements,roads,reserved,acceptObstacles);
   const next:WorldLayout={...layout,obstacles:[...plan.obstacles]};
   // Keep a final defensive check for the complete cumulative plan.
   if(!acceptObstacles(next.obstacles))return {...world,villages:[]};
+  // Do not publish a partial plan that might have crossed a legacy road.
+  // Full proposals must independently pass the explicit regional validator.
+  if(regionalOnly&&(plan.villages.length!==2||validateRegionalProposal({
+    ...terrain,layout:next,roads,roadNetwork:'regional'
+  }).length))return world;
   return {...world,layout:next,terrain:{...terrain,layout:next},villages:plan.villages,
     structures:[...(world.structures??[]),...plan.villages.flatMap(v=>v.structures)]};
 }
@@ -242,10 +252,18 @@ export function buildWilderness(seed: number): WildernessRuntimeWorld {
   // If the same anchors cannot be populated, retry the regional placement
   // order on the unchanged protected base. Complete initial worlds are
   // untouched; ties retain the earlier proposal. Bounded, deterministic.
-  for(let attempt=1;attempt<=6&&(world.villages?.length??0)<2;attempt++){
-    const fallback=withVillagePopulation(withRegionalTopology(base,false,attempt));
-    if((fallback.villages?.length??0)>(world.villages?.length??0)
-      ||(!world.region&&fallback.region))world=fallback;
+  for(let attempt=0;attempt<=6&&(world.villages?.length??0)<2;attempt++){
+    const proposal=withRegionalTopology(base,false,attempt);
+    if(!proposal.region)continue;
+    // Try the intended regional corridors first. Only complete validated
+    // proposals can replace the legacy world. The final publisher repaints.
+    const regional=withVillagePopulation(proposal,true);
+    if(regional.villages?.length===2){world=regional;break;}
+    if(attempt===0||!world.region){
+      const fallback=withVillagePopulation(proposal);
+      if((fallback.villages?.length??0)>(world.villages?.length??0)
+        ||(!world.region&&fallback.region))world=fallback;
+    }
   }
   if (recentWorlds.size >= MAX_CACHED_WORLDS) {
     recentWorlds.delete(recentWorlds.keys().next().value!);
