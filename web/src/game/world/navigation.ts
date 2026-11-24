@@ -134,9 +134,11 @@ export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS, obstac
 export function findPickupPath(
   from: Point, loot: Point, range: number, obstacles: readonly Obstacle[]
 ): Point[] {
-  if (Math.hypot(from.x - loot.x, from.y - loot.y) <= range) return [];
+  if (!canOccupy(from, ACTOR_RADIUS, obstacles) || !Number.isFinite(loot.x)
+    || !Number.isFinite(loot.y) || !Number.isFinite(range) || range <= 0
+    || Math.hypot(from.x - loot.x, from.y - loot.y) <= range) return [];
   const angle = Math.atan2(from.y - loot.y, from.x - loot.x);
-  const offset = range - 4;
+  const offset = Math.max(0, range - 4);
   const destinations = [0, -1, 1, -2, 2, -3, 3, 4].map(turn => ({
     x: loot.x + Math.cos(angle + turn * Math.PI / 4) * offset,
     y: loot.y + Math.sin(angle + turn * Math.PI / 4) * offset
@@ -145,6 +147,61 @@ export function findPickupPath(
     const path = findPath(from, destination, ACTOR_RADIUS, obstacles);
     if (path.length && path.every((point, index) =>
       lineClear(index === 0 ? from : path[index - 1]!, point, ACTOR_RADIUS, obstacles))) return path;
+  }
+
+  // A loot drop can be within reach of a narrow strip at a wall even when
+  // its center and all the first eight approach samples are blocked. The
+  // coarse A* may also have a blocked start/end cell center. Search once
+  // from actually reachable grid centers, and finish at a clear point
+  // inside pickup range, not necessarily at the dropped item's coordinates.
+  const approaches = [loot, ...destinations];
+  for (const radius of [Math.max(0, range - 0.5), range / 2]) {
+    for (let turn = 0; turn < 16; turn++) {
+      approaches.push({
+        x: loot.x + Math.cos(angle + turn * Math.PI / 8) * radius,
+        y: loot.y + Math.sin(angle + turn * Math.PI / 8) * radius
+      });
+    }
+  }
+  const usable = approaches.filter(point => canOccupy(point, ACTOR_RADIUS, obstacles));
+  const finish = (point: Point): Point | undefined => {
+    if (Math.hypot(point.x - loot.x, point.y - loot.y) <= range) return point;
+    return usable.find(goal => Math.hypot(point.x - goal.x, point.y - goal.y) <= CELL * 2
+      && lineClear(point, goal, ACTOR_RADIUS, obstacles));
+  };
+  const direct = usable.find(goal => lineClear(from, goal, ACTOR_RADIUS, obstacles));
+  if (direct) return [{ ...direct }];
+  const parent = new Int32Array(COLS * ROWS).fill(-2);
+  const queue: number[] = [];
+  const [sx, sy] = grid(from);
+  const enqueue = (x: number, y: number, previous: number, origin: Point): void => {
+    if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return;
+    const key = KEY(x, y);
+    if (parent[key] !== -2 || !lineClear(origin, center(x, y), ACTOR_RADIUS, obstacles)) return;
+    parent[key] = previous;
+    queue.push(key);
+  };
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) enqueue(sx + dx, sy + dy, -1, from);
+  }
+  for (let cursor = 0; cursor < queue.length; cursor++) {
+    const key = queue[cursor]!;
+    const x = key % COLS, y = Math.floor(key / COLS);
+    const here = center(x, y);
+    const goal = finish(here);
+    if (goal) {
+      const points: Point[] = [];
+      for (let node = key; node >= 0; node = parent[node]!) {
+        points.push(center(node % COLS, Math.floor(node / COLS)));
+      }
+      points.reverse();
+      if (goal !== here) points.push({ ...goal });
+      return points;
+    }
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1],
+      [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      enqueue(x + dx!, y + dy!, key, here);
+    }
   }
   return [];
 }

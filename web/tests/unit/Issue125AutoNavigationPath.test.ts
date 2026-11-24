@@ -8,9 +8,27 @@ import { createCryptPack } from '../../src/game/enemies/enemies';
 import type { Point } from '../../src/game/core/types';
 import { CRYPT_EXIT, CRYPT_GATE, CRYPT_BOSS_POSITIONS } from '../../src/game/world/generator';
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../../src/game/world/dungeonRuntime';
-import { ACTOR_RADIUS, canOccupy, findPath, hasLineOfSight } from '../../src/game/world/navigation';
+import { ACTOR_RADIUS, canOccupy, findPath, findPickupPath, hasLineOfSight, moveActor } from '../../src/game/world/navigation';
 
 describe('F0 — click-to-interact auto-navigation around solid walls', () => {
+  it('reaches a drop at the outer edge of pickup range when closer samples are blocked', () => {
+    const walls = [{ id: 'wall', x: 450, y: 450, width: 67, height: 100 }];
+    const start = { x: 600, y: 500 };
+    // A secondary drop can be offset inside a solid object. The first legal
+    // hero position is x=535, 34 units away: a 32-unit approach cannot work.
+    const loot = { x: 501, y: 500 };
+    const path = findPickupPath(start, loot, 36, walls);
+    expect(path.length).toBeGreaterThan(0);
+    const actor = { ...start };
+    for (const point of path) {
+      expect(canOccupy(point, ACTOR_RADIUS, walls)).toBe(true);
+      moveActor(actor, point, Math.hypot(actor.x - point.x, actor.y - point.y), ACTOR_RADIUS, walls);
+      expect(actor.x).toBeCloseTo(point.x);
+      expect(actor.y).toBeCloseTo(point.y);
+    }
+    expect(Math.hypot(actor.x - loot.x, actor.y - loot.y)).toBeLessThanOrEqual(36);
+  });
+
   it('walks to pickup range for a drop too close to a wall for the hero to stand on it', () => {
     const game = new GameSimulation(0);
     const snapshot = game.snapshot();

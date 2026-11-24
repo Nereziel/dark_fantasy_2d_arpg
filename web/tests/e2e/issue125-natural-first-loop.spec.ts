@@ -318,8 +318,12 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
     // A player can consult the discovered-only map. Do not inspect the
     // generator, reveal fog, or read undiscovered target coordinates.
     if (!knownEvidence && Date.now() >= nextMapCheck) {
-      await page.getByRole('button', { name: 'View discovered map' }).click();
+      // The onboarding guide can disappear after its last milestone. The
+      // ordinary HUD map remains available throughout the wilderness.
+      await page.locator('.game-header').getByRole('button', { name: 'Map', exact: true })
+        .click({ timeout: 8_000 });
       const map = page.getByTestId('world-map-dialog');
+      await expect(map).toBeVisible({ timeout: 8_000 });
       const marker = map.locator('[data-map-marker="act1.evidence_lead"] circle').first();
       if (await marker.count()) {
         const mx = Number(await marker.getAttribute('cx'));
