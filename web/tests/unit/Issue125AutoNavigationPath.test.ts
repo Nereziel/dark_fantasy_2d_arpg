@@ -8,9 +8,60 @@ import { createCryptPack } from '../../src/game/enemies/enemies';
 import type { Point } from '../../src/game/core/types';
 import { CRYPT_EXIT, CRYPT_GATE, CRYPT_BOSS_POSITIONS } from '../../src/game/world/generator';
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../../src/game/world/dungeonRuntime';
-import { ACTOR_RADIUS, canOccupy, findPath, findPickupPath, hasLineOfSight, moveActor } from '../../src/game/world/navigation';
+import { ACTOR_RADIUS, canOccupy, findPath, findPickupPath, findAttackApproachPath, hasLineOfSight, moveActor } from '../../src/game/world/navigation';
 
 describe('F0 — click-to-interact auto-navigation around solid walls', () => {
+  it('finds a firing position around a wall instead of stopping within range without sight', () => {
+    const walls = [{ id: 'wall', x: 480, y: 420, width: 40, height: 160 }];
+    const from = { x: 450, y: 500 }, target = { x: 550, y: 500 };
+    expect(hasLineOfSight(from, target, walls)).toBe(false);
+    const route = findAttackApproachPath(from, target, 120, walls);
+    expect(route.length).toBeGreaterThan(0);
+    const actor = { ...from };
+    for (const point of route) {
+      moveActor(actor, point, Math.hypot(actor.x-point.x, actor.y-point.y), ACTOR_RADIUS, walls);
+      expect(actor.x).toBeCloseTo(point.x);
+      expect(actor.y).toBeCloseTo(point.y);
+    }
+    expect(Math.hypot(actor.x-target.x, actor.y-target.y)).toBeLessThanOrEqual(120);
+    expect(hasLineOfSight(actor, target, walls)).toBe(true);
+  });
+
+  it('routes an actual Paladin attack from the reported stalled crypt position on seed 109556574', () => {
+    const seed = 109556574;
+    const game = new GameSimulation(seed);
+    game.command({ type: 'reset', classId: 'PALADIN', seed });
+    const outdoor = game.snapshot();
+    expect(game.restore({ ...outdoor, player: { ...outdoor.player, ...CRYPT_GATE } })).toBe(true);
+    game.command({ type: 'usePortal' });
+    const crypt = game.snapshot();
+    expect(crypt.zone).toBe('crypt');
+    const origin = { x: 1503.4124905427934, y: 979.7835771002576 };
+    const layout = buildCryptWorld(seed).layout;
+    expect(canOccupy(origin, ACTOR_RADIUS, layout.obstacles)).toBe(true);
+    const enemies = createCryptPack(1, crypt.level, CRYPT_RUNTIME_BOSS_POSITIONS)
+      .map((unit, index) => index === 0 ? unit : { ...unit,
+        actor: { ...unit.actor, health: 0, alive: false } });
+    expect(game.restore({ ...crypt, player: { ...crypt.player, ...origin },
+      wave: 1, dungeonStage: 1, dungeonCleared: false,
+      enemies, selectedTargetId: null, hollowKing: null })).toBe(true);
+    const boss = enemies[0]!.actor;
+    game.command({ type: 'attack', targetId: boss.id });
+    let attacked = false;
+    for (let tick = 0; tick < 900; tick++) {
+      game.advance(33.334);
+      const state = game.snapshot();
+      expect(canOccupy(state.player, ACTOR_RADIUS, layout.obstacles)).toBe(true);
+      if (state.enemies[0]!.actor.health < boss.health
+        || game.drainEvents().some(event => event.type === 'cast' && event.skillId === 'basicAttack')) {
+        attacked = true;
+        break;
+      }
+      if (!state.player.alive) break;
+    }
+    expect(attacked).toBe(true);
+  });
+
   it('reaches a drop at the outer edge of pickup range when closer samples are blocked', () => {
     const walls = [{ id: 'wall', x: 450, y: 450, width: 67, height: 100 }];
     const start = { x: 600, y: 500 };

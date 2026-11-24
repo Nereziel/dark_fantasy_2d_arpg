@@ -61,7 +61,7 @@ import {
 import { monsterActions, monsterAction, type MonsterAction } from '../enemies/monsterRuntime';
 import { getEnemyArchetype } from '../enemies/archetypeCatalog';
 import { defaultHotbarLayout, validateHotbarLayout } from '../input/hotbarRegistry';
-import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, findPath, findPickupPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
+import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, canApproachAttackDirectly, findAttackApproachPath, findPath, findPickupPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
   type WorldLayout
@@ -366,6 +366,10 @@ export class GameSimulation {
     stalledTicks: number;
   } | null = null;
   private attackTarget: string | null = null;
+  private attackApproachPlan: {
+    world: WorldLayout; targetId: string; goal: Point; range: number;
+    points: Point[]; stalledTicks: number; retryTicks: number;
+  } | null = null;
   private pickupTarget: { id: string; path: Point[] } | null = null;
   private pendingObject: WorldObjectId | null = null;
   private usedObjects = new Set<WorldObjectId>();
@@ -846,6 +850,37 @@ export class GameSimulation {
     if (plan.points.length === 1 && distance(actor, target) <= stop + 0.01) {
       this.movementSpeed = 0;
     }
+  }
+
+  /** Cache only obstructed basic-attack approaches; direct combat stays unchanged. */
+  private followAttackApproach(target: EnemySnapshot, range: number, speed: number, dt: number): void {
+    if (this.immobilized) { this.movementSpeed = 0; return; }
+    if (canApproachAttackDirectly(this.player, target, range, this.world.obstacles)) {
+      this.attackApproachPlan = null;
+      this.follow(this.player, target, speed, dt, Math.max(0, range - 4));
+      return;
+    }
+    const cached = this.attackApproachPlan;
+    if (!cached || cached.world !== this.world || cached.targetId !== target.id
+      || cached.range !== range || distance(cached.goal, target) > 12
+      || cached.stalledTicks >= 15 || (!cached.points.length && cached.retryTicks >= 30)) {
+      this.attackApproachPlan = {
+        world: this.world, targetId: target.id, goal: { x: target.x, y: target.y }, range,
+        points: findAttackApproachPath(this.player, target, range, this.world.obstacles),
+        stalledTicks: 0, retryTicks: 0
+      };
+    }
+    const plan = this.attackApproachPlan!;
+    const point = plan.points[0];
+    if (!point) { plan.retryTicks++; this.movementSpeed = 0; return; }
+    const before = { ...this.player };
+    this.follow(this.player, point, speed, dt);
+    if (distance(this.player, point) <= 0.1) {
+      plan.points.shift();
+      plan.stalledTicks = 0;
+      plan.retryTicks = 30;
+    } else if (distance(this.player, before) < 0.05) plan.stalledTicks++;
+    else plan.stalledTicks = 0;
   }
 
   private get focusedUnit(): EnemyUnit {
@@ -1755,6 +1790,7 @@ export class GameSimulation {
       this.warriorPending = null;
       this.warriorAction = null;
       this.classAction = null;
+      if (this.attackTarget !== selected.actor.id) this.attackApproachPlan = null;
       this.attackTarget = selected.actor.id;
       this.movePath = [];
       this.pickupTarget = null;
@@ -4093,20 +4129,15 @@ export class GameSimulation {
       const target = this.units.find(unit => unit.actor.id === this.attackTarget && unit.actor.alive);
       if (!target) this.attackTarget = null;
       else if (distance(this.player, target.actor) >
-        (this.classId === 'WARRIOR' ? Math.min(60, definition.attackRange) : this.rogueAttackRange())) {
+        (this.classId === 'WARRIOR' ? Math.min(60, definition.attackRange) : this.rogueAttackRange())
+        || !hasLineOfSight(this.player, target.actor, this.world.obstacles)) {
         if (!this.holdPosition) {
           const range = this.classId === 'WARRIOR'
             ? Math.min(60, definition.attackRange) : this.rogueAttackRange();
-          const route = hasLineOfSight(this.player, target.actor, this.world.obstacles)
-            ? [] : findPath(this.player, target.actor, ACTOR_RADIUS, this.world.obstacles);
-          if (route.length > 0) {
-            this.follow(this.player, route[0]!, speed, dt, route.length === 1 ? range - 4 : 0);
-          } else {
-            this.follow(this.player, target.actor, speed, dt, range - 4);
-          }
+          this.followAttackApproach(target.actor, range, speed, dt);
         }
-      } else if (!this.immobilized && this.attackTimer <= 0
-        && hasLineOfSight(this.player,target.actor,this.world.obstacles)) {
+      } else if (!this.immobilized && this.attackTimer <= 0) {
+        this.attackApproachPlan = null;
         if (this.classId === 'WARRIOR') {
           // Repeated left-click attacks share the same hit-frame and Rage policy.
           this.requestWarriorAbility('basicAttack', target.actor.id);
