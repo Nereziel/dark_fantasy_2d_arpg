@@ -1,6 +1,6 @@
 // GPL-3.0-only
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveActorFacing, directionalPixelView } from '../../src/game/phaser/isometricActorFacing';
+import { resolveActorFacing, directionalPixelView, activeFacingAim } from '../../src/game/phaser/isometricActorFacing';
 import { renderPixelAtlas, pixelAtlasKey, directionalPixelAtlasKey, type PixelActor } from '../../src/game/phaser/pixelSpriteAtlas';
 import type { IsometricFacing } from '../../src/game/phaser/isometricProjection';
 
@@ -67,5 +67,21 @@ describe('directional preview atlas', () => {
     for (const actor of ['wolf','spider','wraith','skeleton'] as const) {
       expect(capture(actor,'n').commands).not.toEqual(capture(actor,'s').commands);
     }
+  });
+});
+
+describe('active skill facing', () => {
+  const enemy = { x: 140, y: 80 };
+  const lookup = (id: string) => id === 'enemy' ? enemy : undefined;
+  it('uses explicit target, ground and directional aim, not pointer hover', () => {
+    expect(activeFacingAim(position, { mode: 'TARGET_ENTITY', targetId: 'enemy' }, null, lookup)).toEqual(enemy);
+    expect(activeFacingAim(position, { mode: 'AREA', position: { x: 90, y: 120 } }, 'enemy', lookup)).toEqual({ x: 90, y: 120 });
+    expect(activeFacingAim(position, { mode: 'DIRECTION', direction: { x: 0, y: -1 } }, null, lookup)).toEqual({ x: 100, y: 99 });
+    expect(activeFacingAim(position, undefined, 'enemy', lookup)).toEqual(enemy);
+  });
+  it('does not turn toward stale targets during self casts or missing targets', () => {
+    expect(activeFacingAim(position, { mode: 'SELF' }, 'enemy', lookup)).toBeUndefined();
+    expect(activeFacingAim(position, { mode: 'TARGET_ENTITY', targetId: 'missing' }, 'enemy', lookup)).toBeUndefined();
+    expect(activeFacingAim(position, undefined, null, lookup)).toBeUndefined();
   });
 });
