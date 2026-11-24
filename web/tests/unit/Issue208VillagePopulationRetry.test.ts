@@ -46,4 +46,33 @@ describe('Issue #208: atomic village retries',()=>{
       expect(layout.obstacles).toEqual([]);
     }finally{planner.mockImplementation(original);}
   });
+  it('retries a village when the runtime rejects its candidate geometry, keeping accepted neighbours',()=>{
+    const layout:WorldLayout={seed:123,camp:{...CAMP},obstacles:[],encounterPositions:[]};
+    const settlements:RegionalSettlement[]=[
+      {id:'camp',anchor:CAMP,position:CAMP,radius:165,nameKey:'region.camp'},
+      {id:'north-village',anchor:{x:1120,y:230},position:{x:1120,y:230},radius:72,nameKey:'region.north-village'},
+      {id:'east-village',anchor:{x:1910,y:960},position:{x:1910,y:960},radius:72,nameKey:'region.east-village'}
+    ];
+    const accept=vi.fn((walls:readonly WorldLayout['obstacles'][number][])=>walls.length>0);
+    accept.mockReturnValueOnce(false);
+    const result=planVillagePopulation(layout,settlements,[],[],accept);
+    expect(accept.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(result.villages.map(v=>v.id)).toEqual(['north-village','east-village']);
+    expect(result.skipped).toEqual([]);
+    const acceptedNorth=accept.mock.calls[1]![0];
+    for(const wall of acceptedNorth)expect(result.obstacles).toContainEqual(wall);
+    expect(result.obstacles).toEqual(accept.mock.calls.at(-1)![0]);
+    expect(layout.obstacles).toEqual([]);
+  });
+  it('does not publish any rejected village geometry',()=>{
+    const layout:WorldLayout={seed:123,camp:{...CAMP},obstacles:[],encounterPositions:[]};
+    const p={x:1120,y:230};
+    const north:RegionalSettlement={id:'north-village',anchor:p,position:p,radius:72,nameKey:'region.north-village'};
+    const accept=vi.fn(()=>false);
+    const result=planVillagePopulation(layout,[north],[],[],accept);
+    expect(accept).toHaveBeenCalled();
+    expect(result.villages).toEqual([]);
+    expect(result.skipped).toEqual(['north-village']);
+    expect(result.obstacles).toEqual([]);
+  });
 });
