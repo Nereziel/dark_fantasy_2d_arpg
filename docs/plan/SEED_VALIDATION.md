@@ -41,6 +41,25 @@ single-seed replay command. The harness verifies:
 - Rejection of NaN, infinities, fractional, negative and out-of-range seeds
 - Deterministic validated dungeon fallback at zero attempt budget
 
+## Populated village acceptance (Issue #208)
+
+The wilderness sweep validates each published village's residents, roles,
+forge, building entrances and pedestrian paths. It logs a JSON
+`[Act I village coverage]` report with the total, complete count and missing
+seeds, distinguishing topology from population failure.
+
+The existing baseline remains green while missing villages are being fixed.
+Use the strict acceptance gate to require both populated villages for every
+sampled seed:
+
+```sh
+SEED_SWEEP_REQUIRE_VILLAGES=1 SEED_SWEEP_START=0 SEED_SWEEP_COUNT=1000 npm test -- tests/unit/Issue113SeedValidation.test.ts
+```
+
+A failed strict sweep reports the incomplete seeds and a replay command.
+This is sampled evidence, not a mathematical guarantee across all uint32 seeds.
+The replay includes the fixed boundary samples as in the original harness.
+
 ## Scope and future acts
 
 **This PR is the Act I subset of Issue #113, not the full Prompt 58 acceptance.**

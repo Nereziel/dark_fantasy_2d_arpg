@@ -26,6 +26,7 @@ function checkedEnv(name: string, fallback: number, min: number, max: number): n
 }
 const START = checkedEnv('SEED_SWEEP_START', 0, 0, 0xffffffff);
 const COUNT = checkedEnv('SEED_SWEEP_COUNT', 24, 1, 5000);
+const REQUIRE_VILLAGES = checkedEnv('SEED_SWEEP_REQUIRE_VILLAGES', 0, 0, 1) === 1;
 const seeds = Array.from({ length: COUNT }, (_, i) => (START + Math.imul(i, 7919)) >>> 0);
 const sample = [0, 1, 2, 3, 42, 99, 0x7fffffff, 0xffffffff];
 const suiteSeeds = [...new Set([...sample, ...seeds])];
@@ -57,6 +58,7 @@ function criticalPath(
 
 describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
   it(`validates wilderness roads, town services, quests and encounters for ${suiteSeeds.length} seeds`, () => {
+    const missing: {seed:number; stage:'topology'|'population'; villages:string[]}[]=[];
     for (const seed of suiteSeeds) checkedSeed(seed, 'wilderness', () => {
       const world = buildWilderness(seed);
       const { layout, terrain, features } = world;
@@ -81,6 +83,20 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
         criticalPath(seed, 'wilderness', 'encounter-' + index, layout.camp,
           point, layout.obstacles);
       }
+      const villages=world.villages??[];
+      const villageIds=villages.map(v=>v.id);
+      expect(new Set(villageIds).size).toBe(villageIds.length);
+      if(villages.length!==2)missing.push({seed,stage:world.region?'population':'topology',villages:villageIds});
+      for(const village of villages){
+        expect(village.structures.length).toBeGreaterThan(0);
+        expect(village.residents.map(n=>n.role)).toEqual(village.id==='north-village'
+          ?['healer','civilian']:['blacksmith','quest']);
+        if(village.id==='east-village')expect(village.structures.some(s=>s.kind==='smithy')).toBe(true);
+        for(const resident of village.residents)
+          criticalPath(seed,'wilderness',resident.id,layout.camp,resident.position,layout.obstacles);
+        for(const structure of village.structures)
+          criticalPath(seed,'wilderness',structure.id,layout.camp,structure.approach,layout.obstacles);
+      }
       const side = terrain.roads.find(road => road.id === 'road-forest-side');
       const trail = terrain.roads.find(road => road.id === 'road-story-corruption_site');
       expect(side).toBeDefined();
@@ -96,7 +112,16 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
       // Pure generation with the same inputs must preserve every item ID and position.
       expect(buildWilderness(seed)).toEqual(world);
     });
-  });
+    console.info('[Act I village coverage] '+JSON.stringify({
+      total:suiteSeeds.length,complete:suiteSeeds.length-missing.length,missing
+    }));
+    // The full guarantee is a separate acceptance gate until coverage is
+    // complete. Default CI still validates every actually published village.
+    if(REQUIRE_VILLAGES&&missing.length)
+      throw new Error('Incomplete Act I villages: '+JSON.stringify(missing)
+        +'\nReplay: SEED_SWEEP_REQUIRE_VILLAGES=1 SEED_SWEEP_START='+missing[0]!.seed
+        +' SEED_SWEEP_COUNT=1 npm test -- tests/unit/Issue113SeedValidation.test.ts');
+  }, Math.max(15000, suiteSeeds.length * 1000));
 
   it(`validates crypt entrance, reachable encounters, boss guards and exit for ${suiteSeeds.length} seeds`, () => {
     for (const seed of suiteSeeds) checkedSeed(seed, 'crypt', () => {
