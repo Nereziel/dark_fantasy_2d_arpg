@@ -40,6 +40,7 @@ import type { PotionCharges, PotionId, PotionState } from '../consumables/potion
 import type { WaypointId } from '../world/waypointTravel';
 import type { WorldEventKind, WorldEventId, WorldEventView } from '../world/worldEvents';
 import type { StashTabs } from '../inventory/stashRules';
+import type {OptionalDungeonRewardId} from '../world/optionalDungeonRewards';
 
 export interface Point { x: number; y: number }
 export type GameStatus = 'ready' | 'moving' | 'combat' | 'dead' | 'paused';
@@ -53,6 +54,8 @@ export interface WorldSessionProgress {
   /** Stable one-shot crypt facts. Never an enemy/map/world snapshot. */
   cryptUsedPropIds?: string[];
   cryptTriggeredTrapIds?: string[];
+  /** Seed-scoped claims, not character data or combat snapshots. */
+  optionalDungeonRewardIds?: OptionalDungeonRewardId[];
   /** Seed-scoped one-shot miniboss victories, not enemy state snapshots. */
   miniBossDefeatedIds?: MiniBossId[];
   /** Optional one-shot outdoor environmental interactions; never character data. */
@@ -235,6 +238,8 @@ export interface GameSnapshot {
   cryptInteractables?: CryptInteractable[];
   cryptUsedPropIds?: string[];
   cryptTriggeredTrapIds?: string[];
+  /** Seed-scoped claims, not character data or combat snapshots. */
+  optionalDungeonRewardIds?: OptionalDungeonRewardId[];
   /** Session-only miniboss planner states; not written to character/world saves. */
   miniBossStates?: Record<string, MiniBossState>;
   miniBossDefeatedIds?: MiniBossId[];
