@@ -19,6 +19,22 @@ describe('Issue #208 village quest simulation',()=>{
     expect(validateQuestLedger(CAMPAIGN_QUEST_CATALOG,expanded)).toBe(true);
     expect(createCampaignQuestLedger({quests:expanded.quests.slice(0,10)})).toBeNull();
   });
+  it('copies a validated reactive ledger without structured-cloning Proxy objects',()=>{
+    const ledger=createCampaignQuestLedger(freshQuest())!;
+    // Svelte $state wraps snapshot objects and nested arrays in Proxy.
+    // Reproduce that boundary without depending on a DOM or Svelte compiler.
+    const wrapped=new Proxy({quests:new Proxy(ledger.quests.map(q=>new Proxy({
+      ...q,counters:new Proxy(q.counters,{}),
+      processedEventIds:new Proxy(q.processedEventIds,{})
+    },{})),{})},{});
+    expect(()=>createCampaignQuestLedger(wrapped)).not.toThrow();
+    const copy=createCampaignQuestLedger(wrapped)!;
+    expect(copy).toEqual(ledger);
+    expect(copy).not.toBe(wrapped);
+    expect(copy.quests[0]).not.toBe(wrapped.quests[0]);
+    expect(copy.quests[0]!.counters).not.toBe(wrapped.quests[0]!.counters);
+    expect(()=>structuredClone(copy)).not.toThrow();
+  });
   it.each(VILLAGE_QUESTS)('completes $id only by real local interactions and never rewards twice',q=>{
     const seed=42, sim=new GameSimulation(seed);
     const state=()=>sim.snapshot().questLedger!.quests.find(s=>s.questId===q.id)!;
