@@ -8,7 +8,8 @@ import { ENEMY_DEFINITIONS } from '../enemies/enemies';
 import { CRYPT_GATE, CRYPT_EXIT } from '../world/generator';
 import { buildWilderness } from '../world/wildernessRuntime';
 import { buildCryptWorld } from '../world/dungeonRuntime';
-import { DUNGEON_TILE_SIZE } from '../world/proceduralDungeon';
+import { IsometricGroundLayer } from './isometricGroundLayer';
+import { wildernessGroundLayout, cryptGroundLayout } from './isometricTerrain';
 import { getTownManifest, townEntry } from '../world/townManifest';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
 import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, type Obstacle } from '../world/navigation';
@@ -16,7 +17,7 @@ import { contextToCommand, cursorForContext } from '../input/contextResolver';
 import { resolvePointerAction } from '../input/bindings';
 import { dispatchCombatAction } from '../input/combatActionDispatcher';
 import { HeldPointerMovement } from '../input/heldMovement';
-import { projectIsometric, isometricFootprint, isometricBounds, isometricDepth } from './isometricProjection';
+import { projectIsometric, isometricBounds, isometricDepth } from './isometricProjection';
 import { pickIsometricPointer, type IsometricTarget } from './isometricPicking';
 import { createIsometricPrism, type IsometricOccluder } from './isometricOcclusion';
 import { heroCutaway } from './isometricCutaway';
@@ -35,10 +36,7 @@ import {
 
 const ORIGIN = { x: WORLD_HEIGHT, y: 100 };
 const project = (p: Readonly<Point>, z = 0) => projectIsometric(p, z, ORIGIN);
-const PALETTE: Record<string, number> = {
-  town_clearing: 0x454b3d, dark_grass: 0x293c31, dead_leaves: 0x484432,
-  corrupted_soil: 0x47333b, broken_stone: 0x48494b, dirt_road: 0x655542
-};
+
 
 type ImpactVisual = {
   object: Phaser.GameObjects.Graphics | Phaser.GameObjects.Text;
@@ -48,7 +46,7 @@ const MAX_IMPACT_VISUALS = 64;
 
 export class IsometricPreviewScene extends Phaser.Scene {
   private readonly impacts: ImpactVisual[] = [];
-  private floor!: Phaser.GameObjects.Graphics;
+  private ground!: IsometricGroundLayer;
   private warnings!: Phaser.GameObjects.Graphics;
   private missiles!: Phaser.GameObjects.Graphics;
   private healthBars!: Phaser.GameObjects.Graphics;
@@ -70,7 +68,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
   constructor(private readonly bridge: GameBridge) { super({ key: 'IsometricPreview' }); }
 
   create(): void {
-    this.floor = this.add.graphics().setDepth(-100);
+    this.ground = new IsometricGroundLayer(this);
     this.warnings = this.add.graphics().setDepth(-90);
     this.missiles = this.add.graphics().setDepth(9000);
     this.healthBars = this.add.graphics().setDepth(9100);
@@ -97,6 +95,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       unsubscribe();
       this.events.off(Phaser.Scenes.Events.DESTROY, onDestroy);
       this.clearImpacts();
+      this.ground.clear();
       this.input.off('pointerdown', this.click, this);
       this.input.off('pointermove', this.hover, this);
       this.input.off('pointerup', this.release, this);
@@ -112,6 +111,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       this.lastCutawayHero = undefined;
       if (this.game.canvas) {
         delete this.game.canvas.dataset.renderer;
+        delete this.game.canvas.dataset.groundChunks;
         this.game.canvas.style.cursor = 'default';
       }
     });
@@ -124,7 +124,6 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private rebuild(state: GameSnapshot): void {
     this.seed = state.worldSeed;
     this.zone = state.zone;
-    this.floor.clear();
     this.clearImpacts();
     for (const wall of this.walls) wall.destroy();
     this.walls.length = 0;
@@ -140,30 +139,13 @@ export class IsometricPreviewScene extends Phaser.Scene {
     if (state.zone === 'wilderness') {
       const world = buildWilderness(state.worldSeed);
       this.obstacles = world.layout.obstacles;
-      for (const tile of world.terrain.tiles) {
-        this.polygon(this.floor, isometricFootprint(tile, 0, ORIGIN), PALETTE[tile.terrainId] ?? 0x303a30);
-      }
-      for (const road of world.terrain.roads) {
-        for (let i = 1; i < road.points.length; i++) {
-          const a = road.points[i - 1]!, b = road.points[i]!;
-          const length = Math.hypot(b.x - a.x, b.y - a.y);
-          if (!length) continue;
-          const nx = -(b.y - a.y) / length * road.width / 2;
-          const ny = (b.x - a.x) / length * road.width / 2;
-          this.polygon(this.floor, [
-            project({ x: a.x + nx, y: a.y + ny }), project({ x: b.x + nx, y: b.y + ny }),
-            project({ x: b.x - nx, y: b.y - ny }), project({ x: a.x - nx, y: a.y - ny })
-          ], 0x736044);
-        }
-      }
+      this.ground.rebuild(wildernessGroundLayout(world.terrain), ORIGIN);
     } else {
       const world = buildCryptWorld(state.worldSeed);
       this.obstacles = world.layout.obstacles;
-      for (const tile of world.dungeon.tiles) {
-        this.polygon(this.floor, isometricFootprint({ ...tile, width: DUNGEON_TILE_SIZE,
-          height: DUNGEON_TILE_SIZE }, 0, ORIGIN), tile.kind === 'floor' ? 0x44434a : 0x191b24);
-      }
+      this.ground.rebuild(cryptGroundLayout(world.dungeon), ORIGIN);
     }
+    this.game.canvas.dataset.groundChunks = String(this.ground.count);
     // The exact collision footprint becomes a simple raised prism. Split into
     // bounded sections so a long wall doesn't get one global painter depth.
     for (const wall of this.obstacles) {
