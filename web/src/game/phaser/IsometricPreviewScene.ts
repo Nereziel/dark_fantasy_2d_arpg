@@ -21,6 +21,8 @@ import { projectIsometric, isometricBounds, isometricDepth } from './isometricPr
 import { pickIsometricPointer, type IsometricTarget } from './isometricPicking';
 import type { IsometricOccluder } from './isometricOcclusion';
 import { obstacleMaterial, planObstacleArt, type ObstacleMaterial } from './isometricProps';
+import { planBuildingArt } from './isometricBuildings';
+import type { SettlementStructure } from '../world/settlementStructures';
 import { heroCutaway } from './isometricCutaway';
 import { activeFacingAim, directionalPixelView, resolveActorFacing, type DirectionalPixelView } from './isometricActorFacing';
 import type { IsometricFacing } from './isometricProjection';
@@ -114,6 +116,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
         delete this.game.canvas.dataset.renderer;
         delete this.game.canvas.dataset.groundChunks;
         delete this.game.canvas.dataset.propMaterials;
+        delete this.game.canvas.dataset.buildingCount;
         this.game.canvas.style.cursor = 'default';
       }
     });
@@ -138,8 +141,10 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.sprites.clear();
     this.lastEnemyPositions.clear();
     this.facingMemory.clear();
+    const buildings = new Map<string, SettlementStructure>();
     if (state.zone === 'wilderness') {
       const world = buildWilderness(state.worldSeed);
+      for (const structure of world.structures ?? []) buildings.set(structure.obstacle.id, structure);
       this.obstacles = world.layout.obstacles;
       this.ground.rebuild(wildernessGroundLayout(world.terrain), ORIGIN);
     } else {
@@ -152,6 +157,17 @@ export class IsometricPreviewScene extends Phaser.Scene {
     // obstacles into bounded sections to preserve local painter depth.
     const materials = new Set<ObstacleMaterial>();
     for (const wall of this.obstacles) {
+      const building = buildings.get(wall.id);
+      if (building) {
+        // A roofed structure is one coherent painter/occlusion group.
+        // Unlike a long wall, splitting its footprint would duplicate roofs.
+        const art = planBuildingArt(wall, building, ORIGIN);
+        const g = this.add.graphics().setDepth(art.occluder.depth);
+        for (const layer of art.paint) this.polygon(g, layer.points, layer.color);
+        this.walls.push(g);
+        this.occluders.push(art.occluder);
+        continue;
+      }
       const material = obstacleMaterial(wall.id, state.zone);
       materials.add(material);
       for (let dy = 0; dy < wall.height; dy += 80) for (let dx = 0; dx < wall.width; dx += 80) {
@@ -165,6 +181,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       }
     }
     this.game.canvas.dataset.propMaterials = [...materials].sort().join(',');
+    this.game.canvas.dataset.buildingCount = String(buildings.size);
     this.updateCutaway(state.player);
   }
 
