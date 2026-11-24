@@ -1,5 +1,6 @@
 // GPL-3.0-only — presentation state, never simulation steering.
 import type { Point } from '../core/types';
+import type { SkillAim } from '../input/skillAiming';
 import { isometricFacing, type IsometricFacing } from './isometricProjection';
 
 export type DirectionalPixelView = 's' | 'se' | 'e' | 'ne' | 'n';
@@ -38,5 +39,18 @@ export function directionalPixelView(facing: IsometricFacing): {
     case 'nw': return { view: 'ne', flipX: true };
     case 'sw': return { view: 'se', flipX: true };
     default: return { view: facing, flipX: false };
+  }
+}
+
+/** Resolve only an active simulation action, never the current pointer position. */
+export function activeFacingAim(position: Readonly<Point>, aim: SkillAim | undefined,
+  targetId: string | null | undefined, lookup: (id: string) => Readonly<Point> | undefined): Readonly<Point> | undefined {
+  if (!aim) return targetId ? lookup(targetId) : undefined;
+  switch (aim.mode) {
+    case 'SELF': return undefined;
+    case 'TARGET_ENTITY': return lookup(aim.targetId);
+    case 'GROUND_POSITION':
+    case 'AREA': return aim.position;
+    case 'DIRECTION': return { x: position.x + aim.direction.x, y: position.y + aim.direction.y };
   }
 }
