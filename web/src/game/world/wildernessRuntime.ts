@@ -205,13 +205,20 @@ function withVillagePopulation(world: WildernessRuntimeWorld): WildernessRuntime
     ...(world.structures??[]).map(s=>s.approach),
     ...world.region.forms.flatMap(f=>f.pass?[f.pass]:[])
   ];
-  const plan=planVillagePopulation(layout,world.region.settlements,terrain.roads,reserved);
+  const forms=world.region.forms;
+  const clearRoads=terrain.roads.filter(r=>routeClear(r.points,layout.obstacles));
+  const expectedEnv=JSON.stringify(env),expectedEvents=JSON.stringify(events);
+  const acceptObstacles=(obstacles:readonly WorldLayout['obstacles'][number][]):boolean=>{
+    const trial:WorldLayout={...layout,obstacles:[...obstacles]};
+    return JSON.stringify(planEnvironmentObjects(seed,trial,features))===expectedEnv
+      &&JSON.stringify(planWorldEvents(seed,trial,features))===expectedEvents
+      &&clearRoads.every(r=>routeClear(r.points,trial.obstacles))
+      &&forms.every(f=>!f.pass||canOccupy(f.pass,42,trial.obstacles));
+  };
+  const plan=planVillagePopulation(layout,world.region.settlements,terrain.roads,reserved,acceptObstacles);
   const next:WorldLayout={...layout,obstacles:[...plan.obstacles]};
-  if(JSON.stringify(planEnvironmentObjects(seed,next,features))!==JSON.stringify(env)
-    ||JSON.stringify(planWorldEvents(seed,next,features))!==JSON.stringify(events)
-    ||terrain.roads.some(r=>routeClear(r.points,layout.obstacles)&&!routeClear(r.points,next.obstacles))
-    ||world.region.forms.some(f=>f.pass&&!canOccupy(f.pass,42,next.obstacles)))
-    return {...world,villages:[]};
+  // Keep a final defensive check for the complete cumulative plan.
+  if(!acceptObstacles(next.obstacles))return {...world,villages:[]};
   return {...world,layout:next,terrain:{...terrain,layout:next},villages:plan.villages,
     structures:[...(world.structures??[]),...plan.villages.flatMap(v=>v.structures)]};
 }
