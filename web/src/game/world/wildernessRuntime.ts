@@ -274,7 +274,8 @@ export function buildWilderness(seed: number): WildernessRuntimeWorld {
   // If the same anchors cannot be populated, retry the regional placement
   // order on the unchanged protected base. Complete initial worlds are
   // untouched; ties retain the earlier proposal. Bounded, deterministic.
-  for(let attempt=0;attempt<=6&&(world.villages?.length??0)<2;attempt++){
+  // Explore all nine supported topology bands before giving up.
+  for(let attempt=0;attempt<=8&&(world.villages?.length??0)<2;attempt++){
     const proposal=withRegionalTopology(base,false,attempt);
     if(!proposal.region)continue;
     // Try the intended regional corridors first. Only complete validated
