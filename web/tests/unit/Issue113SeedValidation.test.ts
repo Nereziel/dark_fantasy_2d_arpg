@@ -26,7 +26,7 @@ function checkedEnv(name: string, fallback: number, min: number, max: number): n
 }
 const START = checkedEnv('SEED_SWEEP_START', 0, 0, 0xffffffff);
 const COUNT = checkedEnv('SEED_SWEEP_COUNT', 24, 1, 5000);
-const REQUIRE_VILLAGES = checkedEnv('SEED_SWEEP_REQUIRE_VILLAGES', 0, 0, 1) === 1;
+const REQUIRE_VILLAGES = checkedEnv('SEED_SWEEP_REQUIRE_VILLAGES', 1, 0, 1) === 1;
 const seeds = Array.from({ length: COUNT }, (_, i) => (START + Math.imul(i, 7919)) >>> 0);
 const sample = [0, 1, 2, 3, 42, 99, 0x7fffffff, 0xffffffff];
 const suiteSeeds = [...new Set([...sample, ...seeds])];
@@ -115,8 +115,8 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
     console.info('[Act I village coverage] '+JSON.stringify({
       total:suiteSeeds.length,complete:suiteSeeds.length-missing.length,missing
     }));
-    // The full guarantee is a separate acceptance gate until coverage is
-    // complete. Default CI still validates every actually published village.
+    // Full population is now required by default. Only explicit diagnostic
+    // sweeps may opt out to inspect additional incomplete seeds.
     if(REQUIRE_VILLAGES&&missing.length)
       throw new Error('Incomplete Act I villages: '+JSON.stringify(missing)
         +'\nReplay: SEED_SWEEP_REQUIRE_VILLAGES=1 SEED_SWEEP_START='+missing[0]!.seed

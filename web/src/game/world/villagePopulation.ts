@@ -60,6 +60,18 @@ export function planVillagePopulation(layout:WorldLayout,settlements:readonly Re
       const house:StructureSite={...sites[0]!,anchor:{x:p.x-dx,y:p.y-dy}};
       arrangements.push([service,house]);
     }
+    // Diagonal pairs can all be blocked by a road bend or adjacent terrain.
+    // Only after the existing five arrangements fail, explore cardinal
+    // pairs at two bounded distances; preserve the original accepted sites.
+    if(north){
+      for(const distance of [108,160]){
+        for(const [dx,dy] of [[distance,0],[-distance,0],[0,distance],[0,-distance]] as const){
+          const service:StructureSite={...sites[1]!,anchor:{x:p.x+dx,y:p.y+dy}};
+          const house:StructureSite={...sites[0]!,anchor:{x:p.x-dx,y:p.y-dy}};
+          arrangements.push([service,house]);
+        }
+      }
+    }
     const roles:VillageResident['role'][]=north?['healer','civilian']:['blacksmith','quest'];
     let accepted=false;
     for(const arrangement of arrangements){
