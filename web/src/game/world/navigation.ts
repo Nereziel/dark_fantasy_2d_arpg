@@ -167,6 +167,32 @@ export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS, obstac
   return [];
 }
 
+/** Continuous swept actor square. Sampling alone can miss a short crossing
+ * at an expanded obstacle corner; mere boundary contact remains walkable. */
+function pickupSegmentClear(from: Point, to: Point, obstacles: readonly Obstacle[]): boolean {
+  const radius=ACTOR_RADIUS;
+  if(!canOccupy(from,radius,obstacles)||!canOccupy(to,radius,obstacles))return false;
+  const start=[from.x,from.y],delta=[to.x-from.x,to.y-from.y];
+  for(const wall of obstacles){
+    const lower=[wall.x-radius,wall.y-radius];
+    const upper=[wall.x+wall.width+radius,wall.y+wall.height+radius];
+    let enter=0,exit=1;
+    for(let axis=0;axis<2;axis++){
+      const p=start[axis]!,d=delta[axis]!,lo=lower[axis]!,hi=upper[axis]!;
+      if(d===0){
+        if(p<=lo||p>=hi){enter=1;exit=0;break;}
+      }else{
+        const a=(lo-p)/d,b=(hi-p)/d;
+        enter=Math.max(enter,Math.min(a,b));
+        exit=Math.min(exit,Math.max(a,b));
+        if(enter>=exit)break;
+      }
+    }
+    if(enter<exit)return false;
+  }
+  return true;
+}
+
 /** Route to a usable reach position even when the exact item coordinate is blocked. */
 export function findPickupPath(
   from: Point, loot: Point, range: number, obstacles: readonly Obstacle[],
@@ -189,7 +215,7 @@ export function findPickupPath(
     if (!validGoal(destination)) continue;
     const path = findPath(from, destination, ACTOR_RADIUS, obstacles);
     if (path.length && path.every((point, index) =>
-      lineClear(index === 0 ? from : path[index - 1]!, point, ACTOR_RADIUS, obstacles))) return path;
+      pickupSegmentClear(index === 0 ? from : path[index - 1]!, point, obstacles))) return path;
   }
 
   // A loot drop can be within reach of a narrow strip at a wall even when
@@ -210,9 +236,9 @@ export function findPickupPath(
   const finish = (point: Point): Point | undefined => {
     if (validGoal(point)) return point;
     return usable.find(goal => Math.hypot(point.x - goal.x, point.y - goal.y) <= CELL * 2
-      && lineClear(point, goal, ACTOR_RADIUS, obstacles));
+      && pickupSegmentClear(point, goal, obstacles));
   };
-  const direct = usable.find(goal => lineClear(from, goal, ACTOR_RADIUS, obstacles));
+  const direct = usable.find(goal => pickupSegmentClear(from, goal, obstacles));
   if (direct) return [{ ...direct }];
   const parent = new Int32Array(COLS * ROWS).fill(-2);
   const queue: number[] = [];
@@ -220,7 +246,7 @@ export function findPickupPath(
   const enqueue = (x: number, y: number, previous: number, origin: Point): void => {
     if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return;
     const key = KEY(x, y);
-    if (parent[key] !== -2 || !lineClear(origin, center(x, y), ACTOR_RADIUS, obstacles)) return;
+    if (parent[key] !== -2 || !pickupSegmentClear(origin, center(x, y), obstacles)) return;
     parent[key] = previous;
     queue.push(key);
   };
