@@ -551,9 +551,11 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   const target = loot.locator('[data-loot-id]').first();
   const lootId = await target.getAttribute('data-loot-id');
   expect(lootId).not.toBeNull();
-  await target.click();
-  await expect(loot.locator('[data-loot-id="' + lootId + '"]'))
-    .toHaveCount(0, { timeout: 12_000 });
+  // The nearby list is distance-sorted and can gain a closer drop during
+  // combat. Resolve the click by the SAME ID used in the assertion.
+  const chosenDrop = loot.locator('[data-loot-id="' + lootId + '"]');
+  await chosenDrop.click();
+  await expect(chosenDrop).toHaveCount(0, { timeout: 12_000 });
 
   await page.locator('[data-quick-action="inventory"]').click();
   const inventory = page.getByRole('dialog', { name: 'Inventory & Equipment' });
