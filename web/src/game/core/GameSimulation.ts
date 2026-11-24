@@ -4089,7 +4089,10 @@ export class GameSimulation {
         if (entry.role === 'waypoint') this.activateTownWaypoint();
         this.events.push({ type: 'townInteraction', entryId: entry.id, role: entry.role });
       } else {
-        this.follow(this.player, entry.position, speed, dt, Math.max(1, entry.interactionRange - 10), true);
+        // A resident behind a wall may be within nominal range but not reachable.
+        const reach = townEntry(entry.id) || hasLineOfSight(this.player,entry.position,this.world.obstacles)
+          ? Math.max(1, entry.interactionRange - 10) : 1;
+        this.follow(this.player, entry.position, speed, dt, reach, true);
       }
     } else if (this.pendingNpc) {
       if (nearNpc(this.player, this.pendingNpc)) {
