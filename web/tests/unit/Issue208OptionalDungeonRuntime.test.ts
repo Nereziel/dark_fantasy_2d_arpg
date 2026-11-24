@@ -4,6 +4,7 @@ import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { buildWilderness } from '../../src/game/world/wildernessRuntime';
 import { planActIDungeonEntrances,buildActIDungeonInterior } from '../../src/game/world/actIDungeonEntrances';
 import type { EnemyUnit } from '../../src/game/enemies/enemies';
+import {createWorldRecord,readWorldRecord} from '../../src/persistence/WorldProgressRepository';
 
 describe('Issue #208 C2.2: optional dungeon runtime',()=>{
   it.each(['mine','cave'] as const)('enters and exits %s at the real world anchor without advancing story',id=>{
@@ -43,5 +44,29 @@ describe('Issue #208 C2.2: optional dungeon runtime',()=>{
     expect(sim.snapshot().questLedger).toEqual(story);
     expect(sim.character()).not.toHaveProperty('dungeonId');
     expect(sim.worldProgress()?.seed).toBe(seed);
+    const facts=sim.worldProgress()!;
+    expect(facts.optionalDungeonRewardIds).toHaveLength(7);
+    expect(new Set(facts.optionalDungeonRewardIds).size).toBe(7);
+    expect(sim.character()).not.toHaveProperty('optionalDungeonRewardIds');
+    const record=readWorldRecord(createWorldRecord(facts))!;
+    expect(record).toEqual(facts);
+    expect(readWorldRecord(createWorldRecord({...facts,optionalDungeonRewardIds:['forged']} as unknown as typeof facts))).toBeNull();
+    const loaded=new GameSimulation(seed);
+    expect(loaded.restoreCharacter(sim.character(),seed)).toBe(true);
+    expect(loaded.restoreWorldProgress(record)).toBe(true);
+    const beforeReplay=loaded.character();
+    const replayStart=loaded.snapshot();
+    expect(loaded.restore({...replayStart,player:{...replayStart.player,...entrance.position}})).toBe(true);
+    loaded.command({type:'usePortal',dungeonId:id});
+    const replay=loaded as unknown as {units:EnemyUnit[];defeatEnemy:(u:EnemyUnit)=>void};
+    for(const u of [...replay.units])replay.defeatEnemy(u);
+    for(let i=0;i<40&&loaded.snapshot().dungeonStage===0;i++)loaded.advance(100);
+    for(const u of [...replay.units])replay.defeatEnemy(u);
+    loaded.advance(100);
+    expect(loaded.snapshot().dungeonCleared).toBe(true);
+    expect(loaded.character()).toEqual(beforeReplay);
+    expect(loaded.snapshot().groundLoot).toEqual([]);
+    expect(loaded.worldProgress()?.optionalDungeonRewardIds).toEqual(facts.optionalDungeonRewardIds);
+    expect(new GameSimulation(99).restoreWorldProgress(record)).toBe(false);
   },30000);
 });
