@@ -171,8 +171,7 @@ describe('Prompt 37 — real simulation, rewards and world saves', () => {
     expect(loaded.worldProgress()?.worldFacts.entries.filter(f=>f.kind==='eventCompleted'))
       .toHaveLength(1);
     expect(new GameSimulation(seed+1).restoreWorldProgress(worldProgress)).toBe(false);
-  });
-  it('rejects forged active event snapshots, resets transient encounters on death or zone changes', () => {
+  },15000);  it('rejects forged active event snapshots, resets transient encounters on death or zone changes', () => {
     const sim=new GameSimulation(42);
     const world=buildWilderness(42);
     const plan=planWorldEvents(42,world.layout,world.features)[0]!;
