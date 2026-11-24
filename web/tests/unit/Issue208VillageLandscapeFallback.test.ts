@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildWilderness } from '../../src/game/world/wildernessRuntime';
 import { planVillagePopulation } from '../../src/game/world/villagePopulation';
+import { planActOneTopology } from '../../src/game/world/regionalTopology';
 import { planRegionalLandscape } from '../../src/game/world/regionalLandscape';
 
 vi.mock('../../src/game/world/villagePopulation', async importOriginal=>{
@@ -21,19 +22,43 @@ describe('Issue #208: population takes precedence over optional landscape',()=>{
     // This isolates the orchestration from seed-specific landscape placement.
     const originalLandscape=landscape.getMockImplementation()!;
     const originalPopulate=populate.getMockImplementation()!;
-    landscape.mockImplementation((...args)=>{
-      const result=originalLandscape(...args);
-      if(!result.ok)return result;
-      return {...result,forms:[...result.forms,{id:'test-optional',kind:'forest-belt',obstacles:[]}]};
+    let proposed=false;
+    landscape.mockImplementation((layout,tiles,sites,reserved,roads)=>{
+      const topology=planActOneTopology(layout,tiles,sites,reserved);
+      if(!topology.ok)return originalLandscape(layout,tiles,sites,reserved,roads);
+      proposed=true;
+      return {ok:true,layout,tiles:[...tiles],topology,usedFallback:false,
+        forms:[{id:'test-optional',kind:'forest-belt',obstacles:[]}]};
     });
-    populate.mockImplementationOnce(layout=>({
-      villages:[],obstacles:layout.obstacles,skipped:['north-village','east-village']
-    }));
     try{
-      const world=buildWilderness(123);
-      expect(landscape).toHaveBeenCalledTimes(1);
-      expect(populate).toHaveBeenCalledTimes(2);
-      expect(world.terrain.layout.obstacles).toEqual(world.layout.obstacles);
+      let verified=false;
+      for(const seed of [0,1,123,0xffffffff]){
+        proposed=false;
+        landscape.mockClear();
+        populate.mockClear();
+        let calls=0;
+        populate.mockImplementation((...args)=>{
+          if(++calls===1)return {villages:[],obstacles:args[0].obstacles,
+            skipped:['north-village','east-village']};
+          return originalPopulate(...args);
+        });
+        const world=buildWilderness(seed);
+        if(!proposed)continue;
+        expect(landscape).toHaveBeenCalledTimes(1);
+        expect(populate).toHaveBeenCalledTimes(2);
+        expect(world.terrain.layout.obstacles).toEqual(world.layout.obstacles);
+        const retried=populate.mock.results[1]?.value;
+        if(retried?.villages.length){
+          expect(world.villages).toEqual(retried.villages);
+          expect(world.region?.forms).toEqual([]);
+          expect(world.region?.usedLandscapeFallback).toBe(true);
+        }else{
+          expect(world.region?.forms.map(f=>f.id)).toContain('test-optional');
+        }
+        verified=true;
+        break;
+      }
+      expect(verified).toBe(true);
     }finally{
       landscape.mockImplementation(originalLandscape);
       populate.mockImplementation(originalPopulate);
