@@ -58,7 +58,7 @@ describe('Act I authoritative quest progression integration', () => {
     game.command({ type: 'questTurnIn', questId: 'vesnas_report' });
     expect(game.snapshot().actIIUnlocked).toBe(false);
     game.command({ type: 'interactNpc', npcId: 'warden_vesna' });
-    expect(game.snapshot().questLedger?.quests.at(-1)?.status).toBe('ready');
+    expect(game.snapshot().questLedger?.quests.find(q => q.questId === 'vesnas_report')?.status).toBe('ready');
     const beforeClaim = game.snapshot().gold;
     game.command({ type: 'questTurnIn', questId: 'vesnas_report' });
     expect(game.snapshot().actIIUnlocked).toBe(true);
