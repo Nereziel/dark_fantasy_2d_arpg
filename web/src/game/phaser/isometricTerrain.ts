@@ -1,10 +1,11 @@
 // GPL-3.0-only — original procedural pixel textures, no simulation authority.
 import type { Point } from '../core/types';
+import type { OptionalDungeonId } from '../world/optionalDungeonVisit';
 import type { TerrainId, WildernessTerrainResult } from '../world/wildernessTerrain';
 import { DUNGEON_TILE_SIZE, type ProceduralDungeonResult } from '../world/proceduralDungeon';
 import { isometricFootprint, type IsometricRect } from './isometricProjection';
 
-export type GroundMaterial = TerrainId | 'crypt_floor' | 'crypt_wall';
+export type GroundMaterial = TerrainId | 'crypt_floor' | 'crypt_wall' | 'mine_floor' | 'mine_wall' | 'cave_floor' | 'cave_wall';
 export type GroundTile = IsometricRect & { terrainId: GroundMaterial; variant: number };
 export interface GroundRoad {
   readonly id: string;
@@ -37,7 +38,11 @@ const STYLES: Record<GroundMaterial, MaterialStyle> = {
   broken_stone: {base:[66,67,65], light:[86,88,81], dark:[39,43,43], detail:[89,94,77], pattern:'stone'},
   dirt_road: {base:[83,67,48], light:[106,88,63], dark:[60,50,39], detail:[130,105,74], pattern:'soil'},
   crypt_floor: {base:[64,64,73], light:[82,81,91], dark:[36,38,47], detail:[97,91,92], pattern:'stone'},
-  crypt_wall: {base:[34,36,43], light:[49,51,57], dark:[23,25,31], detail:[62,60,63], pattern:'stone'}
+  crypt_wall: {base:[34,36,43], light:[49,51,57], dark:[23,25,31], detail:[62,60,63], pattern:'stone'},
+  mine_floor: {base:[81,65,49], light:[111,89,62], dark:[48,39,31], detail:[179,151,106], pattern:'soil'},
+  mine_wall: {base:[45,36,28], light:[65,52,41], dark:[29,24,20], detail:[102,81,59], pattern:'soil'},
+  cave_floor: {base:[53,72,68], light:[78,100,83], dark:[32,46,44], detail:[140,168,138], pattern:'soil'},
+  cave_wall: {base:[30,43,42], light:[43,59,57], dark:[19,29,29], detail:[70,91,79], pattern:'soil'}
 };
 const MATERIALS = Object.keys(STYLES) as GroundMaterial[];
 const SIZE = GROUND_TEXTURE_SIZE;
@@ -130,7 +135,7 @@ export function planTerrainChunks(layout: GroundLayout, origin: Readonly<Point>,
 export type GroundAtlas = ReadonlyMap<string, HTMLCanvasElement>;
 const textureKey = (material: GroundMaterial, variant: number) => material+'/'+variant;
 
-/** Generate once per scene/game, reuse all 32 textures across both zones. */
+/** Generate once per scene/game, reuse all material textures across both zones. */
 export function createGroundAtlas(): GroundAtlas {
   const atlas = new Map<string,HTMLCanvasElement>();
   for (const material of MATERIALS) for (let variant=0; variant<GROUND_VARIANTS; variant++) {
@@ -184,10 +189,11 @@ export function wildernessGroundLayout(terrain: Pick<WildernessTerrainResult, 'w
   return { width:terrain.width,height:terrain.height,tiles:terrain.tiles,roads:terrain.roads };
 }
 
-export function cryptGroundLayout(dungeon: Pick<ProceduralDungeonResult, 'seed'|'width'|'height'|'tiles'>): GroundLayout {
+export function cryptGroundLayout(dungeon: Pick<ProceduralDungeonResult, 'seed'|'width'|'height'|'tiles'>, id?: OptionalDungeonId): GroundLayout {
   return {width:dungeon.width,height:dungeon.height,roads:[],tiles:dungeon.tiles.map(tile=>({
     x:tile.x,y:tile.y,width:DUNGEON_TILE_SIZE,height:DUNGEON_TILE_SIZE,
-    terrainId:tile.kind==='floor'?'crypt_floor':'crypt_wall',
+    terrainId:tile.kind==='floor'?(id==='mine'?'mine_floor':id==='cave'?'cave_floor':'crypt_floor')
+      :(id==='mine'?'mine_wall':id==='cave'?'cave_wall':'crypt_wall'),
     variant:hash(dungeon.seed,tile.x,tile.y)%GROUND_VARIANTS
   }))};
 }
