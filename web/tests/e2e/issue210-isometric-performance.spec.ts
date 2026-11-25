@@ -1,6 +1,6 @@
 // GPL-3.0-only — D5.4: observational browser performance baseline.
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { isoGroundPoint } from './iso-input';
+import { campMovementTarget } from './iso-input';
 
 const renderer = 'canvas[data-renderer="isometric-preview"]';
 const screen = '.game-screen[data-world-seed]';
@@ -78,23 +78,6 @@ function checkSample(value: Sample, groundTotal: number, staticTotal: number) {
   // Hardware-dependent FPS/heap figures are diagnostic, not CI thresholds.
 }
 
-async function movementTarget(page: Page, canvas: Locator) {
-  const hero = await point(page);
-  // Known local camp ground, not an arbitrary offset from the canvas midpoint.
-  // Hover is only an exposure/context probe; actual movement uses mouse or tap.
-  for (const [dx, dy] of [[80, 0], [90, -20], [65, 5], [0, -55], [-35, 40], [35, 50]]) {
-    try {
-      const target = await isoGroundPoint(canvas, { x: hero.x + dx!, y: hero.y + dy! });
-      await page.mouse.move(target.x, target.y);
-      if (await canvas.evaluate(node => (node as HTMLCanvasElement).style.cursor) === 'crosshair')
-        return target;
-    } catch (error) {
-      if (!(error instanceof Error) || !error.message.startsWith('Projected ground is not exposed')) throw error;
-    }
-  }
-  throw new Error('No exposed camp ground movement target');
-}
-
 for (const profile of profiles) {
   test.describe('D5.4 baseline ' + profile.name, () => {
     test.use({ viewport: profile.viewport, deviceScaleFactor: profile.deviceScaleFactor, hasTouch: profile.hasTouch });
@@ -113,7 +96,7 @@ for (const profile of profiles) {
       await sample(canvas, 500); // warm-up; excluded from measurements
       const idle = await sample(canvas, 1500);
       checkSample(idle, groundTotal, staticTotal);
-      const target = await movementTarget(page, canvas);
+      const target = await campMovementTarget(page, canvas);
       const before = await point(page);
       const movingPromise = sample(canvas, 2000);
       if (profile.hasTouch) await page.touchscreen.tap(target.x, target.y);

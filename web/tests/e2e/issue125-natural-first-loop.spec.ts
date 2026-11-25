@@ -1,5 +1,6 @@
 import { errors, expect, test, type Locator, type Page } from '@playwright/test';
 import { projectIsometric, unprojectIsometric } from '../../src/game/phaser/isometricProjection';
+import { campMovementTarget } from './iso-input';
 
 /** Use read-only renderer diagnostics and actual exposed canvas pixels.
  * All quest targets remain ordinary Cartesian map coordinates. The only
@@ -61,10 +62,6 @@ async function keepFighting(
   const roster = page.locator('.enemy-roster');
   let previousCount = -1;
   let lastTargetRefreshAt = 0;
-  let lastProgressAt = Date.now();
-  let progressKey = '';
-  let nextCandidate = 0;
-  const game = page.locator('.game-screen');
   while (Date.now() < deadline) {
     const journal = await page.locator('.quest-journal').innerText();
     // The starter hunt is NPC-gated and stays at 3/3. Act I boar kills,
@@ -77,6 +74,10 @@ async function keepFighting(
       throw new Error('Natural quest playthrough: the hero died before ' + until + '/3 kills');
     }
 
+    // A dialogue pauses the simulation; fail at the actual UI blocker rather
+    // than misreporting a navigation/combat timeout forty-five seconds later.
+    const openDialog = page.getByRole('dialog');
+    if (await openDialog.count()) throw new Error('Unexpected modal during natural combat: ' + await openDialog.first().innerText());
     const current = await page.locator('.vital-top').first().innerText();
     const hp = current.match(/(\d+)\s*\/\s*(\d+)/);
     if (hp && Number(hp[1]) / Number(hp[2]) < 0.67) {
@@ -102,15 +103,7 @@ async function keepFighting(
     const candidates = boarVisible ? boars : hasNormal ? otherEncounterTargets : liveTargets;
     const targetingOptional = hasNormal && await roster
       .locator('button.targeted.bossTarget:not([disabled])').count() > 0;
-    const position = [await game.getAttribute('data-player-x'), await game.getAttribute('data-player-y')]
-      .map(value => Math.round(Number(value) / 8));
-    const health = await roster.locator('.roster-health').allTextContents();
-    const observed = JSON.stringify([achieved, position, health]);
-    if (observed !== progressKey) { progressKey = observed; lastProgressAt = Date.now(); }
-    // If a selected foe stays inaccessible, try another visible ordinary foe
-    // instead of leaving the same autoattack pinned for the entire stage.
-    const stalledTarget = !huntBoars && Date.now() - Math.max(lastTargetRefreshAt, lastProgressAt) > 8000;
-    const refreshTarget = stalledTarget || targetingOptional || (huntBoars
+    const refreshTarget = targetingOptional || (huntBoars
       && (Date.now() - lastTargetRefreshAt > 10_000
       || (boarVisible && await activeTarget.filter({ hasText: 'Corrupted Boar' }).count() === 0)));
     if (await activeTarget.count() === 0 || achieved !== previousCount || refreshTarget) {
@@ -118,10 +111,7 @@ async function keepFighting(
         try {
           // A real click may race with an enemy death, as in PR #187. Bound
           // only the transient control wait, never the quest/death conditions.
-          const count = await candidates.count();
-          if (stalledTarget) nextCandidate = (nextCandidate + 1) % count;
-          else if (achieved !== previousCount) nextCandidate = 0;
-          await candidates.nth(nextCandidate % count).click({ timeout: 1_500 });
+          await candidates.first().click({ timeout: 1_500 });
           lastTargetRefreshAt = Date.now();
         } catch (error) {
           if (!(error instanceof errors.TimeoutError)) throw error;
@@ -132,6 +122,7 @@ async function keepFighting(
     await page.waitForTimeout(400);
   }
   const rosterText = await roster.innerText();
+  const game = page.locator('.game-screen');
   throw new Error('Natural quest playthrough timed out at ' +
     await activeQuestCount(page) + '/3 kills; target ' + until
     + '; active quest: ' + (await page.locator('.quest-journal').innerText())
@@ -734,13 +725,15 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // Real left-click walk (not a simulation command) followed by real roster combat.
   const canvas = page.locator('.phaser-container canvas');
   const startX = Number(await game.getAttribute('data-player-x'));
-  const startY = Number(await game.getAttribute('data-player-y'));
-  const firstClick = await exposedIsometricClick(canvas, { x: startX + 100, y: startY - 25 });
+  const firstClick = await campMovementTarget(page, canvas);
+  await expect(canvas).toHaveCSS('cursor', 'crosshair');
   await page.mouse.click(firstClick.x, firstClick.y);
   await expect.poll(async () => Math.abs(
     Number(await game.getAttribute('data-player-x')) - startX
   ), { timeout: 8_000 }).toBeGreaterThan(14);
 
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.enemy-roster button:not([disabled])').first()).toBeEnabled();
   await timedNaturalStage('starter first kill', () => keepFighting(page, 1, 45_000));
   await expect(guide).toHaveAttribute('data-guide-step', 'loot');
   const loot = page.getByTestId('nearby-loot');

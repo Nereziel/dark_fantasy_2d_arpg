@@ -43,3 +43,22 @@ export async function heldIsoMoveEast(page: Page, canvas: Locator) {
     await page.mouse.up();
   }
 }
+
+/** Find visible camp ground for a real primary click, checking the live cursor
+ * first so a projected NPC body (including Lio/Toma) cannot steal movement.
+ * Candidates are local open-ground offsets, not a hidden world-state query.
+ */
+export async function campMovementTarget(page: Page, canvas: Locator) {
+  const hero = await heroPoint(page);
+  for (const [dx, dy] of [[80, 0], [90, -20], [65, 5], [0, -55], [-35, 40], [35, 50]]) {
+    try {
+      const target = await isoGroundPoint(canvas, { x: hero.x + dx!, y: hero.y + dy! });
+      await page.mouse.move(target.x, target.y);
+      if (await canvas.evaluate(node => (node as HTMLCanvasElement).style.cursor) === 'crosshair')
+        return target;
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.startsWith('Projected ground is not exposed')) throw error;
+    }
+  }
+  throw new Error('No exposed camp ground movement target');
+}
