@@ -73,3 +73,48 @@ test('Czech mobile creation has a labelled name field and cancel returns to the 
   await expect(page.getByTestId('new-character')).toBeFocused();
   await expect(page.getByTestId('continue-character')).toBeDisabled();
 });
+
+test('double-click opens the clicked saved hero, while a single click only selects', async ({page}) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await create(page,'Aldric');
+  const seed = await page.locator('.game-screen').getAttribute('data-world-seed');
+  await page.getByRole('button',{name:'Main menu'}).click();
+  await create(page,'Morgana');
+  await page.getByRole('button',{name:'Main menu'}).click();
+  const row = page.locator('.saved-character-row').filter({hasText:'Aldric'}).locator('.saved-select');
+  await row.click();
+  await expect(row).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('.main-menu')).toBeVisible();
+  await row.dblclick();
+  await expect(page.locator('.game-screen')).toHaveAttribute('data-world-seed',seed!);
+  await expect(page.locator('.hud-details')).toContainText('Aldric');
+});
+
+test.describe('touch character shortcut', () => {
+  test.use({hasTouch:true, viewport:{width:390,height:780}});
+  test('two consecutive taps on one saved row continue exactly that hero', async ({page}) => {
+    await page.goto('./');
+    await page.locator('#menu-language').selectOption('en');
+    await create(page,'Aldric');
+    const seed = await page.locator('.game-screen').getAttribute('data-world-seed');
+    await page.getByRole('button',{name:'Main menu'}).click();
+    await create(page,'Morgana');
+    await page.getByRole('button',{name:'Main menu'}).click();
+    const first = page.locator('.saved-character-row').filter({hasText:'Aldric'}).locator('.saved-select');
+    const other = page.locator('.saved-character-row').filter({hasText:'Morgana'}).locator('.saved-select');
+    await expect(first).toBeEnabled();
+    await first.tap();
+    await other.tap();
+    await expect(page.locator('.main-menu')).toBeVisible();
+    await expect(other).toHaveAttribute('aria-pressed','true');
+    // Touchscreen input, not synthetic click or dblclick dispatch.
+    await first.scrollIntoViewIfNeeded();
+    const box = await first.boundingBox();
+    if (!box) throw new Error('Saved hero is not visible');
+    const x = box.x + box.width/2, y = box.y + box.height/2;
+    await page.touchscreen.tap(x,y);
+    await page.touchscreen.tap(x,y);
+    await expect(page.locator('.game-screen')).toHaveAttribute('data-world-seed',seed!);
+  });
+});
