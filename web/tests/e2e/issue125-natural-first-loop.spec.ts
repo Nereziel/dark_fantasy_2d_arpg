@@ -299,8 +299,44 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
   let knownEvidence: { x: number; y: number } | null = null;
   let nextMapCheck = 0;
   const lastSteps: string[] = [];
+  const journal = page.locator('.quest-journal');
+  let inspectAttempts = 0;
+  // A survey route can cross the interaction radius without ending there.
+  // Stop by the normal Shift hold-position binding before using the real
+  // button. The simulation still checks proximity and quest prerequisites.
+  const inspectIfInReach = async (): Promise<boolean> => {
+    if (Date.now() >= deadline || !await inspect.isVisible()) return false;
+    inspectAttempts++;
+    await page.keyboard.down('Shift');
+    try {
+      const remaining = Math.min(1_500, deadline - Date.now());
+      if (remaining <= 0) return false;
+      await expect(game).toHaveAttribute('data-hold-position', 'true', { timeout: remaining });
+      if (!await inspect.isVisible()) {
+        // The actor may already have left range before the key arrived.
+        nextMapCheck = 0;
+        return false;
+      }
+      await expect(journal).toContainText('The Seal of Rot');
+      try {
+        await inspect.click({ timeout: Math.max(1, Math.min(1_500, deadline - Date.now())) });
+      } catch (error) {
+        if (!(error instanceof errors.TimeoutError)) throw error;
+        // A transient detached control does not count as completion.
+        nextMapCheck = 0;
+        return false;
+      }
+      // Only authoritative journal transition counts as success.
+      await expect(journal).toContainText('Descent into the Crypt', {
+        timeout: Math.max(1, Math.min(3_000, deadline - Date.now()))
+      });
+      return true;
+    } finally {
+      await page.keyboard.up('Shift');
+    }
+  };
   while (Date.now() < deadline) {
-    if (await inspect.count() > 0) return;
+    if (await inspectIfInReach()) return;
     if (await page.getByTestId('death-overlay').count()) {
       throw new Error('Natural Act I evidence search: hero died; seed=' + await game.getAttribute('data-world-seed')
         + '; last steps=' + lastSteps.join(' | '));
@@ -400,7 +436,7 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
     let nextX = currentX, nextY = currentY, still = 0;
     while (Date.now() < observationDeadline) {
       await page.waitForTimeout(300);
-      if (await inspect.count() > 0) return;
+      if (await inspectIfInReach()) return;
       if (await page.getByTestId('death-overlay').count()) {
         throw new Error('Natural Act I evidence search: hero died during movement; seed='
           + await game.getAttribute('data-world-seed'));
@@ -438,6 +474,7 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
     + await game.getAttribute('data-player-x') + ','
     + await game.getAttribute('data-player-y') + '), waypoint=' + index
     + ', seed=' + await game.getAttribute('data-world-seed')
+    + ', inspect attempts=' + inspectAttempts
     + ', discovered evidence=' + JSON.stringify(knownEvidence)
     + ', last steps=' + lastSteps.join(' | ')
     + ', journal=' + await page.locator('.quest-journal').innerText());
@@ -866,11 +903,10 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // looked up; the quest panel exposes its action only within reach.
   await expect(page.locator('.quest-journal'))
     .toContainText('Recover evidence leading to the crypt');
+  // Complete the actual inspection inside the search deadline, while
+  // standing in range, rather than returning on transient button visibility.
   await walkToStoryEvidence(page, 135_000);
   const evidence = page.getByTestId('story-inspect-evidence');
-  await expect(evidence).toBeVisible();
-  await expect(page.locator('.quest-journal')).toContainText('The Seal of Rot');
-  await evidence.click();
   await expect(page.locator('.quest-journal')).toContainText('Descent into the Crypt');
   await expect(page.locator('.quest-journal')).toContainText('Enter the crypt');
   await expect(page.locator('.quest-journal')).not.toContainText('The Seal of Rot');
