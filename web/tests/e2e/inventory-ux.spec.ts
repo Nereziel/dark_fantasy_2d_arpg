@@ -1,8 +1,10 @@
+import { openCharacterCreation } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('inventory is compact, compares on hover, and drag-drops gear both ways', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
@@ -36,6 +38,7 @@ test('HUD columns and minimap fog stay clear of the seven-skill action bar', asy
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: /Paladin/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const mini = page.locator('.minimap-overlay');
@@ -83,6 +86,7 @@ test('inventory filter dims hidden items without disguising them as empty or mov
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
@@ -127,6 +131,7 @@ test.describe('touch inventory item preview', () => {
     await page.setViewportSize({ width: 390, height: 740 });
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
+    await openCharacterCreation(page);
     await page.getByRole('button', { name: 'Enter the world' }).click();
     await page.getByRole('button', { name: 'Browse wares' }).click();
     const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
@@ -192,6 +197,7 @@ test.describe('touch inventory item preview', () => {
 test('dragging a bag item highlights only the compatible equipment sockets', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const vendor = page.getByRole('dialog', { name: 'Merchant Bram' });

@@ -1,8 +1,10 @@
+import { openCharacterCreation, loadCharacterControl } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('Q uses an authoritative combat potion, saves charges and refills at the apothecary', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
 
   const resistance = page.locator('[data-potion-id="resistance"]');
@@ -17,7 +19,7 @@ test('Q uses an authoritative combat potion, saves charges and refills at the ap
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await loadCharacterControl(page).click();
   await expect(page.locator('[data-potion-id="resistance"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('use-potion')).toContainText('0');
 
@@ -58,6 +60,6 @@ test('Q uses an authoritative combat potion, saves charges and refills at the ap
   });
   expect(persistedCharges).toEqual([1, 1]);
   await page.reload();
-  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await loadCharacterControl(page).click();
   await expect(page.locator('[data-potion-id="resistance"]')).toContainText('1');
 });

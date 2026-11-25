@@ -4,7 +4,7 @@
   import { languageOptions, setLanguage, type Language } from './i18n';
   import { GameBridge } from './game/bridge/GameBridge';
   import { baseOf, tierOf, type GemId } from './game/gems/gemCatalog';
-  import type { GameSnapshot, Point } from './game/core/types';
+  import type { CharacterProgress, GameSnapshot, Point } from './game/core/types';
   import {isOptionalDungeonBoss} from './game/enemies/optionalDungeonEncounters';
   import { resolveKeyboardAction, applyBindingOverrides, type InputBinding, type InputAction } from './game/input/bindings';
   import { GAME_BINDINGS } from './game/input/gameBindings';
@@ -14,6 +14,7 @@
     type PointerUiOperation } from './game/input/pointerUiActions';
   import { dispatchCombatAction } from './game/input/combatActionDispatcher';
   import { prioritizeCombatRoster } from './game/ui/combatRoster';
+  import { CharacterDoubleTap } from './game/ui/characterDoubleTap';
   import { loadGame, saveGame, listCharacters, deleteCharacter, MAX_SAVED_CHARACTERS, type SavedCharacterInfo } from './persistence/SaveRepository';
   import { loadWorldProgress, saveWorldProgress } from './persistence/WorldProgressRepository';
   import type { WorldSessionProgress } from './game/core/types';
@@ -61,6 +62,7 @@
   import { VILLAGE_QUESTS } from './game/quests/villageQuests';
   import { CLASSES, type ClassId } from './game/data/classes';
   import { createCharacterId } from './game/creation/characterCreation';
+  import { normalizeCharacterName, MAX_CHARACTER_NAME_LENGTH } from './game/creation/characterName';
   import { POTION_IDS, POTIONS } from './game/consumables/potionRules';
   import { xpRequiredForLevel } from './game/progression/progressionRules';
 
@@ -128,7 +130,86 @@
   let savedCharacters: SavedCharacterInfo[] = $state([]);
   let selectedCharacterId: string | null = $state(null);
   let pendingDeleteId: string | null = $state(null);
-  let activeSessionDeleted = $state(false);
+  let activeSessionId = $state<string | null>(null);
+  let activeCharacterName = $state<string | undefined>(undefined);
+  let menuReady = $state(false);
+  let catalogReadError = $state(false);
+  let creatingCharacter = $state(false);
+  let newCharacterName = $state('');
+  let selectedCharacter = $derived(savedCharacters.find(entry => entry.characterId === selectedCharacterId));
+  let validCharacterName = $derived(normalizeCharacterName(newCharacterName));
+  let restoring = false;
+  const characterTaps = new CharacterDoubleTap();
+  let touchDown: { id: string; time: number; x: number; y: number } | null = null;
+  let lastSelectionWasTouch = false;
+
+  function resetCharacterGesture(): void {
+    characterTaps.reset();
+    touchDown = null;
+    lastSelectionWasTouch = false;
+  }
+
+  function selectSavedCharacter(id: string, event: MouseEvent): void {
+    if (busy || playing || !menuReady || creatingCharacter
+      || !savedCharacters.some(entry => entry.characterId === id)) return;
+    selectedCharacterId = id;
+    pendingDeleteId = null;
+    const now = performance.now();
+    const explicitTouch = 'pointerType' in event && event.pointerType === 'touch';
+    const down = touchDown;
+    touchDown = null;
+    // Safari may synthesize a MouseEvent for a real touch click. Match the
+    // preceding primary touch pointerdown on this row, never keyboard clicks.
+    const matchingTouch = !!down && down.id === id && now - down.time <= 1000
+      && Math.hypot(event.clientX - down.x, event.clientY - down.y) <= 24;
+    lastSelectionWasTouch = explicitTouch || (event.detail > 0 && matchingTouch);
+    if (!lastSelectionWasTouch) { characterTaps.reset(); return; }
+    if (!matchingTouch) { characterTaps.reset(); return; }
+    if (characterTaps.tap(id, now, event.clientX, event.clientY)) {
+      void continueCharacter(id);
+    }
+  }
+
+  function doubleClickSavedCharacter(id: string, event: MouseEvent): void {
+    // Some touch browsers also emit dblclick; only the touch tracker handles
+    // those gestures. Native desktop dblclick respects OS click timing.
+    if (event.button === 0 && !lastSelectionWasTouch) void continueCharacter(id);
+  }
+
+  function characterForSave(): CharacterProgress {
+    return { ...bridge.character(), ...(activeCharacterName ? { characterName: activeCharacterName } : {}) };
+  }
+  async function openCreation(): Promise<void> {
+    if (busy || !menuReady || savedCharacters.length >= MAX_SAVED_CHARACTERS) return;
+    resetCharacterGesture();
+    selectedClass = 'WARRIOR';
+    newCharacterName = '';
+    pendingDeleteId = null;
+    messageKey = '';
+    creatingCharacter = true;
+    await tick();
+    document.getElementById('character-name')?.focus();
+  }
+  async function cancelCreation(): Promise<void> {
+    if (busy) return;
+    creatingCharacter = false;
+    newCharacterName = '';
+    await tick();
+    document.querySelector<HTMLElement>('[data-testid="new-character"]')?.focus();
+  }
+
+  async function initializeCatalog(): Promise<void> {
+    menuReady = false;
+    catalogReadError = false;
+    try {
+      await refreshCharacters();
+      menuReady = true;
+      if (messageKey === 'status.saveError') messageKey = '';
+    } catch {
+      catalogReadError = true;
+      messageKey = 'status.saveError';
+    }
+  }
 
   async function refreshCharacters(): Promise<void> {
     const entries = await listCharacters();
@@ -144,7 +225,7 @@
     try {
       await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
       await deleteCharacter(id);
-      if ((bridge.character().characterId ?? 'hero') === id) activeSessionDeleted = true;
+      if (activeSessionId === id) { activeSessionId = null; activeCharacterName = undefined; }
       pendingDeleteId = null;
       await refreshCharacters();
       messageKey = 'saveSlots.deleted';
@@ -381,7 +462,7 @@
     };
     window.addEventListener('pointerdown', unlockAudio, true);
     window.addEventListener('keydown', unlockAudio, true);
-    void refreshCharacters().catch(() => { messageKey = 'status.saveError'; });
+    void initializeCatalog();
     try {
       const raw = JSON.parse(window.localStorage.getItem(controlsStorage) ?? '[]');
       if (Array.isArray(raw) && raw.length <= 25) {
@@ -458,8 +539,8 @@
       if (latest.paused || !latest.player.alive) heldPosition.clear();
       audio.setZone(latest.zone);
       audio.setPaused(!playing || latest.paused);
-      if (playing) {
-        autosaver.schedule(bridge.character());
+      if (playing && !restoring) {
+        autosaver.schedule(characterForSave());
         const world = boundWorldProgress();
         if (world) worldAutosaver.schedule(world);
       }
@@ -508,65 +589,80 @@
   }
 
   async function newGame(): Promise<void> {
-    if (busy || savedCharacters.length >= MAX_SAVED_CHARACTERS) return;
+    const name = normalizeCharacterName(newCharacterName);
+    if (busy || !menuReady || !creatingCharacter || !name
+      || savedCharacters.length >= MAX_SAVED_CHARACTERS) return;
     heldPosition.clear();
-    busy=true;
+    busy = true;
     try {
-      // Drain the previous hero's queued writes before changing the save slot.
-      await Promise.all([autosaver.flush(),worldAutosaver.flush()]);
-      bridge.command({ type:'createCharacter',classId:selectedClass,
-        characterId:createCharacterId(window.crypto.randomUUID()) });
-      messageKey='';
-      inventoryOpen=false;
-      characterOpen=false;
-      talentsOpen=false;
-      controlsOpen=false;
-      mapOpen=false;
-      dialogueOpen=false;
-      tradeNpc=null;
-      townModal=null;
-      playing=true;
-      activateOnboardingForHero();
-      const world=boundWorldProgress();
+      await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
+      const id = createCharacterId(window.crypto.randomUUID());
+      bridge.command({ type:'createCharacter', classId:selectedClass, characterId:id });
+      activeSessionId = null;
+      activeCharacterName = name;
+      const world = boundWorldProgress();
       await Promise.all([
-        autosaver.saveNow(bridge.character()),
-        ...(world?[worldAutosaver.saveNow(world)]:[])
+        autosaver.saveNow(characterForSave()),
+        ...(world ? [worldAutosaver.saveNow(world)] : [])
       ]);
-      selectedCharacterId = bridge.character().characterId ?? 'hero';
-      activeSessionDeleted = false;
+      selectedCharacterId = id;
+      activeSessionId = id;
+      messageKey = '';
+      inventoryOpen = false; characterOpen = false; talentsOpen = false;
+      controlsOpen = false; settingsOpen = false; mapOpen = false;
+      dialogueOpen = false; tradeNpc = null; townModal = null;
+      creatingCharacter = false;
+      newCharacterName = '';
+      playing = true;
+      activateOnboardingForHero();
       await refreshCharacters();
     } catch {
-      messageKey='status.saveError';
+      messageKey = 'status.saveError';
+      // Character write may have succeeded even if world write failed.
+      await refreshCharacters().catch(() => {});
     } finally {
-      busy=false;
+      busy = false;
     }
   }
-  function resume(): void {
+  async function continueSelected(): Promise<void> {
+    if (selectedCharacterId) await continueCharacter(selectedCharacterId);
+  }
+  async function continueCharacter(id: string): Promise<void> {
+    if (busy || playing || !menuReady || creatingCharacter
+      || !savedCharacters.some(entry => entry.characterId === id)) return;
+    selectedCharacterId = id;
+    pendingDeleteId = null;
+    resetCharacterGesture();
     heldPosition.clear();
-    if (activeSessionDeleted) {
-      messageKey = 'status.emptySave';
+    if (activeSessionId !== id) {
+      await load(id);
       return;
     }
-    bridge.command({ type: 'pause', value: false });
+    // Only the matching live hero resumes its exact position and combat state.
+    messageKey = '';
+    bridge.command({ type:'pause', value:false });
     playing = true;
     activateOnboardingForHero();
   }
-  function menu(): void {
-    talentsOpen = false;
-    controlsOpen = false; settingsOpen = false;
+  async function menu(): Promise<void> {
+    if (busy) return;
+    resetCharacterGesture();
+    busy = true;
+    talentsOpen = false; controlsOpen = false; settingsOpen = false;
     mapOpen = false;
     heldPosition.clear();
-    tradeNpc = null;
-    townModal = null;
-    dialogueOpen = false;
-    inventoryOpen = false;
-    characterOpen = false;
-    bridge.command({ type: 'pause', value: true });
-    void Promise.all([autosaver.flush(), worldAutosaver.flush()])
-      .then(() => refreshCharacters())
-      .catch(() => { messageKey = 'status.saveError'; });
-    pendingDeleteId = null;
+    tradeNpc = null; townModal = null; dialogueOpen = false;
+    inventoryOpen = false; characterOpen = false;
+    bridge.command({ type:'pause', value:true });
     playing = false;
+    creatingCharacter = false;
+    pendingDeleteId = null;
+    selectedCharacterId = activeSessionId;
+    try {
+      await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
+      await refreshCharacters();
+    } catch { messageKey = 'status.saveError'; }
+    finally { busy = false; }
   }
   function togglePause(origin?: HTMLElement): void {
     if (controlsOpen || mapOpen || talentsOpen) return;
@@ -657,6 +753,17 @@
   }
 
   function handlePointerUiDown(event: PointerEvent): void {
+    if (!playing) {
+      const row = event.target instanceof Element
+        ? event.target.closest('.saved-select')?.closest<HTMLElement>('[data-saved-character]') : null;
+      const id = row?.dataset.savedCharacter;
+      if (event.pointerType === 'touch' && event.isPrimary && id && !busy && !creatingCharacter) {
+        touchDown = { id, time: performance.now(), x: event.clientX, y: event.clientY };
+      } else {
+        resetCharacterGesture();
+      }
+      return;
+    }
     if (event.pointerType !== 'mouse') return;
     handleHoldPointerDown(event);
     const operation = pointerUiOperation(event.button, event.target);
@@ -694,6 +801,7 @@
       heldPosition.pointerUp(event.pointerId, event.button);
   }
   function handleHoldPointerCancel(event: PointerEvent): void {
+    if (!playing) resetCharacterGesture();
     if (event.pointerType === 'mouse') heldPosition.pointerCancel(event.pointerId);
   }
   function handleHoldPointerOut(event: PointerEvent): void {
@@ -713,7 +821,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent): void {
-    if (!playing) return;
+    if (!playing) { resetCharacterGesture(); return; }
     if (settingsOpen) {
       if (event.code === 'Escape') {
         event.preventDefault();
@@ -837,6 +945,7 @@
     });
   }
   function handleBlur(): void {
+    resetCharacterGesture();
     heldPosition.clear();
   }
   async function save(): Promise<void> {
@@ -847,7 +956,7 @@
       await tick(); // Commit the saving label before awaiting IndexedDB transactions.
       const world = boundWorldProgress();
       await Promise.all([
-        autosaver.saveNow(bridge.character()),
+        autosaver.saveNow(characterForSave()),
         ...(world ? [worldAutosaver.saveNow(world)] : [])
       ]);
       messageKey = 'status.saved';
@@ -862,6 +971,7 @@
     if (busy) return;
     heldPosition.clear();
     busy = true;
+    restoring = true;
     try {
       await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
       const id = requestedId ?? (playing ? (bridge.character().characterId ?? 'hero')
@@ -869,8 +979,10 @@
       const character = await loadGame(id);
       const world = character ? await loadWorldProgress(character.characterId ?? 'hero') : null;
       if (character && bridge.restoreCharacter(character, world?.seed)) {
-        if (world) bridge.restoreWorldProgress(world);
-        messageKey = 'status.loaded';
+        const worldRestored = world ? bridge.restoreWorldProgress(world) : false;
+        activeCharacterName = character.characterName;
+        activeSessionId = character.characterId ?? 'hero';
+        messageKey = world && !worldRestored ? 'status.worldRestoreError' : 'status.loaded';
         inventoryOpen = false;
         characterOpen = false;
         talentsOpen = false;
@@ -880,13 +992,13 @@
         tradeNpc = null;
         townModal = null;
         selectedClass = bridge.snapshot().classId;
-        autosaver.prime(bridge.character());
+        autosaver.prime(characterForSave());
         const currentWorld=boundWorldProgress();
         if (currentWorld) worldAutosaver.prime(currentWorld);
         playing = true;
         activateOnboardingForHero();
         selectedCharacterId = bridge.character().characterId ?? 'hero';
-        activeSessionDeleted = false;
+        creatingCharacter = false;
         await refreshCharacters();
       } else {
         messageKey = 'status.emptySave';
@@ -894,6 +1006,7 @@
     } catch {
       messageKey = 'status.saveError';
     } finally {
+      restoring = false;
       busy = false;
     }
   }
@@ -918,53 +1031,80 @@
         <h1>Aether <span>&amp;</span> Ruin</h1>
         <div class="ornament">◆ ─── ◆ ─── ◆</div>
         <p class="subtitle">{ $t('menu.subtitle') }</p>
-        <CharacterSelect selected={selectedClass} choose={(id) => { selectedClass = id; }} />
-        <div class="saved-characters" aria-label={$t('saveSlots.title')}>
-          <div class="saved-characters-title">
-            <strong>{$t('saveSlots.title')}</strong>
-            <span>{savedCharacters.length}/{MAX_SAVED_CHARACTERS}</span>
-          </div>
-          {#if savedCharacters.length === 0}
-            <p class="saved-empty">{$t('saveSlots.empty')}</p>
-          {:else}
-            <div class="saved-character-list">
-              {#each savedCharacters as entry (entry.characterId)}
-                <div class="saved-character-row" data-saved-character={entry.characterId}>
-                  <button type="button" class="saved-select" class:chosen={selectedCharacterId === entry.characterId}
-                    aria-pressed={selectedCharacterId === entry.characterId} disabled={busy}
-                    onclick={() => { selectedCharacterId = entry.characterId; pendingDeleteId = null; }}>
-                    <strong>{$t('classes.' + entry.classId + '.name')}</strong>
-                    <span>{$t('saveSlots.level')} {entry.level}</span>
-                  </button>
-                  {#if pendingDeleteId === entry.characterId}
-                    <button type="button" class="saved-remove-confirm" disabled={busy}
-                      onclick={() => removeSavedCharacter(entry.characterId)}>
-                      {$t('saveSlots.confirmDelete')}
-                    </button>
-                    <button type="button" disabled={busy}
-                      onclick={() => { pendingDeleteId = null; }}>{$t('saveSlots.cancel')}</button>
-                  {:else}
-                    <button type="button" disabled={busy}
-                      aria-label={$t('saveSlots.delete') + ': ' + $t('classes.' + entry.classId + '.name')}
-                      onclick={() => { pendingDeleteId = entry.characterId; }}>
-                      {$t('saveSlots.delete')}
-                    </button>
-                  {/if}
-                </div>
-              {/each}
+        {#if creatingCharacter}
+          <section class="creation-flow" aria-label={$t('menu.new')}>
+            <h2>{$t('menu.new')}</h2>
+            <label for="character-name">{$t('creation.name')}</label>
+            <input id="character-name" data-testid="character-name" type="text"
+              bind:value={newCharacterName} maxlength={MAX_CHARACTER_NAME_LENGTH}
+              placeholder={$t('creation.namePlaceholder')} disabled={busy}
+              aria-describedby="character-name-hint" />
+            <p id="character-name-hint" class="name-hint">{$t('creation.nameHint')}</p>
+            <CharacterSelect selected={selectedClass} choose={(id) => { if (!busy) selectedClass = id; }} />
+            <div class="menu-actions">
+              <button class="primary" disabled={busy || !validCharacterName} onclick={newGame}>{$t('menu.start')}</button>
+              <button class="secondary" data-testid="cancel-character" disabled={busy}
+                onclick={cancelCreation}>{$t('saveSlots.cancel')}</button>
             </div>
-          {/if}
-          {#if savedCharacters.length >= MAX_SAVED_CHARACTERS}
-            <p class="saved-empty">{$t('saveSlots.full')}</p>
-          {/if}
-        </div>
-        <div class="menu-actions">
-          <button class="primary" disabled={busy || savedCharacters.length >= MAX_SAVED_CHARACTERS}
-            onclick={newGame}>{$t('menu.start')}</button>
-          <button class="secondary" disabled={busy || activeSessionDeleted} onclick={resume}>{$t('menu.continue')}</button>
-          <button class="secondary" disabled={busy}
-            onclick={() => load(selectedCharacterId ?? undefined)}>{$t('menu.load')}</button>
-        </div>
+          </section>
+        {:else}
+          <section class="saved-characters" aria-label={$t('saveSlots.title')}>
+            <div class="saved-characters-title">
+              <strong>{$t('saveSlots.title')}</strong>
+              <span>{savedCharacters.length}/{MAX_SAVED_CHARACTERS}</span>
+            </div>
+            {#if catalogReadError}
+              <button type="button" class="secondary" onclick={initializeCatalog}>{$t('saveSlots.retry')}</button>
+            {:else if !menuReady}
+              <p class="saved-empty">{$t('saveSlots.loading')}</p>
+            {:else if savedCharacters.length === 0}
+              <p class="saved-empty">{$t('saveSlots.empty')}</p>
+            {:else}
+              <div class="saved-character-list">
+                {#each savedCharacters as entry (entry.characterId)}
+                  {@const displayName = entry.characterName ?? $t('saveSlots.unnamed') + ' · ' + entry.characterId.slice(-6)}
+                  <div class="saved-character-row" data-saved-character={entry.characterId}>
+                    <button type="button" class="saved-select" class:chosen={selectedCharacterId === entry.characterId}
+                      aria-pressed={selectedCharacterId === entry.characterId} disabled={busy}
+                      onclick={(event) => selectSavedCharacter(entry.characterId, event)}
+                      ondblclick={(event) => doubleClickSavedCharacter(entry.characterId, event)}>
+                      <strong>{displayName}</strong>
+                      <span>{$t('classes.' + entry.classId + '.name')} · {$t('saveSlots.level')} {entry.level}</span>
+                    </button>
+                    {#if pendingDeleteId === entry.characterId}
+                      <button type="button" class="saved-remove-confirm" disabled={busy}
+                        onclick={() => removeSavedCharacter(entry.characterId)}>{$t('saveSlots.confirmDelete')}</button>
+                      <button type="button" disabled={busy}
+                        onclick={() => { pendingDeleteId = null; }}>{$t('saveSlots.cancel')}</button>
+                    {:else}
+                      <button type="button" disabled={busy}
+                        aria-label={$t('saveSlots.delete') + ': ' + displayName}
+                        onclick={() => { pendingDeleteId = entry.characterId; }}>{$t('saveSlots.delete')}</button>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+            {#if savedCharacters.length > 0}
+              <p class="saved-gesture-hint">{$t('saveSlots.doubleActivateHint')}</p>
+            {/if}
+            {#if selectedCharacter}
+              <div class="selected-character-details" data-testid="selected-character" aria-live="polite">
+                <strong>{selectedCharacter.characterName ?? $t('saveSlots.unnamed') + ' · ' + selectedCharacter.characterId.slice(-6)}</strong>
+                <span>{$t('classes.' + selectedCharacter.classId + '.name')} · {$t('saveSlots.level')} {selectedCharacter.level}</span>
+              </div>
+            {/if}
+            {#if savedCharacters.length >= MAX_SAVED_CHARACTERS}
+              <p class="saved-empty">{$t('saveSlots.full')}</p>
+            {/if}
+            <div class="menu-actions">
+              <button class="primary" data-testid="continue-character" disabled={busy || !menuReady || !selectedCharacter}
+                onclick={continueSelected}>{$t('menu.continue')}</button>
+              <button class="secondary" data-testid="new-character" disabled={busy || !menuReady || savedCharacters.length >= MAX_SAVED_CHARACTERS}
+                onclick={openCreation}>{$t('menu.new')}</button>
+            </div>
+          </section>
+        {/if}
         <p class="hint">{ $t('menu.help') }</p>
         <div class="language-choice">
           <label for="menu-language">{ $t('menu.language') }</label>
@@ -1003,7 +1143,7 @@
           <button class="small-button" disabled={view.zone !== 'wilderness' || view.paused}
             onclick={(event) => openMap(event.currentTarget)}>{$t('map.open')}</button>
           <button class="small-button" disabled={!view.player.alive} onclick={(event) => togglePause(event.currentTarget)}>{view.paused ? $t('menu.resume') : $t('menu.paused')}</button>
-          <button class="small-button" onclick={menu}>{$t('menu.back')}</button>
+          <button class="small-button" disabled={busy} onclick={menu}>{$t('menu.back')}</button>
         </div>
       </header>
 
@@ -1128,7 +1268,7 @@
           {/if}
           <div class="vital-top resource-label"><span>{$t('resource.' + CLASSES[view.classId].resourceId)}</span><strong>{Math.round(view.resource)} / {view.stats.maxResource}</strong></div>
           <div class="health-track resource-track"><div class="resource-fill" style:width={`${100 * view.resource / view.stats.maxResource}%`}></div></div>
-          <div class="hud-details"><span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
+          <div class="hud-details">{#if activeCharacterName}<span class="hero-name">{activeCharacterName}</span>{/if}<span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
           <div class="experience-track"><div style:width={`${xpRequiredForLevel(view.level) > 0 ? 100 * view.xp / xpRequiredForLevel(view.level) : 100}%`}></div></div>
         </div>
         <SkillBar {bridge} {view} bindings={controlBindings} />
@@ -1302,7 +1442,7 @@
             <button class="secondary" onclick={(event) => openControls(event.currentTarget)}>{$t('bindings.open')}</button>
             <button class="secondary" data-testid="open-visual-settings"
               onclick={(event) => openVisualSettings(event.currentTarget)}>{$t('visualSettings.open')}</button>
-            <button class="secondary" onclick={menu}>{$t('menu.back')}</button>
+            <button class="secondary" disabled={busy} onclick={menu}>{$t('menu.back')}</button>
           </div>
         </div>
       {/if}
@@ -1387,6 +1527,16 @@
     .hud-right-column :global(.enemy-roster){max-height:110px}
     .hud-left-column :global(.quest-journal){padding:6px}
   }
+  .creation-flow { width:min(100%,710px);margin:12px auto;text-align:left; }
+  .creation-flow h2 { font-family:Georgia,serif;color:#e9c993;font-size:1.15rem;margin:0 0 12px; }
+  .creation-flow label { display:block;color:#e4d4bb;margin-bottom:6px; }
+  .creation-flow input { width:100%;box-sizing:border-box;min-height:44px;padding:9px 12px;color:#f2e8d7;background:#111920;border:1px solid #837052;border-radius:3px;font:inherit; }
+  .name-hint { color:#bdab92;font-size:.72rem;margin:5px 0 12px; }
+  .selected-character-details { display:flex;flex-direction:column;gap:4px;text-align:left;background:#20252b;border:1px solid #665740;padding:12px;margin:12px 0;overflow-wrap:anywhere; }
+  .selected-character-details strong { color:#f1d6a3;font-size:1.05rem; }
+  .selected-character-details span { color:#c9bba7;font-size:.82rem; }
+  .saved-characters .menu-actions { margin-top:12px; }
+  .hero-name { color:#e6c998;overflow-wrap:anywhere; }
   .saved-characters { margin: 10px auto 14px; width: min(100%, 710px);
     padding: 10px; border: 1px solid #665740; background: #101721e8; text-align: left; }
   .saved-characters-title { display:flex; align-items:center; justify-content:space-between;
@@ -1394,8 +1544,9 @@
   .saved-character-list { display:grid; gap:5px; max-height:175px; overflow-y:auto; }
   .saved-character-row { display:flex; align-items:stretch; gap:6px; min-width:0; }
   .saved-character-row button { min-height:38px; padding:6px 9px; font-size:.72rem; }
-  .saved-character-row .saved-select { flex:1; display:flex; gap:8px; align-items:center;
-    justify-content:space-between; min-width:0; text-align:left; color:#e1d7c7; }
+  .saved-gesture-hint { color:#bdab92;font-size:.72rem;margin:8px 0;text-align:left; }
+  .saved-character-row .saved-select { touch-action:manipulation; flex:1; display:flex; flex-direction:column; gap:4px; align-items:flex-start;
+    justify-content:center; min-width:0; text-align:left; color:#e1d7c7; overflow-wrap:anywhere; }
   .saved-select.chosen { border-color:#ddbc82; background:#302a22; }
   .saved-select span { color:#bdaf9b; flex-shrink:0; }
   .saved-remove-confirm { color:#ffc2aa; border-color:#b36659; }

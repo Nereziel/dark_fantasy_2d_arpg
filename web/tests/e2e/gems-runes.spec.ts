@@ -1,8 +1,10 @@
+import { openCharacterCreation, loadCharacterControl } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('forges a Ruby from naturally salvaged material and persists the gem wallet', async ({page})=>{
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button',{name:'Enter the world'}).click();
   await page.getByRole('button',{name:'Browse wares'}).click();
   const merchant=page.getByRole('dialog',{name:'Merchant Bram'});
@@ -31,7 +33,7 @@ test('forges a Ruby from naturally salvaged material and persists the gem wallet
   await page.getByRole('button',{name:'Save'}).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await page.getByRole('button',{name:'Load'}).click();
+  await loadCharacterControl(page).click();
   await page.getByRole('button',{name:'Visit blacksmith'}).click();
   await expect(page.getByRole('dialog',{name:'Blacksmith Odan'})
     .locator('[data-gem-id="gem.ruby.1"] strong')).toHaveText('1');
@@ -40,6 +42,7 @@ test('forges a Ruby from naturally salvaged material and persists the gem wallet
 test('inserts gem into a real socket, saves the socket and extracts stone at the smith', async ({page})=>{
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button',{name:'Enter the world'}).click();
   await page.getByRole('button',{name:'Browse wares'}).click();
   await page.getByRole('dialog',{name:'Merchant Bram'})
@@ -79,7 +82,7 @@ test('inserts gem into a real socket, saves the socket and extracts stone at the
       };
     });
   });
-  await page.getByRole('button',{name:'Load'}).click();
+  await loadCharacterControl(page).click();
   await page.getByRole('button',{name:'Visit blacksmith'}).click();
   let smith=page.getByRole('dialog',{name:'Blacksmith Odan'});
   let belt=smith.locator('[data-testid^="socket-item-trade-belt-"]');
@@ -93,7 +96,7 @@ test('inserts gem into a real socket, saves the socket and extracts stone at the
   await page.getByRole('button',{name:'Save'}).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await page.getByRole('button',{name:'Load'}).click();
+  await loadCharacterControl(page).click();
   await page.getByRole('button',{name:'Visit blacksmith'}).click();
   smith=page.getByRole('dialog',{name:'Blacksmith Odan'});
   belt=smith.locator('[data-testid^="socket-item-trade-belt-"]');

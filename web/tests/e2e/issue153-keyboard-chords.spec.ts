@@ -1,8 +1,10 @@
+import { openCharacterCreation } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('rebinding Ctrl+M changes map gameplay shortcut and HUD, persisting after reload', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Controls' }).click();
@@ -29,6 +31,7 @@ test('rebinding Ctrl+M changes map gameplay shortcut and HUD, persisting after r
 
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await expect(page.locator('.minimap-overlay button')).toContainText('Ctrl+M');
   await page.keyboard.press('Control+m');
@@ -38,6 +41,7 @@ test('rebinding Ctrl+M changes map gameplay shortcut and HUD, persisting after r
 test('Shift+1 potion overrides regular skill 1 while Shift still holds position', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.locator('[data-potion-id="resistance"]').click();
   await expect(page.getByTestId('use-potion')).toContainText('1');
@@ -65,6 +69,7 @@ test('Shift+1 potion overrides regular skill 1 while Shift still holds position'
 test('standalone modifier captured on keyup, not prematurely on keydown', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Controls' }).click();
@@ -81,6 +86,7 @@ test('standalone modifier captured on keyup, not prematurely on keydown', async 
 test('Ctrl+M HOLD_POSITION releases when Ctrl is lifted before M', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Controls' }).click();

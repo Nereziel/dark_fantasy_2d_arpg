@@ -1,3 +1,4 @@
+import { openCharacterCreation } from './character-menu';
 // Issue #102: MAP and TALENTS are user-configurable actions, not hardcoded
 // KeyM/KeyT shortcuts. Also ensures old bindings stop triggering after rebind.
 import { expect, test } from '@playwright/test';
@@ -5,6 +6,7 @@ import { expect, test } from '@playwright/test';
 test('rebound map and talent hotkeys work to open/close and survive reload', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await expect(page.locator('.phaser-container canvas')).toBeVisible();
 
@@ -53,6 +55,7 @@ test('rebound map and talent hotkeys work to open/close and survive reload', asy
 
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('o');
   await expect(page.getByTestId('world-map-dialog')).toBeVisible();

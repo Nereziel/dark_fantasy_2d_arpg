@@ -1,3 +1,4 @@
+import { openCharacterCreation } from './character-menu';
 // Issue #102: browser-local visual preferences survive reload and remain
 // accessible by keyboard and on narrow mobile screens. GPL-3.0-only.
 import { test, expect } from '@playwright/test';
@@ -7,6 +8,7 @@ test('visual accessibility preferences persist across reload without changing ga
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await expect(page.locator('.phaser-container canvas')).toBeVisible();
 
@@ -39,6 +41,7 @@ test('visual accessibility preferences persist across reload without changing ga
 
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await expect(page.locator('.phaser-container canvas')).toBeVisible();
   const restored = await openSettings();

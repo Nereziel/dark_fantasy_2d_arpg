@@ -1,3 +1,4 @@
+import { openCharacterCreation } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 /** Regression for stale armed move state. Ordinary clicks after Cancel selection
@@ -7,6 +8,7 @@ import { expect, test } from '@playwright/test';
 test('clear selection and sort both disarm move mode before subsequent bag clicks', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });

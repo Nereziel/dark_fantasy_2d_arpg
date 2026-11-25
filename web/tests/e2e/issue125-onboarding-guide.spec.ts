@@ -1,8 +1,10 @@
+import { openCharacterCreation, loadCharacterControl } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('Issue #125: new player gets an optional, quest-aware first-play guide', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const guide = page.getByTestId('onboarding-guide');
   await expect(guide).toBeVisible();
@@ -36,7 +38,7 @@ test('Issue #125: new player gets an optional, quest-aware first-play guide', as
   await guide.getByRole('button', { name: 'Next tip' }).click();
   await expect(guide).toHaveAttribute('data-guide-step', 'attack');
   await page.reload();
-  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await loadCharacterControl(page).click();
   await expect(guide).toHaveAttribute('data-guide-step', 'attack');
 });
 
@@ -44,6 +46,7 @@ test('Issue #125: Czech/touch guide stays in scroll-safe HUD and never blocks ot
   await page.setViewportSize({ width: 320, height: 740 });
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('cs');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
   const guide = page.getByTestId('onboarding-guide');
   await expect(guide).toHaveAttribute('data-guide-step', 'warden');

@@ -1,3 +1,4 @@
+import { openCharacterCreation } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 // Playwright emulates touch and narrow viewports; this is not a physical
@@ -9,6 +10,7 @@ test.describe('Issue #153 mobile bindings acceptance', () => {
       await page.setViewportSize({ width, height: 740 });
       await page.goto('./?view=iso');
       await page.locator('#menu-language').selectOption('en');
+      await openCharacterCreation(page);
       await page.getByRole('button', { name: 'Enter the world' }).click();
       await page.keyboard.press('Escape');
       await page.getByRole('button', { name: 'Controls' }).tap();
@@ -66,6 +68,7 @@ test.describe('Issue #153 mobile bindings acceptance', () => {
     ])));
     await page.reload();
     await page.locator('#menu-language').selectOption('en');
+    await openCharacterCreation(page);
     await page.getByRole('button', { name: 'Enter the world' }).click();
     const mapAction = page.getByTestId('combat-dock')
       .locator('[data-quick-action="inventory"]');

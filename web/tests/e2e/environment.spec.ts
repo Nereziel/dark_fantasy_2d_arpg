@@ -1,8 +1,10 @@
+import { openCharacterCreation } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('environment objects preserve the original camp, map and fog of war', async ({page})=>{
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button',{name:'Enter the world'}).click();
   await expect(page.locator('.game-screen')).toBeVisible();
   // The hidden wall is never visible before the in-world lever is activated.

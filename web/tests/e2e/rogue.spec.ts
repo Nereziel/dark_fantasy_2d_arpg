@@ -1,7 +1,9 @@
+import { openCharacterCreation, loadCharacterControl } from './character-menu';
 import {test,expect} from '@playwright/test';
 test('Rogue seven-skill bar, Energy costs, stealth/trap counters and CS/EN reload',async({page})=>{
  await page.goto('./?view=iso');
  await page.locator('#menu-language').selectOption('en');
+ await openCharacterCreation(page);
  await page.getByRole('button',{name:/Rogue/}).click();
  await page.getByRole('button',{name:'Enter the world'}).click();
  await expect(page.getByText('Rogue · Level 1')).toBeVisible();
@@ -24,7 +26,7 @@ test('Rogue seven-skill bar, Energy costs, stealth/trap counters and CS/EN reloa
  await page.getByRole('button',{name:'Uložit'}).click();
  await expect(page.getByRole('status')).toContainText('Postava uložena');
  await page.reload();
- await page.getByRole('button',{name:'Načíst'}).click();
+ await loadCharacterControl(page).click();
  await expect(page.getByTestId('rogue-status')).toContainText('Pasti: 0/3');
  await expect(extras).toHaveCount(5);
 });

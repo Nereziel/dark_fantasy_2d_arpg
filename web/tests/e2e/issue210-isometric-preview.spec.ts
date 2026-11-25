@@ -1,3 +1,4 @@
+import { openCharacterCreation } from './character-menu';
 // GPL-3.0-only
 import { test, expect, type Locator } from '@playwright/test';
 
@@ -43,6 +44,7 @@ test('default isometric view boots, accepts a pointer and keeps the map controls
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
@@ -89,6 +91,7 @@ for (const query of ['?view=iso', '?view=classic', '?view=unknown', '?view=']) {
   test('obsolete view parameter does not change the renderer: ' + query, async ({ page }) => {
     await page.goto('./' + query);
     await page.locator('#menu-language').selectOption('en');
+    await openCharacterCreation(page);
     await page.getByRole('button', { name: 'Enter the world' }).click();
     await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toBeVisible();
     await expect(page.locator('.phaser-container canvas')).toHaveCount(1);

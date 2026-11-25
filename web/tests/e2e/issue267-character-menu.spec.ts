@@ -1,0 +1,120 @@
+import {test,expect,type Page} from '@playwright/test';
+import {campMovementTarget, heroPoint} from './iso-input';
+async function create(page: Page, name:string) {
+  await page.getByTestId('new-character').click();
+  await page.getByTestId('character-name').fill(name);
+  await page.locator('[data-class-id="WARRIOR"]').click();
+  await page.getByRole('button',{name:'Enter the world'}).click();
+  await expect(page.locator('.game-screen')).toBeVisible();
+}
+test('named same-class heroes resume the selected world, not the in-memory default',async({page})=>{
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  const next = page.getByTestId('continue-character');
+  await expect(next).toBeDisabled();
+  await expect(page.locator('[data-class-id]')).toHaveCount(0);
+  await page.getByTestId('new-character').click();
+  await expect(page.getByRole('button',{name:'Enter the world'})).toBeDisabled();
+  await page.getByTestId('cancel-character').click();
+  await expect(page.locator('[data-class-id]')).toHaveCount(0);
+  await create(page,'Šárka');
+  const game=page.locator('.game-screen');
+  const seed=await game.getAttribute('data-world-seed');
+  const spawn=await heroPoint(page);
+  const canvas=page.locator('canvas[data-renderer="isometric-preview"]');
+  const ground=await campMovementTarget(page,canvas);
+  await page.mouse.click(ground.x,ground.y);
+  await expect.poll(async()=>{const p=await heroPoint(page);return Math.hypot(p.x-spawn.x,p.y-spawn.y);},{timeout:8000}).toBeGreaterThan(20);
+  await page.getByRole('button',{name:'Main menu'}).click();
+  await expect(page.locator('.saved-character-row')).toHaveCount(1);
+  await next.click();
+  await expect(game).toHaveAttribute('data-world-seed',seed!);
+  const resumed=await heroPoint(page);
+  expect(Math.hypot(resumed.x-spawn.x,resumed.y-spawn.y)).toBeGreaterThan(20);
+  await page.getByRole('button',{name:'Main menu'}).click();
+  await create(page,'Morrow');
+  const otherSeed=await game.getAttribute('data-world-seed');
+  await page.getByRole('button',{name:'Main menu'}).click();
+  await expect(page.locator('.saved-character-row')).toHaveCount(2);
+  const first=page.locator('.saved-character-row').filter({hasText:'Šárka'});
+  await first.locator('.saved-select').click();
+  await expect(page.getByTestId('selected-character')).toContainText('Šárka');
+  await expect(page.getByTestId('selected-character')).toContainText('Warrior');
+  await expect(page.getByTestId('selected-character')).toContainText('Level 1');
+  await next.click();
+  await expect(game).toHaveAttribute('data-world-seed',seed!);
+  await expect(page.locator('.hud-details')).toContainText('Šárka');
+  await page.getByRole('button',{name:'Main menu'}).click();
+  await page.reload();
+  await page.locator('.saved-character-row').filter({hasText:'Morrow'}).locator('.saved-select').click();
+  await next.click();
+  await expect(game).toHaveAttribute('data-world-seed',otherSeed!);
+  await expect(page.locator('.hud-details')).toContainText('Morrow');
+  await page.getByRole('button',{name:'Main menu'}).click();
+  await next.click();
+  await expect(game).toHaveAttribute('data-world-seed',otherSeed!);
+});
+
+test('Czech mobile creation has a labelled name field and cancel returns to the list',async({page})=>{
+  await page.setViewportSize({width:390,height:740});
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('cs');
+  await page.getByRole('button',{name:'Nová postava',exact:true}).click();
+  const name=page.getByRole('textbox',{name:'Jméno postavy'});
+  await expect(name).toBeFocused();
+  await name.fill('  ');
+  await expect(page.getByRole('button',{name:'Vstoupit do světa'})).toBeDisabled();
+  await name.fill('Šárka z lesa');
+  await expect(page.getByRole('button',{name:'Vstoupit do světa'})).toBeEnabled();
+  await page.locator('[data-class-id="MAGE"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-class-id="MAGE"]')).toHaveAttribute('aria-pressed','true');
+  await page.getByTestId('cancel-character').click();
+  await expect(page.getByTestId('new-character')).toBeFocused();
+  await expect(page.getByTestId('continue-character')).toBeDisabled();
+});
+
+test('double-click opens the clicked saved hero, while a single click only selects', async ({page}) => {
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await create(page,'Aldric');
+  const seed = await page.locator('.game-screen').getAttribute('data-world-seed');
+  await page.getByRole('button',{name:'Main menu'}).click();
+  await create(page,'Morgana');
+  await page.getByRole('button',{name:'Main menu'}).click();
+  const row = page.locator('.saved-character-row').filter({hasText:'Aldric'}).locator('.saved-select');
+  await row.click();
+  await expect(row).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('.main-menu')).toBeVisible();
+  await row.dblclick();
+  await expect(page.locator('.game-screen')).toHaveAttribute('data-world-seed',seed!);
+  await expect(page.locator('.hud-details')).toContainText('Aldric');
+});
+
+test.describe('touch character shortcut', () => {
+  test.use({hasTouch:true, viewport:{width:390,height:780}});
+  test('two consecutive taps on one saved row continue exactly that hero', async ({page}) => {
+    await page.goto('./');
+    await page.locator('#menu-language').selectOption('en');
+    await create(page,'Aldric');
+    const seed = await page.locator('.game-screen').getAttribute('data-world-seed');
+    await page.getByRole('button',{name:'Main menu'}).click();
+    await create(page,'Morgana');
+    await page.getByRole('button',{name:'Main menu'}).click();
+    const first = page.locator('.saved-character-row').filter({hasText:'Aldric'}).locator('.saved-select');
+    const other = page.locator('.saved-character-row').filter({hasText:'Morgana'}).locator('.saved-select');
+    await expect(first).toBeEnabled();
+    await first.tap();
+    await other.tap();
+    await expect(page.locator('.main-menu')).toBeVisible();
+    await expect(other).toHaveAttribute('aria-pressed','true');
+    // Touchscreen input, not synthetic click or dblclick dispatch.
+    await first.scrollIntoViewIfNeeded();
+    const box = await first.boundingBox();
+    if (!box) throw new Error('Saved hero is not visible');
+    const x = box.x + box.width/2, y = box.y + box.height/2;
+    await page.touchscreen.tap(x,y);
+    await page.touchscreen.tap(x,y);
+    await expect(page.locator('.game-screen')).toHaveAttribute('data-world-seed',seed!);
+  });
+});
