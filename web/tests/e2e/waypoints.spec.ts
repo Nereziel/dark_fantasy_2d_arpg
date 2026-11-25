@@ -1,11 +1,11 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('town waypoint activates only on arrival and survives world save/reload', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
 
   await page.locator('.game-header').getByRole('button', { name: 'Map', exact: true }).click();
   const initialMap = page.getByRole('dialog', { name: 'World Map' });
@@ -30,7 +30,7 @@ test('town waypoint activates only on arrival and survives world save/reload', a
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await page.locator('.game-header').getByRole('button', { name: 'Map', exact: true }).click();
   const restoredMap = page.getByRole('dialog', { name: 'World Map' });
   await expect(restoredMap.locator('[data-map-marker="town.waypoint"]')).toHaveCount(1);

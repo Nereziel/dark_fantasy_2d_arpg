@@ -1,4 +1,4 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 import { test, expect } from '@playwright/test';
 import { heldIsoMoveEast } from './iso-input';
 
@@ -10,7 +10,7 @@ test('switches Czech/English in the menu and game without losing the scene', asy
   await openCharacterCreation(page);
   await expect(page.getByRole('button', { name: 'Vstoupit do světa' })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
+  await enterWorld(page);
   await expect(page.locator('.game-hud')).toBeVisible();
   await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Poražení nepřátelé')).toBeVisible();
@@ -45,7 +45,7 @@ test('creates a Rogue, opens localized inventory, saves and reloads its class', 
   await expect(rogue).toBeVisible();
   await rogue.click();
   await expect(rogue).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await expect(page.getByText('Rogue · Level 1')).toBeVisible();
   await page.getByRole('button', { name: 'Inventory (I)' }).click();
   await expect(page.getByRole('dialog', { name: 'Inventory & Equipment' })).toBeVisible();
@@ -57,7 +57,7 @@ test('creates a Rogue, opens localized inventory, saves and reloads its class', 
   await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
   await expect(page.locator('#menu-language')).toHaveValue('cs');
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await expect(page.getByText('Tulák · Úroveň 1')).toBeVisible();
 });
 
@@ -66,7 +66,7 @@ test('casts a Paladin ability and localizes effects without restarting the game'
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await page.getByRole('button', { name: /Paladin/ }).click();
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const skill = page.getByRole('button', { name: 'Consecration' });
   await expect(skill).toBeEnabled();
   await skill.click();
@@ -78,7 +78,7 @@ test('casts a Paladin ability and localizes effects without restarting the game'
   await page.getByRole('button', { name: 'Uložit' }).click();
   await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await expect(page.getByText('Paladin · Úroveň 1')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Posvěcená půda' })).toBeEnabled();
   await expect(page.locator('.effect-chip.beneficial')).toHaveCount(0);
@@ -91,7 +91,7 @@ test('retains character-only save v11 and resumes separate seed-scoped world rec
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await page.getByRole('button', { name: /Rogue/ }).click();
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await expect(page.locator('.zone-name')).toHaveText('Emberwatch Camp');
   const firstSeed = await page.locator('.game-screen').getAttribute('data-world-seed');
   expect(firstSeed).not.toBeNull();
@@ -122,7 +122,7 @@ test('retains character-only save v11 and resumes separate seed-scoped world rec
   })).toBe(11);
 
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await expect(page.getByText('Rogue · Level 1')).toBeVisible();
   await expect(page.locator('.zone-name')).toHaveText('Emberwatch Camp');
   const secondSeed = await page.locator('.game-screen').getAttribute('data-world-seed');
@@ -137,7 +137,7 @@ test('talks to Warden Vesna, accepts the quest and loads its persistent progress
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const journal = page.locator('.quest-journal');
   await expect(journal).toContainText('Ashes at the Gate');
   await expect(journal).toContainText('Warden Vesna has a task');
@@ -156,7 +156,7 @@ test('talks to Warden Vesna, accepts the quest and loads its persistent progress
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await expect(journal).toContainText('0/3');
   await expect(journal).toContainText('Ashes at the Gate');
   await page.getByRole('button', { name: 'Speak to the warden' }).click();
@@ -174,7 +174,7 @@ test('buys equipment, tempers it at the smith and reloads persistent upgrades', 
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
 
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
@@ -203,7 +203,7 @@ test('buys equipment, tempers it at the smith and reloads persistent upgrades', 
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await page.getByRole('button', { name: 'Visit blacksmith' }).click();
   const loadedSmith = page.getByRole('dialog', { name: 'Blacksmith Odan' });
   await expect(loadedSmith).toContainText('Upgrades 1/3');
@@ -229,7 +229,7 @@ test('enters a separate procedurally generated crypt, returns to camp and reload
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'wilderness');
   const seed = await page.locator('.game-screen').getAttribute('data-world-seed');
   await expect(page.getByRole('button', { name: 'Enter the crypt' })).toBeEnabled();
@@ -249,7 +249,7 @@ test('enters a separate procedurally generated crypt, returns to camp and reload
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'wilderness');
   await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
 });
@@ -258,7 +258,7 @@ test('opens the derived character sheet, switches locales live, and closes with 
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Character (C)' }).click();
   const english = page.getByRole('dialog', { name: 'Character and Attributes' });
   await expect(english).toBeVisible();
@@ -285,7 +285,7 @@ test('new input mappings evade on Space and toggle pause on Escape', async ({ pa
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const game = page.locator('.game-screen');
   const beforeEvade = await game.evaluate(element => ({
     x: Number(element.getAttribute('data-player-x')),
@@ -325,7 +325,7 @@ test('rebinds inventory from I to O in the controls panel and reloads this prefe
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Controls' }).click();
   const controls = page.getByRole('dialog', { name: 'Input bindings' });
@@ -340,7 +340,7 @@ test('rebinds inventory from I to O in the controls panel and reloads this prefe
   await expect(page.getByRole('dialog', { name: 'Inventory & Equipment' })).toBeVisible();
   await page.keyboard.press('Escape');
   await page.reload();
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await continueGame(page);
   await page.keyboard.press('o');
   await expect(page.getByRole('dialog', { name: 'Inventory & Equipment' })).toBeVisible();
 });
@@ -349,7 +349,7 @@ test('holding mouse movement updates the destination without creating combat com
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
   await heldIsoMoveEast(page, canvas);
@@ -359,7 +359,7 @@ test('Warrior War Cry uses the simulation timeline and localizes active buffs', 
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const cry = page.getByRole('button', { name: 'War Cry' });
   await expect(cry).toBeVisible();
   await expect(cry).toBeEnabled();
@@ -376,7 +376,7 @@ test('stores a purchased item in the permanent camp stash and retrieves it after
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
 
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
@@ -396,7 +396,7 @@ test('stores a purchased item in the permanent camp stash and retrieves it after
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await page.getByRole('button', { name: 'Open stash' }).click();
   const recovered = page.getByRole('dialog', { name: 'Camp Stash' });
   await expect(recovered).toContainText('Stash (1/24)');
@@ -412,7 +412,7 @@ test('re-entering the game releases destroyed scene event listeners and keeps mo
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
 
@@ -420,7 +420,7 @@ test('re-entering the game releases destroyed scene event listeners and keeps mo
   await page.getByRole('button', { name: 'Main menu' }).click();
   await openCharacterCreation(page, 'Restart hero');
   await expect(page.getByRole('button', { name: 'Enter the world' })).toBeVisible();
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await expect(canvas).toBeVisible();
 
   // Potion VFX calls obtainImpact() via GameBridge.tick(). A stale listener

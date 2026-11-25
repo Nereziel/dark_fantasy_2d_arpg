@@ -1,4 +1,4 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 // F1 — actual editable hotbar and character save/load. GPL-3.0-only.
 import { test, expect } from '@playwright/test';
 
@@ -9,7 +9,7 @@ test('hotbar supports drag, keyboard activation, reset and per-hero reload', asy
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await page.getByRole('button', { name: /Warrior/ }).click();
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const toolbar = page.locator('.skill-toolbar');
   const slots = toolbar.locator('[data-hotbar-ability]');
   await expect(slots).toHaveCount(7);
@@ -27,7 +27,7 @@ test('hotbar supports drag, keyboard activation, reset and per-hero reload', asy
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await expect(slots.nth(1)).toHaveAttribute('data-hotbar-ability', 'warCry');
   await page.getByTestId('edit-hotbar').click();
   await page.getByTestId('reset-hotbar').click();
@@ -43,7 +43,7 @@ test('touch hotbar slot selection fits a 320px viewport without casting', async 
     await page.locator('#menu-language').selectOption('en');
     await openCharacterCreation(page);
     await page.getByRole('button', { name: /Warrior/ }).click();
-  await page.getByRole('button', { name: 'Enter the world' }).tap();
+  await enterWorld(page, 'tap');
     await page.getByTestId('edit-hotbar').tap();
     const editor = page.getByTestId('hotbar-editor');
     await expect(editor).toBeVisible();

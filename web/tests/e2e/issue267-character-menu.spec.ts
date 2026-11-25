@@ -1,10 +1,11 @@
+import { enterWorld, continueGame } from './character-menu';
 import {test,expect,type Page} from '@playwright/test';
 import {campMovementTarget, heroPoint} from './iso-input';
 async function create(page: Page, name:string) {
   await page.getByTestId('new-character').click();
   await page.getByTestId('character-name').fill(name);
   await page.locator('[data-class-id="WARRIOR"]').click();
-  await page.getByRole('button',{name:'Enter the world'}).click();
+  await enterWorld(page);
   await expect(page.locator('.game-screen')).toBeVisible();
 }
 test('named same-class heroes resume the selected world, not the in-memory default',async({page})=>{
@@ -27,7 +28,7 @@ test('named same-class heroes resume the selected world, not the in-memory defau
   await expect.poll(async()=>{const p=await heroPoint(page);return Math.hypot(p.x-spawn.x,p.y-spawn.y);},{timeout:8000}).toBeGreaterThan(20);
   await page.getByRole('button',{name:'Main menu'}).click();
   await expect(page.locator('.saved-character-row')).toHaveCount(1);
-  await next.click();
+  await continueGame(page);
   await expect(game).toHaveAttribute('data-world-seed',seed!);
   const resumed=await heroPoint(page);
   expect(Math.hypot(resumed.x-spawn.x,resumed.y-spawn.y)).toBeGreaterThan(20);
@@ -41,17 +42,17 @@ test('named same-class heroes resume the selected world, not the in-memory defau
   await expect(page.getByTestId('selected-character')).toContainText('Šárka');
   await expect(page.getByTestId('selected-character')).toContainText('Warrior');
   await expect(page.getByTestId('selected-character')).toContainText('Level 1');
-  await next.click();
+  await continueGame(page);
   await expect(game).toHaveAttribute('data-world-seed',seed!);
   await expect(page.locator('.hud-details')).toContainText('Šárka');
   await page.getByRole('button',{name:'Main menu'}).click();
   await page.reload();
   await page.locator('.saved-character-row').filter({hasText:'Morrow'}).locator('.saved-select').click();
-  await next.click();
+  await continueGame(page);
   await expect(game).toHaveAttribute('data-world-seed',otherSeed!);
   await expect(page.locator('.hud-details')).toContainText('Morrow');
   await page.getByRole('button',{name:'Main menu'}).click();
-  await next.click();
+  await continueGame(page);
   await expect(game).toHaveAttribute('data-world-seed',otherSeed!);
 });
 

@@ -1,4 +1,4 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 /**
@@ -9,7 +9,7 @@ test('bag click only inspects; equipping, unequipping and dragging preserve the 
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
@@ -57,7 +57,7 @@ test('desktop click-to-move fallback supports both directions without accidental
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
@@ -92,7 +92,7 @@ test('clicking two different bag items does not swap them until Move by click is
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   const belt = merchant.getByRole('button', { name: 'Buy Studded War Belt' });
@@ -133,7 +133,7 @@ test.describe('landscape touch equipment management', () => {
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await openCharacterCreation(page);
-    await page.getByRole('button', { name: 'Enter the world' }).tap();
+    await enterWorld(page, 'tap');
     await page.getByRole('button', { name: 'Browse wares' }).tap();
     const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
     await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).tap();
@@ -169,7 +169,7 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   const buyBelt = merchant.getByRole('button', { name: 'Buy Studded War Belt' });
@@ -213,7 +213,7 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   // Verify that the asynchronous character restore completed, not just that Load was clicked.
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
   await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
@@ -230,7 +230,7 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   // Verify that the asynchronous character restore completed, not just that Load was clicked.
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
   await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();

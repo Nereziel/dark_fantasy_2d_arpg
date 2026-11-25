@@ -1,4 +1,4 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 import {test,expect} from '@playwright/test';
 
 test('Paladin offers seven real localized abilities, Faith and keyboard 2–6',async ({page})=>{
@@ -6,7 +6,7 @@ test('Paladin offers seven real localized abilities, Faith and keyboard 2–6',a
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await page.getByRole('button',{name:/Paladin/}).click();
-  await page.getByRole('button',{name:'Enter the world'}).click();
+  await enterWorld(page);
   await expect(page.getByText('Paladin · Level 1')).toBeVisible();
   await expect(page.locator('.resource-label')).toContainText('Faith');
   for(const name of ['Judgment','Consecration','Holy Strike','Divine Shield',
@@ -24,7 +24,7 @@ test('Paladin offers seven real localized abilities, Faith and keyboard 2–6',a
   await page.getByRole('button',{name:'Uložit'}).click();
   await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await expect(page.getByText('Paladin · Úroveň 1')).toBeVisible();
   await expect(page.getByRole('button',{name:'Božský štít',exact:true})).toBeEnabled();
 });

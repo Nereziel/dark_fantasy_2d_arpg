@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 test('seven-bus audio settings persist safely and remain usable on mobile', async ({ page }) => {
@@ -6,7 +6,7 @@ test('seven-bus audio settings persist safely and remain usable on mobile', asyn
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.locator('.game-header .top-actions .small-button').nth(1).click();
   await page.getByTestId('open-visual-settings').click();
 
@@ -33,7 +33,7 @@ test('seven-bus audio settings persist safely and remain usable on mobile', asyn
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.locator('.game-header .top-actions .small-button').nth(1).click();
   await page.getByTestId('open-visual-settings').click();
 

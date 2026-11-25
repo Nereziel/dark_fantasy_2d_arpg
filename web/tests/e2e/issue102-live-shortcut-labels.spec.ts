@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 // Issue #102: visual keyboard shortcuts must follow the same bindings as gameplay.
 import { expect, test } from '@playwright/test';
 
@@ -6,7 +6,7 @@ test('combat and quick-action hints update on rebind and after page reload', asy
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await expect(page.locator('.phaser-container canvas')).toBeVisible();
 
   await expect(page.locator('.potion-key')).toHaveText('Q');
@@ -39,7 +39,7 @@ test('combat and quick-action hints update on rebind and after page reload', asy
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await expect(page.locator('.potion-key')).toHaveText('V');
   await expect(page.locator('[data-quick-action="inventory"] .quick-key')).toHaveText('O');
   await expect(page.locator('[data-quick-action="talents"] .quick-key')).toHaveText('P');

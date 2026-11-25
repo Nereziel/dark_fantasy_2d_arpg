@@ -1,4 +1,4 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 test.use({ hasTouch: true });
@@ -8,7 +8,7 @@ test('landscape touch stash supports explicit transfer across tabs and back to b
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).tap();
+  await enterWorld(page, 'tap');
   await page.getByRole('button', { name: 'Browse wares' }).tap();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).tap();
@@ -52,7 +52,7 @@ test('landscape touch stash supports explicit transfer across tabs and back to b
   await page.getByRole('button', { name: 'Save', exact: true }).tap();
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
-  await loadCharacterControl(page).tap();
+  await continueGame(page, 'tap');
   await page.getByRole('button', { name: 'Open stash' }).tap();
   const reloaded = page.getByRole('dialog', { name: 'Camp Stash' });
   await expect(reloaded.locator('[data-stash-bag] [data-item-id]')).toHaveAttribute('data-item-id', id!);

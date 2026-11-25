@@ -103,6 +103,9 @@ jobs:
       - name: Test mandatory validation gate
         run: bash tests/quality-validation.test.sh
 
+      - name: Test browser timing report
+        run: node --test tests/browser-timings.test.mjs
+
       - name: Typecheck Svelte/TypeScript
         working-directory: web
         run: npm run check
@@ -157,9 +160,13 @@ jobs:
       matrix:
         include:
           - lane: quick-1
-            shard: 1/2
+            shard: 1/4
           - lane: quick-2
-            shard: 2/2
+            shard: 2/4
+          - lane: quick-3
+            shard: 3/4
+          - lane: quick-4
+            shard: 4/4
           - lane: act-i
             shard: ''
     steps:
@@ -198,8 +205,12 @@ jobs:
           if [[ "$LANE" == "act-i" ]]; then
             npm run test:e2e -- --grep 'natural first Act I loop:' --workers=1 --retries=0
           else
-            npm run test:e2e -- --grep-invert 'natural first Act I loop:' --shard="$SHARD"
+            npm run test:e2e -- --grep-invert 'natural first Act I loop:' --shard="$SHARD" --workers=2
           fi
+
+      - name: Report slow tests and retries
+        if: ${{ always() && !cancelled() }}
+        run: node .github/actions/browser-timings.mjs web/test-results/ci-results.json '${{ matrix.lane }}'
 
       - name: Retain failing browser traces
         if: failure()

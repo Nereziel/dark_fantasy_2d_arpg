@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 // GPL-3.0-only — D5.4: observational browser performance baseline.
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { campMovementTarget } from './iso-input';
@@ -89,7 +89,7 @@ for (const profile of profiles) {
       await page.goto('./');
       await page.locator('#menu-language').selectOption('en');
       await openCharacterCreation(page);
-      await page.getByRole('button', { name: 'Enter the world' }).click();
+      await enterWorld(page);
       const canvas = await ready(page);
       const seed = await page.locator(screen).getAttribute('data-world-seed');
       expect(seed).toMatch(/^\d+$/);
@@ -117,7 +117,7 @@ for (const profile of profiles) {
       await page.locator('.game-header').getByRole('button', { name: 'Main menu', exact: true }).click();
       await expect(page.locator('canvas')).toHaveCount(0);
       await openCharacterCreation(page, 'Restart hero');
-      await page.getByRole('button', { name: 'Enter the world' }).click();
+      await enterWorld(page);
       const restarted = await ready(page);
       const restartedSeed = await page.locator(screen).getAttribute('data-world-seed');
       expect(restartedSeed).toMatch(/^\d+$/);

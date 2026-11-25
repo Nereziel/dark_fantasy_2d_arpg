@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 /**
  * Issue #102: browser fullscreen and pixel-art interpolation stay visual only.
  * The mocked Fullscreen API makes unsupported/headless CI deterministic; this
@@ -37,7 +37,7 @@ test('fullscreen toggle and smooth pixels preserve the live game, save and mobil
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const canvas = page.locator('.phaser-container canvas');
   await expect(canvas).toBeVisible();
   await expect(page.locator('.phaser-container')).toHaveAttribute('data-render-mode', 'sharp');
@@ -92,7 +92,7 @@ test('fullscreen toggle and smooth pixels preserve the live game, save and mobil
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await expect(page.locator('.phaser-container')).toHaveAttribute('data-render-mode', 'smooth');
   await expect(page.locator('.phaser-container canvas')).toBeVisible();
 });

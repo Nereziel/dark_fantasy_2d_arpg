@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 /**
@@ -10,7 +10,7 @@ test('combat dock contains all seven skills, vitals and clickable actions withou
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await page.getByRole('button', { name: /Paladin/ }).click();
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
 
   const dock = page.getByTestId('combat-dock');
   const skills = dock.locator('.skill-ui');
@@ -66,7 +66,7 @@ test('map stays above combat dock and has an accessible close control on every s
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   for (const viewport of [
     { width: 1280, height: 800 },
     { width: 740, height: 720 },

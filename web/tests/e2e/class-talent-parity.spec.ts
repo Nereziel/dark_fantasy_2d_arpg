@@ -1,4 +1,4 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 // Issue #122: new class talents are playable, localized and persistent.
 // GPL-3.0-only.
 import { test, expect, type Page } from '@playwright/test';
@@ -53,12 +53,12 @@ for (const { id, title, nodes } of examples) {
     await openCharacterCreation(page);
     await page.getByRole('button', { name: new RegExp(id === 'NECROMANCER' ? 'Necromancer' :
       id === 'WARLOCK' ? 'Warlock' : 'Rogue') }).click();
-    await page.getByRole('button', { name: 'Enter the world' }).click();
+    await enterWorld(page);
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Hero saved');
     await page.reload();
     await grantThreeTalentPoints(page);
-    await loadCharacterControl(page).click();
+    await continueGame(page);
     await page.getByRole('button', { name: /Talents/ }).click();
     const dialog = page.getByRole('dialog', { name: title });
     await expect(dialog).toBeVisible();
@@ -75,7 +75,7 @@ for (const { id, title, nodes } of examples) {
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Hero saved');
     await page.reload();
-    await loadCharacterControl(page).click();
+    await continueGame(page);
     await page.getByRole('button', { name: 'Talents' }).click();
     const reloaded = page.getByRole('dialog', { name: title });
     for (const talentId of nodes)
