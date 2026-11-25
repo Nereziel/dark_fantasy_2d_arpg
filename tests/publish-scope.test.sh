@@ -65,6 +65,8 @@ HISTORY_MODE=error check true 'deployment API unavailable'
 HISTORY_MODE=status-error check true 'status API unavailable'
 HISTORY_MODE=failed check true 'latest deployment failed'
 HISTORY_MODE=malformed check true 'invalid deployment SHA'
-DEPLOYED_SHA=$app BEFORE_SHA=$DEPLOYED_SHA check true 'ordinary app change'
+# Compare the actual application-changing push, not the later test-only
+# commit (which has identical app files to $app).
+GITHUB_SHA=$app BEFORE_SHA=$DEPLOYED_SHA check true 'ordinary app change'
 EVENT_NAME=pull_request HISTORY_MODE=error check false 'PR never publishes'
 EVENT_NAME=workflow_dispatch HISTORY_MODE=error check true 'manual dispatch always publishes'
