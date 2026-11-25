@@ -1,0 +1,45 @@
+import {test,expect,type Page} from '@playwright/test';
+async function create(page: Page, name:string) {
+  await page.getByTestId('new-character').click();
+  await page.getByTestId('character-name').fill(name);
+  await page.locator('[data-class-id="WARRIOR"]').click();
+  await page.getByRole('button',{name:'Enter the world'}).click();
+  await expect(page.locator('.game-screen')).toBeVisible();
+}
+test('named same-class heroes resume the selected world, not the in-memory default',async({page})=>{
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  const next = page.getByTestId('continue-character');
+  await expect(next).toBeDisabled();
+  await expect(page.locator('[data-class-id]')).toHaveCount(0);
+  await page.getByTestId('new-character').click();
+  await expect(page.getByRole('button',{name:'Enter the world'})).toBeDisabled();
+  await page.getByTestId('cancel-character').click();
+  await expect(page.locator('[data-class-id]')).toHaveCount(0);
+  await create(page,'Šárka');
+  const game=page.locator('.game-screen');
+  const seed=await game.getAttribute('data-world-seed');
+  await page.getByRole('button',{name:'Main menu'}).click();
+  await expect(page.locator('.saved-character-row')).toHaveCount(1);
+  await create(page,'Morrow');
+  const otherSeed=await game.getAttribute('data-world-seed');
+  await page.getByRole('button',{name:'Main menu'}).click();
+  await expect(page.locator('.saved-character-row')).toHaveCount(2);
+  const first=page.locator('.saved-character-row').filter({hasText:'Šárka'});
+  await first.locator('.saved-select').click();
+  await expect(page.getByTestId('selected-character')).toContainText('Šárka');
+  await expect(page.getByTestId('selected-character')).toContainText('Warrior');
+  await expect(page.getByTestId('selected-character')).toContainText('Level 1');
+  await next.click();
+  await expect(game).toHaveAttribute('data-world-seed',seed!);
+  await expect(page.locator('.hud-details')).toContainText('Šárka');
+  await page.getByRole('button',{name:'Main menu'}).click();
+  await page.reload();
+  await page.locator('.saved-character-row').filter({hasText:'Morrow'}).locator('.saved-select').click();
+  await next.click();
+  await expect(game).toHaveAttribute('data-world-seed',otherSeed!);
+  await expect(page.locator('.hud-details')).toContainText('Morrow');
+  await page.getByRole('button',{name:'Main menu'}).click();
+  await next.click();
+  await expect(game).toHaveAttribute('data-world-seed',otherSeed!);
+});
