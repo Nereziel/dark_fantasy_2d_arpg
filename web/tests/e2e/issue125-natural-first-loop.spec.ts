@@ -1,4 +1,48 @@
-import { errors, expect, test, type Page } from '@playwright/test';
+import { errors, expect, test, type Locator, type Page } from '@playwright/test';
+import { projectIsometric, unprojectIsometric } from '../../src/game/phaser/isometricProjection';
+
+/** Use read-only renderer diagnostics and actual exposed canvas pixels.
+ * All quest targets remain ordinary Cartesian map coordinates. The only
+ * action that changes gameplay is a real mouse click in the browser.
+ */
+async function exposedIsometricClick(canvas: Locator, goal: { x: number; y: number }, timeout = 1500) {
+  await expect(canvas).toHaveAttribute('data-renderer', 'isometric-preview', { timeout });
+  await expect(canvas).toHaveAttribute('data-camera-origin', /^-?[0-9.]+,-?[0-9.]+$/, { timeout });
+  const originText = await canvas.getAttribute('data-projection-origin');
+  const [ox, oy] = (originText ?? '').split(',').map(Number);
+  if (!originText || !Number.isFinite(ox) || !Number.isFinite(oy)) throw new Error('Missing isometric projection origin');
+  const origin = { x: ox!, y: oy! };
+  const desired = projectIsometric(goal, 0, origin);
+  const click = await canvas.evaluate((node, { desired, origin }) => {
+    const element = node as HTMLCanvasElement;
+    const rect = element.getBoundingClientRect();
+    const [sx, sy] = (element.dataset.cameraOrigin ?? '').split(',').map(Number);
+    if (!Number.isFinite(sx) || !Number.isFinite(sy) || !element.width || !element.height
+      || rect.width <= 0 || rect.height <= 0) return null;
+    const desiredX = rect.left + (desired.x - sx!) * rect.width / element.width;
+    const desiredY = rect.top + (desired.y - sy!) * rect.height / element.height;
+    let best: { x: number; y: number; projectedX: number; projectedY: number; score: number } | null = null;
+    const consider = (x: number, y: number) => {
+      if (x < rect.left + 12 || x > rect.right - 12 || y < rect.top + 12 || y > rect.bottom - 12
+        || document.elementFromPoint(x, y) !== element) return;
+      const projectedX = sx! + (x - rect.left) * element.width / rect.width;
+      const projectedY = sy! + (y - rect.top) * element.height / rect.height;
+      // Exclude the empty corners outside the projected wilderness diamond.
+      const px = projectedX - origin.x, py = projectedY - origin.y;
+      const wx = py + px / 2, wy = py - px / 2;
+      if (wx < 0 || wx >= 2200 || wy < 0 || wy >= 1400) return;
+      const score = Math.hypot(x - desiredX, y - desiredY);
+      if (!best || score < best.score) best = { x, y, projectedX, projectedY, score };
+    };
+    consider(desiredX, desiredY);
+    for (let y = rect.top + 16; y <= rect.bottom - 12; y += 24)
+      for (let x = rect.left + 16; x <= rect.right - 12; x += 24) consider(x, y);
+    return best as { x: number; y: number; projectedX: number; projectedY: number; score: number } | null;
+  }, { desired, origin });
+  if (!click) throw new Error('No exposed isometric world canvas for ' + goal.x + ',' + goal.y);
+  const world = unprojectIsometric({ x: click.projectedX, y: click.projectedY }, 0, origin);
+  return { x: click.x, y: click.y, worldX: world.x, worldY: world.y };
+}
 
 /** Uses only ordinary user-visible controls on the production Vite build.
  * No GameBridge, debug hooks, direct commands, seeded snapshot injection,
@@ -134,11 +178,6 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
       }
     }
 
-    const rect = await canvas.boundingBox();
-    if (!rect) throw new Error('Phaser canvas missing during story exploration');
-    const { width, height } = await canvas.evaluate(node => ({
-      width: node.width, height: node.height
-    }));
     // If the path is pinned against an obstacle, make a real short sideways
     // world click, then retry the authored region search. No simulation
     // teleport, hidden map marker or obstacle lookup is involved.
@@ -147,17 +186,8 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
         y: y < 570 ? Math.min(1200, y + 270) : Math.max(120, y - 230) }
       : waypoints[waypointIndex]!;
     const waypoint = target;
-    // Phaser's camera clamps to world edges: a hero north of the viewport
-    // midpoint is NOT drawn at canvas center. Project the target using the
-    // clamped camera scroll, then choose a safe on-screen middle-mouse click.
-    const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
-    const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
-    const screenX = Math.max(width * 0.35,
-      Math.min(width * 0.67, waypoint.x - scrollX));
-    const screenY = Math.max(height * 0.23,
-      Math.min(height * 0.94, waypoint.y - scrollY));
-    await page.mouse.click(rect.x + rect.width * screenX / width,
-      rect.y + rect.height * screenY / height, { button: 'middle' });
+    const click = await exposedIsometricClick(canvas, waypoint);
+    await page.mouse.click(click.x, click.y, { button: 'middle' });
     await page.waitForTimeout(1200);
     const nextX = Number(await game.getAttribute('data-player-x'));
     const nextY = Number(await game.getAttribute('data-player-y'));
@@ -222,11 +252,6 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
       }
     }
 
-    const rect = await canvas.boundingBox();
-    if (!rect) throw new Error('Phaser canvas missing during graveyard exploration');
-    const { width, height } = await canvas.evaluate(node => ({
-      width: node.width, height: node.height
-    }));
     // Recover if a procedural obstacle blocks a specific eastward click.
     // This uses real viewport movement; it does not inspect map obstacles.
     const destination = waypoints[index]!;
@@ -234,20 +259,8 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
       ? { x: x - (stalled % 2 ? 95 : 175),
         y: Math.max(130, Math.min(1260, y + (stalled % 2 ? -165 : 245))) }
       : destination;
-    const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
-    const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
-    // At the east world edge the camera can no longer follow the hero.
-    // Clamping at 67% capped the maximum world-click x to 1777 in a 1280px
-    // viewport (2200 - 1280 + 0.67 * 1280): the exact repeated CI failure.
-    // 78% stays left of the right HUD but reaches the graveyard at x≈1900.
-    const screenX = Math.max(width * 0.35,
-      Math.min(width * 0.78, waypoint.x - scrollX));
-    // The combat controls sit below the canvas, so southern clicks can use
-    // its lower rows. Leave a small edge margin and keep clear of the side HUD.
-    const screenY = Math.max(height * 0.18,
-      Math.min(height * 0.94, waypoint.y - scrollY));
-    await page.mouse.click(rect.x + rect.width * screenX / width,
-      rect.y + rect.height * screenY / height, { button: 'middle' });
+    const click = await exposedIsometricClick(canvas, waypoint);
+    await page.mouse.click(click.x, click.y, { button: 'middle' });
     await page.waitForTimeout(1200);
 
     const nextX = Number(await game.getAttribute('data-player-x'));
@@ -421,37 +434,8 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
         };
       }
     }
-    await expect(canvas).toHaveAttribute('data-camera-origin', /^-?[0-9.]+,-?[0-9.]+$/, {
-      timeout: Math.max(1, Math.min(1500, deadline - Date.now()))
-    });
-    const click = await canvas.evaluate((node, goal) => {
-      const element = node as HTMLCanvasElement;
-      const rect = element.getBoundingClientRect();
-      const [scrollX, scrollY] = (element.dataset.cameraOrigin ?? '').split(',').map(Number);
-      if (!Number.isFinite(scrollX) || !Number.isFinite(scrollY)
-        || rect.width <= 0 || rect.height <= 0) return null;
-      // Project the map coordinate into the live canvas. Prefer the exact
-      // location, or the nearest exposed ground point if a HUD blocks it.
-      const desiredX = rect.left + (goal.x - scrollX!) * rect.width / element.width;
-      const desiredY = rect.top + (goal.y - scrollY!) * rect.height / element.height;
-      let best: { x: number; y: number; score: number } | null = null;
-      const consider = (x: number, y: number) => {
-        if (x < rect.left + 12 || x > rect.right - 12
-          || y < rect.top + 12 || y > rect.bottom - 12
-          || document.elementFromPoint(x, y) !== element) return;
-        const score = Math.hypot(x - desiredX, y - desiredY);
-        if (!best || score < best.score) best = { x, y, score };
-      };
-      consider(desiredX, desiredY);
-      for (let y = rect.top + 16; y <= rect.bottom - 12; y += 24)
-        for (let x = rect.left + 16; x <= rect.right - 12; x += 24) consider(x, y);
-      if (!best) return null;
-      const picked = best as { x: number; y: number; score: number };
-      return { x: picked.x, y: picked.y,
-        worldX: scrollX! + (picked.x - rect.left) * element.width / rect.width,
-        worldY: scrollY! + (picked.y - rect.top) * element.height / rect.height };
-    }, waypoint);
-    if (!click) throw new Error('No exposed world canvas while finding evidence');
+    const click = await exposedIsometricClick(canvas, waypoint,
+      Math.max(1, Math.min(1500, deadline - Date.now())));
     await page.mouse.click(click.x, click.y, { button: 'middle' });
     // Do not cancel a collision-aware route after a fixed 1.2 s: a route
     // can temporarily move away from the goal to go around a wall.
@@ -715,7 +699,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // A missing HUD control must fail at the specific action, not consume
   // the entire fifteen-minute playthrough allowance.
   page.setDefaultTimeout(8_000);
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -732,11 +716,10 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
 
   // Real left-click walk (not a simulation command) followed by real roster combat.
   const canvas = page.locator('.phaser-container canvas');
-  const rect = await canvas.boundingBox();
-  expect(rect).not.toBeNull();
   const startX = Number(await game.getAttribute('data-player-x'));
-  await page.mouse.click(rect!.x + rect!.width * 0.63,
-    rect!.y + rect!.height * 0.43);
+  const startY = Number(await game.getAttribute('data-player-y'));
+  const firstClick = await exposedIsometricClick(canvas, { x: startX + 100, y: startY - 25 });
+  await page.mouse.click(firstClick.x, firstClick.y);
   await expect.poll(async () => Math.abs(
     Number(await game.getAttribute('data-player-x')) - startX
   ), { timeout: 8_000 }).toBeGreaterThan(14);
@@ -1090,10 +1073,11 @@ test.describe('touch input', () => {
   test('Issue #125 — touch loot affordance is reachable without canvas pinpoint', async ({ page }) => {
   test.setTimeout(85_000);
   await page.setViewportSize({ width: 390, height: 740 });
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('cs');
   await page.getByRole('button', { name: /Paladin/ }).click();
   await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
+  await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toBeVisible();
   await page.getByRole('button', { name: 'Promluvit se strážkyní' }).click();
   const dialog = page.getByRole('dialog', { name: 'Strážkyně Vesna' });
   await dialog.getByRole('button', { name: 'Přijmout úkol' }).click();
