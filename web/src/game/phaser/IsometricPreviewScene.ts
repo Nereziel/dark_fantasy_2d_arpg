@@ -412,9 +412,20 @@ export class IsometricPreviewScene extends Phaser.Scene {
       this.clearImpacts();
       return;
     }
-    if (event.type !== 'damageResolved') return;
     const state = this.bridge.snapshot();
     if (state.zone !== this.zone || state.worldSeed !== this.seed || state.dungeonId!==this.dungeonId) return;
+    if(event.type==='cryptTrapWindup'){
+      const center=project({x:event.x,y:event.y});
+      const points=projectCombatCircle({x:event.x,y:event.y},event.radius,ORIGIN)
+        .map(p=>new Phaser.Math.Vector2(p.x-center.x,p.y-center.y));
+      const g=this.add.graphics().setPosition(center.x,center.y).setDepth(-89);
+      g.fillStyle(0xb94b42,.32).fillPoints(points,true);
+      g.lineStyle(3,0xffaa78,.95).strokePoints(points,true);
+      if(this.impacts.length>=MAX_IMPACT_VISUALS)this.impacts.shift()?.object.destroy();
+      this.impacts.push({object:g,position:center,started:this.time.now,duration:1200,rise:0});
+      return;
+    }
+    if (event.type !== 'damageResolved') return;
     const target = event.targetId === 'hero' ? state.player
       : state.enemies.find(unit => unit.actor.id === event.targetId)?.actor
         ?? state.summons?.find(summon => summon.id === event.targetId);
