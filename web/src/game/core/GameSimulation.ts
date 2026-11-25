@@ -76,7 +76,7 @@ import { planOptionalDungeonEntry, planOptionalDungeonExit, type OptionalDungeon
 import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
 import { projectDiscoveredDungeonEntrances } from '../world/dungeonPortalPresentation';
 import {optionalDungeonRewardId,validOptionalDungeonRewardIds,type OptionalDungeonRewardId} from '../world/optionalDungeonRewards';
-import {planOptionalDungeonFeatures,optionalDungeonChestProjection} from '../world/optionalDungeonFeatures';
+import {planOptionalDungeonFeatures,optionalDungeonChestProjection,rollOptionalDungeonTreasure} from '../world/optionalDungeonFeatures';
 import {
   applyTalentStats, planSpendTalent, planRespecTalents, projectTalentBonuses,
   validateTalentBuild, type TalentRanks, type TalentId
@@ -789,8 +789,23 @@ export class GameSimulation {
     this.pendingCryptPropId = null;
     if (this.optionalVisit) {
       const plan=planOptionalDungeonFeatures(this.optionalVisit.interior,this.optionalVisit.identity.dungeonId);
-      if (prop.id!==plan.chest.id || !this.claimDungeonReward('treasure')) return;
+      if (prop.id!==plan.chest.id) return;
+      const item=rollOptionalDungeonTreasure(this.world.seed,this.optionalVisit.identity.dungeonId,this.level,this.classId);
+      if (!item) return;
+      const owned=[...this.inventory,...this.stash,...this.stashTabs.flat(),...Object.values(this.equipment),
+        ...this.groundLoot.map(loot=>loot.item)].some(value=>value?.id===item.id);
+      const free=this.inventory.findIndex(slot=>slot===null);
+      // Do not consume an unclaimed chest when neither inventory nor ground can hold the item.
+      if (!owned && free<0 && this.groundLoot.length>=100) return;
+      if (!this.claimDungeonReward('treasure')) return;
       this.gold=Math.min(Number.MAX_SAFE_INTEGER,this.gold+plan.gold);
+      if (!owned) {
+        if (free>=0) this.inventory[free]=item;
+        else {
+          this.groundLoot.push({id:item.id,x:prop.position.x,y:prop.position.y,item});
+          this.events.push({type:'loot',id:item.id});
+        }
+      }
       this.events.push({type:'cryptInteract',id:prop.id,capability:prop.capability,goldAwarded:plan.gold});
       return;
     }
@@ -826,7 +841,10 @@ export class GameSimulation {
       else this.cryptTriggeredTrapIds.add(trap.id);
       if (distance(this.player, trap.trigger.center) > trap.trigger.radius) continue;
       const damage = trap.damage.maxBaseDamage;
-      this.dealPlayerDamage(damage, trap.damage.type, trap.id);
+      const hit=this.dealPlayerDamage(damage, trap.damage.type, trap.id);
+      if (optionalId && hit && this.player.alive && trap.damage.statusId) {
+        this.applyCanonicalStatus('player',trap.damage.statusId,trap.id,3,trap.damage.maxDurationSeconds);
+      }
       this.events.push({ type: 'cryptTrap', id: trap.id, damage,
         x: trap.trigger.center.x, y: trap.trigger.center.y });
     }
