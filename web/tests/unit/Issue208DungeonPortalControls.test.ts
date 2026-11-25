@@ -14,10 +14,10 @@ describe('Issue #208 C2.3 shared dungeon portal controls',()=>{
     expect(targets.map(t=>t.id)).toEqual(['crypt-portal','dungeon-portal:mine','dungeon-portal:cave']);
     expect(targets[0]!.position).toEqual(CRYPT_GATE);
     for(const t of targets.slice(1)){
-      const id=t.id==='dungeon-portal:mine'?'mine':'cave';
+      const id:'mine'|'cave'=t.id==='dungeon-portal:mine'?'mine':'cave';
       expect(dungeonPortalCommand(t.id)).toEqual({type:'usePortal',dungeonId:id});
       expect(t.position).toEqual(planActIDungeonEntrances(world).find(e=>e.id===id)!.position);
-      const snapshot={...sim.snapshot(),zone:'crypt' as const,dungeonId:id};
+      const snapshot={...sim.snapshot(),zone:'crypt' as const,dungeonId:id} as const;
       expect(dungeonRenderSeed(snapshot)).toBe(buildActIDungeonInterior(seed,id).seed);
       expect(dungeonPortalTargets(snapshot,[])).toHaveLength(1);
       expect(dungeonPortalTargets(snapshot,[])[0]!.position).toEqual(buildActIDungeonInterior(seed,id).exitPosition);
