@@ -9,6 +9,7 @@ import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/act
 import { dungeonPortalTargets, dungeonPortalCommand, dungeonRenderSeed } from '../world/dungeonPortalPresentation';
 import { buildWilderness } from '../world/wildernessRuntime';
 import { buildCryptWorld } from '../world/dungeonRuntime';
+import { planOptionalDungeonDecorations } from '../world/optionalDungeonDecorations';
 import { IsometricGroundLayer } from './isometricGroundLayer';
 import { wildernessGroundLayout, cryptGroundLayout } from './isometricTerrain';
 import { getTownManifest, townEntry } from '../world/townManifest';
@@ -52,6 +53,7 @@ const MAX_IMPACT_VISUALS = 64;
 export class IsometricPreviewScene extends Phaser.Scene {
   private readonly impacts: ImpactVisual[] = [];
   private ground!: IsometricGroundLayer;
+  private dungeonDecor!: Phaser.GameObjects.Graphics;
   private warnings!: Phaser.GameObjects.Graphics;
   private missiles!: Phaser.GameObjects.Graphics;
   private healthBars!: Phaser.GameObjects.Graphics;
@@ -77,6 +79,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
 
   create(): void {
     this.ground = new IsometricGroundLayer(this);
+    this.dungeonDecor = this.add.graphics().setDepth(-95);
     this.warnings = this.add.graphics().setDepth(-90);
     this.missiles = this.add.graphics().setDepth(9000);
     this.healthBars = this.add.graphics().setDepth(9100);
@@ -136,6 +139,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.zone = state.zone;
     this.dungeonId = state.dungeonId;
     this.dungeonEntrances = [];
+    this.dungeonDecor.clear();
     this.clearImpacts();
     for (const wall of this.walls) wall.destroy();
     this.walls.length = 0;
@@ -161,6 +165,9 @@ export class IsometricPreviewScene extends Phaser.Scene {
       const world = buildCryptWorld(dungeonRenderSeed(state));
       this.obstacles = world.layout.obstacles;
       this.ground.rebuild(cryptGroundLayout(world.dungeon,state.dungeonId), ORIGIN);
+      for(const decoration of planOptionalDungeonDecorations(world.dungeon,state.dungeonId)){
+        this.polygon(this.dungeonDecor,decoration.points.map(p=>project(p)),decoration.color);
+      }
     }
     this.game.canvas.dataset.groundChunks = String(this.ground.count);
     // Static layered art shares the exact collision footprint. Split long
