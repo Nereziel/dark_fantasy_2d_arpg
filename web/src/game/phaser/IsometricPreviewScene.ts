@@ -13,6 +13,8 @@ import { buildCryptWorld } from '../world/dungeonRuntime';
 import { planOptionalDungeonDecorations } from '../world/optionalDungeonDecorations';
 import { IsometricGroundLayer } from './isometricGroundLayer';
 import { groundCameraEnvelope } from './isometricGroundResidency';
+import { staticPaintBounds, staticPaintVisible } from './isometricStaticCulling';
+import type { IsometricRect } from './isometricProjection';
 import { wildernessGroundLayout, cryptGroundLayout } from './isometricTerrain';
 import { getTownManifest, townEntry } from '../world/townManifest';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
@@ -64,6 +66,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private label!: Phaser.GameObjects.Text;
   private villageResidents: readonly VillageResident[] = [];
   private readonly walls: Phaser.GameObjects.Graphics[] = [];
+  private readonly wallPaintBounds: (IsometricRect | null)[] = [];
   private readonly occluders: IsometricOccluder[] = [];
   private opaqueOccluders: readonly IsometricOccluder[] = [];
   private lastCutawayHero: Point | undefined;
@@ -122,6 +125,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       this.enemyPresentation.clear();
       this.facingMemory.clear();
       this.walls.length = 0;
+      this.wallPaintBounds.length = 0;
       this.occluders.length = 0;
       this.opaqueOccluders = [];
       this.lastCutawayHero = undefined;
@@ -131,6 +135,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
         delete this.game.canvas.dataset.groundResidentChunks;
         delete this.game.canvas.dataset.propMaterials;
         delete this.game.canvas.dataset.buildingCount;
+        delete this.game.canvas.dataset.staticLayers;
+        delete this.game.canvas.dataset.staticVisibleLayers;
         this.game.canvas.style.cursor = 'default';
       }
     });
@@ -149,6 +155,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.clearImpacts();
     for (const wall of this.walls) wall.destroy();
     this.walls.length = 0;
+    this.wallPaintBounds.length = 0;
     this.occluders.length = 0;
     this.opaqueOccluders = [];
     this.lastCutawayHero = undefined;
@@ -190,6 +197,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
           const g = this.add.graphics().setDepth(group.occluder.depth);
           for (const layer of group.paint) this.polygon(g, layer.points, layer.color);
           this.walls.push(g);
+          this.wallPaintBounds.push(staticPaintBounds(group.paint));
           this.occluders.push(group.occluder);
         }
         continue;
@@ -203,11 +211,13 @@ export class IsometricPreviewScene extends Phaser.Scene {
         const g = this.add.graphics().setDepth(art.occluder.depth);
         for (const layer of art.paint) this.polygon(g, layer.points, layer.color);
         this.walls.push(g);
+        this.wallPaintBounds.push(staticPaintBounds(art.paint));
         this.occluders.push(art.occluder);
       }
     }
     this.game.canvas.dataset.propMaterials = [...materials].sort().join(',');
     this.game.canvas.dataset.buildingCount = String(buildings.size);
+    this.game.canvas.dataset.staticLayers = String(this.walls.length);
     this.updateCutaway(state.player);
   }
 
@@ -216,10 +226,22 @@ export class IsometricPreviewScene extends Phaser.Scene {
     // The preview camera has fixed zoom=1, no rotation, and follows the hero.
     // Include both current scroll and the destination to cover follow lag.
     if (camera.width <= 0 || camera.height <= 0) return;
-    this.ground.sync(groundCameraEnvelope({
+    const envelope = groundCameraEnvelope({
       x: camera.scrollX, y: camera.scrollY,
       width: camera.width, height: camera.height
-    }, follow));
+    }, follow);
+    this.ground.sync(envelope);
+    // Only render visibility changes. Keep every occluder and its alpha,
+    // including hidden layers, for authoritative presentation/picking order.
+    let visibleLayers = 0;
+    this.walls.forEach((wall, i) => {
+      const visible = staticPaintVisible(this.wallPaintBounds[i] ?? null, envelope);
+      if (wall.visible !== visible) wall.setVisible(visible);
+      if (visible) visibleLayers++;
+    });
+    const visibleCount = String(visibleLayers);
+    if (this.game.canvas.dataset.staticVisibleLayers !== visibleCount)
+      this.game.canvas.dataset.staticVisibleLayers = visibleCount;
     const count = String(this.ground.count);
     if (this.game.canvas.dataset.groundResidentChunks !== count)
       this.game.canvas.dataset.groundResidentChunks = count;
