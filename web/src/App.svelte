@@ -5,6 +5,7 @@
   import { GameBridge } from './game/bridge/GameBridge';
   import { baseOf, tierOf, type GemId } from './game/gems/gemCatalog';
   import type { GameSnapshot, Point } from './game/core/types';
+  import {isOptionalDungeonBoss} from './game/enemies/optionalDungeonEncounters';
   import { resolveKeyboardAction, applyBindingOverrides, type InputBinding, type InputAction } from './game/input/bindings';
   import { GAME_BINDINGS } from './game/input/gameBindings';
   import { HeldPositionSources } from './game/input/heldPositionSources';
@@ -1083,16 +1084,17 @@
         {#each rosterUnits as unit (unit.actor.id)}
           <button
             class:targeted={unit.actor.id === view.selectedTargetId}
-            class:bossTarget={unit.actor.id === 'crypt_lord-4' || !!view.miniBossStates?.[unit.actor.id]}
+            class:bossTarget={unit.actor.id === 'crypt_lord-4' || isOptionalDungeonBoss(view.dungeonId,view.dungeonStage,unit.actor.id) || !!view.miniBossStates?.[unit.actor.id]}
             class:eliteTarget={!!unit.elite}
-            data-threat={unit.actor.id === 'crypt_lord-4' || view.miniBossStates?.[unit.actor.id]
+            data-threat={unit.actor.id === 'crypt_lord-4' || isOptionalDungeonBoss(view.dungeonId,view.dungeonStage,unit.actor.id) || view.miniBossStates?.[unit.actor.id]
               ? 'boss' : unit.elite ? 'elite' : 'normal'}
             disabled={!unit.actor.alive || !view.player.alive || view.paused}
             aria-pressed={unit.actor.id === view.selectedTargetId}
             onclick={() => bridge.command({ type: 'attack', targetId: unit.actor.id })}
           >
             <span class="roster-label">{unit.elite ? $t('hud.elite') + ' · ' : ''}{$t(unit.actor.id === 'crypt_lord-4' && view.zone === 'crypt'
-              ? 'boss.hollowKing.name' : view.miniBossStates?.[unit.actor.id]
+              ? 'boss.hollowKing.name' : isOptionalDungeonBoss(view.dungeonId,view.dungeonStage,unit.actor.id)
+              ? (view.dungeonId==='mine'?'dungeon.mineBoss':'dungeon.caveBoss') : view.miniBossStates?.[unit.actor.id]
               ? 'miniBossNames.' + unit.actor.id
               : unit.actor.id === 'morrow_gravebound'
                 ? 'enemies.morrow_gravebound.name' : 'enemies.' + unit.actor.type + '.name')}
@@ -1106,7 +1108,7 @@
             <span class="roster-health">{unit.actor.alive
               ? Math.ceil(100 * unit.actor.health / unit.actor.maxHealth) + '%'
               : '—'}</span>
-            {#if unit.actor.alive && (unit.actor.id === 'crypt_lord-4' || view.miniBossStates?.[unit.actor.id])}
+            {#if unit.actor.alive && (unit.actor.id === 'crypt_lord-4' || isOptionalDungeonBoss(view.dungeonId,view.dungeonStage,unit.actor.id) || view.miniBossStates?.[unit.actor.id])}
               <span class="boss-health-track" aria-hidden="true">
                 <span class="boss-health-fill" style:width={`${Math.max(0, Math.min(100,
                   100 * unit.actor.health / Math.max(1, unit.actor.maxHealth)))}%`}></span>
