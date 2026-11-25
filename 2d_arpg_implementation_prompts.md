@@ -199,7 +199,7 @@ Use a consistent **dark-fantasy pixel-art** direction with legible silhouettes, 
 
 ---
 
-<a id="prompt-01"></a>
+<a name="prompt-01"></a>
 # PROMPT 01 — Project Foundation and Architecture
 
 **Roadmap v3 contract:** Audit the existing web implementation; do not scaffold a second engine. Reuse GameSimulation, GameBridge, FrontierScene and the opt-in IsometricPreviewScene. Technical G1 validates the latter before default cutover.
@@ -331,7 +331,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-02"></a>
+<a name="prompt-02"></a>
 # PROMPT 02 — Player Entity and Character Core
 
 **Roadmap v3 contract:** Player position, speed, radius, stats and resources remain world-space; sprite facing and screen elevation are renderer-only.
@@ -407,7 +407,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-03"></a>
+<a name="prompt-03"></a>
 # PROMPT 03 — Diablo-Style Mouse Movement
 
 **Roadmap v3 contract:** Convert camera/DPR/zoom-adjusted pointer coordinates through inverse isometric projection; the same authoritative navigation handles ground clicks, held movement and interactive approach. Test both mouse and touch.
@@ -474,7 +474,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-04"></a>
+<a name="prompt-04"></a>
 # PROMPT 04 — Mouse Context Resolver and Interaction Model
 
 **Roadmap v3 contract:** Use shared typed context/picking; select projected actor bodies and ground targets with opaque occluder depth, then authorize range and LOS in simulation. Cover NPC, loot, doors, chests and all dungeon portals.
@@ -543,7 +543,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-05"></a>
+<a name="prompt-05"></a>
 # PROMPT 05 — Force Move, Hold Position, and Skill Aiming
 
 **Roadmap v3 contract:** All aim types carry world-space point/entity/direction values. Isometric input, held movement and modifiers use existing bindings and respect modal capture; test mouse, keyboard, touch and AltGr.
@@ -623,7 +623,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-06"></a>
+<a name="prompt-06"></a>
 # PROMPT 06 — Combat Foundation
 
 **Roadmap v3 contract:** Damage, ranges, LOS, projectiles and hit areas use Cartesian world-space; project the authoritative shapes for isometric warnings.
@@ -690,7 +690,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-07"></a>
+<a name="prompt-07"></a>
 # PROMPT 07 — Warrior Basic Combat
 
 Implement the Warrior as the first complete combat class.
@@ -754,7 +754,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-08"></a>
+<a name="prompt-08"></a>
 # PROMPT 08 — Animation and Combat Feel
 
 **Roadmap v3 contract:** G1: functional eight-direction atlas and combat timeline parity, projected shadows, effects and hit feedback; G4: final authored assets. Use footpoint depth and independent occlusion without changing attack timing.
@@ -809,7 +809,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-09"></a>
+<a name="prompt-09"></a>
 # PROMPT 09 — Status Effect Framework
 
 Implement a reusable status-effect system.
@@ -862,7 +862,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-10"></a>
+<a name="prompt-10"></a>
 # PROMPT 10 — Enemy Framework and AI
 
 **Roadmap v3 contract:** G2/#207 replaces ordinary global packs/waves with deterministic spatial groups, stable IDs, budgeted activation and persistent visit facts. Existing wave systems are transitional except explicit events and boss mechanics.
@@ -918,7 +918,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-11"></a>
+<a name="prompt-11"></a>
 # PROMPT 11 — Monster Families
 
 **Roadmap v3 contract:** Populate actual biomes/dungeon rooms from typed family catalogs; reuse monster actions and stable encounter IDs, not fixed global pack indices.
@@ -967,7 +967,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-12"></a>
+<a name="prompt-12"></a>
 # PROMPT 12 — XP, Levels, and Character Progression
 
 Implement player progression.
@@ -1008,7 +1008,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-13"></a>
+<a name="prompt-13"></a>
 # PROMPT 13 — Item Data Model
 
 Create the equipment/item foundation.
@@ -1079,7 +1079,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-14"></a>
+<a name="prompt-14"></a>
 # PROMPT 14 — Affixes and Random Item Generation
 
 Implement procedural item generation.
@@ -1137,7 +1137,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-15"></a>
+<a name="prompt-15"></a>
 # PROMPT 15 — Inventory and Equipment
 
 **Roadmap v3 contract:** Use #123 as the sole inventory task: inspect-only first click/tap, explicit equip/unequip and drag/move, compatible target hints, 2H/offhand and rings, stash, same item identity, accessible CS/EN errors.
@@ -1185,7 +1185,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-16"></a>
+<a name="prompt-16"></a>
 # PROMPT 16 — Loot Drops
 
 **Roadmap v3 contract:** Seeded loot is simulation-owned. Ground loot has world positions; projected picking and filters never mutate drop identity or RNG. One-shot encounter/treasure rewards are seed-scoped.
@@ -1229,7 +1229,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-17"></a>
+<a name="prompt-17"></a>
 # PROMPT 17 — Elite Monsters and Modifiers
 
 Implement elite enemies.
@@ -1267,7 +1267,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-18"></a>
+<a name="prompt-18"></a>
 # PROMPT 18 — First Persistent Town
 
 **Roadmap v3 contract:** G2/#208: at least three inhabited settlements (hub and two villages) with stable identities/approximate anchors but variable layout and paths. Render shared structure footprints and NPC manifests; protect safe zones and ensure reachable service approaches.
@@ -1312,7 +1312,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-19"></a>
+<a name="prompt-19"></a>
 # PROMPT 19 — Gold Economy and Merchants
 
 Implement gold as the primary currency.
@@ -1363,7 +1363,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-20"></a>
+<a name="prompt-20"></a>
 # PROMPT 20 — Dialogue and Quest Foundation
 
 **Roadmap v3 contract:** NPC and quest IDs are semantic, independent of generated positions. Require real NPC interaction range/LOS and character-scoped one-time quest claims across new seeds.
@@ -1422,7 +1422,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-21"></a>
+<a name="prompt-21"></a>
 # PROMPT 21 — Act I Quest Chain
 
 **Roadmap v3 contract:** Keep the existing nine-story-quest chain and local side quests; optional mine/cave must not advance story crypt milestones. Unlock eligibility is not permission to build Act II before G5.
@@ -1463,7 +1463,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-22"></a>
+<a name="prompt-22"></a>
 # PROMPT 22 — Procedural Wilderness Generation
 
 **Roadmap v3 contract:** Use #208 regional terrain and settlement/road manifests. Plan coherent terrain and navigable corridors before road routes; main trade roads connect settlements, optional trails may terminate or leave POIs off-road. Guarantee walkable required targets, not a road to every object. Validate fresh seeds and bounded fallbacks.
@@ -1518,7 +1518,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-23"></a>
+<a name="prompt-23"></a>
 # PROMPT 23 — World Chunking and Streaming
 
 **Roadmap v3 contract:** Separate simulation lifecycle (#207) from camera-driven isometric render culling/texture cache (G1/#210). Stable chunk IDs and facts survive unloading within a seed; no enemy HP or reward reset exploit. Profile mobile memory and release textures on rebuild/shutdown.
@@ -1558,7 +1558,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-24"></a>
+<a name="prompt-24"></a>
 # PROMPT 24 — Map, Minimap, and Fog of War
 
 **Roadmap v3 contract:** Fog only on large map and minimap. Known regions remain revealed within the same seed; fresh launch resets discovery. Clip roads, landmarks, portals and quest hints to discovered cells. No scene fog/dimming or leak of unknown POIs.
@@ -1593,7 +1593,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-25"></a>
+<a name="prompt-25"></a>
 # PROMPT 25 — Procedural Dungeon Generator
 
 **Roadmap v3 contract:** Generate independent interiors for story crypt, mine and cave from region seed + dungeon identity. Shared validated room/door geometry; distinct spawns, layouts, rewards and exact return entrance. Never route optional bosses into story quest state.
@@ -1638,7 +1638,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-26"></a>
+<a name="prompt-26"></a>
 # PROMPT 26 — First Dungeon Theme
 
 **Roadmap v3 contract:** Keep story crypt identity; mine/cave use their own materials, decorations, enemies, treasure and telegraphed hazards. Shared isometric floor/wall silhouettes and collision; decoration is not a functional prop unless authorized by simulation. G4 final art follows content.
@@ -1675,7 +1675,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-27"></a>
+<a name="prompt-27"></a>
 # PROMPT 27 — Mini Boss Framework
 
 **Roadmap v3 contract:** Assign seeded miniboss identity to actual regions/POIs; defeat facts and one-shot rewards must not reset when chunks unload. Project attacks and health independently of gameplay.
@@ -1712,7 +1712,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-28"></a>
+<a name="prompt-28"></a>
 # PROMPT 28 — Boss Framework and First Act Boss
 
 **Roadmap v3 contract:** Story Hollow King remains distinct from optional dungeon bosses. World-space windups, reachable movement and LOS; telegraphs projected through the shared renderer. Unique mechanics and balance only in their active roadmap gate.
@@ -1754,7 +1754,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-29"></a>
+<a name="prompt-29"></a>
 # PROMPT 29 — Death and Respawn
 
 **Roadmap v3 contract:** Respawn preserves active session seed, relevant discovery and consumed/defeated facts; avoid granting duplicate quest or same-seed rewards. No positional migration requirement.
@@ -1793,7 +1793,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-30"></a>
+<a name="prompt-30"></a>
 # PROMPT 30 — Talent Tree Foundation
 
 Implement a reusable talent tree framework.
@@ -1847,7 +1847,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-31"></a>
+<a name="prompt-31"></a>
 # PROMPT 31 — Skill Modification System
 
 Expand skills so talents and items can alter behavior.
@@ -1888,7 +1888,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-32"></a>
+<a name="prompt-32"></a>
 # PROMPT 32 — Crafting, Salvaging, and Materials
 
 Implement crafting foundation.
@@ -1927,7 +1927,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-33"></a>
+<a name="prompt-33"></a>
 # PROMPT 33 — Gems and Runes
 
 Implement equipment sockets.
@@ -1961,7 +1961,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-34"></a>
+<a name="prompt-34"></a>
 # PROMPT 34 — Potions and Consumables
 
 Implement consumables.
@@ -1998,7 +1998,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-35"></a>
+<a name="prompt-35"></a>
 # PROMPT 35 — Player Stash
 
 **Roadmap v3 contract:** Stash is durable character state, not region seed state; explicit move/equip/drop transactions preserve item identity.
@@ -2030,7 +2030,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-36"></a>
+<a name="prompt-36"></a>
 # PROMPT 36 — Fast Travel and Waypoints
 
 **Roadmap v3 contract:** Use discovered/activated waypoints with stable IDs and authoritative destination validation. New launch resets world activation; travel within a session does not regenerate the region.
@@ -2059,7 +2059,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-37"></a>
+<a name="prompt-37"></a>
 # PROMPT 37 — World Events
 
 **Roadmap v3 contract:** Events are explicit seeded local encounters; bounded event waves are valid, but not global default population. Stable one-shot facts across same-seed reentry and appropriate reset on fresh launch.
@@ -2100,7 +2100,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-38"></a>
+<a name="prompt-38"></a>
 # PROMPT 38 — Shrines and Environmental Interactions
 
 **Roadmap v3 contract:** Place shrines and actionable objects in actual valid terrain/rooms; use manifest IDs, range/LOS and collision-aware approach. Claims committed before rewards; project warnings/props without renderer ownership.
@@ -2146,7 +2146,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-39"></a>
+<a name="prompt-39"></a>
 # PROMPT 39 — Paladin Class
 
 Add the Paladin using existing class infrastructure.
@@ -2190,7 +2190,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-40"></a>
+<a name="prompt-40"></a>
 # PROMPT 40 — Mage Class
 
 Add the Mage.
@@ -2244,7 +2244,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-41"></a>
+<a name="prompt-41"></a>
 # PROMPT 41 — Necromancer Class
 
 Add the Necromancer.
@@ -2294,7 +2294,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-42"></a>
+<a name="prompt-42"></a>
 # PROMPT 42 — Rogue Class
 
 Add the Rogue.
@@ -2347,7 +2347,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-43"></a>
+<a name="prompt-43"></a>
 # PROMPT 43 — Warlock Class
 
 Add the Warlock.
@@ -2388,7 +2388,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-44"></a>
+<a name="prompt-44"></a>
 # PROMPT 44 — Class Selection and Character Creation
 
 **Roadmap v3 contract:** Selecting an existing character for a new launch preserves character progression but generates a fresh region seed; selecting/creating a character must not leak another character's world facts.
@@ -2429,7 +2429,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-45"></a>
+<a name="prompt-45"></a>
 # PROMPT 45 — Save/Load System
 
 **Roadmap v3 contract:** G2 defines the launch/session distinction below. This is the target contract, not a claim that the current bridge already implements it.
@@ -2453,7 +2453,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-46"></a>
+<a name="prompt-46"></a>
 # PROMPT 46 — Full HUD and Main Gameplay UI
 
 **Roadmap v3 contract:** Use existing Svelte projections and modal stack; no duplicate HUD/gameplay rules. G1 checks technical interaction parity; G3/G5 checks full HUD/inventory/touch/accessibility, with #123 owning inventory.
@@ -2510,7 +2510,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-47"></a>
+<a name="prompt-47"></a>
 # PROMPT 47 — Settings, Accessibility, and Input Rebinding
 
 **Roadmap v3 contract:** Preferences are browser-local; renderer/view selection does not alter simulation or save. Test isometric mouse/touch/keyboard bindings, modifier chords, UI capture and focus.
@@ -2550,7 +2550,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-48"></a>
+<a name="prompt-48"></a>
 # PROMPT 48 — Audio Framework
 
 **Roadmap v3 contract:** G4 final audio; authoritative game events feed one audio adapter regardless of renderer. Avoid double-playing events, handle browser autoplay and mobile lifecycle.
@@ -2592,7 +2592,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-49"></a>
+<a name="prompt-49"></a>
 # PROMPT 49 — Act II Region
 
 **Roadmap v3 contract:** BLOCKED until explicit G5 approval; no Act II planning, data preparation, code or PR. Future region must reuse the accepted isometric/seed/quest contracts.
@@ -2647,7 +2647,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-50"></a>
+<a name="prompt-50"></a>
 # PROMPT 50 — Act III Region
 
 **Roadmap v3 contract:** BLOCKED until explicit G5 approval and Act II acceptance. Reuse the shared isometric world pipeline.
@@ -2697,7 +2697,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-51"></a>
+<a name="prompt-51"></a>
 # PROMPT 51 — Act IV Region
 
 **Roadmap v3 contract:** BLOCKED until explicit G5 approval and Act III acceptance. Reuse the shared isometric world pipeline.
@@ -2746,7 +2746,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-52"></a>
+<a name="prompt-52"></a>
 # PROMPT 52 — Act V and Campaign Finale
 
 **Roadmap v3 contract:** BLOCKED until explicit G5 approval and Act IV acceptance. Reuse the shared isometric world pipeline.
@@ -2796,7 +2796,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-53"></a>
+<a name="prompt-53"></a>
 # PROMPT 53 — Difficulty Modes and Controlled Scaling
 
 **Roadmap v3 contract:** G3 after #207 population; reassess draft #206 against actual Act I encounters, no runtime merge based on old global waves. No Act II balancing.
@@ -2835,7 +2835,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-54"></a>
+<a name="prompt-54"></a>
 # PROMPT 54 — Reputation and Factions
 
 **Roadmap v3 contract:** Deferred beyond Act I approval; reference only.
@@ -2868,7 +2868,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-55"></a>
+<a name="prompt-55"></a>
 # PROMPT 55 — Advanced Legendary Items
 
 **Roadmap v3 contract:** G3 only for necessary Act I item/build diversity; broader campaign/endgame effects deferred. Audit existing item systems first.
@@ -2901,7 +2901,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-56"></a>
+<a name="prompt-56"></a>
 # PROMPT 56 — Endgame Foundation
 
 **Roadmap v3 contract:** BLOCKED until explicit G5 approval and completed campaign; reference only.
@@ -2935,7 +2935,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-57"></a>
+<a name="prompt-57"></a>
 # PROMPT 57 — Performance Pass
 
 **Roadmap v3 contract:** G1 technical baseline and G4/G5 final performance: measure isometric render/culling, texture memory, active enemy budget, navigation, particles and Svelte updates on desktop/mobile. Never skip authoritative combat or change RNG due to visibility.
@@ -2980,7 +2980,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-58"></a>
+<a name="prompt-58"></a>
 # PROMPT 58 — Procedural Generation Validation Suite
 
 **Roadmap v3 contract:** G2 rerun strict 1,000-distinct-seed wilderness/dungeon validation (#113) plus boundary and historical regressions after topology/population changes; verify both graph and actual geometry, all settlements, off-road required targets, exact returns, safe spawns and discovery. Report all failing seeds without weakening gates.
@@ -3016,7 +3016,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-59"></a>
+<a name="prompt-59"></a>
 # PROMPT 59 — Combat and Item Test Suite
 
 **Roadmap v3 contract:** G3/G5: deterministic combat/item regression including seed-scoped rewards, persistent character claims, full-inventory ground fallback, optional bosses and projected interaction parity. Do not replace natural E2E with fixture-only tests.
@@ -3052,7 +3052,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-60"></a>
+<a name="prompt-60"></a>
 # PROMPT 60 — Developer Console and Debug Tools
 
 **Roadmap v3 contract:** Only if required by active gate; dev-only, no production debug commands or hidden bridge bypass. Debug fixtures do not count as acceptance.
@@ -3093,7 +3093,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-61"></a>
+<a name="prompt-61"></a>
 # PROMPT 61 — Multiplayer-Readiness Architecture Review
 
 **Roadmap v3 contract:** Deferred review until after Act I approval and stable campaign scope; no netcode or speculative architectural rewrite.
@@ -3144,7 +3144,7 @@ Acceptance criteria:
 
 ---
 
-<a id="prompt-62"></a>
+<a name="prompt-62"></a>
 # PROMPT 62 — Final Vertical Slice Verification
 
 **Roadmap v3 contract:** Deferred release-wide verification; earlier G5/#125 requires a full natural Act I in default isometry, multiple seeds, all six classes, physical devices and public build. Distinguish same-seed restoration from fresh-launch reset.
@@ -3194,7 +3194,7 @@ Run Playwright against the built Vite bundle on `/dark_fantasy_2d_arpg/`: verify
 
 ---
 
-<a id="prompt-63"></a>
+<a name="prompt-63"></a>
 # PROMPT 63 — Full Game Systems Audit
 
 **Roadmap v3 contract:** Deferred final release audit after campaign; G5 is a separate Act I gate. Audit coordinate ownership, seed/session boundary, stable IDs, resource cleanup, map-only fog and renderer independence.
