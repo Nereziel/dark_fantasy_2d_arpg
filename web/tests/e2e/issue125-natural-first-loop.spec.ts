@@ -273,8 +273,8 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
 }
 
 /** Continue from Morrow using ordinary world clicks, not a prepared save.
- * The evidence marker is seed-dependent; only the visible Inspect button
- * proves the live player reached its interaction radius.
+ * The evidence marker is seed-dependent; the real Inspect button must be
+ * clicked in range and advance the live quest journal before returning.
  */
 async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void> {
   const game = page.locator('.game-screen');
@@ -299,8 +299,48 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
   let knownEvidence: { x: number; y: number } | null = null;
   let nextMapCheck = 0;
   const lastSteps: string[] = [];
+  const journal = page.locator('.quest-journal');
+  let inspectAttempts = 0;
+  // A survey route can cross the interaction radius without ending there.
+  // Stop by the normal Shift hold-position binding before using the real
+  // button. The simulation still checks proximity and quest prerequisites.
+  const inspectIfInReach = async (): Promise<boolean> => {
+    if (Date.now() >= deadline || !await inspect.isVisible()) return false;
+    if (await page.getByTestId('death-overlay').count()) {
+      throw new Error('Natural Act I evidence search: hero died before inspection; seed='
+        + await game.getAttribute('data-world-seed'));
+    }
+    inspectAttempts++;
+    await page.keyboard.down('Shift');
+    try {
+      const remaining = Math.min(1_500, deadline - Date.now());
+      if (remaining <= 0) return false;
+      await expect(game).toHaveAttribute('data-hold-position', 'true', { timeout: remaining });
+      if (!await inspect.isVisible()) {
+        // The actor may already have left range before the key arrived.
+        nextMapCheck = 0;
+        return false;
+      }
+      await expect(journal).toContainText('The Seal of Rot');
+      try {
+        await inspect.click({ timeout: Math.max(1, Math.min(1_500, deadline - Date.now())) });
+      } catch (error) {
+        if (!(error instanceof errors.TimeoutError)) throw error;
+        // A transient detached control does not count as completion.
+        nextMapCheck = 0;
+        return false;
+      }
+      // Only authoritative journal transition counts as success.
+      await expect(journal).toContainText('Descent into the Crypt', {
+        timeout: Math.max(1, Math.min(3_000, deadline - Date.now()))
+      });
+      return true;
+    } finally {
+      await page.keyboard.up('Shift');
+    }
+  };
   while (Date.now() < deadline) {
-    if (await inspect.count() > 0) return;
+    if (await inspectIfInReach()) return;
     if (await page.getByTestId('death-overlay').count()) {
       throw new Error('Natural Act I evidence search: hero died; seed=' + await game.getAttribute('data-world-seed')
         + '; last steps=' + lastSteps.join(' | '));
@@ -400,7 +440,7 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
     let nextX = currentX, nextY = currentY, still = 0;
     while (Date.now() < observationDeadline) {
       await page.waitForTimeout(300);
-      if (await inspect.count() > 0) return;
+      if (await inspectIfInReach()) return;
       if (await page.getByTestId('death-overlay').count()) {
         throw new Error('Natural Act I evidence search: hero died during movement; seed='
           + await game.getAttribute('data-world-seed'));
@@ -438,6 +478,7 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
     + await game.getAttribute('data-player-x') + ','
     + await game.getAttribute('data-player-y') + '), waypoint=' + index
     + ', seed=' + await game.getAttribute('data-world-seed')
+    + ', inspect attempts=' + inspectAttempts
     + ', discovered evidence=' + JSON.stringify(knownEvidence)
     + ', last steps=' + lastSteps.join(' | ')
     + ', journal=' + await page.locator('.quest-journal').innerText());
@@ -456,35 +497,62 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
   let lastProgressAt = Date.now();
   let previousRoster = '';
   const game = page.locator('.game-screen');
+  const recent: string[] = [];
+  const pressIfReady = async (button: ReturnType<Page['locator']>): Promise<boolean> => {
+    if (!await button.isEnabled()) return false;
+    try {
+      await button.click({ timeout: 700 });
+      return true;
+    } catch (error) {
+      if (!(error instanceof errors.TimeoutError)) throw error;
+      return false;
+    }
+  };
   while (Date.now() < deadline) {
     const quest = await journal.innerText();
     const chamber = await dungeon.innerText();
     if (quest.includes('Report to Vesna') && chamber.includes('Crypt cleared')) return;
     if (await page.getByTestId('death-overlay').count()) {
-      throw new Error('Natural crypt battle: hero died before Act I boss victory; quest=' + quest);
+      throw new Error('Natural crypt battle: hero died before Act I boss victory; seed='
+        + await game.getAttribute('data-world-seed') + '; player='
+        + await game.getAttribute('data-player-x') + ','
+        + await game.getAttribute('data-player-y') + '; quest=' + quest
+        + '; dungeon=' + chamber + '; roster=' + (await roster.innerText()).replaceAll('\n', ' ')
+        + '; recent=' + recent.join(' | '));
     }
-    const hp = (await page.locator('.vital-top').first().innerText())
-      .match(/(\d+)\s*\/\s*(\d+)/);
-    if (hp && Number(hp[1]) / Number(hp[2]) < 0.74) {
-      const heal = page.locator('[data-paladin-ability="healingLight"]');
-      if (await heal.isEnabled()) {
-        try { await heal.click({ timeout: 1_500 }); }
-        catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
-      } else {
-        const potion = page.getByTestId('use-potion');
-        if (await potion.isEnabled()) {
-          try { await potion.click({ timeout: 1_500 }); }
-          catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
-        }
-      }
+    const vital = page.locator('.vital-panel .vital-top');
+    const hp = (await vital.first().innerText()).match(/(\d+)\s*\/\s*(\d+)/);
+    const faith = (await vital.last().innerText()).match(/(\d+)\s*\/\s*(\d+)/);
+    const healthRatio = hp ? Number(hp[1]) / Number(hp[2]) : 0;
+    const shieldActive = await vital.filter({ hasText: 'Shield' }).count() > 0;
+    const warning = (await dungeon.locator('.king-warning').allTextContents()).join(' ');
+    const damageWarning = warning !== '' && !warning.includes('Raise the Dead');
+    const heal = page.locator('[data-paladin-ability="healingLight"]');
+    const shield = page.locator('[data-paladin-ability="divineShield"]');
+    const potion = page.getByTestId('use-potion');
+    // Prevent burst damage instead of waiting until the hero is nearly dead.
+    // Use an emergency potion independently of Faith; reserve the class
+    // action for healing or shielding. Do not recast an existing shield.
+    let action = '';
+    if (hp && healthRatio < 0.5 && await pressIfReady(potion)) action = 'potion';
+    if (hp && healthRatio < 0.82 && await pressIfReady(heal)) action += ' heal';
+    else if (!shieldActive && (damageWarning || healthRatio < 0.85)
+      && await pressIfReady(shield)) action += ' shield';
+    else if (!action && hp && healthRatio < 0.7
+      && await pressIfReady(potion)) action = 'potion';
+    // Holy Strike costs 12 Faith and refunds 10 on hit. Leave at least 59
+    // Faith (27 heal + 32 shield) after spending it, and never attack at
+    // the expense of an urgent defensive action. Range remains authoritative.
+    if (!action && healthRatio >= 0.85 && !damageWarning
+      && faith && Number(faith[1]) >= 71
+      && await roster.locator('button.targeted:not([disabled])').count()
+      && await pressIfReady(page.locator('[data-paladin-ability="holyStrike"]'))) {
+      action = 'holyStrike';
     }
-    if (hp && Number(hp[1]) / Number(hp[2]) < 0.6) {
-      const shield = page.locator('[data-paladin-ability="divineShield"]');
-      if (await shield.isEnabled()) {
-        try { await shield.click({ timeout: 1_500 }); }
-        catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
-      }
-    }
+    recent.push('HP=' + (hp?.[0] ?? '?') + ', Faith=' + (faith?.[0] ?? '?')
+      + ', shield=' + shieldActive + ', warning=' + warning + ', action=' + action
+      + ', phase=' + (await dungeon.locator('.king-phase').allTextContents()).join(' '));
+    if (recent.length > 12) recent.shift();
     // A real boss phase may take time, but a minute without ANY visible
     // combat progress indicates a stuck approach or attack, not slow DPS.
     // Fail the same acceptance gate early; do not advance or skip the fight.
@@ -500,8 +568,12 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
         + progress + '; dungeon=' + chamber);
     }
     const live = roster.locator('button:not([disabled])');
+    // Defeat living guards and summoned adds before focusing the boss;
+    // ignoring adds lets their attacks accumulate through multiple phases.
+    const adds = live.filter({ hasNotText: 'The Hollow King' });
     const kings = live.filter({ hasText: 'The Hollow King' });
-    const candidate = (await kings.count()) ? kings.first() : live.first();
+    const candidate = (await adds.count()) ? adds.first()
+      : (await kings.count()) ? kings.first() : live.first();
     // Read the current selection without waiting for a target that may have
     // died between the roster query and the attribute read. The next loop
     // still requires the real quest transition AND Crypt cleared.
@@ -515,13 +587,14 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
         if (!(error instanceof errors.TimeoutError)) throw error;
       }
     }
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(250);
   }
   throw new Error('Natural crypt battle timed out; quest=' + await journal.innerText()
     + '; dungeon=' + await dungeon.innerText() + '; roster='
     + (await roster.innerText()).replaceAll('\n', ' ')
     + '; player=' + await page.locator('.game-screen').getAttribute('data-player-x')
-    + ',' + await page.locator('.game-screen').getAttribute('data-player-y'));
+    + ',' + await page.locator('.game-screen').getAttribute('data-player-y')
+    + '; recent=' + recent.join(' | '));
 }
 
 /** Defeat the unique Act I miniboss through the visible HUD and ordinary
@@ -866,11 +939,10 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // looked up; the quest panel exposes its action only within reach.
   await expect(page.locator('.quest-journal'))
     .toContainText('Recover evidence leading to the crypt');
+  // Complete the actual inspection inside the search deadline, while
+  // standing in range, rather than returning on transient button visibility.
   await walkToStoryEvidence(page, 135_000);
   const evidence = page.getByTestId('story-inspect-evidence');
-  await expect(evidence).toBeVisible();
-  await expect(page.locator('.quest-journal')).toContainText('The Seal of Rot');
-  await evidence.click();
   await expect(page.locator('.quest-journal')).toContainText('Descent into the Crypt');
   await expect(page.locator('.quest-journal')).toContainText('Enter the crypt');
   await expect(page.locator('.quest-journal')).not.toContainText('The Seal of Rot');
