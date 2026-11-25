@@ -1,7 +1,7 @@
-// GPL-3.0-only — opt-in engineering preview, not the production renderer.
+// GPL-3.0-only — default 2:1 isometric presentation; simulation remains Cartesian.
 import Phaser from 'phaser';
 import { get } from 'svelte/store';
-import { _ as translate, locale } from 'svelte-i18n';
+import { _ as translate } from 'svelte-i18n';
 import type { GameBridge } from '../bridge/GameBridge';
 import type { GameEvent, GameSnapshot, Point, ZoneId } from '../core/types';
 import { EnemyPresentation, snapshotEnemyWindup } from './isometricEnemyPresentation';
@@ -63,7 +63,6 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private missiles!: Phaser.GameObjects.Graphics;
   private healthBars!: Phaser.GameObjects.Graphics;
   private anchor!: Phaser.GameObjects.Graphics;
-  private label!: Phaser.GameObjects.Text;
   private villageResidents: readonly VillageResident[] = [];
   private readonly walls: Phaser.GameObjects.Graphics[] = [];
   private readonly wallPaintBounds: (IsometricRect | null)[] = [];
@@ -97,9 +96,6 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.cameras.main.setBounds(bounds.x, bounds.y, bounds.width, bounds.height)
       .setZoom(1).centerOn(p.x, p.y).startFollow(this.anchor, true, 0.12, 0.12);
     this.syncGround(p);
-    this.label = this.add.text(12, 12, '', { fontSize: '13px', color: '#f0dbab',
-      backgroundColor: '#141a20', padding: { x: 6, y: 4 } })
-      .setScrollFactor(0).setDepth(10000);
     this.game.canvas.dataset.renderer = 'isometric-preview';
     this.game.canvas.dataset.projectionOrigin = ORIGIN.x + ',' + ORIGIN.y;
     this.input.mouse?.disableContextMenu();
@@ -233,7 +229,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     const cameraOrigin = camera.scrollX + ',' + camera.scrollY;
     if (this.game.canvas.dataset.cameraOrigin !== cameraOrigin)
       this.game.canvas.dataset.cameraOrigin = cameraOrigin;
-    // The preview camera has fixed zoom=1, no rotation, and follows the hero.
+    // The isometric camera has fixed zoom=1, no rotation, and follows the hero.
     // Include both current scroll and the destination to cover follow lag.
     if (camera.width <= 0 || camera.height <= 0) return;
     const envelope = groundCameraEnvelope({
@@ -659,7 +655,5 @@ export class IsometricPreviewScene extends Phaser.Scene {
     }
     this.renderCombat(state);
     this.updateImpacts();
-    this.label.setText(get(locale) === 'cs'
-      ? '2,5D – vývojový náhled' : '2.5D – development preview');
   }
 }

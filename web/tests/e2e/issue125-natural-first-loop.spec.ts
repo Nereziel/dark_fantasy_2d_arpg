@@ -699,7 +699,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // A missing HUD control must fail at the specific action, not consume
   // the entire fifteen-minute playthrough allowance.
   page.setDefaultTimeout(8_000);
-  await page.goto('./?view=iso');
+  await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -1073,7 +1073,7 @@ test.describe('touch input', () => {
   test('Issue #125 — touch loot affordance is reachable without canvas pinpoint', async ({ page }) => {
   test.setTimeout(85_000);
   await page.setViewportSize({ width: 390, height: 740 });
-  await page.goto('./?view=iso');
+  await page.goto('./');
   await page.locator('#menu-language').selectOption('cs');
   await page.getByRole('button', { name: /Paladin/ }).click();
   await page.getByRole('button', { name: 'Vstoupit do světa' }).click();

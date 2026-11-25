@@ -38,10 +38,10 @@ async function assertMapFog(map: Locator, mode: 'mini' | 'world') {
   expect(result.unknownRoads).toBe(0);
 }
 
-test('isometric preview boots, accepts a pointer and keeps the map controls', async ({ page }) => {
+test('default isometric view boots, accepts a pointer and keeps the map controls', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('./?view=iso');
+  await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
@@ -85,10 +85,20 @@ test('isometric preview boots, accepts a pointer and keeps the map controls', as
   expect(errors).toEqual([]);
 });
 
-test('normal game entry still uses the existing renderer', async ({ page }) => {
-  await page.goto('./');
+test('explicit classic fallback remains available only during E2', async ({ page }) => {
+  await page.goto('./?view=classic');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await expect(page.locator('canvas').first()).toBeVisible();
   await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toHaveCount(0);
 });
+
+for (const query of ['?view=iso', '?view=unknown', '?view=']) {
+  test('isometric entry for ' + query, async ({ page }) => {
+    await page.goto('./' + query);
+    await page.locator('#menu-language').selectOption('en');
+    await page.getByRole('button', { name: 'Enter the world' }).click();
+    await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toBeVisible();
+    await expect(page.locator('.phaser-container canvas')).toHaveCount(1);
+  });
+}

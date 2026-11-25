@@ -98,7 +98,7 @@ for (const profile of profiles) {
       test.setTimeout(60_000);
       const errors: string[] = [];
       page.on('pageerror', e => errors.push(e.message));
-      await page.goto('./?view=iso');
+      await page.goto('./');
       await page.locator('#menu-language').selectOption('en');
       await page.getByRole('button', { name: 'Enter the world' }).click();
       const canvas = await ready(page);
