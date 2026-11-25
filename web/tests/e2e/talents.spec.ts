@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
  * The fixture uses the public v11 IndexedDB record, never a debug simulation API.
  */
 test('spends, saves, reloads and refunds Warrior talent ranks through the UI', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Save' }).click();

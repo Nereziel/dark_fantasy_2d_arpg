@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 
 test('stash shows the same item illustration in bag, stored rows and after withdrawal at mobile width', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 740 });
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();

@@ -20,7 +20,7 @@
     {#each drops as drop (drop.id)}
       {@const name = itemDisplayName(drop.item, $locale ?? 'en',
         $t('item.base.' + drop.item.templateId))}
-      <button type="button" data-loot-id={drop.id}
+      <button type="button" data-loot-id={drop.id} data-loot-x={drop.x} data-loot-y={drop.y}
         aria-label={$t('nearbyLoot.pickup') + ': ' + name}
         title={$t('nearbyLoot.pickup') + ': ' + name}
         onclick={() => bridge.command({ type: 'pickup', id: drop.id })}>

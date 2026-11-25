@@ -7,7 +7,7 @@ test.describe('Issue #153 mobile bindings acceptance', () => {
   for (const width of [320, 390, 430]) {
     test(`${width}px touch: Controls chord capture, map, and modal close remain reachable`, async ({ page }) => {
       await page.setViewportSize({ width, height: 740 });
-      await page.goto('./');
+      await page.goto('./?view=iso');
       await page.locator('#menu-language').selectOption('en');
       await page.getByRole('button', { name: 'Enter the world' }).click();
       await page.keyboard.press('Escape');
@@ -59,7 +59,7 @@ test.describe('Issue #153 mobile bindings acceptance', () => {
 
   test('320px: long modifier hints stay within their touch buttons', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 740 });
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.evaluate(() => localStorage.setItem('aether-ruin-controls-v1', JSON.stringify([
       { action: 'INVENTORY', device: 'keyboard', code: 'F8',
         modifiers: { ctrl: true, shift: true } }

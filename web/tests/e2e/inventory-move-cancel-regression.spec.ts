@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
  * Uses real merchant purchases and the visible inventory controls.
  */
 test('clear selection and sort both disarm move mode before subsequent bag clicks', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();

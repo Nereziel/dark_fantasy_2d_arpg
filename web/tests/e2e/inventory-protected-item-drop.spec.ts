@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
  * No debug bridge, injected game state or synthetic drag events.
  */
 test('favorite and locked items cannot be dropped until explicitly unprotected', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();

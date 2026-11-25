@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('environment objects preserve the original camp, map and fog of war', async ({page})=>{
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button',{name:'Enter the world'}).click();
   await expect(page.locator('.game-screen')).toBeVisible();

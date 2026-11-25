@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 test('reduced-motion mobile combat keeps authoritative abilities and canvas responsive', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 390, height: 740 });
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const canvas = page.locator('.phaser-container canvas');
@@ -24,7 +24,7 @@ test('reduced-motion mobile combat keeps authoritative abilities and canvas resp
 test('combat alerts and class actions remain within the 320–430px mobile canvas layout', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 320, height: 720 });
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const canvas = page.locator('.phaser-container canvas');

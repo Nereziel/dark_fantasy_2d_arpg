@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 test('hotbar supports drag, keyboard activation, reset and per-hero reload', async ({ page }) => {
   test.setTimeout(90_000);
   page.setDefaultTimeout(12_000);
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Warrior/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -37,7 +37,7 @@ test('touch hotbar slot selection fits a 320px viewport without casting', async 
   const context = await browser.newContext({ baseURL: 'http://127.0.0.1:4173/dark_fantasy_2d_arpg/', viewport: { width: 320, height: 740 }, hasTouch: true, isMobile: true });
   try {
     const page = await context.newPage();
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: /Warrior/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).tap();

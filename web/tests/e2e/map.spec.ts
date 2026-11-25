@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('world map and minimap conceal unvisited places, support localization and survive reload', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
 

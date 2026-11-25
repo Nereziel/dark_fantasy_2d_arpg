@@ -4,7 +4,7 @@ test.use({ hasTouch: true });
 
 test('landscape touch stash supports explicit transfer across tabs and back to backpack with Save/Load', async ({ page }) => {
   await page.setViewportSize({ width: 740, height: 390 });
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).tap();
   await page.getByRole('button', { name: 'Browse wares' }).tap();

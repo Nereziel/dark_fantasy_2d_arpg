@@ -3,7 +3,7 @@
 import { test, expect } from '@playwright/test';
 
 test('inventory uses real SVG artwork for bag, equipped gear and the inspector', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
@@ -34,7 +34,7 @@ test.describe('touch item preview and loot-label preferences', () => {
 
   test('320–430px preview is illustrated and compares side by side before deliberate equip', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 740 });
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: 'Enter the world' }).click();
     await page.getByRole('button', { name: 'Browse wares' }).click();
@@ -81,7 +81,7 @@ test.describe('touch item preview and loot-label preferences', () => {
   });
 
   test('ground loot label filter stores sanitized preferences without discarding the bag item', async ({ page }) => {
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: 'Enter the world' }).click();
     await page.getByRole('button', { name: 'Browse wares' }).click();

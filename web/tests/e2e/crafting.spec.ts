@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('blacksmith salvages real purchased item, persists material wallet and denies double salvage', async ({page}) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button',{name:'Enter the world'}).click();
   await page.getByRole('button',{name:'Browse wares'}).click();

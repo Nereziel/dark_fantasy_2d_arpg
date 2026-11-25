@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test';
 
 test('combat and quick-action hints update on rebind and after page reload', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await expect(page.locator('.phaser-container canvas')).toBeVisible();

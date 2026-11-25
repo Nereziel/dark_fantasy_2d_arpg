@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 test('build presets retain saved layout and preview without changing talents', async ({ page }) => {
   test.setTimeout(90_000);
   await page.setViewportSize({ width: 320, height: 740 });
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Warrior/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();

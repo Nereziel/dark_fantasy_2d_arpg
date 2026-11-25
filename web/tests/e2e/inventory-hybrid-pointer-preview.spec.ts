@@ -8,7 +8,7 @@ test.describe('hybrid pointer inventory inspection', () => {
 
   test('touch tap then mouse hover previews the hovered item without changing item flags', async ({ page }) => {
     await page.setViewportSize({ width: 740, height: 390 });
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: 'Enter the world' }).tap();
     await page.getByRole('button', { name: 'Browse wares' }).tap();
