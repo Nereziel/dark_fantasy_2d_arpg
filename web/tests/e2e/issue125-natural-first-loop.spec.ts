@@ -652,6 +652,20 @@ async function defeatMorrowNaturally(page: Page, timeoutMs: number): Promise<voi
     + '; enemy roster: ' + (await page.locator('.enemy-roster').innerText()).replaceAll('\n', ' '));
 }
 
+/** Log actual stage latency without modifying game time, polling or assertions. */
+async function timedNaturalStage(name: string, operation: () => Promise<void>): Promise<void> {
+  const started = Date.now();
+  let status = 'failed';
+  try {
+    await test.step(name, operation);
+    status = 'passed';
+  } finally {
+    console.log('[act-i-stage] ' + JSON.stringify({
+      name, status, durationMs: Date.now() - started
+    }));
+  }
+}
+
 test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, equip, turn-in', async ({ page }) => {
   // Continuous natural run: real first quest, corruption, boar hunt, graveyard,
   // then a fresh real Save/Load proving the unique Morrow encounter persists.
@@ -685,7 +699,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
     Number(await game.getAttribute('data-player-x')) - startX
   ), { timeout: 8_000 }).toBeGreaterThan(14);
 
-  await keepFighting(page, 1, 45_000);
+  await timedNaturalStage('starter first kill', () => keepFighting(page, 1, 45_000));
   await expect(guide).toHaveAttribute('data-guide-step', 'loot');
   const loot = page.getByTestId('nearby-loot');
   await expect(loot).toBeVisible({ timeout: 10_000 });
@@ -733,7 +747,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await inventory.locator('.close-button').click();
   await expect(guide).toHaveAttribute('data-guide-step', 'objective');
 
-  await keepFighting(page, 3, 50_000);
+  await timedNaturalStage('starter hunt', () => keepFighting(page, 3, 50_000));
   await expect(guide).toHaveAttribute('data-guide-step', 'return');
   await expect(page.locator('.quest-journal')).toContainText('Return to Warden Vesna');
 
@@ -824,7 +838,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // Continue using actual player movement after loading the genuine quest save.
   // The corruption-site discovery must grant its reward exactly once and
   // automatically activate the next story quest, not a second Vesna turn-in.
-  await walkToCorruptionSite(page, 110_000);
+  await timedNaturalStage('corruption exploration', () => walkToCorruptionSite(page, 110_000));
   await expect(page.locator('.quest-journal')).toContainText('The Blighted Pack');
   await expect(page.locator('.quest-journal')).toContainText('Defeat three corrupted boars');
   await expect(game).toHaveAttribute('data-zone', 'wilderness');
@@ -836,7 +850,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // enemy falls the simulation spawns its actual three-corrupted-boar wave.
   // The objective cannot advance from ordinary skeleton/wolf/wraith kills.
   await expect(page.locator('.quest-journal')).toContainText('0/3');
-  await keepFighting(page, 3, 105_000, 'The Forgotten Graves');
+  await timedNaturalStage('boar hunt', () => keepFighting(page, 3, 105_000, 'The Forgotten Graves'));
   await expect(page.locator('.quest-journal')).toContainText('Forgotten Graves');
   await expect(page.locator('.quest-journal')).toContainText('graveyard');
   await expect(page.locator('.quest-journal')).not.toContainText('The Blighted Pack');
@@ -869,7 +883,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
     .filter({ hasText: 'Morrow, Graveyard Warden' });
   await expect(morrow).toHaveCount(0);
   await expect(page.locator('.quest-journal')).toContainText('Discover the abandoned graveyard');
-  await walkToAbandonedGraveyard(page, 130_000);
+  await timedNaturalStage('graveyard exploration', () => walkToAbandonedGraveyard(page, 130_000));
   await expect(page.locator('.quest-journal')).toContainText('Morrow, Gravebound');
   await expect(page.locator('.quest-journal')).toContainText('Defeat Morrow at the graveyard');
   await expect(page.locator('.quest-journal')).not.toContainText('The Forgotten Graves');
@@ -906,7 +920,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(page.locator('.quest-journal'))
     .toContainText('Defeat Morrow at the graveyard');
   await expect(morrow).toBeEnabled();
-  await defeatMorrowNaturally(page, 150_000);
+  await timedNaturalStage('Morrow battle', () => defeatMorrowNaturally(page, 150_000));
   await expect(page.locator('.quest-journal')).toContainText('The Seal of Rot');
   await expect(page.locator('.quest-journal'))
     .toContainText('Recover evidence leading to the crypt');
@@ -941,7 +955,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
     .toContainText('Recover evidence leading to the crypt');
   // Complete the actual inspection inside the search deadline, while
   // standing in range, rather than returning on transient button visibility.
-  await walkToStoryEvidence(page, 135_000);
+  await timedNaturalStage('story evidence', () => walkToStoryEvidence(page, 135_000));
   const evidence = page.getByTestId('story-inspect-evidence');
   await expect(page.locator('.quest-journal')).toContainText('Descent into the Crypt');
   await expect(page.locator('.quest-journal')).toContainText('Enter the crypt');
@@ -978,7 +992,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
 
   // The genuine crypt guardian wave and the three-phase Hollow King battle
   // must finish before the authoritative quest allows the final report.
-  await clearCryptNaturally(page, 240_000);
+  await timedNaturalStage('crypt boss battle', () => clearCryptNaturally(page, 240_000));
   await expect(page.locator('.quest-journal')).toContainText('Report to Vesna');
   await expect(page.locator('.quest-journal')).toContainText('Speak to Vesna in town');
   await expect(page.locator('.dungeon-panel')).toContainText('Crypt cleared');

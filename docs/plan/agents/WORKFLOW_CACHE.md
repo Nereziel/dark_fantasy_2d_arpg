@@ -5,10 +5,10 @@ Tento postup platí pro další agentní vlny. Nemění existující historické
 ## GitHub Actions
 
 - `quality.yml` je jediný validační workflow pro PR i změny v `main`; **job `verify` zachovává existující název required checku**.
-- `build` provede check, všechny unit testy, jediný produkční build a kontrolu historického HTML dle scope; uploadne stejný `web/dist` pro další joby. `pull_request` spustí kompletní sadu, PR nikdy nedeployuje.
+- `build` určí publish scope a vytvoří jediný produkční `web/dist`; `checks` běží souběžně (scope/gate regresní testy, typecheck, všechny unit testy a legacy dle scope). Browser lanes čekají jen na build. `pull_request` spustí kompletní sadu, PR nikdy nedeployuje.
 - Chromium se dělí na dvě paralelní části běžných testů a samostatný průchod Aktu I (`--grep 'natural first Act I loop:'`). Komplementární `--grep-invert` a sharding zachovají úplné pokrytí, včetně touch-loot scénáře ze stejného souboru. Průchod Aktu I běží bez automatického retry, takže se jedna chyba neopakuje po celém průchodu. Běžné testy zachovávají svůj dosavadní retry.
-- `verify` je povinná souhrnná brána: vyžaduje úspěch buildu a všech tří browser lanes. V případě selhání používej **Re-run failed jobs**, který znovu nespustí úspěšné části a využije výstup přesného buildu v témže runu. Trace neúspěšných browser testů jsou k dispozici jako artefakty jednotlivých lanes. Lokální cílený průchod: `cd web && npm run test:e2e -- --grep 'natural first Act I loop:' --workers=1 --retries=0` (po buildu).
-- `push` do `main` validuje změny v `web/**`, `tests/**`, quality workflow a sdílených Actions. Publikace nastane při změně vstupů hry (`web/src`, `web/public`, hlavních konfigurací/dependencies nebo `.github/actions`) či samotného `quality.yml`. Dokumentace a testy bez změny hry nezpůsobí publikaci.
+- `verify` je povinná souhrnná brána: vyžaduje úspěch buildu, `checks` a všech tří browser lanes; samostatný shell gate odmítá failure/skipped/cancelled i neznámé výsledky. V případě selhání používej **Re-run failed jobs**, který znovu nespustí úspěšné části a využije výstup přesného buildu v témže runu. Trace neúspěšných browser testů jsou k dispozici jako artefakty jednotlivých lanes. Lokální cílený průchod: `cd web && npm run test:e2e -- --grep 'natural first Act I loop:' --workers=1 --retries=0` (po buildu).
+- `push` do `main` validuje změny v `web/**`, `tests/**`, quality workflow a sdílených Actions. Publikace nastane při změně vstupů hry (`web/src`, `web/public`, hlavních konfigurací/dependencies nebo `.github/actions`) či samotného `quality.yml`. Test-only push s již úspěšně publikovanými shodnými vstupy hru znovu nepublikuje; chybějící/neúspěšná/neurčitá historie deploymentu nebo dosud nepublikovaná změna povolí publish až po plném GREEN.
 - `workflow_dispatch` provede plnou validaci a v případě úspěchu znovu publikuje.
 - `verify` stáhne přesný produkční balíček z `build`, ověří base path a nahraje `web/dist` jako Pages balíček až po úspěchu všech E2E lanes. Název obsahuje SHA a číslo pokusu. Job `deploy` dostane přesný název z výstupu `verify` a publikuje jej pomocí `actions/deploy-pages`. Při opakování pouze nasazovacího jobu se použije již ověřený balíček.
 - `setup-node` používá npm download cache podle `web/package-lock.json`; `npm ci` stále instaluje soubory z důvěryhodného lockfile. **Nekešovat a nesdílet `node_modules` mezi worktree**.
@@ -33,3 +33,23 @@ bash scripts/verify.sh agent
 ## Doporučené sledování přínosu
 
 Porovnávat délku `verify` a `deploy` jobu před/po změně; nezaměňovat odhady za měření. Pokud `npm ci` nebo Playwright instalace zůstávají bottleneckem, profilovat jednotlivé kroky z Actions.
+
+
+## Rychlá diagnostika Aktu I
+
+```bash
+bash scripts/verify.sh act-i-diagnostic evidence
+bash scripts/verify.sh act-i-diagnostic crypt
+bash scripts/verify.sh act-i-diagnostic story
+bash scripts/verify.sh act-i-diagnostic all
+bash scripts/verify.sh targeted tests/unit/Issue125SealEvidenceInteraction.test.ts tests/unit/WaveGHollowKingCombat.test.ts
+bash scripts/verify.sh act-i-browser
+```
+
+- Stejné skupiny nabízí ruční workflow `Act I targeted diagnostics` (scope `evidence`, `crypt`, `story`, `all`, `natural-browser`). Nejsou required check, nemají deploy a jejich zelený výsledek nikdy nenahrazuje `verify`. Natural browser stále hraje celý Akt I normální rychlostí, s náhodným seedem, bez retry.
+- Osm etap natural E2E loguje `[act-i-stage]` se stavem a skutečným trváním, včetně selhání. Při přijetí optimalizace porovnat nejméně tři srovnatelné běhy (stejný runner a počet testů) s baseline; uložit run ID, kritickou cestu i součet runner-minut. Neporovnávat pouze trvání jobu `verify`, který běží až na konci.
+- Dlouhý natural CI trace zachová DOM/action snapshots a finální failure screenshot, ale neukládá průběžné screenshoty ani zdrojové kopie. Quick a lokální traces se nemění. Při reprodukci vizuální chyby použít plný trace lokálně bez `LANE=act-i`.
+- Baseline 45578481918: build 95 s (unit 59 s, check 9 s), browser test act-i 337 s, quick-1 252 s, quick-2 314 s. 45586129139 act-i 373 s, failure artifact 513923917 B. Paralelní build/checks by teoreticky odstranil cca 60–70 s z kritické cesty při stejném výkonu runnerů; reálný přínos není dosud změřený. Cena je jeden dodatečný runner a další npm ci.
+- Zatím ponechat dva quick shardy: natural Act I byl delší než oba, takže další sharding sám kritickou cestu nezkrátí. Po měření případně rozdělit pouze pokud quick opravdu blokuje; validovat disjunktní úplný seznam testů.
+- Další fáze: na základě stage timings nahradit pevná čekání jen odpovídajícími pozorovatelnými podmínkami (route progress, quest transition, action readiness), s původními deadline a death/failure checks. Izolované browser fixtures pro evidence/boss až po ověření potřeby a existujících testů, striktně oddělené od plného natural průchodu. Nezrychlovat simulaci, nefixovat příznivý seed, nevynechávat save/load či boss kill. Profilovat instalaci/cache pouze pokud je skutečným bottleneckem. 1000-seed sweep zůstává samostatný a povinný v rozsahu roadmapy po změnách geometrie/populace.
+- Přejímka: celý required `verify` v PR, shodný tree po merge, úspěšné CI na main a Pages, ověřený deployment recovery. Žádné nahrazování zeleného CI cache výsledků jiného SHA.

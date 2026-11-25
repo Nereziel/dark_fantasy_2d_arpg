@@ -43,9 +43,6 @@ jobs:
           # Required to compare the entire pushed range, including merge commits.
           fetch-depth: 0
 
-      - name: Test deployment scope and recovery
-        run: bash tests/publish-scope.test.sh
-
       - name: Determine whether the published application changed
         id: scope
         shell: bash
@@ -66,6 +63,46 @@ jobs:
         working-directory: web
         run: npm ci --prefer-offline --no-audit --no-fund
 
+      - name: Build static game
+        working-directory: web
+        run: npm run build
+
+      # One production build is shared by every browser lane, not rebuilt.
+      - name: Upload production bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-dist-${{ github.sha }}-${{ github.run_attempt }}
+          path: web/dist
+          if-no-files-found: error
+          retention-days: 3
+
+  # Independent checks run alongside the build, not on the browser critical path.
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Required to compare the entire pushed range, including merge commits.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: web
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Test deployment scope and recovery
+        run: bash tests/publish-scope.test.sh
+
+      - name: Test mandatory validation gate
+        run: bash tests/quality-validation.test.sh
+
       - name: Typecheck Svelte/TypeScript
         working-directory: web
         run: npm run check
@@ -73,10 +110,6 @@ jobs:
       - name: Unit tests
         working-directory: web
         run: npm run test
-
-      - name: Build static game
-        working-directory: web
-        run: npm run build
 
       - name: Check whether the archived HTML reference changed
         id: legacy
@@ -113,15 +146,6 @@ jobs:
       - name: Legacy reference test
         if: steps.legacy.outputs.run == 'true'
         run: node tests/site.test.mjs
-
-      # One production build is shared by every browser lane, not rebuilt.
-      - name: Upload production bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: game-dist-${{ github.sha }}-${{ github.run_attempt }}
-          path: web/dist
-          if-no-files-found: error
-          retention-days: 3
 
   browser:
     name: Browser (${{ matrix.lane }})
@@ -188,20 +212,22 @@ jobs:
 
   # Preserve the required check name. No skipped/failed lane can publish.
   verify:
-    needs: [build, browser]
+    needs: [build, checks, browser]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-24.04
     outputs:
       publish: ${{ needs.build.outputs.publish }}
       pages_artifact: pages-${{ github.sha }}-${{ github.run_attempt }}
     steps:
+      - name: Checkout validation gate
+        uses: actions/checkout@v4
+
       - name: Require all validation lanes
         env:
           BUILD_RESULT: ${{ needs.build.result }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
-        run: |
-          test "$BUILD_RESULT" = success
-          test "$BROWSER_RESULT" = success
+        run: bash .github/actions/require-validation.sh "$BUILD_RESULT" "$CHECKS_RESULT" "$BROWSER_RESULT"
 
       - name: Download verified production bundle
         if: needs.build.outputs.publish == 'true'
