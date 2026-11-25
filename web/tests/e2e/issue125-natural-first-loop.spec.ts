@@ -496,6 +496,9 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
   let lastTargetAt = 0;
   let lastProgressAt = Date.now();
   let previousRoster = '';
+  let resumeAfter = 0;
+  let resumeAttack = false;
+  let focusRegeneratingKing = false;
   const game = page.locator('.game-screen');
   const recent: string[] = [];
   const pressIfReady = async (button: ReturnType<Page['locator']>): Promise<boolean> => {
@@ -540,17 +543,43 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
       && await pressIfReady(shield)) action += ' shield';
     else if (!action && hp && healthRatio < 0.7
       && await pressIfReady(potion)) action = 'potion';
-    // Holy Strike costs 12 Faith and refunds 10 on hit. Leave at least 59
-    // Faith (27 heal + 32 shield) after spending it, and never attack at
-    // the expense of an urgent defensive action. Range remains authoritative.
-    if (!action && healthRatio >= 0.85 && !damageWarning
-      && faith && Number(faith[1]) >= 71
-      && await roster.locator('button.targeted:not([disabled])').count()
-      && await pressIfReady(page.locator('[data-paladin-ability="holyStrike"]'))) {
-      action = 'holyStrike';
+    // Judgment and Smite are real ranged attacks; Holy Strike is melee.
+    // Use the available damage skills instead of letting regeneration erase
+    // intermittent basic hits. Keep 59 Faith in reserve for heal + shield.
+    // Judgment's normal hotbar control is usable during basic attacks.
+    const live = roster.locator('button:not([disabled])');
+    const adds = live.filter({ hasNotText: 'The Hollow King' });
+    const kings = live.filter({ hasText: 'The Hollow King' });
+    const regenerating = await kings.filter({ hasText: 'Regenerating' }).count() > 0;
+    // Sustained damage on a regenerating boss matters more than endlessly
+    // clearing its finite active add slots. Revert to adds if health is unsafe.
+    if (!regenerating || (healthRatio < 0.70 && !shieldActive)) focusRegeneratingKing = false;
+    else if (healthRatio >= 0.85 || shieldActive) focusRegeneratingKing = true;
+    const candidate = focusRegeneratingKing && await kings.count() ? kings.first()
+      : (await adds.count()) ? adds.first() : (await kings.count()) ? kings.first() : live.first();
+    const pressed = await candidate.evaluateAll(nodes =>
+      nodes.length ? nodes[0]!.getAttribute('aria-pressed') : null);
+    if (!action && !resumeAttack && Date.now() >= resumeAfter
+      && healthRatio >= 0.85 && !damageWarning && faith && pressed === 'true') {
+      const available = Number(faith[1]);
+      if (available >= 79 && await pressIfReady(page.locator('[data-hotbar-ability="judgment"]'))) {
+        action = 'judgment';
+      } else if (available >= 83 && await pressIfReady(page.locator('[data-paladin-ability="smite"]'))) {
+        action = 'smite';
+      } else if (available >= 71 && await pressIfReady(page.locator('[data-paladin-ability="holyStrike"]'))) {
+        action = 'holyStrike';
+      }
+    }
+    // The roster selection can outlive an interrupted auto-attack. Give the
+    // actual cast its hit/recovery window before explicitly resuming combat;
+    // clicking a roster button during the cast would cancel its timeline.
+    if (action && action !== 'potion') {
+      resumeAfter = Date.now() + 850;
+      resumeAttack = true;
     }
     recent.push('HP=' + (hp?.[0] ?? '?') + ', Faith=' + (faith?.[0] ?? '?')
       + ', shield=' + shieldActive + ', warning=' + warning + ', action=' + action
+      + ', regenFocus=' + focusRegeneratingKing + ', resume=' + resumeAttack
       + ', phase=' + (await dungeon.locator('.king-phase').allTextContents()).join(' '));
     if (recent.length > 12) recent.shift();
     // A real boss phase may take time, but a minute without ANY visible
@@ -567,29 +596,20 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
         + await game.getAttribute('data-player-y') + '; roster='
         + progress + '; dungeon=' + chamber);
     }
-    const live = roster.locator('button:not([disabled])');
-    // Defeat living guards and summoned adds before focusing the boss;
-    // ignoring adds lets their attacks accumulate through multiple phases.
-    const adds = live.filter({ hasNotText: 'The Hollow King' });
-    const kings = live.filter({ hasText: 'The Hollow King' });
-    const candidate = (await adds.count()) ? adds.first()
-      : (await kings.count()) ? kings.first() : live.first();
-    // Read the current selection without waiting for a target that may have
-    // died between the roster query and the attribute read. The next loop
-    // still requires the real quest transition AND Crypt cleared.
-    const pressed = await candidate.evaluateAll(nodes =>
-      nodes.length ? nodes[0]!.getAttribute('aria-pressed') : null);
-    if (pressed !== null && (pressed !== 'true' || Date.now() - lastTargetAt > 10_000)) {
+    if (pressed !== null && Date.now() >= resumeAfter
+      && (resumeAttack || pressed !== 'true' || Date.now() - lastTargetAt > 10_000)) {
       try {
         await candidate.click({ timeout: 1_500 });
         lastTargetAt = Date.now();
+        resumeAttack = false;
       } catch (error) {
         if (!(error instanceof errors.TimeoutError)) throw error;
       }
     }
     await page.waitForTimeout(250);
   }
-  throw new Error('Natural crypt battle timed out; quest=' + await journal.innerText()
+  throw new Error('Natural crypt battle timed out; seed=' + await game.getAttribute('data-world-seed')
+    + '; quest=' + await journal.innerText()
     + '; dungeon=' + await dungeon.innerText() + '; roster='
     + (await roster.innerText()).replaceAll('\n', ' ')
     + '; player=' + await page.locator('.game-screen').getAttribute('data-player-x')
