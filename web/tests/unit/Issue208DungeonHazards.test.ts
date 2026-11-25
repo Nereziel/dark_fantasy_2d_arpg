@@ -47,7 +47,7 @@ describe('Issue #208 C3.4: optional dungeon treasure and hazards',()=>{
     internal.tickCryptTraps(.1);
     expect(sim.drainEvents()).toContainEqual(expect.objectContaining({type:'cryptTrapWindup',id:plan.trap.id}));
     const hp=internal.player.health;
-    Object.assign(internal.player,entered.player);
+    Object.assign(internal.player,{x:entered.player.x,y:entered.player.y});
     internal.tickCryptTraps(plan.trap.telegraphSeconds+.1);
     expect(internal.player.health).toBe(hp);
     expect(sim.worldProgress()?.optionalDungeonRewardIds).toEqual([id+':treasure',id+':trap']);
