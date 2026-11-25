@@ -133,6 +133,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       if (this.game.canvas) {
         delete this.game.canvas.dataset.renderer;
         delete this.game.canvas.dataset.projectionOrigin;
+        delete this.game.canvas.dataset.renderZone;
         delete this.game.canvas.dataset.cameraOrigin;
         delete this.game.canvas.dataset.groundChunks;
         delete this.game.canvas.dataset.groundResidentChunks;
@@ -187,6 +188,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       }
     }
     this.game.canvas.dataset.groundChunks = String(this.ground.total);
+    this.game.canvas.dataset.renderZone = state.zone;
     // Static layered art shares the exact collision footprint. Split long
     // obstacles into bounded sections to preserve local painter depth.
     const materials = new Set<ObstacleMaterial>();

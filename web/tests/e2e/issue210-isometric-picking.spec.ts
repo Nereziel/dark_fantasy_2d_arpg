@@ -25,6 +25,11 @@ test('canvas portal picking enters the crypt and returns to camp', async ({ page
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   const game = page.locator('.game-screen');
   const seed = await game.getAttribute('data-world-seed');
+  // Approach via an exposed waypoint before selecting the portal, since
+  // the side HUD may cover the entrance from the original camp spawn.
+  const approach = await isoGroundPoint(canvas, { x: 545, y: 430 });
+  await page.mouse.click(approach.x, approach.y, { button: 'middle' });
+  await expect.poll(async () => Number(await game.getAttribute('data-player-x')), { timeout: 8000 }).toBeGreaterThan(520);
   const entrance = await isoGroundPoint(canvas, CRYPT_GATE);
   await page.mouse.move(entrance.x, entrance.y);
   await expect(canvas).toHaveCSS('cursor', 'pointer');
@@ -32,13 +37,14 @@ test('canvas portal picking enters the crypt and returns to camp', async ({ page
   await expect(game).toHaveAttribute('data-zone', 'crypt', { timeout: 20000 });
   await expect(page.getByText('Crypt guardians')).toBeVisible();
   // Wait for the zone-specific ground rebuild rather than clicking the old camera.
-  await expect(canvas).not.toHaveAttribute('data-ground-chunks', '24');
+  await expect(canvas).toHaveAttribute('data-render-zone', 'crypt');
   const exit = await isoGroundPoint(canvas, CRYPT_EXIT);
   await page.mouse.move(exit.x, exit.y);
   await expect(canvas).toHaveCSS('cursor', 'pointer');
   await page.mouse.click(exit.x, exit.y);
   await expect(game).toHaveAttribute('data-zone', 'wilderness', { timeout: 20000 });
   await expect(game).toHaveAttribute('data-world-seed', seed!);
+  await expect(canvas).toHaveAttribute('data-render-zone', 'wilderness');
   await expect(canvas).toHaveAttribute('data-ground-chunks', '24');
 });
 
@@ -59,6 +65,8 @@ test('canvas loot picking collects a naturally defeated enemy drop', async ({ pa
   const id = await first.getAttribute('data-loot-id');
   expect(id).toBeTruthy();
   const drop = loot.locator('[data-loot-id="' + id + '"]');
+  const itemId = await drop.getAttribute('data-loot-item-id');
+  expect(itemId).toBeTruthy();
   const world = await drop.evaluate(node => ({
     x: Number(node.getAttribute('data-loot-x')), y: Number(node.getAttribute('data-loot-y'))
   }));
@@ -69,5 +77,5 @@ test('canvas loot picking collects a naturally defeated enemy drop', async ({ pa
   await page.mouse.click(point.x, point.y);
   await expect(drop).toHaveCount(0, { timeout: 12000 });
   await page.locator('[data-quick-action="inventory"]').click();
-  await expect(page.getByRole('dialog', { name: 'Inventory & Equipment' }).locator('.bag-slot.occupied').first()).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Inventory & Equipment' }).locator('.bag-slot.occupied[data-item-id="' + itemId + '"]')).toBeVisible();
 });
