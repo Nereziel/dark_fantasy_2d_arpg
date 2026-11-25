@@ -125,8 +125,10 @@
 
   function insidePassiveMinimap(event:PointerEvent):boolean {
     if (event.pointerType !== 'touch' || !event.isPrimary || !playing ||
-        modalKind !== '' || view.zone !== 'wilderness' ||
-        pointerUiSurface(event.target) !== 'canvas') return false;
+        modalKind !== '' || view.zone !== 'wilderness') return false;
+    // Pointer capture may retarget pointerup. Check the visible screen point,
+    // not the event's captured target, before treating it as a world tap.
+    if(pointerUiSurface(document.elementFromPoint(event.clientX,event.clientY))!=='canvas')return false;
     const rect=document.querySelector('[data-minimap="active"]')?.getBoundingClientRect();
     return !!rect && rect.width>0 && rect.height>0 &&
       event.clientX>=rect.left && event.clientX<=rect.right &&
@@ -143,7 +145,7 @@
     const start=minimapTouch;minimapTouch=null;
     const now=performance.now();
     if(!start||start.id!==event.pointerId||!insidePassiveMinimap(event)||
-      now-start.time>350||Math.hypot(event.clientX-start.x,event.clientY-start.y)>18){
+      now-start.time>450||Math.hypot(event.clientX-start.x,event.clientY-start.y)>18){
       minimapTaps.reset();return;
     }
     if(minimapTaps.tap('minimap',now,event.clientX,event.clientY))openMap();

@@ -109,6 +109,7 @@ test.describe('passive minimap touch',()=>{
     expect(await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.tagName,{x,y})).toBe('CANVAS');
     await page.touchscreen.tap(x,y);
     await expect(page.getByTestId('world-map-dialog')).toHaveCount(0);
+    await expect(page.locator('.game-screen [aria-modal="true"]')).toHaveCount(0);
     // Separate the first single tap from the following double gesture.
     await page.waitForTimeout(500);
     await page.touchscreen.tap(x,y);

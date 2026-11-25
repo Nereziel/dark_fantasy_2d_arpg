@@ -351,6 +351,22 @@ export class IsometricScene extends Phaser.Scene {
     const action = resolveWorldPointerAction({ button: pointer.button, wasTouch: pointer.wasTouch, uiCaptured: this.captured() },
       this.bridge.bindings());
     if (!action) return;
+    // Touch on the passive map always means ground movement, not activation
+    // of an NPC, portal, enemy or loot hidden underneath the overlay. This
+    // preserves the first tap for movement and lets App recognize a double tap.
+    if(pointer.wasTouch&&action==='PRIMARY'&&this.bridge.snapshot().zone==='wilderness'){
+      const canvasRect=this.game.canvas.getBoundingClientRect();
+      const mini=document.querySelector('[data-minimap="active"]')?.getBoundingClientRect();
+      const x=canvasRect.left+pointer.x*canvasRect.width/Math.max(1,this.scale.width);
+      const y=canvasRect.top+pointer.y*canvasRect.height/Math.max(1,this.scale.height);
+      if(mini&&x>=mini.left&&x<=mini.right&&y>=mini.top&&y<=mini.bottom){
+        const {ground}=this.pick(pointer);
+        this.bridge.setPointerAim(ground,null);
+        this.held.begin(ground,this.time.now);
+        this.bridge.command({type:'move',destination:ground});
+        return;
+      }
+    }
     if(action==='PRIMARY') {
       const loot=this.lootLabelAt(pointer);
       if(loot){this.release();this.bridge.command({type:'pickup',id:loot});return;}

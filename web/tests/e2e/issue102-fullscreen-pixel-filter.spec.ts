@@ -42,7 +42,7 @@ test('fullscreen toggle and smooth pixels preserve the live game, save and mobil
   await expect(canvas).toBeVisible();
   await expect(page.locator('.phaser-container')).toHaveAttribute('data-render-mode', 'sharp');
 
-  await page.locator('.game-header .top-actions .small-button').nth(1).click();
+  await page.locator('.game-hud [data-testid="system-menu"]').click();
   await page.getByTestId('open-visual-settings').click();
   const panel = page.getByTestId('visual-settings-dialog');
   await expect(panel).toBeVisible();

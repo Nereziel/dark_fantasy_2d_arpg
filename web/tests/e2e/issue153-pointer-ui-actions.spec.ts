@@ -45,7 +45,7 @@ test('mouse-bound map shortcut opens and closes on backdrop, then persists on re
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await enterWorld(page);
-  await expect(page.locator('.minimap-overlay button')).toContainText('RMB');
+  await expect(page.locator('.minimap-caption')).toContainText('RMB');
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Controls' }).click();
   const reopened = page.getByRole('dialog', { name: 'Input bindings' });

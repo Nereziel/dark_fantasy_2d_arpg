@@ -40,7 +40,7 @@ test.describe('Issue #153 mobile bindings acceptance', () => {
       await page.getByRole('dialog', { name: 'Paused' })
         .getByRole('button', { name: 'Resume' }).tap();
 
-      await expect(page.locator('.minimap-overlay button')).toContainText('Ctrl+M');
+      await expect(page.locator('.minimap-caption')).toContainText('Ctrl+M');
       await page.keyboard.press('Control+m');
       const mapDialog = page.getByTestId('world-map-dialog');
       await expect(mapDialog).toBeVisible();
