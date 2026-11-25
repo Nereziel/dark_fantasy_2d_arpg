@@ -176,13 +176,15 @@ export class IsometricPreviewScene extends Phaser.Scene {
     for (const wall of this.obstacles) {
       const building = buildings.get(wall.id);
       if (building) {
-        // A roofed structure is one coherent painter/occlusion group.
-        // Unlike a long wall, splitting its footprint would duplicate roofs.
+        // Keep the building footprint intact but fade facade and roof independently.
+        // Stable insertion order at the same depth keeps roof paint above the facade.
         const art = planBuildingArt(wall, building, ORIGIN);
-        const g = this.add.graphics().setDepth(art.occluder.depth);
-        for (const layer of art.paint) this.polygon(g, layer.points, layer.color);
-        this.walls.push(g);
-        this.occluders.push(art.occluder);
+        for (const group of art.layers) {
+          const g = this.add.graphics().setDepth(group.occluder.depth);
+          for (const layer of group.paint) this.polygon(g, layer.points, layer.color);
+          this.walls.push(g);
+          this.occluders.push(group.occluder);
+        }
         continue;
       }
       const material = obstacleMaterial(wall.id, state.zone,state.dungeonId);
