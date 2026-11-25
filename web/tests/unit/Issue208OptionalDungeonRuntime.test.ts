@@ -4,6 +4,7 @@ import { GameSimulation } from '../../src/game/core/GameSimulation';
 import { buildWilderness } from '../../src/game/world/wildernessRuntime';
 import { planActIDungeonEntrances,buildActIDungeonInterior } from '../../src/game/world/actIDungeonEntrances';
 import type { EnemyUnit } from '../../src/game/enemies/enemies';
+import {optionalDungeonRoster} from '../../src/game/enemies/optionalDungeonEncounters';
 import {createWorldRecord,readWorldRecord} from '../../src/persistence/WorldProgressRepository';
 
 describe('Issue #208 C2.2: optional dungeon runtime',()=>{
@@ -24,12 +25,15 @@ describe('Issue #208 C2.2: optional dungeon runtime',()=>{
     expect(entered.player).toMatchObject(interior.playerSpawn);
     expect(entered.questLedger).toEqual(story);
     expect(entered.cryptInteractables).toEqual([]);
+    expect(entered.enemies.map(u=>u.actor.type)).toEqual(optionalDungeonRoster(id,0));
     expect(sim.restore(entered)).toBe(true);
     expect(sim.restore({...entered,dungeonId:'forged'} as unknown as typeof entered)).toBe(false);
     const internals=sim as unknown as {units:EnemyUnit[];defeatEnemy:(u:EnemyUnit)=>void};
     for(const u of [...internals.units])internals.defeatEnemy(u);
     for(let i=0;i<40&&sim.snapshot().dungeonStage===0;i++)sim.advance(100);
     expect(sim.snapshot().dungeonStage).toBe(1);
+    expect(sim.snapshot().enemies.slice(0,3).map(u=>u.actor.type)).toEqual(optionalDungeonRoster(id,1));
+    expect(sim.snapshot().hollowKing).toBeNull();
     for(const u of [...internals.units])internals.defeatEnemy(u);
     sim.advance(100);
     expect(sim.snapshot().dungeonCleared).toBe(true);
@@ -47,6 +51,7 @@ describe('Issue #208 C2.2: optional dungeon runtime',()=>{
     const facts=sim.worldProgress()!;
     expect(facts.optionalDungeonRewardIds).toHaveLength(7);
     expect(new Set(facts.optionalDungeonRewardIds).size).toBe(7);
+    expect(new Set(facts.optionalDungeonRewardIds)).toEqual(new Set(['skeleton-1','wolf-2','wraith-3','crypt_lord-4','skeleton-5','wraith-6','clear'].map(slot=>id+':'+slot)));
     expect(sim.character()).not.toHaveProperty('optionalDungeonRewardIds');
     const record=readWorldRecord(createWorldRecord(facts))!;
     expect(record).toEqual(facts);
