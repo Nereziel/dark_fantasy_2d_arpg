@@ -53,6 +53,7 @@ import {
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
 import { planEnemyBehavior } from '../enemies/behaviorPlanner';
+import {createOptionalDungeonPack,optionalDungeonRoster,optionalDungeonRewardSlot,isOptionalDungeonBoss} from '../enemies/optionalDungeonEncounters';
 import {
   MINI_BOSS_IDS, getMiniBossDefinition, createMiniBossState, validateMiniBossState,
   stepMiniBoss, planMiniBossDefeat, type MiniBossId, type MiniBossState,
@@ -3986,7 +3987,9 @@ export class GameSimulation {
     this.hollowKingHazardDelays.clear();
     this.wave = 0;
     this.units = destination === 'crypt'
-      ? createCryptPack(0, this.level, this.world.encounterPositions)
+      ? (this.optionalVisit
+        ? createOptionalDungeonPack(this.optionalVisit.identity.dungeonId,0,this.level,this.world.encounterPositions)
+        : createCryptPack(0, this.level, this.world.encounterPositions))
       : createPack(0, this.level, this.world.encounterPositions);
     this.respawnTimer = 0;
     this.groundLoot = [];
@@ -4134,7 +4137,9 @@ export class GameSimulation {
         if (this.respawnTimer <= 0) {
           this.dungeonStage = 1;
           this.wave = 1;
-          this.units = createCryptPack(1, this.level, this.dungeonBossPositions);
+          this.units = this.optionalVisit
+            ? createOptionalDungeonPack(this.optionalVisit.identity.dungeonId,1,this.level,this.dungeonBossPositions)
+            : createCryptPack(1, this.level, this.dungeonBossPositions);
           this.seedElitePack();
           const king = this.units.find(unit => unit.actor.id === 'crypt_lord-4');
           if (king && !this.optionalVisit) {
@@ -4454,6 +4459,7 @@ export class GameSimulation {
     unit.actor.health = 0;
     if(this.classId==='NECROMANCER'
       && unit.actor.type!=='crypt_lord'
+      && !isOptionalDungeonBoss(this.optionalVisit?.identity.dungeonId,this.dungeonStage,unit.actor.id)
       && canOccupy(unit.actor,0,this.world.obstacles))
       this.corpses=[...addCorpseToken(this.corpses,unit.actor.id,
         this.zone,unit.actor)];
@@ -4509,7 +4515,9 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
     }
-    const rewarded = !eventEnemy && (!this.optionalVisit || (!unit.summoned && this.claimDungeonReward(unit.actor.id)));
+    const optionalId=this.optionalVisit?.identity.dungeonId;
+    const slot=optionalId?optionalDungeonRewardSlot(optionalId,this.dungeonStage,unit.actor.id):null;
+    const rewarded = !eventEnemy && (!this.optionalVisit || (!unit.summoned && slot!==null && this.claimDungeonReward(slot)));
     if(rewarded)this.kills++;
     // Partial event kills and already claimed dungeon slots yield no gold, XP or loot.
     if(rewarded) {
@@ -4530,7 +4538,7 @@ export class GameSimulation {
         this.storyEvent('morrow_gravebound', 'morrow_gravebound_slain', 'morrow_defeat');
       }
     }
-    if (unit.actor.type === 'crypt_lord') {
+    if (unit.actor.type === 'crypt_lord' || isOptionalDungeonBoss(optionalId,this.dungeonStage,unit.actor.id)) {
       if (this.zone === 'crypt' && !this.optionalVisit) this.storyEvent('crypt_lord_fallen', 'crypt_lord_slain', 'crypt_lord_defeat');
       if (!this.optionalVisit || rewarded) {
         this.gold += 100;
@@ -4544,7 +4552,9 @@ export class GameSimulation {
   }
   /** The one runtime path for normal, elite and boss drops; rolls share catalog+affixes. */
   private dropEnemyLoot(unit: EnemyUnit): void {
-    const boss = unit.actor.type === 'crypt_lord' || this.defeatedMiniBossIds.has(unit.actor.id as MiniBossId);
+    const boss = unit.actor.type === 'crypt_lord'
+      || isOptionalDungeonBoss(this.optionalVisit?.identity.dungeonId,this.dungeonStage,unit.actor.id)
+      || this.defeatedMiniBossIds.has(unit.actor.id as MiniBossId);
     if (boss || this.zone === 'crypt' || this.wave >= 2) {
       const rank = boss ? 'boss' : unit.elite ? 'elite' : 'normal';
       const gem = rollCombatGem(this.world.seed, this.kills, rank);
@@ -5087,9 +5097,11 @@ export class GameSimulation {
         !!unit && !!unit.actor && validEnemyType(unit.actor.type)
         && (s.zone === 'crypt'
           ? (index >= PACK_SIZE ? unit.summoned === true && unit.actor.type === 'skeleton'
-            : unit.actor.type === (s.dungeonStage === 0
-              ? (['skeleton', 'wolf', 'wraith'] as const)[index]
-              : (['crypt_lord', 'skeleton', 'wraith'] as const)[index]))
+            : unit.actor.type === (restoredVisit
+              ? optionalDungeonRoster(restoredVisit.identity.dungeonId,s.dungeonStage)[index]
+              : s.dungeonStage === 0
+                ? (['skeleton', 'wolf', 'wraith'] as const)[index]
+                : (['crypt_lord', 'skeleton', 'wraith'] as const)[index]))
           : index >= PACK_SIZE ? (activeEventPlan?.enemySpawns.some(spawn=>
               spawn.id===unit.actor.id&&spawn.type===unit.actor.type)
               ? unit.summoned !== true
