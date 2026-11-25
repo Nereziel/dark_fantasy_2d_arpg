@@ -24,7 +24,8 @@ describe('Issue #208 C2.2: optional dungeon runtime',()=>{
     expect(entered.worldSeed).toBe(seed);
     expect(entered.player).toMatchObject(interior.playerSpawn);
     expect(entered.questLedger).toEqual(story);
-    expect(entered.cryptInteractables).toEqual([]);
+    expect(entered.cryptInteractables).toHaveLength(1);
+    expect(entered.cryptInteractables?.[0]?.capability).toBe('lootContainer');
     expect(entered.enemies.map(u=>u.actor.type)).toEqual(optionalDungeonRoster(id,0));
     expect(sim.restore(entered)).toBe(true);
     expect(sim.restore({...entered,dungeonId:'forged'} as unknown as typeof entered)).toBe(false);
