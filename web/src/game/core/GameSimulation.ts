@@ -1727,7 +1727,7 @@ export class GameSimulation {
     }
     if (command.type === 'usePortal') {
       const entrance = command.dungeonId === undefined ? null
-        : this.dungeonEntrances.find(e=>e.id===command.dungeonId && e.id!=='crypt') ?? null;
+        : this.dungeonEntrances.find(e=>e.id===command.dungeonId) ?? null;
       if (command.dungeonId !== undefined && (!entrance || this.zone !== 'wilderness' || this.paused)) return;
       this.warriorAction = null;
       this.classAction = null;
