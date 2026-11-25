@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('forges a Ruby from naturally salvaged material and persists the gem wallet', async ({page})=>{
@@ -30,7 +30,7 @@ test('forges a Ruby from naturally salvaged material and persists the gem wallet
   await expect(smith.locator('[data-gem-id="gem.ruby.1"] svg[data-gem-art="gem.ruby"][data-gem-tier="1"]'))
     .toBeVisible();
   await smith.getByRole('button',{name:'Leave'}).click();
-  await page.getByRole('button',{name:'Save'}).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
@@ -51,7 +51,7 @@ test('inserts gem into a real socket, saves the socket and extracts stone at the
     .getByRole('button',{name:'Buy Studded War Belt'}).click();
   await page.getByRole('dialog',{name:'Merchant Bram'})
     .getByRole('button',{name:'Leave'}).click();
-  await page.getByRole('button',{name:'Save'}).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload(); // Prevent the live autosaver overwriting this valid v11 fixture.
   // The existing item schema permits one belt socket. The fixture provides
@@ -95,7 +95,7 @@ test('inserts gem into a real socket, saves the socket and extracts stone at the
   await expect(belt).toContainText('+3 fire resistance');
   await expect(smith.locator('[data-gem-id="gem.ruby.1"]')).toHaveCount(0);
   await smith.getByRole('button',{name:'Leave'}).click();
-  await page.getByRole('button',{name:'Save'}).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);

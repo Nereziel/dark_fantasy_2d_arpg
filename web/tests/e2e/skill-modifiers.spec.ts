@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 /** Real UI projection from validated, character-only v11 data, not a debug API. */
@@ -7,7 +7,7 @@ test('Whirlwind shows modifier radius and pull from learned Warrior talents', as
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await enterWorld(page);
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload(); // The live session/autosaver must not overwrite the fixture.
 

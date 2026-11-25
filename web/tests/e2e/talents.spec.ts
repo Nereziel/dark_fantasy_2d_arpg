@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 /**
@@ -11,7 +11,7 @@ test('spends, saves, reloads and refunds Warrior talent ranks through the UI', a
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await enterWorld(page);
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   // Stop the running session/autosaver before modifying the v11 test fixture.
   await page.reload();
@@ -69,7 +69,7 @@ test('spends, saves, reloads and refunds Warrior talent ranks through the UI', a
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);

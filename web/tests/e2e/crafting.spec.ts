@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('blacksmith salvages real purchased item, persists material wallet and denies double salvage', async ({page}) => {
@@ -21,7 +21,7 @@ test('blacksmith salvages real purchased item, persists material wallet and deni
   await expect(belt).toHaveCount(0);
   await expect(wallet.locator('[data-material="iron"]')).not.toHaveText('0');
   await smith.getByRole('button',{name:'Leave'}).click();
-  await page.getByRole('button',{name:'Save'}).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);

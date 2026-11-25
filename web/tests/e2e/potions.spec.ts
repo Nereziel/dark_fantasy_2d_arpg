@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('Q uses an authoritative combat potion, saves charges and refills at the apothecary', async ({ page }) => {
@@ -16,7 +16,7 @@ test('Q uses an authoritative combat potion, saves charges and refills at the ap
   await expect(page.getByTestId('use-potion')).toContainText('s');
   await expect(page.getByTestId('use-potion')).toBeDisabled();
 
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
@@ -30,7 +30,7 @@ test('Q uses an authoritative combat potion, saves charges and refills at the ap
   await vendor.locator('[data-potion-refill="resistance"]').getByRole('button', { name: /Refill 1/ }).click();
   await expect(vendor.locator('[data-potion-refill="resistance"]')).toContainText('1/1');
   await vendor.getByRole('button', { name: 'Leave' }).click();
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   // Both the active legacy alias and the canonical character slot must be
   // committed before the browser navigates away.

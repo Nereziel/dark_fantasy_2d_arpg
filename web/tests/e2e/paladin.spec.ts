@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import {test,expect} from '@playwright/test';
 
 test('Paladin offers seven real localized abilities, Faith and keyboard 2–6',async ({page})=>{
@@ -21,7 +21,7 @@ test('Paladin offers seven real localized abilities, Faith and keyboard 2–6',a
   await page.locator('#game-language').selectOption('cs');
   await expect(page.getByRole('button',{name:'Božský štít',exact:true})).toBeDisabled();
   await expect(page.locator('[data-paladin-ability]')).toHaveCount(5);
-  await page.getByRole('button',{name:'Uložit'}).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
   await continueGame(page);

@@ -106,14 +106,15 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
   const stride = animation === 'walk' || run ? [-3,1,4,-1][frame]! : 0;
   const bob = animation === 'idle' || animation === 'channel' ? [0,-1,0,1][frame]!
     : run ? [0,-2,0,-2][frame]! : 0;
-  const striking = animation === 'attack' && frame >= 1 && frame <= 2;
+  const striking = animation === 'attack' && frame === 1;
   const casting = animation === 'cast' || animation === 'channel';
   const hit = animation === 'hit' && frame >= 1;
   const falling = animation === 'death';
   // Keep the body and equipment inside the original pivot-centered cell.
   // Wide creatures use shorter lateral shifts; their legs/head still move
   // relative to the body. This is visual only, never collision displacement.
-  const shift = animation === 'dodge' ? [-4,-2,2,4][frame]! : hit ? 2 : 0;
+  const shift = animation === 'dodge' ? [-4,-2,2,4][frame]! : hit ? 2
+    : animation === 'attack' && view !== 'n' && view !== 's' ? [-2,3,1,0][frame]! : 0;
   const x = 24 + (look.shape === 'spider' ? Math.max(-2, Math.min(2, shift)) : shift);
   const y = falling ? 0 : bob;
   // Earlier death poses collapse toward the planted foot line instead of
@@ -243,7 +244,8 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
   }
   rect(ctx,look.shadow,x-16,26+y,6,15);
   rect(ctx,look.body,x-16,25+y,5,13);
-  const armLift = striking || casting ? -10 : 0;
+  const armLift = animation==='attack' ? [-11,-4,5,0][frame]!
+    : casting ? [-5,-13,-9,-3][frame]! : 0;
   rect(ctx,look.shadow,x+10,26+armLift+y,6,15);
   rect(ctx,look.body,x+11,25+armLift+y,5,12);
   if(look.shape === 'archer') {

@@ -1,4 +1,5 @@
 {
+  "worldLabels": {"toggle":"Ground item labels","skillInfo":"Inspect skills","portalExit":"Exit","door":"Passage"},
   "village": {
     "services": "Village services",
     "north-village-healer": {
@@ -136,6 +137,8 @@
     }
   },
   "menu": {
+    "system": "Game menu",
+    "editSkills": "Edit skills",
     "subtitle": "The dark frontier awaits",
     "start": "Enter the world",
     "continue": "Continue playing",

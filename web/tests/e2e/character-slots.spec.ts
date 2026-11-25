@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, returnToMenu } from './character-menu';
 // Issue #100 / Prompt 45 — browser-managed character slots. GPL-3.0-only.
 import { test, expect } from '@playwright/test';
 
@@ -27,11 +27,11 @@ test('two different heroes retain separate slots and character/world identity af
   await page.locator('#menu-language').selectOption('en');
   await createHero(page, 'WARRIOR');
   const warriorSeed = await page.locator('.game-screen').getAttribute('data-world-seed');
-  await page.getByRole('button', { name: 'Main menu' }).click();
+  await returnToMenu(page);
   await expect(page.locator('.saved-character-row')).toHaveCount(1);
 
   await createHero(page, 'MAGE');
-  await page.getByRole('button', { name: 'Main menu' }).click();
+  await returnToMenu(page);
   await expect(page.locator('.saved-character-row')).toHaveCount(2);
   const warrior = page.locator('.saved-character-row').filter({ hasText: 'Warrior' });
   await warrior.locator('.saved-select').click();
@@ -50,9 +50,9 @@ test('two-step deletion removes only its own saved character and world record', 
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await createHero(page, 'WARRIOR');
-  await page.getByRole('button', { name: 'Main menu' }).click();
+  await returnToMenu(page);
   await createHero(page, 'MAGE');
-  await page.getByRole('button', { name: 'Main menu' }).click();
+  await returnToMenu(page);
   const mage = page.locator('.saved-character-row').filter({ hasText: 'Mage' });
   await mage.getByRole('button', { name: 'Delete: Mage' }).click();
   await expect(mage.getByRole('button', { name: 'Delete permanently?' })).toBeVisible();
@@ -108,10 +108,10 @@ test('legacy single-slot hero and its world are preserved when a new hero is cre
     });
   });
   expect(id).toMatch(/^char-[0-9a-f]{32}$/);
-  await page.getByRole('button', { name: 'Main menu' }).click();
+  await returnToMenu(page);
   await expect(page.locator('.saved-character-row')).toHaveCount(1);
   await createHero(page, 'MAGE');
-  await page.getByRole('button', { name: 'Main menu' }).click();
+  await returnToMenu(page);
   await expect(page.locator('.saved-character-row')).toHaveCount(2);
   const savedWorld = await page.evaluate(async characterId => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {

@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('Issue #125: new player gets an optional, quest-aware first-play guide', async ({ page }) => {
@@ -33,7 +33,7 @@ test('Issue #125: new player gets an optional, quest-aware first-play guide', as
   await guide.getByRole('button', { name: 'Restart tips' }).click();
   await expect(guide).toHaveAttribute('data-guide-step', 'move');
 
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await guide.getByRole('button', { name: 'Next tip' }).click();
   await expect(guide).toHaveAttribute('data-guide-step', 'attack');

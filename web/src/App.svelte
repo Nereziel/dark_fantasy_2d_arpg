@@ -34,6 +34,7 @@
     DEFAULT_AUDIO_PREFERENCES, type AudioPreferences } from './game/audio/audioPreferences';
   import { WebAudioDirector } from './game/audio/WebAudioDirector';
   import SkillBar from './ui/SkillBar.svelte';
+  import { lootLabelsEnabled, setLootLabelsEnabled } from './game/ui/worldReadability';
   import { shortcutHint } from './game/ui/shortcutHints';
   import OnboardingGuide from './ui/OnboardingGuide.svelte';
   import {
@@ -239,6 +240,19 @@
   let characterOpen = $state(false);
   let talentsOpen = $state(false);
   let controlsOpen = $state(false);
+  let skillInfoMode = $state(false);
+  let hotbarEditRequest = $state(0);
+  let showLootLabels = $state(lootLabelsEnabled());
+  function toggleLootLabels(): void {
+    showLootLabels = !showLootLabels;
+    setLootLabelsEnabled(showLootLabels);
+  }
+  function editSkillsFromMenu(): void {
+    if (!view.paused || !view.player.alive || busy) return;
+    skillInfoMode = false;
+    bridge.command({ type:'pause', value:false });
+    hotbarEditRequest += 1;
+  }
   let settingsOpen = $state(false);
   let visualPreferences: VisualPreferences = $state({ ...DEFAULT_VISUAL_PREFERENCES });
   let appRoot: HTMLDivElement;
@@ -822,6 +836,9 @@
 
   function handleKeydown(event: KeyboardEvent): void {
     if (!playing) { resetCharacterGesture(); return; }
+    if (skillInfoMode && event.code === 'Escape') {
+      event.preventDefault(); skillInfoMode = false; return;
+    }
     if (settingsOpen) {
       if (event.code === 'Escape') {
         event.preventDefault();
@@ -1142,8 +1159,7 @@
           </select>
           <button class="small-button" disabled={view.zone !== 'wilderness' || view.paused}
             onclick={(event) => openMap(event.currentTarget)}>{$t('map.open')}</button>
-          <button class="small-button" disabled={!view.player.alive} onclick={(event) => togglePause(event.currentTarget)}>{view.paused ? $t('menu.resume') : $t('menu.paused')}</button>
-          <button class="small-button" disabled={busy} onclick={menu}>{$t('menu.back')}</button>
+
         </div>
       </header>
 
@@ -1259,19 +1275,19 @@
       </aside>
       </div>
       </div>
-      <div class="game-hud" data-testid="combat-dock" inert={modalKind !== ''}>
+      <div class="game-hud compact-dock" data-testid="combat-dock" inert={modalKind !== ''}>
         <div class="vital-panel">
-          <div class="vital-top"><span>{$t('hud.health')}</span><strong>{view.player.health} / {view.player.maxHealth}</strong></div>
+          <div class="health-meter"><div class="vital-top"><span>{$t('hud.health')}</span><strong>{view.player.health} / {view.player.maxHealth}</strong></div>
           <div class="health-track"><div class="health-fill" style:width={`${100 * view.player.health / view.player.maxHealth}%`}></div></div>
           {#if view.shield > 0}
             <div class="vital-top resource-label"><span>{$t('hud.shield')}</span><strong>{view.shield}</strong></div>
           {/if}
-          <div class="vital-top resource-label"><span>{$t('resource.' + CLASSES[view.classId].resourceId)}</span><strong>{Math.round(view.resource)} / {view.stats.maxResource}</strong></div>
+          </div><div class="resource-meter"><div class="vital-top resource-label"><span>{$t('resource.' + CLASSES[view.classId].resourceId)}</span><strong>{Math.round(view.resource)} / {view.stats.maxResource}</strong></div>
           <div class="health-track resource-track"><div class="resource-fill" style:width={`${100 * view.resource / view.stats.maxResource}%`}></div></div>
-          <div class="hud-details">{#if activeCharacterName}<span class="hero-name">{activeCharacterName}</span>{/if}<span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
+          </div><div class="hud-details">{#if activeCharacterName}<span class="hero-name">{activeCharacterName}</span>{/if}<span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
           <div class="experience-track"><div style:width={`${xpRequiredForLevel(view.level) > 0 ? 100 * view.xp / xpRequiredForLevel(view.level) : 100}%`}></div></div>
         </div>
-        <SkillBar {bridge} {view} bindings={controlBindings} />
+        <SkillBar {bridge} {view} bindings={controlBindings} bind:infoMode={skillInfoMode} editRequest={hotbarEditRequest} />
         <div class="hud-actions">
           <button onclick={(event) => openInventory(event.currentTarget)} aria-label={$t('inventory.open')} title={$t('inventory.open')}
             data-quick-action="inventory"><span aria-hidden="true">▦</span><span class="quick-key">{shortcutHint(controlBindings, 'INVENTORY')}</span></button>
@@ -1282,10 +1298,12 @@
             title={$t('talents.open')}
             data-quick-action="talents"><span aria-hidden="true">✧</span><span class="quick-key">{shortcutHint(controlBindings, 'TALENTS')}</span>
             {#if (view.talentPoints ?? 0) > 0}<span class="quick-notice">{view.talentPoints}</span>{/if}</button>
-          <button disabled={busy} onclick={save} aria-label={$t('menu.save')} title={$t('menu.save')}
-            data-quick-action="save"><span aria-hidden="true">▣</span></button>
-          <button disabled={busy} onclick={() => load()} aria-label={$t('menu.load')} title={$t('menu.load')}
-            data-quick-action="load"><span aria-hidden="true">↺</span></button>
+          <button type="button" aria-pressed={showLootLabels} onclick={toggleLootLabels}
+            aria-label={$t('worldLabels.toggle')} title={$t('worldLabels.toggle')}
+            data-testid="toggle-loot-labels" data-quick-action="loot-labels"><span aria-hidden="true">◇</span></button>
+          <button type="button" disabled={busy || !view.player.alive} onclick={(event)=>togglePause(event.currentTarget)}
+            aria-label={$t('menu.system')} title={$t('menu.system')}
+            data-testid="system-menu" data-quick-action="menu"><span aria-hidden="true">☰</span></button>
         </div>
       </div>
 
@@ -1438,11 +1456,18 @@
         <div class="modal-shield">
           <div class="pause-card" role="dialog" aria-modal="true" aria-label={$t('menu.paused')}>
             <h2>{$t('menu.paused')}</h2>
-            <button class="primary" onclick={() => togglePause()}>{$t('menu.resume')}</button>
+            <button class="primary" disabled={busy} onclick={() => togglePause()}>{$t('menu.resume')}</button>
+            <button class="secondary" data-testid="pause-save" disabled={busy} onclick={save}>{$t('menu.save')}</button>
+            <button class="secondary" data-testid="pause-load" disabled={busy} onclick={() => load()}>{$t('menu.load')}</button>
+            <button class="secondary" data-testid="pause-edit-hotbar" disabled={busy} onclick={editSkillsFromMenu}>{$t('menu.editSkills')}</button>
+            <button class="secondary" aria-pressed={showLootLabels} onclick={toggleLootLabels}>{$t('worldLabels.toggle')}</button>
             <button class="secondary" onclick={(event) => openControls(event.currentTarget)}>{$t('bindings.open')}</button>
             <button class="secondary" data-testid="open-visual-settings"
               onclick={(event) => openVisualSettings(event.currentTarget)}>{$t('visualSettings.open')}</button>
             <button class="secondary" disabled={busy} onclick={menu}>{$t('menu.back')}</button>
+            {#if messageKey === 'status.saving' || messageKey === 'status.saved' || messageKey === 'status.saveError' || messageKey === 'status.emptySave'}
+              <p class="pause-feedback" aria-live="polite">{$t(messageKey)}</p>
+            {/if}
           </div>
         </div>
       {/if}

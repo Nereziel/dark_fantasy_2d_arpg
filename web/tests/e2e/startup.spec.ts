@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu, returnToMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 import { heldIsoMoveEast } from './iso-input';
 
@@ -31,7 +31,7 @@ test('switches Czech/English in the menu and game without losing the scene', asy
   await expect(page.locator('.enemy-roster button.targeted')).toContainText('Skeleton Warrior');
   await expect(page.locator('.game-hud')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await expect(page.locator('#menu-language')).toHaveValue('en');
@@ -53,7 +53,7 @@ test('creates a Rogue, opens localized inventory, saves and reloads its class', 
   await page.locator('#game-language').selectOption('cs');
   await expect(page.getByRole('dialog', { name: 'Inventář a výbava' })).toBeVisible();
   await page.getByRole('button', { name: 'Zavřít' }).click();
-  await page.getByRole('button', { name: 'Uložit' }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
   await expect(page.locator('#menu-language')).toHaveValue('cs');
@@ -75,7 +75,7 @@ test('casts a Paladin ability and localizes effects without restarting the game'
   await page.locator('#game-language').selectOption('cs');
   await expect(page.getByRole('button', { name: 'Posvěcená půda' })).toBeDisabled();
   await expect(page.locator('.effect-chip.beneficial').filter({ hasText: 'Posvěcení' })).toHaveCount(1);
-  await page.getByRole('button', { name: 'Uložit' }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
   await continueGame(page);
@@ -153,7 +153,7 @@ test('talks to Warden Vesna, accepts the quest and loads its persistent progress
   await expect(dialog).toContainText('0/3');
   await dialog.getByRole('button', { name: 'Leave' }).click();
   await expect(journal).toContainText('0/3');
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
@@ -200,7 +200,7 @@ test('buys equipment, tempers it at the smith and reloads persistent upgrades', 
   await expect(smith.getByRole('button', { name: 'Temper Studded War Belt' })).toBeDisabled();
   await smith.getByRole('button', { name: 'Leave' }).click();
 
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
@@ -246,7 +246,7 @@ test('enters a separate procedurally generated crypt, returns to camp and reload
   await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'wilderness');
   await expect(page.locator('.zone-name')).toHaveText('Emberwatch Camp');
   await expect(page.getByRole('button', { name: 'Browse wares' })).toBeVisible();
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
@@ -393,7 +393,7 @@ test('stores a purchased item in the permanent camp stash and retrieves it after
   await expect(stash).toContainText('Backpack (0/24)');
   await stash.getByRole('button', { name: 'Leave' }).click();
 
-  await page.getByRole('button', { name: 'Save' }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
@@ -417,7 +417,7 @@ test('re-entering the game releases destroyed scene event listeners and keeps mo
   await expect(canvas).toBeVisible();
 
   // App reuses its GameBridge, but Svelte destroys and recreates the Phaser game.
-  await page.getByRole('button', { name: 'Main menu' }).click();
+  await returnToMenu(page);
   await openCharacterCreation(page, 'Restart hero');
   await expect(page.getByRole('button', { name: 'Enter the world' })).toBeVisible();
   await enterWorld(page);

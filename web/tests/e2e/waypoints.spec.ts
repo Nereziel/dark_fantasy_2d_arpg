@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('town waypoint activates only on arrival and survives world save/reload', async ({ page }) => {
@@ -27,7 +27,7 @@ test('town waypoint activates only on arrival and survives world save/reload', a
   await expect(map.locator('[data-map-marker="shrine.soul-shrine"]')).toHaveCount(0);
   await map.getByRole('button', { name: 'Close Map' }).click();
 
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);

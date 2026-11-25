@@ -1,4 +1,5 @@
 {
+  "worldLabels": {"toggle":"Popisky předmětů na zemi","skillInfo":"Informace o schopnostech","portalExit":"Východ","door":"Průchod"},
   "village": {
     "services": "Vesnické služby",
     "north-village-healer": {
@@ -136,6 +137,8 @@
     }
   },
   "menu": {
+    "system": "Herní menu",
+    "editSkills": "Upravit schopnosti",
     "subtitle": "Temná země čeká",
     "start": "Vstoupit do světa",
     "continue": "Pokračovat ve hře",
