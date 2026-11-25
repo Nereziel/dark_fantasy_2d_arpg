@@ -73,6 +73,7 @@ import { villageSanctuaries, inVillageSanctuary, type VillageSanctuary } from '.
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonRuntime';
 import { planOptionalDungeonEntry, planOptionalDungeonExit, type OptionalDungeonVisit } from '../world/optionalDungeonVisit';
 import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
+import { projectDiscoveredDungeonEntrances } from '../world/dungeonPortalPresentation';
 import {optionalDungeonRewardId,validOptionalDungeonRewardIds,type OptionalDungeonRewardId} from '../world/optionalDungeonRewards';
 import {
   applyTalentStats, planSpendTalent, planRespecTalents, projectTalentBonuses,
@@ -518,8 +519,9 @@ export class GameSimulation {
       ...(mode === 'world' ? options : {})
     });
     if (!result.ok) return null;
-    const projection = this.mapTerrain
+    const terrainProjection = this.mapTerrain
       ? projectVisibleTerrain(result.value, this.mapTerrain) : result.value;
+    const projection = projectDiscoveredDungeonEntrances(terrainProjection,this.dungeonEntrances);
     // A historic respawn shrine is also a travel waypoint when actually activated.
     // Derive this marker from the existing seed-scoped checkpoint fact; do not
     // expand mapWorld.waypoints (that would invalidate legacy map fingerprints).
@@ -1726,6 +1728,7 @@ export class GameSimulation {
       return;
     }
     if (command.type === 'usePortal') {
+      if (command.dungeonId !== undefined && command.dungeonId !== 'mine' && command.dungeonId !== 'cave') return;
       const entrance = command.dungeonId === undefined ? null
         : this.dungeonEntrances.find(e=>e.id===command.dungeonId) ?? null;
       if (command.dungeonId !== undefined && (!entrance || this.zone !== 'wilderness' || this.paused)) return;
