@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 test('Rogue seven-skill bar, Energy costs, stealth/trap counters and CS/EN reload',async({page})=>{
- await page.goto('./');
+ await page.goto('./?view=iso');
  await page.locator('#menu-language').selectOption('en');
  await page.getByRole('button',{name:/Rogue/}).click();
  await page.getByRole('button',{name:'Enter the world'}).click();

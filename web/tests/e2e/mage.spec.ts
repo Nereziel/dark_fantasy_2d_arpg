@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('Mage extra spells, cooldowns and character-only reload work in both locales', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Mage/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();

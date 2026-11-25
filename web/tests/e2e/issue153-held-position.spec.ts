@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
 
 test('mouse HOLD_POSITION follows down/up, clears on pause, persists after reload', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
-  const game = page.locator('.game-screen'), canvas = page.locator('.phaser-container canvas');
+  const game = page.locator('.game-screen'), canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Controls' }).click();
@@ -46,7 +46,7 @@ test('mouse HOLD_POSITION follows down/up, clears on pause, persists after reloa
 });
 
 test('Shift and mouse are independent; blur and pointercancel unhold safely', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.evaluate(() => localStorage.setItem('aether-ruin-controls-v1', JSON.stringify([
     { action: 'SECONDARY', device: 'keyboard', code: 'KeyY' },
     { action: 'HOLD_POSITION', device: 'keyboard', code: 'ShiftLeft' },
@@ -56,7 +56,7 @@ test('Shift and mouse are independent; blur and pointercancel unhold safely', as
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
-  const canvas = page.locator('.phaser-container canvas'), game = page.locator('.game-screen');
+  const canvas = page.locator('canvas[data-renderer="isometric-preview"]'), game = page.locator('.game-screen');
   const rect = await canvas.boundingBox();
   expect(rect).not.toBeNull();
   await page.mouse.move(rect!.x + rect!.width / 2 - 80, rect!.y + rect!.height / 2 + 75);
