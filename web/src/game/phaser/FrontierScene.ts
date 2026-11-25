@@ -16,7 +16,7 @@ import { getMageSpell } from '../skills/mageKit';
 import { getNecroSpell } from '../skills/necromancerKit';
 import { getRogueAbility } from '../skills/rogueKit';
 import { getWarlockSpell } from '../skills/warlockKit';
-import type { GameEvent, ZoneId, Point } from '../core/types';
+import type { GameEvent, ZoneId, Point, GameSnapshot } from '../core/types';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
 import {
   resolvePointerContext, contextToCommand, cursorForContext,
@@ -33,11 +33,13 @@ import {
 import { ACTOR_RADIUS, canOccupy, type Obstacle } from '../world/navigation';
 import { ENEMY_DEFINITIONS, type EnemyType } from '../enemies/enemies';
 import {
-  CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS
+  CAMP_RADIUS, CRYPT_GATE, CRYPT_BOSS_POSITIONS
 } from '../world/generator';
 import { buildWilderness } from '../world/wildernessRuntime';
 import { CORRUPTION_TRAIL_ID, FOREST_SIDE_TRAIL_ID } from '../world/forestTrail';
 import { buildCryptWorld } from '../world/dungeonRuntime';
+import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
+import { dungeonPortalTargets, dungeonPortalCommand, dungeonRenderSeed } from '../world/dungeonPortalPresentation';
 import type { ProceduralDungeonResult, DungeonRoomType } from '../world/proceduralDungeon';
 import type { CryptThemePlan } from '../world/cryptTheme';
 import {
@@ -91,6 +93,8 @@ export class FrontierScene extends Phaser.Scene {
   private nextStreamUpdate = 0;
   private renderedSeed: number | null = null;
   private renderedZone: ZoneId | null = null;
+  private renderedDungeonId: GameSnapshot['dungeonId'];
+  private dungeonEntrances: ActIDungeonEntrance[] = [];
   private activeObstacles: readonly Obstacle[] = [];
   private activeStoryFeatures: readonly WildernessFeature[] = [];
   private villageEntries: TownEntry[] = [];
@@ -110,7 +114,7 @@ export class FrontierScene extends Phaser.Scene {
 
   create(): void {
     const entry = this.bridge.snapshot();
-    this.paintWorld(entry.worldSeed, entry.zone);
+    this.paintWorld(entry);
 
     // The warden is an in-world NPC. Interaction uses simulation commands.
     const warden = this.add.graphics().setPosition(WARDEN_POSITION.x, WARDEN_POSITION.y).setDepth(49);
@@ -310,9 +314,8 @@ export class FrontierScene extends Phaser.Scene {
   /** Context choice is owned by Agent 03's pure resolver, not Phaser hit-order. */
   private pointerContext(point: Point): ResolvedPointerContext {
     const state = this.bridge.snapshot();
-    const portal = state.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT;
     const targets: ContextTarget[] = [
-      { kind: 'INTERACTABLE', id: 'crypt-portal', position: portal, hitRadius: 64 },
+      ...dungeonPortalTargets(state,this.dungeonEntrances),
       ...(state.cryptInteractables ?? []).map(prop => ({
         kind: 'INTERACTABLE' as const, id: prop.id,
         position: prop.position, hitRadius: prop.hitRadius
@@ -420,7 +423,8 @@ export class FrontierScene extends Phaser.Scene {
       this.heldMovement.release();
       return;
     }
-    const command = contextToCommand(context);
+    const command = context.kind === 'INTERACTABLE'
+      ? dungeonPortalCommand(context.id) ?? contextToCommand(context) : contextToCommand(context);
     if (command) {
       this.bridge.command(command);
       if (context.kind === 'GROUND') this.heldMovement.begin(world, this.time.now);
@@ -879,8 +883,8 @@ export class FrontierScene extends Phaser.Scene {
       }
     }
     const state = this.bridge.snapshot();
-    if (this.renderedSeed !== state.worldSeed || this.renderedZone !== state.zone) {
-      this.paintWorld(state.worldSeed, state.zone);
+    if (this.renderedSeed !== state.worldSeed || this.renderedZone !== state.zone || this.renderedDungeonId !== state.dungeonId) {
+      this.paintWorld(state);
     }
     if (state.zone === 'wilderness' && this.time.now >= this.nextStreamUpdate) {
       this.advanceChunkGraphics(state.player, 4);
@@ -1088,8 +1092,9 @@ export class FrontierScene extends Phaser.Scene {
       if (npc) this.statusVisuals.lineStyle(2, 0xf3d49e, 0.86)
         .strokeCircle(npc.x, npc.y, 34);
     }
-    const portal = state.zone === 'wilderness' ? CRYPT_GATE : CRYPT_EXIT;
-    if (this.hoveredId === 'crypt-portal') {
+    const hoveredPortal = dungeonPortalTargets(state,this.dungeonEntrances).find(p=>p.id===this.hoveredId);
+    if (hoveredPortal) {
+      const portal=hoveredPortal.position;
       this.statusVisuals.lineStyle(3, 0xb8e6dc, 0.85)
         .strokeCircle(portal.x, portal.y, 66);
     }
@@ -1449,7 +1454,7 @@ export class FrontierScene extends Phaser.Scene {
   private paintCrypt(
     g: Phaser.GameObjects.Graphics, seed: number,
     walls: readonly { x: number; y: number; width: number; height: number }[],
-    dungeon: ProceduralDungeonResult, theme: CryptThemePlan
+    dungeon: ProceduralDungeonResult, theme: CryptThemePlan, optional=false
   ): void {
     g.fillStyle(0x0a0c14).fillRect(0, 0, WIDTH, HEIGHT);
     // Render only walkable tiles supplied by the same pure plan as collisions.
@@ -1498,7 +1503,7 @@ export class FrontierScene extends Phaser.Scene {
     // room geometry as navigation. Props are visual/nonblocking until the
     // integrator's authoritative interactables and trap damage are connected.
     const themedRoomIds = new Set(dungeon.rooms.map(room => room.id));
-    for (const visual of theme.roomVisuals) {
+    for (const visual of optional ? [] : theme.roomVisuals) {
       if (!themedRoomIds.has(visual.roomId) || !visual.initiallyVisible) continue;
       const bounds = visual.bounds;
       g.lineStyle(2, visual.lighting.tint, Math.min(0.65, visual.lighting.intensity * 0.65))
@@ -1511,7 +1516,7 @@ export class FrontierScene extends Phaser.Scene {
         }
       }
     }
-    for (const prop of theme.props) {
+    for (const prop of optional ? [] : theme.props) {
       if (prop.capability !== 'decorative') continue;
       if (!theme.roomVisuals.find(room => room.roomId === prop.roomId)?.initiallyVisible) continue;
       const x = prop.position.x, y = prop.position.y, r = prop.footprintRadius;
@@ -1533,7 +1538,7 @@ export class FrontierScene extends Phaser.Scene {
         g.lineStyle(2, 0xb2a6a1, 0.65).strokeCircle(x, y, r * 0.9);
       }
     }
-    for (const trap of theme.traps) {
+    for (const trap of optional ? [] : theme.traps) {
       g.lineStyle(2, trap.kind === 'poison' ? 0x80b57f
         : trap.kind === 'runic' ? 0x9982bd : 0xb46d67, 0.5)
         .strokeCircle(trap.trigger.center.x, trap.trigger.center.y, trap.trigger.radius);
@@ -1548,13 +1553,15 @@ export class FrontierScene extends Phaser.Scene {
       g.fillStyle(0xb56c65, 0.65)
         .fillCircle(boss.x + Math.cos(a) * 155, boss.y + Math.sin(a) * 155, 5);
     }
-    this.paintPortal(g, CRYPT_EXIT.x, CRYPT_EXIT.y, 0xa4c7b0);
+    this.paintPortal(g, dungeon.exitPosition.x, dungeon.exitPosition.y, 0xa4c7b0);
     g.lineStyle(12, 0x6a656d, 0.8).strokeRect(6, 6, WIDTH - 12, HEIGHT - 12);
   }
 
-  private paintWorld(worldSeed: number, zone: ZoneId): void {
+  private paintWorld(state: GameSnapshot): void {
+    const {worldSeed,zone}=state;
     const wilderness = zone === 'wilderness' ? buildWilderness(worldSeed) : null;
-    const crypt = zone === 'crypt' ? buildCryptWorld(worldSeed) : null;
+    const crypt = zone === 'crypt' ? buildCryptWorld(dungeonRenderSeed(state)) : null;
+    this.dungeonEntrances = wilderness ? planActIDungeonEntrances(wilderness) : [];
     const layout = crypt?.layout ?? wilderness!.layout;
     if (!this.terrain) this.terrain = this.add.graphics().setDepth(-100);
     const ground = this.terrain;
@@ -1562,6 +1569,7 @@ export class FrontierScene extends Phaser.Scene {
     this.releaseChunkGraphics();
     this.renderedSeed = worldSeed;
     this.renderedZone = zone;
+    this.renderedDungeonId = state.dungeonId;
     this.activeObstacles = layout.obstacles;
     this.activeStoryFeatures = wilderness?.features ?? [];
     this.villageDecor.forEach(g=>g.destroy());
@@ -1575,10 +1583,15 @@ export class FrontierScene extends Phaser.Scene {
       this.villageDecor.push(g);
     }
     if (zone === 'crypt') {
-      this.paintCrypt(ground, worldSeed, layout.obstacles, crypt!.dungeon, crypt!.theme);
+      this.paintCrypt(ground, dungeonRenderSeed(state), layout.obstacles, crypt!.dungeon, crypt!.theme, !!state.dungeonId);
       return;
     }
     ground.fillStyle(0x10161d).fillRect(0, 0, WIDTH, HEIGHT);
+    for (const entrance of this.dungeonEntrances.filter(e=>e.id!=='crypt')) {
+      const g=this.add.graphics().setDepth(48);
+      this.paintPortal(g,entrance.position.x,entrance.position.y,entrance.id==='mine'?0xd8af75:0x83c3a0);
+      this.villageDecor.push(g);
+    }
     this.streamIndex = createChunkIndex(wilderness!);
     this.advanceChunkGraphics(this.bridge.snapshot().player, 9);
   }

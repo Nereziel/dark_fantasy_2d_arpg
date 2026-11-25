@@ -833,6 +833,15 @@
     "noForgeable": "Nasaď zbraň nebo zbroj v inventáři a vrať se ke kováři."
   },
   "dungeon": {
+    "mineName": "Opuštěný důl",
+    "caveName": "Lesní jeskyně",
+    "optionalGuards": "Strážci podzemí",
+    "optionalBoss": "Vládce podzemí",
+    "optionalBossHint": "Poraz vládce a jeho strážce.",
+    "optionalCleared": "Podzemí vyčištěno",
+    "optionalClearedHint": "Odměny v tomto světě lze získat pouze jednou.",
+    "optionalReturn": "Vrátit se ke vstupu",
+    "optionalClearedToast": "Podzemí vyčištěno.",
     "name": "Krypta Duté koruny",
     "gateHint": "Za táborem leží zapečetěná krypta. Vstup a očisti ji od temnoty.",
     "enter": "Vstoupit do krypty",

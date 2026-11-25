@@ -72,7 +72,8 @@ import { buildWilderness, type WildernessRuntimeWorld } from '../world/wildernes
 import { villageSanctuaries, inVillageSanctuary, type VillageSanctuary } from '../world/villageSanctuary';
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonRuntime';
 import { planOptionalDungeonEntry, planOptionalDungeonExit, type OptionalDungeonVisit } from '../world/optionalDungeonVisit';
-import { planActIDungeonEntrances } from '../world/actIDungeonEntrances';
+import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
+import { projectDiscoveredDungeonEntrances } from '../world/dungeonPortalPresentation';
 import {optionalDungeonRewardId,validOptionalDungeonRewardIds,type OptionalDungeonRewardId} from '../world/optionalDungeonRewards';
 import {
   applyTalentStats, planSpendTalent, planRespecTalents, projectTalentBonuses,
@@ -331,6 +332,8 @@ export class GameSimulation {
   private dungeonStage: 0 | 1 = 0;
   private dungeonCleared = false;
   private pendingPortal = false;
+  private pendingDungeonEntrance: ActIDungeonEntrance | null = null;
+  private dungeonEntrances: ActIDungeonEntrance[] = [];
   private optionalVisit: OptionalDungeonVisit | null = null;
   private optionalDungeonRewards = new Set<OptionalDungeonRewardId>();
   private units: EnemyUnit[] = createPack(0, 1);
@@ -439,6 +442,7 @@ export class GameSimulation {
   }
 
   private initWorldSystems(world: WildernessRuntimeWorld): void {
+    this.dungeonEntrances = planActIDungeonEntrances(world);
     this.regionalTownEntries = villageTownEntries(world.villages);
     this.villageSafeZones = villageSanctuaries(world);
     const index = createChunkIndex(world);
@@ -515,8 +519,9 @@ export class GameSimulation {
       ...(mode === 'world' ? options : {})
     });
     if (!result.ok) return null;
-    const projection = this.mapTerrain
+    const terrainProjection = this.mapTerrain
       ? projectVisibleTerrain(result.value, this.mapTerrain) : result.value;
+    const projection = projectDiscoveredDungeonEntrances(terrainProjection,this.dungeonEntrances);
     // A historic respawn shrine is also a travel waypoint when actually activated.
     // Derive this marker from the existing seed-scoped checkpoint fact; do not
     // expand mapWorld.waypoints (that would invalidate legacy map fingerprints).
@@ -1307,7 +1312,7 @@ export class GameSimulation {
     this.units = createPack(0, this.level, this.world.encounterPositions);
     this.selectedTargetId = null;
     this.paused = false;
-    this.pendingPortal = false;
+    this.pendingPortal = false; this.pendingDungeonEntrance = null;
     this.pendingObject = null;
     this.pendingCryptPropId = null;
     this.pendingNpc = null;
@@ -1455,7 +1460,7 @@ export class GameSimulation {
       this.pickupTarget = null;
       this.pendingNpc = null;
       this.pendingTown = null;
-      this.pendingPortal = false;
+      this.pendingPortal = false; this.pendingDungeonEntrance = null;
       this.pendingObject = null;
       this.pendingCryptPropId = null;
       this.pendingSkill = null;
@@ -1486,7 +1491,7 @@ export class GameSimulation {
         this.pickupTarget = null;
         this.pendingNpc = null;
         this.pendingTown = null;
-        this.pendingPortal = false;
+        this.pendingPortal = false; this.pendingDungeonEntrance = null;
       }
       return;
     }
@@ -1536,7 +1541,7 @@ export class GameSimulation {
       this.pickupTarget = null;
       this.pendingNpc = null;
       this.pendingTown = null;
-      this.pendingPortal = false;
+      this.pendingPortal = false; this.pendingDungeonEntrance = null;
       return;
     }
     if (command.type === 'equip') { this.equip(command.index, command.slot); return; }
@@ -1671,7 +1676,7 @@ export class GameSimulation {
       this.movePath = [];
       this.attackTarget = null;
       this.pickupTarget = null;
-      this.pendingPortal = false;
+      this.pendingPortal = false; this.pendingDungeonEntrance = null;
       this.pendingNpc = null;
       this.pendingTown = null;
       this.pendingObject = null;
@@ -1697,7 +1702,7 @@ export class GameSimulation {
       this.pendingTown=null;
       this.pendingSkill=null;
       this.pendingAim=null;
-      this.pendingPortal=false;
+      this.pendingPortal=false; this.pendingDungeonEntrance=null;
       this.pendingObject=null;
       this.pendingCryptPropId=null;
       this.pendingEnvironmentId=object.id;
@@ -1717,18 +1722,16 @@ export class GameSimulation {
       this.pendingTown = null;
       this.pendingSkill = null;
       this.pendingAim = null;
-      this.pendingPortal = false;
+      this.pendingPortal = false; this.pendingDungeonEntrance = null;
       this.pendingObject = object.id;
       this.tryInteractObject();
       return;
     }
     if (command.type === 'usePortal') {
-      if (command.dungeonId !== undefined) {
-        if (this.zone !== 'wilderness' || this.paused) return;
-        const visit = planOptionalDungeonEntry(buildWilderness(this.world.seed), command.dungeonId, this.player);
-        if (visit) this.changeZone(visit);
-        return;
-      }
+      if (command.dungeonId !== undefined && command.dungeonId !== 'mine' && command.dungeonId !== 'cave') return;
+      const entrance = command.dungeonId === undefined ? null
+        : this.dungeonEntrances.find(e=>e.id===command.dungeonId) ?? null;
+      if (command.dungeonId !== undefined && (!entrance || this.zone !== 'wilderness' || this.paused)) return;
       this.warriorAction = null;
       this.classAction = null;
       this.warriorPending = null;
@@ -1740,8 +1743,9 @@ export class GameSimulation {
       this.pendingNpc = null;
       this.pendingTown = null;
       this.pendingObject = null;
+      this.pendingDungeonEntrance = entrance;
       this.pendingPortal = true;
-      if (distance(this.player, this.portalPosition) <= (this.optionalVisit ? 72 : 78)) this.changeZone();
+      this.tryPendingPortal();
       return;
     }
     if (command.type === 'interactTown') {
@@ -1756,7 +1760,7 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingObject = null;
-      this.pendingPortal = false;
+      this.pendingPortal = false; this.pendingDungeonEntrance = null;
       this.pendingNpc = null;
       this.pendingTown = null;
       if (this.canReachDialogue(entry)) {
@@ -1781,7 +1785,7 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
       this.pendingObject = null;
-      this.pendingPortal = false;
+      this.pendingPortal = false; this.pendingDungeonEntrance = null;
       if (nearNpc(this.player, command.npcId)) {
         if (command.npcId === WARDEN_ID) this.recordVesnaReport();
         this.events.push({ type: 'npcDialogue', npcId: command.npcId });
@@ -1854,7 +1858,7 @@ export class GameSimulation {
       this.pendingNpc = null;
       this.pendingTown = null;
       this.pendingObject = null;
-      this.pendingPortal = false;
+      this.pendingPortal = false; this.pendingDungeonEntrance = null;
     } else if (command.type === 'attack') {
       const selected = this.units.find(unit => unit.actor.id === command.targetId && unit.actor.alive);
       if (!selected) return;
@@ -1871,7 +1875,7 @@ export class GameSimulation {
       this.pendingNpc = null;
       this.pendingTown = null;
       this.pendingObject = null;
-      this.pendingPortal = false;
+      this.pendingPortal = false; this.pendingDungeonEntrance = null;
     } else if (command.type === 'pickup') {
       const loot = this.groundLoot.find(item => item.id === command.id);
       if (!loot) return;
@@ -1884,7 +1888,7 @@ export class GameSimulation {
       this.pendingNpc = null;
       this.pendingTown = null;
       this.pendingObject = null;
-      this.pendingPortal = false;
+      this.pendingPortal = false; this.pendingDungeonEntrance = null;
     }
   }
 
@@ -3183,7 +3187,7 @@ export class GameSimulation {
         this.pendingNpc = null;
         this.pendingTown = null;
         this.pendingObject = null;
-        this.pendingPortal = false;
+        this.pendingPortal = false; this.pendingDungeonEntrance = null;
         return;
       }
       this.performCast(slot, aim);
@@ -3213,7 +3217,7 @@ export class GameSimulation {
     this.pendingNpc = null;
     this.pendingTown = null;
     this.pendingObject = null;
-    this.pendingPortal = false;
+    this.pendingPortal = false; this.pendingDungeonEntrance = null;
     if (distance(this.player, this.enemy) > skill.range) {
       if (!this.holdPosition) this.pendingSkill = slot;
       return;
@@ -3581,7 +3585,7 @@ export class GameSimulation {
       this.pendingAim = null;
       this.pendingNpc = null;
       this.pendingTown = null;
-      this.pendingPortal = false;
+      this.pendingPortal = false; this.pendingDungeonEntrance = null;
       this.pendingObject = null;
       this.pendingCryptPropId = null;
       this.movePath = [];
@@ -3926,7 +3930,22 @@ export class GameSimulation {
   }
 
   private get portalPosition(): Point {
-    return this.zone === 'wilderness' ? CRYPT_GATE : this.optionalVisit?.interior.exitPosition ?? CRYPT_EXIT;
+    return this.zone === 'wilderness' ? (this.pendingDungeonEntrance?.position ?? CRYPT_GATE) : this.optionalVisit?.interior.exitPosition ?? CRYPT_EXIT;
+  }
+
+  private tryPendingPortal(): boolean {
+    const optional = this.pendingDungeonEntrance;
+    if (distance(this.player,this.portalPosition) > (optional || this.optionalVisit ? 72 : 78)) return false;
+    if (optional) {
+      if (!hasLineOfSight(this.player,optional.position,this.world.obstacles)) return false;
+      const visit = planOptionalDungeonEntry(buildWilderness(this.world.seed),optional.id,this.player);
+      if (!visit) { this.pendingPortal=false; this.pendingDungeonEntrance=null; return false; }
+      this.changeZone(visit);
+    } else {
+      if (this.optionalVisit && !hasLineOfSight(this.player,this.portalPosition,this.world.obstacles)) return false;
+      this.changeZone();
+    }
+    return true;
   }
 
   /** Switch areas without persisting any dungeon, enemy or world state. */
@@ -3936,7 +3955,7 @@ export class GameSimulation {
     const wilderness = destination === 'wilderness' ? buildWilderness(seed) : null;
     const returnPosition = wilderness && this.optionalVisit
       ? planOptionalDungeonExit(wilderness, this.optionalVisit.identity, this.player) : null;
-    if (wilderness && this.optionalVisit && !returnPosition) { this.pendingPortal = false; return; }
+    if (wilderness && this.optionalVisit && !returnPosition) { this.pendingPortal = false; this.pendingDungeonEntrance = null; return; }
     this.optionalVisit = destination === 'crypt' ? visit : null;
     this.zone = destination;
     this.shrineBlessings=[];
@@ -3998,7 +4017,7 @@ export class GameSimulation {
     this.pendingAim = null;
     this.pendingNpc = null;
     this.pendingTown = null;
-    this.pendingPortal = false;
+    this.pendingPortal = false; this.pendingDungeonEntrance = null;
     this.selectedTargetId = null;
     if (destination === 'crypt') {
       if (!this.optionalVisit) this.storyEvent('crypt_descent', 'crypt_gate_entered', 'crypt_entry');
@@ -4143,11 +4162,9 @@ export class GameSimulation {
       * Math.max(0.25, Math.min(1.6, 1 + haste));
     const focus = this.focusedUnit;
     if (this.pendingPortal) {
-      if (distance(this.player, this.portalPosition) <= (this.optionalVisit ? 72 : 78)) {
-        this.changeZone();
-        return;
-      }
-      this.follow(this.player, this.portalPosition, speed, dt, this.optionalVisit ? 60 : 70, true);
+      if (this.tryPendingPortal()) return;
+      if (this.pendingPortal) this.follow(this.player, this.portalPosition, speed, dt,
+        this.pendingDungeonEntrance || this.optionalVisit ? 0 : 70, true);
     } else if (this.pendingTown) {
       const entry = this.dialogueEntry(this.pendingTown);
       if (!entry || this.zone !== 'wilderness') this.pendingTown = null;
@@ -5248,7 +5265,7 @@ export class GameSimulation {
     this.pendingAim = null;
     this.pendingNpc = null;
     this.pendingTown = null;
-    this.pendingPortal = false;
+    this.pendingPortal = false; this.pendingDungeonEntrance = null;
     this.pickupTarget = null;
     this.attackTimer = 0;
     this.accumulator = 0;
@@ -5282,7 +5299,7 @@ export class GameSimulation {
     this.hollowKingHazardDelays.clear();
     this.dungeonStage = 0;
     this.dungeonCleared = false;
-    this.pendingPortal = false;
+    this.pendingPortal = false; this.pendingDungeonEntrance = null;
     this.pendingObject = null;
     this.usedObjects.clear();
     this.shield = 0;
