@@ -120,7 +120,7 @@ export class EnemyPresentation {
         id = 'crypt_lord-4'; pose = kingPattern(event.ability) === 'bolt' ? 'cast' : 'attack'; break;
       default: return;
     }
-    if (!units.some(u => u.actor.id === id && u.actor.alive)) return;
+    if (!id || !pose || !units.some(u => u.actor.id === id && u.actor.alive)) return;
     this.cues.set(id, { pose, started: now });
   }
 
