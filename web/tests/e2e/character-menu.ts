@@ -67,3 +67,9 @@ export async function toggleHotbarEditor(page: Page, gesture: Gesture = 'click')
     await expect(page.getByTestId('hotbar-editor')).toBeVisible();
   }
 }
+
+export async function openGuideFromMenu(page: Page) {
+  await openSystemMenu(page);
+  await page.getByTestId('pause-guide').click();
+  await expect(page.getByTestId('onboarding-guide')).toBeVisible();
+}

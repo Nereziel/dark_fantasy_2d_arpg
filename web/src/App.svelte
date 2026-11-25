@@ -71,6 +71,9 @@
   // No browser AudioContext is created until an explicit trusted user gesture.
   const audio = new WebAudioDirector();
   let playing = $state(false);
+  let guideVisible = $state(false);
+  const minimapTaps = new CharacterDoubleTap();
+  let minimapTouch: { id:number; x:number; y:number; time:number } | null = null;
   let view: GameSnapshot = $state(bridge.snapshot());
   let liveOnboardingContext = $derived(onboardingContextFromSnapshot(view));
   let onboardingProgress: OnboardingProgress = $state(freshOnboarding());
@@ -113,6 +116,38 @@
   }
   function skipGuide(): void { storeOnboarding(skipOnboarding(onboardingProgress)); }
   function showGuide(): void { storeOnboarding(resumeOnboarding(onboardingProgress)); }
+  function openGuideFromMenu(): void {
+    if (!playing || !view.paused || busy || !view.player.alive) return;
+    guideVisible = true;
+    showGuide();
+    bridge.command({type:'pause', value:false});
+  }
+
+  function insidePassiveMinimap(event:PointerEvent):boolean {
+    if (event.pointerType !== 'touch' || !event.isPrimary || !playing ||
+        modalKind !== '' || view.zone !== 'wilderness' ||
+        pointerUiSurface(event.target) !== 'canvas') return false;
+    const rect=document.querySelector('[data-minimap="active"]')?.getBoundingClientRect();
+    return !!rect && rect.width>0 && rect.height>0 &&
+      event.clientX>=rect.left && event.clientX<=rect.right &&
+      event.clientY>=rect.top && event.clientY<=rect.bottom;
+  }
+  function resetMinimapTouch():void { minimapTouch=null; minimapTaps.reset(); }
+  // Observe completed primary taps without capturing the canvas. Single
+  // taps remain ordinary movement; a completed second tap opens the map.
+  function minimapPointerDown(event:PointerEvent):void {
+    if(!insidePassiveMinimap(event)){resetMinimapTouch();return;}
+    minimapTouch={id:event.pointerId,x:event.clientX,y:event.clientY,time:performance.now()};
+  }
+  function minimapPointerUp(event:PointerEvent):void {
+    const start=minimapTouch;minimapTouch=null;
+    const now=performance.now();
+    if(!start||start.id!==event.pointerId||!insidePassiveMinimap(event)||
+      now-start.time>350||Math.hypot(event.clientX-start.x,event.clientY-start.y)>18){
+      minimapTaps.reset();return;
+    }
+    if(minimapTaps.tap('minimap',now,event.clientX,event.clientY))openMap();
+  }
   function resetGuide(): void {
     onboardingOrigin = { x: view.player.x, y: view.player.y };
     onboardingStarterEquipmentIds = Object.values(view.equipment)
@@ -475,6 +510,9 @@
       if (event.isTrusted) audio.unlock();
     };
     window.addEventListener('pointerdown', unlockAudio, true);
+    window.addEventListener('pointerdown', minimapPointerDown, true);
+    window.addEventListener('pointerup', minimapPointerUp, true);
+    window.addEventListener('pointercancel', resetMinimapTouch, true);
     window.addEventListener('keydown', unlockAudio, true);
     void initializeCatalog();
     try {
@@ -578,6 +616,9 @@
       unsubscribe();
       unsubscribeEvents();
       window.removeEventListener('pointerdown', unlockAudio, true);
+      window.removeEventListener('pointerdown', minimapPointerDown, true);
+      window.removeEventListener('pointerup', minimapPointerUp, true);
+      window.removeEventListener('pointercancel', resetMinimapTouch, true);
       window.removeEventListener('keydown', unlockAudio, true);
       audio.dispose();
       document.removeEventListener('fullscreenchange', syncFullscreenState);
@@ -603,6 +644,7 @@
   }
 
   async function newGame(): Promise<void> {
+    guideVisible=false;
     const name = normalizeCharacterName(newCharacterName);
     if (busy || !menuReady || !creatingCharacter || !name
       || savedCharacters.length >= MAX_SAVED_CHARACTERS) return;
@@ -660,6 +702,7 @@
   }
   async function menu(): Promise<void> {
     if (busy) return;
+    guideVisible=false;
     resetCharacterGesture();
     busy = true;
     talentsOpen = false; controlsOpen = false; settingsOpen = false;
@@ -962,6 +1005,7 @@
     });
   }
   function handleBlur(): void {
+    resetMinimapTouch();
     resetCharacterGesture();
     heldPosition.clear();
   }
@@ -1164,7 +1208,19 @@
       </header>
 
       <div class="hud-left-column" aria-label="Game information" inert={modalKind !== ''}>
-        <div class="world-guide" aria-live="polite">
+      {#if modalKind === '' && view.player.alive && !view.paused}
+        <NearbyLootPanel {view} {bridge} />
+      {/if}
+      {#if guideVisible && modalKind === '' && view.player.alive && !view.paused}
+        <div class="optional-help">
+          <button type="button" class="help-close" data-testid="close-guide"
+            aria-label={$t('worldLabels.hideGuide')} onclick={()=>{guideVisible=false;}}>×</button>
+        <OnboardingGuide progress={onboardingProgress}
+          context={liveOnboardingContext}
+          bindings={controlBindings} next={advanceOnboarding}
+          skip={skipGuide} show={showGuide} restart={resetGuide}
+          onMap={openMap} onTalents={openTalents} onWarden={talkToWarden} />
+        <details class="control-help"><summary>{$t('bindings.open')}</summary><div class="world-guide" aria-live="polite">
         <div>{$t('controls.move')}</div>
         <div>{$t('controls.attack')}</div>
         <div>{$t('controls.pickup')}</div>
@@ -1180,17 +1236,8 @@
           hold: shortcutHint(controlBindings, 'HOLD_POSITION'),
           menu: shortcutHint(controlBindings, 'MENU')
         } })}</div>
-      </div>
-
-      {#if modalKind === '' && view.player.alive && !view.paused}
-        <NearbyLootPanel {view} {bridge} />
-      {/if}
-      {#if modalKind === '' && view.player.alive && !view.paused}
-        <OnboardingGuide progress={onboardingProgress}
-          context={liveOnboardingContext}
-          bindings={controlBindings} next={advanceOnboarding}
-          skip={skipGuide} show={showGuide} restart={resetGuide}
-          onMap={openMap} onTalents={openTalents} onWarden={talkToWarden} />
+      </div></details>
+        </div>
       {/if}
       <QuestJournal {view} talk={talkToWarden}
         inspectEvidence={() => bridge.command({ type: 'inspectStoryEvidence' })} />
@@ -1228,9 +1275,7 @@
       {#if miniProjection}
         <div class="minimap-overlay" data-minimap="active">
           <WorldMapCanvas projection={miniProjection} compact />
-          <button onclick={(event) => openMap(event.currentTarget)} disabled={view.paused} aria-label={$t('map.open')}>
-            {$t('map.open')} · {shortcutHint(controlBindings, 'MAP')}
-          </button>
+          <div class="minimap-caption">{shortcutHint(controlBindings, 'MAP')} <span class="minimap-touch-hint">· {$t('worldLabels.doubleTapMap')}</span></div>
         </div>
       {/if}
         <WorldEventPanel {view} />
@@ -1461,6 +1506,7 @@
             <button class="primary" disabled={busy} onclick={() => togglePause()}>{$t('menu.resume')}</button>
             <button class="secondary" data-testid="pause-save" disabled={busy} onclick={save}>{$t('menu.save')}</button>
             <button class="secondary" data-testid="pause-load" disabled={busy} onclick={() => load()}>{$t('menu.load')}</button>
+            <button class="secondary" data-testid="pause-guide" disabled={busy} onclick={openGuideFromMenu}>{$t('worldLabels.showGuide')}</button>
             <button class="secondary" data-testid="pause-edit-hotbar" disabled={busy} onclick={editSkillsFromMenu}>{$t('menu.editSkills')}</button>
             <button class="secondary" aria-pressed={showLootLabels} onclick={toggleLootLabels}>{$t('worldLabels.toggle')}</button>
             <button class="secondary" onclick={(event) => openControls(event.currentTarget)}>{$t('bindings.open')}</button>
@@ -1508,7 +1554,20 @@
   }
   .hud-left-column{left:16px;width:clamp(190px,18vw,260px)}
   .hud-right-column{right:16px;width:clamp(180px,18vw,235px)}
-  .hud-left-column > :global(*),.hud-right-column > :global(*){pointer-events:auto}
+  /* Read-only HUD surfaces never intercept the underlying world. Actual
+     buttons retain their normal pointer/keyboard behavior. */
+  .hud-left-column > :global(*),.hud-right-column > :global(*){pointer-events:none}
+  .hud-left-column :global(button),.hud-right-column :global(button),
+  .hud-left-column :global(summary),.hud-right-column :global(summary){pointer-events:auto}
+  .hud-right-column .minimap-overlay :global(*){pointer-events:none}
+  .minimap-caption { text-align:center;color:#d6c6aa;font-size:.64rem;padding:2px; }
+  .minimap-touch-hint{display:none}
+  @media(pointer:coarse){.minimap-touch-hint{display:inline}}
+  .optional-help{position:relative;flex-shrink:0;padding-top:25px}
+  .help-close{position:absolute;right:0;top:0;min-width:32px;min-height:25px;padding:2px 8px}
+  .control-help summary{font-size:.72rem;color:#d9c49d;background:#101923e8;padding:6px;cursor:pointer}
+  .optional-help .world-guide{display:block;position:relative;top:auto;left:auto;max-width:none;font-size:.67rem}
+  @media(pointer:coarse){.help-close{min-width:44px;min-height:44px}.optional-help{padding-top:44px}}
   .hud-left-column :global(.world-guide),
   .hud-left-column :global(.quest-journal),
   .hud-left-column :global(.camp-services),

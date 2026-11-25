@@ -57,3 +57,64 @@ test.describe('touch info mode',()=>{
     await expect(skill).toHaveClass(/cooldown/);
   });
 });
+
+test('passive HUD surfaces hit the canvas, quest journal collapses, help stays in menu',async({page})=>{
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
+  await enterWorld(page);
+  await expect(page.getByTestId('onboarding-guide')).toHaveCount(0);
+  const journal=page.locator('.quest-journal');
+  const toggle=page.getByTestId('quest-collapse');
+  await expect(toggle).toHaveAttribute('aria-expanded','true');
+  const before=await journal.boundingBox();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded','false');
+  await expect(journal.locator('#quest-journal-body')).toHaveCount(0);
+  const after=await journal.boundingBox();
+  expect(after!.height).toBeLessThan(before!.height);
+  await toggle.click();
+  await expect(journal.locator('#quest-journal-body')).toBeVisible();
+  for(const selector of ['[data-minimap="active"] .map-canvas',' .quest-journal .quest-progress']){
+    const node=page.locator(selector).first();
+    await expect(node).toBeVisible();
+    expect(await node.evaluate(el=>{
+      const b=el.getBoundingClientRect();
+      return document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.tagName;
+    })).toBe('CANVAS');
+  }
+  await page.keyboard.press('m');
+  await expect(page.getByTestId('world-map-dialog')).toBeVisible();
+  await page.keyboard.press('m');
+  await expect(page.getByTestId('world-map-dialog')).toHaveCount(0);
+  await page.getByTestId('system-menu').click();
+  await page.getByTestId('pause-guide').click();
+  await expect(page.getByTestId('onboarding-guide')).toBeVisible();
+  await page.getByTestId('close-guide').click();
+  await expect(page.getByTestId('onboarding-guide')).toHaveCount(0);
+});
+
+test.describe('passive minimap touch',()=>{
+  test.use({hasTouch:true,viewport:{width:390,height:740}});
+  test('single tap passes through; a completed double tap opens full map',async({page})=>{
+    await page.goto('./');
+    await page.locator('#menu-language').selectOption('en');
+    await openCharacterCreation(page);
+    await enterWorld(page);
+    const mini=page.locator('[data-minimap="active"] .map-canvas');
+    await expect(mini).toBeVisible();
+    const b=await mini.boundingBox();
+    expect(b).not.toBeNull();
+    const x=b!.x+b!.width/2,y=b!.y+b!.height/2;
+    expect(await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.tagName,{x,y})).toBe('CANVAS');
+    await page.touchscreen.tap(x,y);
+    await expect(page.getByTestId('world-map-dialog')).toHaveCount(0);
+    // Separate the first single tap from the following double gesture.
+    await page.waitForTimeout(500);
+    await page.touchscreen.tap(x,y);
+    await page.touchscreen.tap(x,y);
+    await expect(page.getByTestId('world-map-dialog')).toBeVisible();
+    await page.getByTestId('map-close').tap();
+    await expect(page.getByTestId('world-map-dialog')).toHaveCount(0);
+  });
+});

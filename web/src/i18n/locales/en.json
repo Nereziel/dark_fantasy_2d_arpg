@@ -1,5 +1,5 @@
 {
-  "worldLabels": {"toggle":"Ground item labels","skillInfo":"Inspect skills","portalExit":"Exit","door":"Passage"},
+  "worldLabels": {"toggle":"Ground item labels","skillInfo":"Inspect skills","portalExit":"Exit","door":"Passage","doubleTapMap":"Double-tap","showGuide":"Help & first steps","hideGuide":"Hide help","collapseQuests":"Collapse quests","expandQuests":"Expand quests","questDetails":"Details"},
   "village": {
     "services": "Village services",
     "north-village-healer": {

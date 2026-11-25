@@ -1,5 +1,5 @@
 {
-  "worldLabels": {"toggle":"Popisky předmětů na zemi","skillInfo":"Informace o schopnostech","portalExit":"Východ","door":"Průchod"},
+  "worldLabels": {"toggle":"Popisky předmětů na zemi","skillInfo":"Informace o schopnostech","portalExit":"Východ","door":"Průchod","doubleTapMap":"Dvojtap","showGuide":"Nápověda a první kroky","hideGuide":"Skrýt nápovědu","collapseQuests":"Sbalit úkoly","expandQuests":"Rozbalit úkoly","questDetails":"Podrobnosti"},
   "village": {
     "services": "Vesnické služby",
     "north-village-healer": {
