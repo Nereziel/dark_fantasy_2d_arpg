@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 // Issue #102: LMB/RMB handedness must survive reloading the v1 override set.
 import { test, expect } from '@playwright/test';
 import { isoGroundPoint } from './iso-input';
@@ -7,7 +7,7 @@ test('primary and secondary mouse bindings swap atomically and persist across re
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
   await expect(page.locator('.skill-shortcut').first()).toHaveText('RMB');
@@ -53,7 +53,7 @@ test('primary and secondary mouse bindings swap atomically and persist across re
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await expect(page.locator('.skill-shortcut').first()).toHaveText('LMB');
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Controls' }).click();

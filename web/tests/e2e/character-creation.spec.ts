@@ -1,4 +1,4 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 import {test,expect} from '@playwright/test';
 
 const names=['Warrior','Paladin','Mage','Necromancer','Rogue','Warlock'] as const;
@@ -12,7 +12,7 @@ for(const name of names){
     await expect(preview).toContainText(name);
     await expect(preview).toContainText('Starting equipment');
     await expect(preview).toContainText('Strengths');
-    await page.getByRole('button',{name:'Enter the world'}).click();
+    await enterWorld(page);
     await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toBeVisible();
     await expect(page.locator('.hud-details')).toContainText(name+' · Level 1');
     const seed=await page.locator('.game-screen').getAttribute('data-world-seed');
@@ -69,7 +69,7 @@ for(const name of names){
     expect(record.equipped).toBeGreaterThan(0);
     expect(String(record.seed)).toBe(seed);
     await page.reload();
-    await loadCharacterControl(page).click();
+    await continueGame(page);
     await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toBeVisible();
     await expect(page.locator('.hud-details')).toContainText(name+' · Level 1');
     await expect(page.locator('.game-screen')).toHaveAttribute('data-world-seed',seed!);

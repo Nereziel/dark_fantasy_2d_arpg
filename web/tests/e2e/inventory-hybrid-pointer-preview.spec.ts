@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 /** Hybrid touch + mouse regression: a tap must not permanently disable
@@ -12,7 +12,7 @@ test.describe('hybrid pointer inventory inspection', () => {
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await openCharacterCreation(page);
-    await page.getByRole('button', { name: 'Enter the world' }).tap();
+    await enterWorld(page, 'tap');
     await page.getByRole('button', { name: 'Browse wares' }).tap();
     const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
     const buy = merchant.getByRole('button', { name: 'Buy Studded War Belt' });

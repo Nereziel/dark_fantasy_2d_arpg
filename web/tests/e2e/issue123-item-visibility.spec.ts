@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 // Issue #123: rendered item art, stable comparison and touch-safe loot filters.
 // GPL-3.0-only.
 import { test, expect } from '@playwright/test';
@@ -7,7 +7,7 @@ test('inventory uses real SVG artwork for bag, equipped gear and the inspector',
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
@@ -39,7 +39,7 @@ test.describe('touch item preview and loot-label preferences', () => {
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await openCharacterCreation(page);
-    await page.getByRole('button', { name: 'Enter the world' }).click();
+    await enterWorld(page);
     await page.getByRole('button', { name: 'Browse wares' }).click();
     const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
     await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
@@ -87,7 +87,7 @@ test.describe('touch item preview and loot-label preferences', () => {
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await openCharacterCreation(page);
-    await page.getByRole('button', { name: 'Enter the world' }).click();
+    await enterWorld(page);
     await page.getByRole('button', { name: 'Browse wares' }).click();
     const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
     await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();

@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 /** All inspector actions must target the item most recently previewed by a
@@ -6,10 +6,13 @@ import { expect, test } from '@playwright/test';
  * back to an older selection; transfers still require explicit Move.
  */
 test('hovered item remains the inspector action target after cursor leaves the bag or gear', async ({ page }) => {
+  // Many real pointer actions in one transaction sequence; avoid truncating
+  // the scenario on a slow renderer. Individual assertions remain unchanged.
+  test.setTimeout(60_000);
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   const belt = merchant.getByRole('button', { name: 'Buy Studded War Belt' });

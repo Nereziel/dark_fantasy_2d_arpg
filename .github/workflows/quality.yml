@@ -103,6 +103,9 @@ jobs:
       - name: Test mandatory validation gate
         run: bash tests/quality-validation.test.sh
 
+      - name: Test browser timing report
+        run: node --test tests/browser-timings.test.mjs
+
       - name: Typecheck Svelte/TypeScript
         working-directory: web
         run: npm run check
@@ -157,9 +160,17 @@ jobs:
       matrix:
         include:
           - lane: quick-1
-            shard: 1/2
+            shard: 1/6
           - lane: quick-2
-            shard: 2/2
+            shard: 2/6
+          - lane: quick-3
+            shard: 3/6
+          - lane: quick-4
+            shard: 4/6
+          - lane: quick-5
+            shard: 5/6
+          - lane: quick-6
+            shard: 6/6
           - lane: act-i
             shard: ''
     steps:
@@ -195,11 +206,17 @@ jobs:
         run: |
           # Complementary filters: every test runs exactly once across the
           # lanes. The touch-loot case in the same file stays in quick tests.
+          # Each quick runner uses one renderer-heavy browser worker; test-level
+          # sharding balances large spec files without sharing browser state.
           if [[ "$LANE" == "act-i" ]]; then
             npm run test:e2e -- --grep 'natural first Act I loop:' --workers=1 --retries=0
           else
-            npm run test:e2e -- --grep-invert 'natural first Act I loop:' --shard="$SHARD"
+            npm run test:e2e -- --grep-invert 'natural first Act I loop:' --shard="$SHARD" --workers=1 --fully-parallel
           fi
+
+      - name: Report slow tests and retries
+        if: ${{ always() && !cancelled() }}
+        run: node .github/actions/browser-timings.mjs web/test-results/ci-results.json '${{ matrix.lane }}'
 
       - name: Retain failing browser traces
         if: failure()

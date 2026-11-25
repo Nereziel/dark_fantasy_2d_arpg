@@ -1,4 +1,4 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 // Issue #122: new class talents are playable, localized and persistent.
 // GPL-3.0-only.
 import { test, expect, type Page } from '@playwright/test';
@@ -48,17 +48,20 @@ async function grantThreeTalentPoints(page: Page): Promise<void> {
 
 for (const { id, title, nodes } of examples) {
   test(`${id} can invest, persist, respec and localize three linked talents`, async ({ page }) => {
+    // Three complete sessions, two persistence round trips and locale switch.
+    // This is a whole-scenario budget; individual UI waits stay bounded.
+    test.setTimeout(60_000);
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await openCharacterCreation(page);
     await page.getByRole('button', { name: new RegExp(id === 'NECROMANCER' ? 'Necromancer' :
       id === 'WARLOCK' ? 'Warlock' : 'Rogue') }).click();
-    await page.getByRole('button', { name: 'Enter the world' }).click();
+    await enterWorld(page);
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Hero saved');
     await page.reload();
     await grantThreeTalentPoints(page);
-    await loadCharacterControl(page).click();
+    await continueGame(page);
     await page.getByRole('button', { name: /Talents/ }).click();
     const dialog = page.getByRole('dialog', { name: title });
     await expect(dialog).toBeVisible();
@@ -75,7 +78,7 @@ for (const { id, title, nodes } of examples) {
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Hero saved');
     await page.reload();
-    await loadCharacterControl(page).click();
+    await continueGame(page);
     await page.getByRole('button', { name: 'Talents' }).click();
     const reloaded = page.getByRole('dialog', { name: title });
     for (const talentId of nodes)

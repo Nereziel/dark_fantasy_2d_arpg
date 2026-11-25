@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 // Issue #123 stage 2: SVG item artwork survives stash transfers on small screens.
 import { test, expect } from '@playwright/test';
 
@@ -7,7 +7,7 @@ test('stash shows the same item illustration in bag, stored rows and after withd
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();

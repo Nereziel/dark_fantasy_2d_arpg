@@ -1,11 +1,11 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('world map and minimap conceal unvisited places, support localization and survive reload', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
 
   const minimap = page.locator('[data-minimap="active"]');
   await expect(minimap).toBeVisible();
@@ -30,7 +30,7 @@ test('world map and minimap conceal unvisited places, support localization and s
   await expect(page.getByRole('dialog', { name: 'Mapa světa' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Uložit' }).click();
   await page.reload();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await expect(page.locator('[data-minimap="active"]')).toBeVisible();
   await expect(page.locator('[data-map-marker="town.camp"]').first()).toBeVisible();
   await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);

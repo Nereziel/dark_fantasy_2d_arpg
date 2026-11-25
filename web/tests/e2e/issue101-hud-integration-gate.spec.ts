@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 // F0 / Prompt 46: independent HUD composition gate for the missing mid/desktop
 // viewport sizes. The 320–430px touch dock and modal suite lives in #120.
 // GPL-3.0-only.
@@ -10,7 +10,7 @@ test('F0 HUD columns preserve a usable world canvas and modal focus at 390–144
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await page.getByRole('button', { name: /Paladin/ }).click();
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
 
   const game = page.locator('.game-screen');
   const canvas = page.locator('.phaser-container canvas');

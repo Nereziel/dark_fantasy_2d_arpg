@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 /** Regression for a deliberately protected item. The UI should never offer an
@@ -9,7 +9,7 @@ test('favorite and locked items cannot be dropped until explicitly unprotected',
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();

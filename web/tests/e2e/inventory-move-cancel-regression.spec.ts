@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 /** Regression for stale armed move state. Ordinary clicks after Cancel selection
@@ -6,10 +6,13 @@ import { expect, test } from '@playwright/test';
  * Uses real merchant purchases and the visible inventory controls.
  */
 test('clear selection and sort both disarm move mode before subsequent bag clicks', async ({ page }) => {
+  // Many real pointer actions in one transaction sequence; avoid truncating
+  // the scenario on a slow renderer. Individual assertions remain unchanged.
+  test.setTimeout(60_000);
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   const buy = merchant.getByRole('button', { name: 'Buy Studded War Belt' });

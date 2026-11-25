@@ -1,4 +1,4 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('multi-tab stash transfers, filters and persists stable item IDs in character v11', async ({ page }) => {
@@ -10,7 +10,7 @@ test('multi-tab stash transfers, filters and persists stable item IDs in charact
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await openCharacterCreation(page);
-    await page.getByRole('button', { name: 'Enter the world' }).click();
+    await enterWorld(page);
     await page.getByRole('button', { name: 'Browse wares' }).click();
     const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
     await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
@@ -44,7 +44,7 @@ test('multi-tab stash transfers, filters and persists stable item IDs in charact
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByRole('status')).toContainText('Hero saved');
     await page.reload();
-    await loadCharacterControl(page).click();
+    await continueGame(page);
   });
   await page.getByRole('button', { name: 'Open stash' }).click();
   const recovered = page.getByRole('dialog', { name: 'Camp Stash' });
@@ -63,7 +63,7 @@ test('drag and drop moves protected-safe items across bag, stash and tabs', asyn
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const vendor = page.getByRole('dialog', { name: 'Merchant Bram' });
   await vendor.getByRole('button', { name: 'Buy Studded War Belt' }).click();

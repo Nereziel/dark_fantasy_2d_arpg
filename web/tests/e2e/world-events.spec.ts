@@ -1,11 +1,11 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('world event UI keeps undiscovered optional events hidden, including on the map', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button',{name:'Enter the world'}).click();
+  await enterWorld(page);
   await expect(page.locator('.game-screen')).toBeVisible();
   await expect(page.locator('[data-world-events]')).toHaveCount(0);
 

@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 /** Chromium can emulate the observable AltGr/AltGraph event flags,
@@ -8,7 +8,7 @@ test('AltGr is ignored during Controls capture, and valid chords work afterward'
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Controls' }).click();
 
@@ -49,7 +49,7 @@ test('AltGr key events cannot activate rebound standalone AltRight hold', async 
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const game = page.locator('.game-screen');
   await expect(game).toHaveAttribute('data-hold-position', 'false');
   await page.evaluate(() => {

@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 // Only the canvas may open panels; only empty modal backdrops may close them.
@@ -6,7 +6,7 @@ test('mouse-bound map shortcut opens and closes on backdrop, then persists on re
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
 
@@ -44,7 +44,7 @@ test('mouse-bound map shortcut opens and closes on backdrop, then persists on re
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await expect(page.locator('.minimap-overlay button')).toContainText('RMB');
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Controls' }).click();
@@ -57,7 +57,7 @@ test('mouse-mapped menu opens pause and resumes without world input', async ({ p
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
   await page.keyboard.press('Escape');

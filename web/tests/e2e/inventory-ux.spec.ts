@@ -1,11 +1,11 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('inventory is compact, compares on hover, and drag-drops gear both ways', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
@@ -40,7 +40,7 @@ test('HUD columns and minimap fog stay clear of the seven-skill action bar', asy
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await page.getByRole('button', { name: /Paladin/ }).click();
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const mini = page.locator('.minimap-overlay');
   const enemies = page.locator('.enemy-roster');
   const guide = page.locator('.world-guide');
@@ -87,7 +87,7 @@ test('inventory filter dims hidden items without disguising them as empty or mov
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
   await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
@@ -132,7 +132,7 @@ test.describe('touch inventory item preview', () => {
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await openCharacterCreation(page);
-    await page.getByRole('button', { name: 'Enter the world' }).click();
+    await enterWorld(page);
     await page.getByRole('button', { name: 'Browse wares' }).click();
     const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
     await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
@@ -198,7 +198,7 @@ test('dragging a bag item highlights only the compatible equipment sockets', asy
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const vendor = page.getByRole('dialog', { name: 'Merchant Bram' });
   await vendor.getByRole('button', { name: 'Buy Studded War Belt' }).click();

@@ -1,11 +1,11 @@
-import { openCharacterCreation, loadCharacterControl } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
 // Issue #100 / Prompt 45 — browser-managed character slots. GPL-3.0-only.
 import { test, expect } from '@playwright/test';
 
 async function createHero(page: import('@playwright/test').Page, classId: string) {
   await openCharacterCreation(page, classId === 'WARRIOR' ? 'Warrior' : 'Mage');
   await page.locator('[data-class-id="' + classId + '"]').click();
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await expect(page.locator('.hud-details')).toContainText(classId === 'WARRIOR' ? 'Warrior' : 'Mage');
   await expect.poll(async () => page.evaluate(async () => {
     const request = indexedDB.open('aether-ruin-web', 1);
@@ -35,14 +35,14 @@ test('two different heroes retain separate slots and character/world identity af
   await expect(page.locator('.saved-character-row')).toHaveCount(2);
   const warrior = page.locator('.saved-character-row').filter({ hasText: 'Warrior' });
   await warrior.locator('.saved-select').click();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await expect(page.locator('.hud-details')).toContainText('Warrior · Level 1');
   await expect(page.locator('.game-screen')).toHaveAttribute('data-world-seed', warriorSeed!);
 
   await page.reload();
   await expect(page.locator('.saved-character-row')).toHaveCount(2);
   await page.locator('.saved-character-row').filter({ hasText: 'Mage' }).locator('.saved-select').click();
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await expect(page.locator('.hud-details')).toContainText('Mage · Level 1');
 });
 
@@ -64,7 +64,7 @@ test('two-step deletion removes only its own saved character and world record', 
   await expect(page.locator('.saved-character-row').first()).toContainText('Warrior');
   await page.reload();
   await expect(page.locator('.saved-character-row')).toHaveCount(1);
-  await loadCharacterControl(page).click();
+  await continueGame(page);
   await expect(page.locator('.hud-details')).toContainText('Warrior · Level 1');
 });
 

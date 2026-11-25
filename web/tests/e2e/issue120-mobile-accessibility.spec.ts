@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 // Issue #120 — touch HUD, geometry and modal focus regression. GPL-3.0-only.
 import { expect, test } from '@playwright/test';
 
@@ -10,7 +10,7 @@ test.describe('mobile touch HUD', () => {
     await page.locator('#menu-language').selectOption('en');
     await openCharacterCreation(page);
     await page.getByRole('button', { name: /Paladin/ }).click();
-    await page.getByRole('button', { name: 'Enter the world' }).click();
+    await enterWorld(page);
 
     const dock = page.getByTestId('combat-dock');
     const skillButtons = dock.locator('.skill-button');
@@ -88,7 +88,7 @@ test.describe('mobile touch HUD', () => {
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('cs');
     await openCharacterCreation(page);
-    await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
+    await enterWorld(page);
 
     await page.locator('[data-quick-action="inventory"]').tap();
     const inventory = page.getByRole('dialog', { name: /Inventář/ });

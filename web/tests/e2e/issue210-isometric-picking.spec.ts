@@ -1,4 +1,4 @@
-import { openCharacterCreation } from './character-menu';
+import { openCharacterCreation, enterWorld } from './character-menu';
 // GPL-3.0-only — actual isometric canvas picking, no debug commands or injected loot.
 import { test, expect } from '@playwright/test';
 import { WARDEN_POSITION } from '../../src/game/world/npcs';
@@ -9,7 +9,7 @@ test('canvas NPC picking opens the Warden dialogue', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   const point = await isoGroundPoint(canvas, WARDEN_POSITION);
   // Hit the upright body rather than a DOM interaction button.
@@ -24,7 +24,7 @@ test('canvas portal picking enters the crypt and returns to camp', async ({ page
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   const game = page.locator('.game-screen');
   const seed = await game.getAttribute('data-world-seed');
@@ -57,7 +57,7 @@ test('canvas loot picking collects a naturally defeated enemy drop', async ({ pa
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await page.getByRole('button', { name: /Paladin/ }).click();
-  await page.getByRole('button', { name: 'Enter the world' }).click();
+  await enterWorld(page);
   await page.getByRole('button', { name: 'Speak to the warden' }).click();
   const dialogue = page.getByRole('dialog', { name: 'Warden Vesna' });
   await dialogue.getByRole('button', { name: 'Accept quest' }).click();
