@@ -1,5 +1,42 @@
 // GPL-3.0-only
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
+
+async function assertMapFog(map: Locator, mode: 'mini' | 'world') {
+  await expect(map).toBeVisible();
+  await expect(map.locator('[data-fog="discovered"]').first()).toBeVisible();
+  await expect(map.locator('[data-fog="unexplored"]').first()).toHaveCount(1);
+  const result = await map.evaluate((root, mode) => {
+    const known = new Set(Array.from(root.querySelectorAll('[data-fog="discovered"]'))
+      .map(cell => cell.getAttribute('data-fog-cell')));
+    const terrain = Array.from(root.querySelectorAll('[data-terrain-cell]'));
+    const clipId = 'ar-discovered-' + mode;
+    const clip = root.querySelector('clipPath[id="' + clipId + '"]');
+    const geometry = Array.from(clip?.querySelectorAll('rect') ?? []);
+    const rectKey = (rect: Element) => ['x','y','width','height']
+      .map(attribute => rect.getAttribute(attribute)).join('/');
+    const knownGeometry = new Set(Array.from(root.querySelectorAll('[data-fog="discovered"]')).map(rectKey));
+    return {
+      known: known.size,
+      terrain: terrain.length,
+      unknownTerrain: terrain.filter(cell => !known.has(cell.getAttribute('data-terrain-cell'))).length,
+      clipCount: geometry.length,
+      unknownClip: geometry.filter(rect => !knownGeometry.has(rectKey(rect))).length,
+      roadClip: root.querySelector('.road-network')?.getAttribute('clip-path'),
+      unknownRoads: Array.from(root.querySelectorAll('[data-known-road]')).filter(line => {
+        const id = line.getAttribute('data-known-road') ?? '';
+        const fogIndex = id.lastIndexOf('/fog/');
+        return fogIndex < 0 || !known.has(id.slice(fogIndex + 1));
+      }).length
+    };
+  }, mode);
+  expect(result.known).toBeGreaterThan(0);
+  expect(result.terrain).toBe(result.known);
+  expect(result.unknownTerrain).toBe(0);
+  expect(result.clipCount).toBe(result.known);
+  expect(result.unknownClip).toBe(0);
+  expect(result.roadClip).toBe('url(#ar-discovered-' + mode + ')');
+  expect(result.unknownRoads).toBe(0);
+}
 
 test('isometric preview boots, accepts a pointer and keeps the map controls', async ({ page }) => {
   const errors: string[] = [];
@@ -36,8 +73,13 @@ test('isometric preview boots, accepts a pointer and keeps the map controls', as
   await expect(canvas).toHaveAttribute('data-static-layers', String(staticTotal));
   await expect.poll(async () => Number(await canvas.getAttribute('data-static-visible-layers'))).toBeGreaterThan(0);
   await expect.poll(async () => Number(await canvas.getAttribute('data-static-visible-layers'))).toBeLessThan(staticTotal);
+  await assertMapFog(page.locator('[data-minimap="active"] [data-map-mode="minimap"]'), 'mini');
   await page.keyboard.press('m');
-  await expect(page.getByTestId('world-map-dialog')).toBeVisible();
+  const dialog = page.getByTestId('world-map-dialog');
+  await expect(dialog).toBeVisible();
+  await assertMapFog(dialog.locator('[data-map-mode="world"]'), 'world');
+  await dialog.getByTestId('map-zoom-in').click();
+  await assertMapFog(dialog.locator('[data-map-mode="world"]'), 'world');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('world-map-dialog')).toHaveCount(0);
   expect(errors).toEqual([]);
