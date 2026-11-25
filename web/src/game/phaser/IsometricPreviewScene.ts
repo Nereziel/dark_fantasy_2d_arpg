@@ -4,7 +4,7 @@ import { get } from 'svelte/store';
 import { _ as translate, locale } from 'svelte-i18n';
 import type { GameBridge } from '../bridge/GameBridge';
 import type { GameEvent, GameSnapshot, Point, ZoneId } from '../core/types';
-import { ENEMY_DEFINITIONS } from '../enemies/enemies';
+import { EnemyPresentation, snapshotEnemyWindup } from './isometricEnemyPresentation';
 import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
 import { dungeonPortalTargets, dungeonPortalCommand, dungeonRenderSeed } from '../world/dungeonPortalPresentation';
 import { buildWilderness } from '../world/wildernessRuntime';
@@ -52,6 +52,7 @@ const MAX_IMPACT_VISUALS = 64;
 
 export class IsometricPreviewScene extends Phaser.Scene {
   private readonly impacts: ImpactVisual[] = [];
+  private readonly enemyPresentation = new EnemyPresentation();
   private ground!: IsometricGroundLayer;
   private dungeonDecor!: Phaser.GameObjects.Graphics;
   private warnings!: Phaser.GameObjects.Graphics;
@@ -100,7 +101,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.input.on('pointerup', this.release, this);
     this.input.on('gameout', this.release, this);
     const unsubscribe = this.bridge.onEvent(event => this.onImpactEvent(event));
-    const onDestroy = () => { unsubscribe(); this.impacts.length = 0; };
+    const onDestroy = () => { unsubscribe(); this.impacts.length = 0; this.enemyPresentation.clear(); };
     this.events.once(Phaser.Scenes.Events.DESTROY, onDestroy);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       unsubscribe();
@@ -115,6 +116,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       this.actors.clear();
       this.sprites.clear();
       this.lastEnemyPositions.clear();
+      this.enemyPresentation.clear();
       this.facingMemory.clear();
       this.walls.length = 0;
       this.occluders.length = 0;
@@ -151,6 +153,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     for (const sprite of this.sprites.values()) sprite.destroy();
     this.sprites.clear();
     this.lastEnemyPositions.clear();
+    this.enemyPresentation.clear();
     this.facingMemory.clear();
     this.villageResidents = [];
     const buildings = new Map<string, SettlementStructure>();
@@ -419,10 +422,12 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private onImpactEvent(event: GameEvent): void {
     if (event.type === 'zoneChanged' || event.type === 'playerRespawn' || event.type === 'waypointTravel') {
       this.clearImpacts();
+      this.enemyPresentation.clear();
       return;
     }
     const state = this.bridge.snapshot();
     if (state.zone !== this.zone || state.worldSeed !== this.seed || state.dungeonId!==this.dungeonId) return;
+    this.enemyPresentation.record(event, state.enemies, this.time.now);
     if(event.type==='cryptTrapWindup'){
       const center=project({x:event.x,y:event.y});
       const points=projectCombatCircle({x:event.x,y:event.y},event.radius,ORIGIN)
@@ -523,6 +528,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       : timeline && (pose === 'attack' || pose === 'cast' || pose === 'channel')
         ? pixelTimelineFrame(timeline)
         : Math.floor(this.time.now / (pose === 'run' ? 95 : 150)) % PIXEL_ANIMATION_FRAMES;
+    this.enemyPresentation.sync(state.enemies, this.time.now);
     const enemies = new Map(state.enemies.map(unit => [unit.actor.id, unit]));
     const liveEnemy = (id: string) => {
       const actor = enemies.get(id)?.actor;
@@ -541,14 +547,15 @@ export class IsometricPreviewScene extends Phaser.Scene {
       if (t.kind === 'ENEMY' && unit) {
         const previous = this.lastEnemyPositions.get(t.id);
         const moving = previous && Math.hypot(previous.x - t.position.x, previous.y - t.position.y) > 0.3;
-        const pose: PixelAnimation = unit.intent
-          ? ENEMY_DEFINITIONS[unit.actor.type].attack === 'bolt' ? 'cast' : 'attack'
-          : moving ? 'run' : 'idle';
-        const frame = unit.intent
-          ? Math.max(0, Math.min(3, Math.floor(4 * (unit.intent.total - unit.intent.remaining)
-              / Math.max(1, unit.intent.total))))
-          : Math.floor(this.time.now / (pose === 'run' ? 110 : 170)) % PIXEL_ANIMATION_FRAMES;
-        this.sprite(key, unit.actor.type, t.position, pose, frame, unit.intent ?? undefined);
+        const windup = snapshotEnemyWindup(state, unit);
+        const reaction = this.enemyPresentation.pose(t.id, this.time.now);
+        // A new authoritative windup supersedes a previous attack's recovery.
+        // Damage reactions may briefly override the body pose, never the warning.
+        const combat = reaction?.pose === 'hit' ? reaction : windup ?? reaction;
+        const pose: PixelAnimation = combat?.pose ?? (moving ? 'run' : 'idle');
+        const frame = combat?.frame ??
+          Math.floor(this.time.now / (pose === 'run' ? 110 : 170)) % PIXEL_ANIMATION_FRAMES;
+        this.sprite(key, unit.actor.type, t.position, pose, frame, windup?.aim);
         this.lastEnemyPositions.set(t.id, { ...t.position });
       } else if (t.kind === 'NPC' && this.villageResidents.some(n=>n.id===t.id)) {
         // Render the resident sprite below, rather than a second proxy actor.
@@ -557,6 +564,13 @@ export class IsometricPreviewScene extends Phaser.Scene {
           : t.kind === 'NPC' ? 0xb0986c : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
         this.entity(key, t.position, color, t.bodyHeight > 0);
       }
+    }
+    // Defeat visuals are renderer-only. They never enter targets(), navigation,
+    // collision, health bars or loot selection and expire after a short sequence.
+    for (const death of this.enemyPresentation.deaths(this.time.now)) {
+      const key = 'ENEMY/' + death.actor.id;
+      visible.add(key);
+      this.sprite(key, death.actor.type, death.actor, death.pose, death.frame);
     }
     // Resident hit targets use the same town interaction command as camp services.
     for (const resident of this.villageResidents) {
