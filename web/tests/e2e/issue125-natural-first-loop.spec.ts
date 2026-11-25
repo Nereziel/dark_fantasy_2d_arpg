@@ -513,105 +513,132 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
   let resumeAfter = 0;
   let resumeAttack = false;
   let focusRegeneratingKing = false;
+  let evadedWarning = '';
+  let lastEvadeAt = 0;
   const game = page.locator('.game-screen');
   const recent: string[] = [];
-  const pressIfReady = async (button: ReturnType<Page['locator']>): Promise<boolean> => {
-    if (!await button.isEnabled()) return false;
-    try {
-      await button.click({ timeout: 700 });
-      return true;
-    } catch (error) {
-      if (!(error instanceof errors.TimeoutError)) throw error;
-      return false;
-    }
-  };
+  // Read a coherent visible HUD frame in a single browser round trip. The
+  // former loop made many serial calls while the boss kept dealing damage,
+  // then spent another 700 ms waiting for each skill button's click geometry.
+  // Read-only DOM access is not a simulation/debug hook.
+  const hud = () => game.evaluate(root => {
+    const text = (selector: string) => (root.querySelector(selector) as HTMLElement | null)?.innerText ?? '';
+    const ready = (selector: string) => {
+      const button = root.querySelector<HTMLButtonElement>(selector);
+      return !!button && !button.disabled;
+    };
+    const vitals = Array.from(root.querySelectorAll<HTMLElement>('.vital-panel .vital-top'));
+    const ratio = (value: string) => {
+      const match = value.match(/(\d+)\s*\/\s*(\d+)/);
+      return match ? [Number(match[1]), Number(match[2])] : null;
+    };
+    const live = Array.from(root.querySelectorAll<HTMLButtonElement>('.enemy-roster button:not([disabled])'));
+    return {
+      quest: text('.quest-journal'), chamber: text('.dungeon-panel'),
+      warning: text('.dungeon-panel .king-warning'), phase: text('.dungeon-panel .king-phase'),
+      roster: text('.enemy-roster').replaceAll('\n', ' '),
+      dead: !!root.querySelector('[data-testid="death-overlay"]'),
+      hp: ratio(vitals[0]?.innerText ?? ''),
+      faith: ratio(vitals[vitals.length - 1]?.innerText ?? ''),
+      shieldActive: vitals.some(node => node.innerText.includes('Shield')),
+      potion: ready('[data-testid="use-potion"]'),
+      heal: ready('[data-paladin-ability="healingLight"]'),
+      shield: ready('[data-paladin-ability="divineShield"]'),
+      smite: ready('[data-paladin-ability="smite"]'),
+      strike: ready('[data-paladin-ability="holyStrike"]'),
+      targets: live.map(button => ({
+        king: button.innerText.includes('The Hollow King'),
+        regenerating: button.innerText.includes('Regenerating'),
+        pressed: button.getAttribute('aria-pressed') === 'true'
+      }))
+    };
+  });
   while (Date.now() < deadline) {
-    const quest = await journal.innerText();
-    const chamber = await dungeon.innerText();
-    if (quest.includes('Report to Vesna') && chamber.includes('Crypt cleared')) return;
-    if (await page.getByTestId('death-overlay').count()) {
+    const frame = await hud();
+    if (frame.quest.includes('Report to Vesna') && frame.chamber.includes('Crypt cleared')) return;
+    if (frame.dead || await page.getByTestId('death-overlay').count()) {
       throw new Error('Natural crypt battle: hero died before Act I boss victory; seed='
         + await game.getAttribute('data-world-seed') + '; player='
         + await game.getAttribute('data-player-x') + ','
-        + await game.getAttribute('data-player-y') + '; quest=' + quest
-        + '; dungeon=' + chamber + '; roster=' + (await roster.innerText()).replaceAll('\n', ' ')
+        + await game.getAttribute('data-player-y') + '; quest=' + frame.quest
+        + '; dungeon=' + frame.chamber + '; roster=' + frame.roster
         + '; recent=' + recent.join(' | '));
     }
-    const vital = page.locator('.vital-panel .vital-top');
-    const hp = (await vital.first().innerText()).match(/(\d+)\s*\/\s*(\d+)/);
-    const faith = (await vital.last().innerText()).match(/(\d+)\s*\/\s*(\d+)/);
-    const healthRatio = hp ? Number(hp[1]) / Number(hp[2]) : 0;
-    const shieldActive = await vital.filter({ hasText: 'Shield' }).count() > 0;
-    const warning = (await dungeon.locator('.king-warning').allTextContents()).join(' ');
+    const healthRatio = frame.hp && frame.hp[1]! > 0 ? frame.hp[0]! / frame.hp[1]! : 0;
+    const shieldActive = frame.shieldActive;
+    const warning = frame.warning;
     const damageWarning = warning !== '' && !warning.includes('Raise the Dead');
-    const heal = page.locator('[data-paladin-ability="healingLight"]');
-    const shield = page.locator('[data-paladin-ability="divineShield"]');
-    const potion = page.getByTestId('use-potion');
-    // Prevent burst damage instead of waiting until the hero is nearly dead.
-    // Use an emergency potion independently of Faith; reserve the class
-    // action for healing or shielding. Do not recast an existing shield.
+    const warningName = warning.split('·')[0]!.trim();
+    if (!damageWarning) evadedWarning = '';
+    const available = frame.faith?.[0] ?? 0;
     let action = '';
-    if (hp && healthRatio < 0.5 && await pressIfReady(potion)) action = 'potion';
-    if (hp && healthRatio < 0.82 && await pressIfReady(heal)) action += ' heal';
-    else if (!shieldActive && (damageWarning || healthRatio < 0.85)
-      && await pressIfReady(shield)) action += ' shield';
-    else if (!action && hp && healthRatio < 0.7
-      && await pressIfReady(potion)) action = 'potion';
-    // Judgment and Smite are real ranged attacks; Holy Strike is melee.
-    // Use the available damage skills instead of letting regeneration erase
-    // intermittent basic hits. Keep 59 Faith in reserve for heal + shield.
-    // Judgment's normal hotbar control is usable during basic attacks.
-    const live = roster.locator('button:not([disabled])');
-    const adds = live.filter({ hasNotText: 'The Hollow King' });
-    const kings = live.filter({ hasText: 'The Hollow King' });
-    const regenerating = await kings.filter({ hasText: 'Regenerating' }).count() > 0;
-    // Sustained damage on a regenerating boss matters more than endlessly
-    // clearing its finite active add slots. Revert to adds if health is unsafe.
+    // Ordinary player keyboard shortcuts are faster than clicking moving HUD
+    // buttons under headless render load. Cooldowns, costs and damage still
+    // belong to the simulation. Q may be used independently of a class action.
+    if (frame.potion && healthRatio < 0.72) {
+      await page.keyboard.press('q');
+      action = 'potion';
+    }
+    if (healthRatio < 0.82 && frame.heal) {
+      await page.keyboard.press('4');
+      action += ' heal';
+    } else if (!shieldActive && (damageWarning || healthRatio < 0.85) && frame.shield) {
+      await page.keyboard.press('3');
+      action += ' shield';
+    } else if (!shieldActive && damageWarning && evadedWarning !== warningName
+      && Date.now() - lastEvadeAt >= 2500) {
+      // Respect the visible telegraph; Space is the normal dodge control.
+      // Evade clears auto-attack, so don't rush back into the same warning.
+      await page.keyboard.press('Space');
+      evadedWarning = warningName;
+      lastEvadeAt = Date.now();
+      action += ' evade';
+    }
+    const kings = frame.targets.filter(target => target.king);
+    const regenerating = kings.some(target => target.regenerating);
     if (!regenerating || (healthRatio < 0.70 && !shieldActive)) focusRegeneratingKing = false;
     else if (healthRatio >= 0.85 || shieldActive) focusRegeneratingKing = true;
-    const candidate = focusRegeneratingKing && await kings.count() ? kings.first()
-      : (await adds.count()) ? adds.first() : (await kings.count()) ? kings.first() : live.first();
-    const pressed = await candidate.evaluateAll(nodes =>
-      nodes.length ? nodes[0]!.getAttribute('aria-pressed') : null);
+    const preferKing = focusRegeneratingKing && kings.length > 0
+      || !frame.targets.some(target => !target.king);
+    const candidateState = frame.targets.find(target => target.king === preferKing) ?? frame.targets[0];
+    const live = roster.locator('button:not([disabled])');
+    const candidate = preferKing ? live.filter({ hasText: 'The Hollow King' }).first()
+      : live.filter({ hasNotText: 'The Hollow King' }).first();
+    const pressed = candidateState?.pressed ?? null;
+    // Keep enough Faith for Healing Light + Divine Shield (27 + 32).
+    // Smite and Holy Strike use the actual default slots 6 and 2.
     if (!action && !resumeAttack && Date.now() >= resumeAfter
-      && healthRatio >= 0.85 && !damageWarning && faith && pressed === 'true') {
-      const available = Number(faith[1]);
-      if (available >= 79 && await pressIfReady(page.locator('[data-hotbar-ability="judgment"]'))) {
-        action = 'judgment';
-      } else if (available >= 83 && await pressIfReady(page.locator('[data-paladin-ability="smite"]'))) {
+      && healthRatio >= 0.85 && !damageWarning && pressed === true) {
+      if (available >= 83 && frame.smite) {
+        await page.keyboard.press('6');
         action = 'smite';
-      } else if (available >= 71 && await pressIfReady(page.locator('[data-paladin-ability="holyStrike"]'))) {
+      } else if (available >= 71 && frame.strike) {
+        await page.keyboard.press('2');
         action = 'holyStrike';
       }
     }
-    // The roster selection can outlive an interrupted auto-attack. Give the
-    // actual cast its hit/recovery window before explicitly resuming combat;
-    // clicking a roster button during the cast would cancel its timeline.
     if (action && action !== 'potion') {
       resumeAfter = Date.now() + 850;
       resumeAttack = true;
     }
-    recent.push('HP=' + (hp?.[0] ?? '?') + ', Faith=' + (faith?.[0] ?? '?')
+    recent.push('HP=' + (frame.hp?.join('/') ?? '?') + ', Faith=' + (frame.faith?.join('/') ?? '?')
       + ', shield=' + shieldActive + ', warning=' + warning + ', action=' + action
       + ', regenFocus=' + focusRegeneratingKing + ', resume=' + resumeAttack
-      + ', phase=' + (await dungeon.locator('.king-phase').allTextContents()).join(' '));
-    if (recent.length > 12) recent.shift();
-    // A real boss phase may take time, but a minute without ANY visible
-    // combat progress indicates a stuck approach or attack, not slow DPS.
-    // Fail the same acceptance gate early; do not advance or skip the fight.
-    const progress = (await roster.innerText()).replaceAll('\n', ' ');
-    if (progress !== previousRoster) {
-      previousRoster = progress;
+      + ', phase=' + frame.phase);
+    if (recent.length > 20) recent.shift();
+    if (frame.roster !== previousRoster) {
+      previousRoster = frame.roster;
       lastProgressAt = Date.now();
     } else if (Date.now() - lastProgressAt >= 60_000) {
       throw new Error('Natural crypt battle stalled for 60s; seed='
         + await game.getAttribute('data-world-seed') + '; player='
         + await game.getAttribute('data-player-x') + ','
         + await game.getAttribute('data-player-y') + '; roster='
-        + progress + '; dungeon=' + chamber);
+        + frame.roster + '; dungeon=' + frame.chamber + '; recent=' + recent.join(' | '));
     }
     if (pressed !== null && Date.now() >= resumeAfter
-      && (resumeAttack || pressed !== 'true' || Date.now() - lastTargetAt > 10_000)) {
+      && !(damageWarning && !shieldActive && evadedWarning === warningName)
+      && (resumeAttack || !pressed || Date.now() - lastTargetAt > 10_000)) {
       try {
         await candidate.click({ timeout: 1_500 });
         lastTargetAt = Date.now();
@@ -620,14 +647,14 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
         if (!(error instanceof errors.TimeoutError)) throw error;
       }
     }
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(150);
   }
   throw new Error('Natural crypt battle timed out; seed=' + await game.getAttribute('data-world-seed')
     + '; quest=' + await journal.innerText()
     + '; dungeon=' + await dungeon.innerText() + '; roster='
     + (await roster.innerText()).replaceAll('\n', ' ')
-    + '; player=' + await page.locator('.game-screen').getAttribute('data-player-x')
-    + ',' + await page.locator('.game-screen').getAttribute('data-player-y')
+    + '; player=' + await game.getAttribute('data-player-x')
+    + ',' + await game.getAttribute('data-player-y')
     + '; recent=' + recent.join(' | '));
 }
 
