@@ -9,8 +9,10 @@ test('isometric preview boots, accepts a pointer and keeps the map controls', as
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
-  // A successful textured ground rebuild must register every bounded chunk.
+  // The full plan is stable, but only camera-near ground textures are resident.
   await expect(canvas).toHaveAttribute('data-ground-chunks', '24');
+  await expect.poll(async () => Number(await canvas.getAttribute('data-ground-resident-chunks'))).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await canvas.getAttribute('data-ground-resident-chunks'))).toBeLessThan(24);
   await expect(canvas).toHaveAttribute('data-prop-materials', /(?:^|,)ruin(?:,|$)/);
   await expect(canvas).toHaveAttribute('data-prop-materials', /(?:^|,)timber(?:,|$)/);
   const player = page.locator('[data-minimap="active"] [data-map-marker="player"] circle').first();
