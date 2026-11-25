@@ -12,6 +12,7 @@ import { buildWilderness } from '../world/wildernessRuntime';
 import { buildCryptWorld } from '../world/dungeonRuntime';
 import { planOptionalDungeonDecorations } from '../world/optionalDungeonDecorations';
 import { IsometricGroundLayer } from './isometricGroundLayer';
+import { groundCameraEnvelope } from './isometricGroundResidency';
 import { wildernessGroundLayout, cryptGroundLayout } from './isometricTerrain';
 import { getTownManifest, townEntry } from '../world/townManifest';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
@@ -92,6 +93,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     const bounds = isometricBounds(WORLD_WIDTH, WORLD_HEIGHT, 90, 40, ORIGIN);
     this.cameras.main.setBounds(bounds.x, bounds.y, bounds.width, bounds.height)
       .setZoom(1).centerOn(p.x, p.y).startFollow(this.anchor, true, 0.12, 0.12);
+    this.syncGround(p);
     this.label = this.add.text(12, 12, '', { fontSize: '13px', color: '#f0dbab',
       backgroundColor: '#141a20', padding: { x: 6, y: 4 } })
       .setScrollFactor(0).setDepth(10000);
@@ -126,6 +128,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       if (this.game.canvas) {
         delete this.game.canvas.dataset.renderer;
         delete this.game.canvas.dataset.groundChunks;
+        delete this.game.canvas.dataset.groundResidentChunks;
         delete this.game.canvas.dataset.propMaterials;
         delete this.game.canvas.dataset.buildingCount;
         this.game.canvas.style.cursor = 'default';
@@ -173,7 +176,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
         this.polygon(this.dungeonDecor,decoration.points.map(p=>project(p)),decoration.color);
       }
     }
-    this.game.canvas.dataset.groundChunks = String(this.ground.count);
+    this.game.canvas.dataset.groundChunks = String(this.ground.total);
     // Static layered art shares the exact collision footprint. Split long
     // obstacles into bounded sections to preserve local painter depth.
     const materials = new Set<ObstacleMaterial>();
@@ -206,6 +209,20 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.game.canvas.dataset.propMaterials = [...materials].sort().join(',');
     this.game.canvas.dataset.buildingCount = String(buildings.size);
     this.updateCutaway(state.player);
+  }
+
+  private syncGround(follow: Readonly<Point>): void {
+    const camera = this.cameras.main;
+    // The preview camera has fixed zoom=1, no rotation, and follows the hero.
+    // Include both current scroll and the destination to cover follow lag.
+    if (camera.width <= 0 || camera.height <= 0) return;
+    this.ground.sync(groundCameraEnvelope({
+      x: camera.scrollX, y: camera.scrollY,
+      width: camera.width, height: camera.height
+    }, follow));
+    const count = String(this.ground.count);
+    if (this.game.canvas.dataset.groundResidentChunks !== count)
+      this.game.canvas.dataset.groundResidentChunks = count;
   }
 
   private updateCutaway(hero: Readonly<Point>): void {
@@ -523,6 +540,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     else if (this.held.active) this.release();
     const hero = project(state.player);
     this.anchor.setPosition(hero.x, hero.y);
+    this.syncGround(hero);
     const visible = new Set<string>(['hero']);
     const heroPose = playerAnimation(state);
     const pose: PixelAnimation = heroPose === 'running' ? 'run'
