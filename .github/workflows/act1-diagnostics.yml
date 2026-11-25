@@ -1,0 +1,60 @@
+name: Act I targeted diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Diagnostic subset (does not replace quality/verify)'
+        type: choice
+        required: true
+        default: all
+        options:
+          - evidence
+          - crypt
+          - story
+          - all
+          - natural-browser
+
+permissions:
+  contents: read
+
+concurrency:
+  group: act1-diagnostic-${{ github.ref }}-${{ inputs.scope }}
+  cancel-in-progress: true
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install locked dependencies
+        working-directory: web
+        run: npm ci --prefer-offline --no-audit --no-fund
+      - name: Install headless Chromium
+        if: inputs.scope == 'natural-browser'
+        working-directory: web
+        run: npx playwright install --only-shell chromium
+      - name: Run requested diagnostic (never a deployment gate)
+        env:
+          SCOPE: ${{ inputs.scope }}
+          LANE: act-i
+        run: |
+          case "$SCOPE" in
+            natural-browser) bash scripts/verify.sh act-i-browser ;;
+            evidence|crypt|story|all) bash scripts/verify.sh act-i-diagnostic "$SCOPE" ;;
+            *) exit 2 ;;
+          esac
+      - name: Retain failed natural-browser trace
+        if: failure() && inputs.scope == 'natural-browser'
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-act-i-${{ github.sha }}-${{ github.run_attempt }}
+          path: web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
