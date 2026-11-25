@@ -497,35 +497,62 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
   let lastProgressAt = Date.now();
   let previousRoster = '';
   const game = page.locator('.game-screen');
+  const recent: string[] = [];
+  const pressIfReady = async (button: ReturnType<Page['locator']>): Promise<boolean> => {
+    if (!await button.isEnabled()) return false;
+    try {
+      await button.click({ timeout: 700 });
+      return true;
+    } catch (error) {
+      if (!(error instanceof errors.TimeoutError)) throw error;
+      return false;
+    }
+  };
   while (Date.now() < deadline) {
     const quest = await journal.innerText();
     const chamber = await dungeon.innerText();
     if (quest.includes('Report to Vesna') && chamber.includes('Crypt cleared')) return;
     if (await page.getByTestId('death-overlay').count()) {
-      throw new Error('Natural crypt battle: hero died before Act I boss victory; quest=' + quest);
+      throw new Error('Natural crypt battle: hero died before Act I boss victory; seed='
+        + await game.getAttribute('data-world-seed') + '; player='
+        + await game.getAttribute('data-player-x') + ','
+        + await game.getAttribute('data-player-y') + '; quest=' + quest
+        + '; dungeon=' + chamber + '; roster=' + (await roster.innerText()).replaceAll('\n', ' ')
+        + '; recent=' + recent.join(' | '));
     }
-    const hp = (await page.locator('.vital-top').first().innerText())
-      .match(/(\d+)\s*\/\s*(\d+)/);
-    if (hp && Number(hp[1]) / Number(hp[2]) < 0.74) {
-      const heal = page.locator('[data-paladin-ability="healingLight"]');
-      if (await heal.isEnabled()) {
-        try { await heal.click({ timeout: 1_500 }); }
-        catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
-      } else {
-        const potion = page.getByTestId('use-potion');
-        if (await potion.isEnabled()) {
-          try { await potion.click({ timeout: 1_500 }); }
-          catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
-        }
-      }
+    const vital = page.locator('.vital-panel .vital-top');
+    const hp = (await vital.first().innerText()).match(/(\d+)\s*\/\s*(\d+)/);
+    const faith = (await vital.last().innerText()).match(/(\d+)\s*\/\s*(\d+)/);
+    const healthRatio = hp ? Number(hp[1]) / Number(hp[2]) : 0;
+    const shieldActive = await vital.filter({ hasText: 'Shield' }).count() > 0;
+    const warning = (await dungeon.locator('.king-warning').allTextContents()).join(' ');
+    const damageWarning = warning !== '' && !warning.includes('Raise the Dead');
+    const heal = page.locator('[data-paladin-ability="healingLight"]');
+    const shield = page.locator('[data-paladin-ability="divineShield"]');
+    const potion = page.getByTestId('use-potion');
+    // Prevent burst damage instead of waiting until the hero is nearly dead.
+    // Use an emergency potion independently of Faith; reserve the class
+    // action for healing or shielding. Do not recast an existing shield.
+    let action = '';
+    if (hp && healthRatio < 0.5 && await pressIfReady(potion)) action = 'potion';
+    if (hp && healthRatio < 0.82 && await pressIfReady(heal)) action += ' heal';
+    else if (!shieldActive && (damageWarning || healthRatio < 0.85)
+      && await pressIfReady(shield)) action += ' shield';
+    else if (!action && hp && healthRatio < 0.7
+      && await pressIfReady(potion)) action = 'potion';
+    // Holy Strike costs 12 Faith and refunds 10 on hit. Leave at least 59
+    // Faith (27 heal + 32 shield) after spending it, and never attack at
+    // the expense of an urgent defensive action. Range remains authoritative.
+    if (!action && healthRatio >= 0.85 && !damageWarning
+      && faith && Number(faith[1]) >= 71
+      && await roster.locator('button.targeted:not([disabled])').count()
+      && await pressIfReady(page.locator('[data-paladin-ability="holyStrike"]'))) {
+      action = 'holyStrike';
     }
-    if (hp && Number(hp[1]) / Number(hp[2]) < 0.6) {
-      const shield = page.locator('[data-paladin-ability="divineShield"]');
-      if (await shield.isEnabled()) {
-        try { await shield.click({ timeout: 1_500 }); }
-        catch (error) { if (!(error instanceof errors.TimeoutError)) throw error; }
-      }
-    }
+    recent.push('HP=' + (hp?.[0] ?? '?') + ', Faith=' + (faith?.[0] ?? '?')
+      + ', shield=' + shieldActive + ', warning=' + warning + ', action=' + action
+      + ', phase=' + (await dungeon.locator('.king-phase').allTextContents()).join(' '));
+    if (recent.length > 12) recent.shift();
     // A real boss phase may take time, but a minute without ANY visible
     // combat progress indicates a stuck approach or attack, not slow DPS.
     // Fail the same acceptance gate early; do not advance or skip the fight.
@@ -541,8 +568,12 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
         + progress + '; dungeon=' + chamber);
     }
     const live = roster.locator('button:not([disabled])');
+    // Defeat living guards and summoned adds before focusing the boss;
+    // ignoring adds lets their attacks accumulate through multiple phases.
+    const adds = live.filter({ hasNotText: 'The Hollow King' });
     const kings = live.filter({ hasText: 'The Hollow King' });
-    const candidate = (await kings.count()) ? kings.first() : live.first();
+    const candidate = (await adds.count()) ? adds.first()
+      : (await kings.count()) ? kings.first() : live.first();
     // Read the current selection without waiting for a target that may have
     // died between the roster query and the attribute read. The next loop
     // still requires the real quest transition AND Crypt cleared.
@@ -556,13 +587,14 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
         if (!(error instanceof errors.TimeoutError)) throw error;
       }
     }
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(250);
   }
   throw new Error('Natural crypt battle timed out; quest=' + await journal.innerText()
     + '; dungeon=' + await dungeon.innerText() + '; roster='
     + (await roster.innerText()).replaceAll('\n', ' ')
     + '; player=' + await page.locator('.game-screen').getAttribute('data-player-x')
-    + ',' + await page.locator('.game-screen').getAttribute('data-player-y'));
+    + ',' + await page.locator('.game-screen').getAttribute('data-player-y')
+    + '; recent=' + recent.join(' | '));
 }
 
 /** Defeat the unique Act I miniboss through the visible HUD and ordinary
