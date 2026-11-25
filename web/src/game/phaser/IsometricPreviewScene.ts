@@ -5,6 +5,7 @@ import { _ as translate, locale } from 'svelte-i18n';
 import type { GameBridge } from '../bridge/GameBridge';
 import type { GameEvent, GameSnapshot, Point, ZoneId } from '../core/types';
 import { EnemyPresentation, snapshotEnemyWindup } from './isometricEnemyPresentation';
+import { miniBossWarnings } from './isometricMiniBossWarnings';
 import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
 import { dungeonPortalTargets, dungeonPortalCommand, dungeonRenderSeed } from '../world/dungeonPortalPresentation';
 import { buildWilderness } from '../world/wildernessRuntime';
@@ -388,6 +389,11 @@ export class IsometricPreviewScene extends Phaser.Scene {
         this.warnings.lineStyle(2, 0xf0c783, 0.95)
           .strokePoints(outline.map(p => new Phaser.Math.Vector2(p.x, p.y)), true);
       }
+    }
+    for (const warning of miniBossWarnings(state, ORIGIN)) {
+      // Distinguish dangerous footprints from support/summon preparations.
+      this.combatArea(warning.points, warning.harmful ? 0xff846b : 0xbfa0e4,
+        0.12 + 0.32 * warning.progress);
     }
     const king = state.zone === 'crypt' ? state.hollowKing : undefined;
     if (king?.warning) {
