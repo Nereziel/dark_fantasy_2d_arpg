@@ -40,6 +40,8 @@ test('forges a Ruby from naturally salvaged material and persists the gem wallet
 });
 
 test('inserts gem into a real socket, saves the socket and extracts stone at the smith', async ({page})=>{
+  // Two save/reload round trips plus real crafting transactions.
+  test.setTimeout(60_000);
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);

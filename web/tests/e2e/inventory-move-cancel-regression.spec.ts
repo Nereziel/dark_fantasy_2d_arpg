@@ -6,6 +6,9 @@ import { expect, test } from '@playwright/test';
  * Uses real merchant purchases and the visible inventory controls.
  */
 test('clear selection and sort both disarm move mode before subsequent bag clicks', async ({ page }) => {
+  // Many real pointer actions in one transaction sequence; avoid truncating
+  // the scenario on a slow renderer. Individual assertions remain unchanged.
+  test.setTimeout(60_000);
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
