@@ -28,7 +28,8 @@ const START = checkedEnv('SEED_SWEEP_START', 0, 0, 0xffffffff);
 const COUNT = checkedEnv('SEED_SWEEP_COUNT', 24, 1, 5000);
 const REQUIRE_VILLAGES = checkedEnv('SEED_SWEEP_REQUIRE_VILLAGES', 1, 0, 1) === 1;
 const seeds = Array.from({ length: COUNT }, (_, i) => (START + Math.imul(i, 7919)) >>> 0);
-const sample = [0, 1, 2, 3, 42, 99, 0x7fffffff, 0xffffffff];
+// Regression: natural Act I evidence-search stall in main CI 45572861430.
+const sample = [0, 1, 2, 3, 42, 99, 2683541248, 0x7fffffff, 0xffffffff];
 const suiteSeeds = [...new Set([...sample, ...seeds])];
 
 function checkedSeed(seed: number, region: 'wilderness' | 'crypt', fn: () => void): void {

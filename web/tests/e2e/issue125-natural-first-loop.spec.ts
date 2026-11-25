@@ -294,6 +294,8 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
   let index = 0;
   let ticks = 0;
   let stalled = 0;
+  let detours = 0;
+  let bestDistance = Infinity;
   let knownEvidence: { x: number; y: number } | null = null;
   let nextMapCheck = 0;
   const lastSteps: string[] = [];
@@ -343,7 +345,14 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
       if (await marker.count()) {
         const mx = Number(await marker.getAttribute('cx'));
         const my = Number(await marker.getAttribute('cy'));
-        if (Number.isFinite(mx) && Number.isFinite(my)) knownEvidence = { x: mx, y: my };
+        if (Number.isFinite(mx) && Number.isFinite(my)) {
+          knownEvidence = { x: mx, y: my };
+          // New visible objective, not the previous survey waypoint.
+          bestDistance = Infinity;
+          stalled = 0;
+          detours = 0;
+          ticks = 0;
+        }
       }
       await map.getByTestId('map-close').click();
       nextMapCheck = Date.now() + 10_000;
@@ -353,32 +362,76 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
     const { width, height } = await canvas.evaluate(node => ({
       width: node.width, height: node.height
     }));
+    // Healing and map interactions may have happened since the first sample.
+    // Re-read the current observable player position before mapping the click.
+    const currentX = Number(await game.getAttribute('data-player-x'));
+    const currentY = Number(await game.getAttribute('data-player-y'));
+    expect(Number.isFinite(currentX) && Number.isFinite(currentY)).toBe(true);
     const destination = knownEvidence ?? waypoints[index]!;
-    const waypoint = stalled >= 2
-      ? { x: Math.max(120, Math.min(2080, x + (index % 2 ? 155 : -155))),
-        y: y >= 860 ? Math.max(140, y - 200) : Math.min(1250, y + 245) }
-      : destination;
-    const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
-    const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
+    const distanceBefore = Math.hypot(currentX - destination.x, currentY - destination.y);
+    bestDistance = Math.min(bestDistance, distanceBefore);
+    // Displacement alone misclassified oscillation as progress in run
+    // 45572861430: waypoint 5 is west, but the odd-index escape went east.
+    // Alternate lateral survey detours with a forward component toward the
+    // current objective. Retain the attempt count even after a moving detour.
+    let waypoint = destination;
+    if (stalled >= 2 && distanceBefore > 32) {
+      const dx = (destination.x - currentX) / distanceBefore;
+      const dy = (destination.y - currentY) / distanceBefore;
+      const side = detours++ % 2 === 0 ? 1 : -1;
+      waypoint = {
+        x: Math.max(120, Math.min(2080, currentX + dx * 100 - dy * side * 220)),
+        y: Math.max(140, Math.min(1250, currentY + dy * 100 + dx * side * 220))
+      };
+    }
+    const scrollX = Math.max(0, Math.min(2200 - width, currentX - width / 2));
+    const scrollY = Math.max(0, Math.min(1400 - height, currentY - height / 2));
     const screenX = Math.max(width * 0.35,
       Math.min(width * 0.78, waypoint.x - scrollX));
     const screenY = Math.max(height * 0.23,
       Math.min(height * 0.94, waypoint.y - scrollY));
     await page.mouse.click(rect.x + rect.width * screenX / width,
       rect.y + rect.height * screenY / height, { button: 'middle' });
-    await page.waitForTimeout(1200);
-    const nextX = Number(await game.getAttribute('data-player-x'));
-    const nextY = Number(await game.getAttribute('data-player-y'));
-    lastSteps.push(index + ': ' + Math.round(x) + ',' + Math.round(y)
-      + ' -> ' + Math.round(nextX) + ',' + Math.round(nextY));
+    // Do not cancel a collision-aware route after a fixed 1.2 s: a route
+    // can temporarily move away from the goal to go around a wall.
+    // Observe movement until it settles, reaches the survey waypoint or
+    // the bounded observation window expires; never extend the search deadline.
+    const observationDeadline = Math.min(deadline, Date.now() + 3600);
+    let nextX = currentX, nextY = currentY, still = 0;
+    while (Date.now() < observationDeadline) {
+      await page.waitForTimeout(300);
+      if (await inspect.count() > 0) return;
+      if (await page.getByTestId('death-overlay').count()) {
+        throw new Error('Natural Act I evidence search: hero died during movement; seed='
+          + await game.getAttribute('data-world-seed'));
+      }
+      const observedX = Number(await game.getAttribute('data-player-x'));
+      const observedY = Number(await game.getAttribute('data-player-y'));
+      expect(Number.isFinite(observedX) && Number.isFinite(observedY)).toBe(true);
+      still = Math.hypot(observedX - nextX, observedY - nextY) < 2 ? still + 1 : 0;
+      nextX = observedX;
+      nextY = observedY;
+      if (still >= 3 || Math.hypot(nextX - waypoint.x, nextY - waypoint.y) < 20) break;
+    }
+    const distanceAfter = Math.hypot(nextX - destination.x, nextY - destination.y);
+    lastSteps.push(index + ': ' + Math.round(currentX) + ',' + Math.round(currentY)
+      + ' -> ' + Math.round(nextX) + ',' + Math.round(nextY)
+      + ' goal=' + Math.round(destination.x) + ',' + Math.round(destination.y)
+      + ' remaining=' + Math.round(distanceAfter) + ' detours=' + detours);
     if (lastSteps.length > 8) lastSteps.shift();
-    stalled = Math.hypot(nextX - x, nextY - y) < 6 ? stalled + 1 : 0;
+    if (distanceAfter < bestDistance - 12) {
+      bestDistance = distanceAfter;
+      stalled = 0;
+    } else {
+      stalled++;
+    }
     ticks++;
-    if (!knownEvidence && (Math.hypot(nextX - destination.x, nextY - destination.y) < 32
-      || ticks >= 9 || stalled >= 3)) {
+    if (!knownEvidence && (distanceAfter < 32 || ticks >= 9 || detours >= 4)) {
       index = (index + 1) % waypoints.length;
       ticks = 0;
       stalled = 0;
+      detours = 0;
+      bestDistance = Infinity;
     }
   }
   throw new Error('Natural Act I evidence search timed out at ('

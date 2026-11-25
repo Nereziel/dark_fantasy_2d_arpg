@@ -8,9 +8,36 @@ import { createCryptPack } from '../../src/game/enemies/enemies';
 import type { Point } from '../../src/game/core/types';
 import { CRYPT_EXIT, CRYPT_GATE, CRYPT_BOSS_POSITIONS } from '../../src/game/world/generator';
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../../src/game/world/dungeonRuntime';
-import { ACTOR_RADIUS, canOccupy, findPath, findPickupPath, findAttackApproachPath, hasLineOfSight, moveActor } from '../../src/game/world/navigation';
+import { ACTOR_RADIUS, canOccupy, findPath, findPickupPath, findAttackApproachPath, hasLineOfSight, moveActor, resolveReachableDestination } from '../../src/game/world/navigation';
 
 describe('F0 — click-to-interact auto-navigation around solid walls', () => {
+  it('reaches the required evidence from the reported stalled position on seed 2683541248', () => {
+    // Postmerge run 45572861430: real browser stopped at this position.
+    // Reconstruct only the pure navigation layer, not the browser quest state.
+    const seed = 2683541248;
+    const { layout, features } = buildWilderness(seed);
+    const origin = { x: 1174.0370058355718, y: 1059.9999999999989 };
+    const evidence = features.find(feature => feature.id === 'act1.evidence_lead');
+    expect(evidence, 'Required evidence must exist').toBeDefined();
+    expect(canOccupy(origin, ACTOR_RADIUS, layout.obstacles), 'Logged player position must be legal').toBe(true);
+    const target = resolveReachableDestination(origin, evidence!.position, ACTOR_RADIUS, layout.obstacles);
+    expect(target, 'Required evidence needs a reachable destination from the actual stalled position').toEqual(evidence!.position);
+    const route = findPath(origin, target!, ACTOR_RADIUS, layout.obstacles);
+    expect(route.length, 'Navigation must provide a route').toBeGreaterThan(0);
+    const actor = { ...origin };
+    for (const point of route) {
+      // Walk each waypoint using the same collision primitive rather than
+      // merely checking that the graph contains a path.
+      for (let step = 0; step < 600 && Math.hypot(actor.x - point.x, actor.y - point.y) > 0.01; step++) {
+        moveActor(actor, point, 220 / 30, ACTOR_RADIUS, layout.obstacles);
+        expect(canOccupy(actor, ACTOR_RADIUS, layout.obstacles)).toBe(true);
+      }
+      expect(Math.hypot(actor.x - point.x, actor.y - point.y),
+        'Blocked route segment at ' + JSON.stringify({ actor, point, seed })).toBeLessThan(0.1);
+    }
+    expect(Math.hypot(actor.x - evidence!.position.x, actor.y - evidence!.position.y)).toBeLessThan(0.1);
+  });
+
   it('finds a firing position around a wall instead of stopping within range without sight', () => {
     const walls = [{ id: 'wall', x: 480, y: 420, width: 40, height: 160 }];
     const from = { x: 450, y: 500 }, target = { x: 550, y: 500 };
