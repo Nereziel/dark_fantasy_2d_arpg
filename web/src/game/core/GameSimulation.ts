@@ -53,6 +53,7 @@ import {
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
 import { planEnemyBehavior } from '../enemies/behaviorPlanner';
+import {createOptionalDungeonPack,optionalDungeonRoster,optionalDungeonRewardSlot,isOptionalDungeonBoss} from '../enemies/optionalDungeonEncounters';
 import {
   MINI_BOSS_IDS, getMiniBossDefinition, createMiniBossState, validateMiniBossState,
   stepMiniBoss, planMiniBossDefeat, type MiniBossId, type MiniBossState,
@@ -75,6 +76,7 @@ import { planOptionalDungeonEntry, planOptionalDungeonExit, type OptionalDungeon
 import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
 import { projectDiscoveredDungeonEntrances } from '../world/dungeonPortalPresentation';
 import {optionalDungeonRewardId,validOptionalDungeonRewardIds,type OptionalDungeonRewardId} from '../world/optionalDungeonRewards';
+import {planOptionalDungeonFeatures,optionalDungeonChestProjection,rollOptionalDungeonTreasure} from '../world/optionalDungeonFeatures';
 import {
   applyTalentStats, planSpendTalent, planRespecTalents, projectTalentBonuses,
   validateTalentBuild, type TalentRanks, type TalentId
@@ -770,7 +772,9 @@ export class GameSimulation {
 
   /** Actionable dungeon facts only; decorative theme props never grant loot. */
   cryptInteractables(): CryptInteractable[] {
-    if (this.zone !== 'crypt' || !this.cryptTheme) return [];
+    if (this.zone !== 'crypt') return [];
+    if (this.optionalVisit) return optionalDungeonChestProjection(planOptionalDungeonFeatures(this.optionalVisit.interior,this.optionalVisit.identity.dungeonId),this.optionalVisit.identity.dungeonId,[...this.optionalDungeonRewards]);
+    if (!this.cryptTheme) return [];
     return this.cryptTheme.interactables.filter(prop => prop.initiallyVisible
       && !this.cryptUsedPropIds.has(prop.id))
       .map(prop => structuredClone(prop));
@@ -780,8 +784,31 @@ export class GameSimulation {
     if (this.zone !== 'crypt' || !this.pendingCryptPropId || !this.player.alive) return;
     const prop = this.cryptInteractables().find(candidate => candidate.id === this.pendingCryptPropId);
     if (!prop) { this.pendingCryptPropId = null; return; }
-    if (distance(this.player, prop.position) > prop.reach) return;
+    if (distance(this.player, prop.position) > prop.reach
+      || (this.optionalVisit && !hasLineOfSight(this.player,prop.position,this.world.obstacles))) return;
     this.pendingCryptPropId = null;
+    if (this.optionalVisit) {
+      const plan=planOptionalDungeonFeatures(this.optionalVisit.interior,this.optionalVisit.identity.dungeonId);
+      if (prop.id!==plan.chest.id) return;
+      const item=rollOptionalDungeonTreasure(this.world.seed,this.optionalVisit.identity.dungeonId,this.level,this.classId);
+      if (!item) return;
+      const owned=[...this.inventory,...this.stash,...this.stashTabs.flat(),...Object.values(this.equipment),
+        ...this.groundLoot.map(loot=>loot.item)].some(value=>value?.id===item.id);
+      const free=this.inventory.findIndex(slot=>slot===null);
+      // Do not consume an unclaimed chest when neither inventory nor ground can hold the item.
+      if (!owned && free<0 && this.groundLoot.length>=100) return;
+      if (!this.claimDungeonReward('treasure')) return;
+      this.gold=Math.min(Number.MAX_SAFE_INTEGER,this.gold+plan.gold);
+      if (!owned) {
+        if (free>=0) this.inventory[free]=item;
+        else {
+          this.groundLoot.push({id:item.id,x:prop.position.x,y:prop.position.y,item});
+          this.events.push({type:'loot',id:item.id});
+        }
+      }
+      this.events.push({type:'cryptInteract',id:prop.id,capability:prop.capability,goldAwarded:plan.gold});
+      return;
+    }
     // Commit idempotency BEFORE emitting the event/reward. Rendering is a projection only.
     if (this.cryptUsedPropIds.has(prop.id)) return;
     this.cryptUsedPropIds.add(prop.id);
@@ -794,9 +821,12 @@ export class GameSimulation {
 
   /** One-shot world hazards give a visible warning and can be dodged before impact. */
   private tickCryptTraps(dt: number): void {
-    if (this.zone !== 'crypt' || !this.cryptTheme || !this.player.alive) return;
-    for (const trap of this.cryptTheme.traps) {
-      if (this.cryptTriggeredTrapIds.has(trap.id)) continue;
+    if (this.zone !== 'crypt' || !this.player.alive) return;
+    const optionalId=this.optionalVisit?.identity.dungeonId;
+    const traps=this.optionalVisit && optionalId
+      ? [planOptionalDungeonFeatures(this.optionalVisit.interior,optionalId).trap] : this.cryptTheme?.traps??[];
+    for (const trap of traps) {
+      if (optionalId ? this.optionalDungeonRewards.has(optionalDungeonRewardId(optionalId,'trap')!) : this.cryptTriggeredTrapIds.has(trap.id)) continue;
       const remaining = this.cryptArmedTraps.get(trap.id);
       if (remaining === undefined) {
         if (distance(this.player, trap.trigger.center) > trap.trigger.radius) continue;
@@ -807,10 +837,14 @@ export class GameSimulation {
       }
       if (remaining > dt) { this.cryptArmedTraps.set(trap.id, remaining - dt); continue; }
       this.cryptArmedTraps.delete(trap.id);
-      this.cryptTriggeredTrapIds.add(trap.id);
+      if (optionalId) {if (!this.claimDungeonReward('trap')) continue;}
+      else this.cryptTriggeredTrapIds.add(trap.id);
       if (distance(this.player, trap.trigger.center) > trap.trigger.radius) continue;
       const damage = trap.damage.maxBaseDamage;
-      this.dealPlayerDamage(damage, trap.damage.type, trap.id);
+      const hit=this.dealPlayerDamage(damage, trap.damage.type, trap.id);
+      if (optionalId && hit && this.player.alive && trap.damage.statusId) {
+        this.applyCanonicalStatus('player',trap.damage.statusId,trap.id,3,trap.damage.maxDurationSeconds);
+      }
       this.events.push({ type: 'cryptTrap', id: trap.id, damage,
         x: trap.trigger.center.x, y: trap.trigger.center.y });
     }
@@ -3986,7 +4020,9 @@ export class GameSimulation {
     this.hollowKingHazardDelays.clear();
     this.wave = 0;
     this.units = destination === 'crypt'
-      ? createCryptPack(0, this.level, this.world.encounterPositions)
+      ? (this.optionalVisit
+        ? createOptionalDungeonPack(this.optionalVisit.identity.dungeonId,0,this.level,this.world.encounterPositions)
+        : createCryptPack(0, this.level, this.world.encounterPositions))
       : createPack(0, this.level, this.world.encounterPositions);
     this.respawnTimer = 0;
     this.groundLoot = [];
@@ -4134,7 +4170,9 @@ export class GameSimulation {
         if (this.respawnTimer <= 0) {
           this.dungeonStage = 1;
           this.wave = 1;
-          this.units = createCryptPack(1, this.level, this.dungeonBossPositions);
+          this.units = this.optionalVisit
+            ? createOptionalDungeonPack(this.optionalVisit.identity.dungeonId,1,this.level,this.dungeonBossPositions)
+            : createCryptPack(1, this.level, this.dungeonBossPositions);
           this.seedElitePack();
           const king = this.units.find(unit => unit.actor.id === 'crypt_lord-4');
           if (king && !this.optionalVisit) {
@@ -4192,8 +4230,9 @@ export class GameSimulation {
     } else if (this.pendingCryptPropId) {
       const prop = this.cryptInteractables().find(p => p.id === this.pendingCryptPropId);
       if (!prop) this.pendingCryptPropId = null;
-      else if (distance(this.player, prop.position) <= prop.reach) this.tryInteractCrypt();
-      else this.follow(this.player, prop.position, speed, dt, Math.max(6, prop.reach - 12), true);
+      else if (distance(this.player, prop.position) <= prop.reach
+        && (!this.optionalVisit || hasLineOfSight(this.player,prop.position,this.world.obstacles))) this.tryInteractCrypt();
+      else this.follow(this.player, prop.position, speed, dt, this.optionalVisit ? 0 : Math.max(6, prop.reach - 12), true);
     } else if(this.pendingEnvironmentId) {
       const object=planEnvironmentInteraction(this.pendingEnvironmentId,
         this.environmentPlan,[...this.environmentUsed]);
@@ -4454,6 +4493,7 @@ export class GameSimulation {
     unit.actor.health = 0;
     if(this.classId==='NECROMANCER'
       && unit.actor.type!=='crypt_lord'
+      && !isOptionalDungeonBoss(this.optionalVisit?.identity.dungeonId,this.dungeonStage,unit.actor.id)
       && canOccupy(unit.actor,0,this.world.obstacles))
       this.corpses=[...addCorpseToken(this.corpses,unit.actor.id,
         this.zone,unit.actor)];
@@ -4509,7 +4549,9 @@ export class GameSimulation {
       this.pendingSkill = null;
       this.pendingAim = null;
     }
-    const rewarded = !eventEnemy && (!this.optionalVisit || (!unit.summoned && this.claimDungeonReward(unit.actor.id)));
+    const optionalId=this.optionalVisit?.identity.dungeonId;
+    const slot=optionalId?optionalDungeonRewardSlot(optionalId,this.dungeonStage,unit.actor.id):null;
+    const rewarded = !eventEnemy && (!this.optionalVisit || (!unit.summoned && slot!==null && this.claimDungeonReward(slot)));
     if(rewarded)this.kills++;
     // Partial event kills and already claimed dungeon slots yield no gold, XP or loot.
     if(rewarded) {
@@ -4530,7 +4572,7 @@ export class GameSimulation {
         this.storyEvent('morrow_gravebound', 'morrow_gravebound_slain', 'morrow_defeat');
       }
     }
-    if (unit.actor.type === 'crypt_lord') {
+    if (unit.actor.type === 'crypt_lord' || isOptionalDungeonBoss(optionalId,this.dungeonStage,unit.actor.id)) {
       if (this.zone === 'crypt' && !this.optionalVisit) this.storyEvent('crypt_lord_fallen', 'crypt_lord_slain', 'crypt_lord_defeat');
       if (!this.optionalVisit || rewarded) {
         this.gold += 100;
@@ -4544,7 +4586,9 @@ export class GameSimulation {
   }
   /** The one runtime path for normal, elite and boss drops; rolls share catalog+affixes. */
   private dropEnemyLoot(unit: EnemyUnit): void {
-    const boss = unit.actor.type === 'crypt_lord' || this.defeatedMiniBossIds.has(unit.actor.id as MiniBossId);
+    const boss = unit.actor.type === 'crypt_lord'
+      || isOptionalDungeonBoss(this.optionalVisit?.identity.dungeonId,this.dungeonStage,unit.actor.id)
+      || this.defeatedMiniBossIds.has(unit.actor.id as MiniBossId);
     if (boss || this.zone === 'crypt' || this.wave >= 2) {
       const rank = boss ? 'boss' : unit.elite ? 'elite' : 'normal';
       const gem = rollCombatGem(this.world.seed, this.kills, rank);
@@ -5011,8 +5055,10 @@ export class GameSimulation {
         cryptManifest?.traps.map(trap => trap.id) ?? [])
       || (s.cryptInteractables !== undefined && (!Array.isArray(s.cryptInteractables)
         || JSON.stringify(s.cryptInteractables) !== JSON.stringify(
-          s.zone === 'crypt' && !restoredVisit ? (cryptManifest?.interactables ?? []).filter(prop =>
-            prop.initiallyVisible && !(s.cryptUsedPropIds ?? []).includes(prop.id)) : [])))
+          s.zone === 'crypt' ? (restoredVisit
+            ? optionalDungeonChestProjection(planOptionalDungeonFeatures(restoredVisit.interior,restoredVisit.identity.dungeonId),restoredVisit.identity.dungeonId,s.optionalDungeonRewardIds??[])
+            : (cryptManifest?.interactables ?? []).filter(prop =>
+              prop.initiallyVisible && !(s.cryptUsedPropIds ?? []).includes(prop.id))) : [])))
       || (s.dungeonStage !== 0 && s.dungeonStage !== 1)
       || typeof s.dungeonCleared !== 'boolean'
       || (s.zone === 'wilderness' && (s.dungeonStage !== 0 || s.dungeonCleared))
@@ -5087,9 +5133,11 @@ export class GameSimulation {
         !!unit && !!unit.actor && validEnemyType(unit.actor.type)
         && (s.zone === 'crypt'
           ? (index >= PACK_SIZE ? unit.summoned === true && unit.actor.type === 'skeleton'
-            : unit.actor.type === (s.dungeonStage === 0
-              ? (['skeleton', 'wolf', 'wraith'] as const)[index]
-              : (['crypt_lord', 'skeleton', 'wraith'] as const)[index]))
+            : unit.actor.type === (restoredVisit
+              ? optionalDungeonRoster(restoredVisit.identity.dungeonId,s.dungeonStage)[index]
+              : s.dungeonStage === 0
+                ? (['skeleton', 'wolf', 'wraith'] as const)[index]
+                : (['crypt_lord', 'skeleton', 'wraith'] as const)[index]))
           : index >= PACK_SIZE ? (activeEventPlan?.enemySpawns.some(spawn=>
               spawn.id===unit.actor.id&&spawn.type===unit.actor.type)
               ? unit.summoned !== true

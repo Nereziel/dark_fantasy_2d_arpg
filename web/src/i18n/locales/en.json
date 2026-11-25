@@ -833,6 +833,8 @@
     "noForgeable": "Equip a weapon or armor in your inventory, then return to the blacksmith."
   },
   "dungeon": {
+    "mineBoss": "Corrupted Foreman",
+    "caveBoss": "Boar of the Depths",
     "mineName": "Abandoned Mine",
     "caveName": "Forest Cave",
     "optionalGuards": "Dungeon guardians",
