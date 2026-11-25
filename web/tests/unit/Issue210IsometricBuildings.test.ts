@@ -48,4 +48,31 @@ describe('Issue #210/#208: isometric building art',()=>{
     expect(planBuildingArt(rect,{...input,variant:1},origin)).not.toEqual(planBuildingArt(rect,input,origin));
     expect(()=>planBuildingArt(rect,{...input,variant:-1},origin)).toThrow(RangeError);
   });
+  it('separates facade and roof paint and uses their own occluders for cutaway and picking',()=>{
+    for(const kind of ['house','smithy','cabin','mine'] as const){
+      const p=planBuildingArt(rect,{...input,kind},origin);
+      expect(p.layers.map(l=>l.kind)).toEqual(['facade','roof']);
+      expect(p.layers.flatMap(l=>l.paint)).toEqual(p.paint);
+      expect(p.layers.flatMap(l=>l.occluder.faces)).toEqual(p.occluder.faces);
+      for(const layer of p.layers){
+        expect(layer.occluder.depth).toBe(p.occluder.depth);
+        expect(layer.occluder.faces).toEqual(layer.paint.filter(f=>f.opaque).map(f=>f.points));
+      }
+      expect(p.layers[0]!.paint.some(f=>f.layer==='door')).toBe(true);
+      expect(p.layers[1]!.paint.every(f=>f.layer!=='door')).toBe(true);
+      expect(p.layers[1]!.paint.some(f=>f.layer==='detail')).toBe(true);
+      const occluders=p.layers.map(l=>l.occluder);
+      const results=new Set<string>();
+      for(let x=20;x<=240;x+=4)for(let y=20;y<=240;y+=4){
+        // Only exterior positions; a building's collision footprint stays solid.
+        if(x>=rect.x-18&&x<=rect.x+rect.width+18&&y>=rect.y-18&&y<=rect.y+rect.height+18)continue;
+        const result=heroCutaway({x,y},origin,occluders);
+        results.add(result.alphas.join(','));
+        expect(result.opaque).toEqual(occluders.filter((_,i)=>result.alphas[i]===1));
+      }
+      expect(results.has('1,0.35')).toBe(true);
+      expect(results.has('1,1')).toBe(true);
+    }
+  });
+
 });

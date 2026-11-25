@@ -17,8 +17,14 @@ export interface BuildingPaint {
   readonly layer:'wall'|'roof'|'door'|'detail';
   readonly opaque:boolean;
 }
+export interface BuildingPaintGroup {
+  readonly kind:'facade'|'roof';
+  readonly paint:readonly BuildingPaint[];
+  readonly occluder:IsometricOccluder;
+}
 export interface BuildingArt {
   readonly base:readonly Point[];
+  readonly layers:readonly BuildingPaintGroup[];
   readonly paint:readonly BuildingPaint[];
   readonly occluder:IsometricOccluder;
 }
@@ -83,6 +89,7 @@ export function planBuildingArt(rect:Readonly<IsometricRect>, appearance:Buildin
       if(appearance.kind!=='mine') {window(.30);window(.70);}
     }
   }
+  const facadePaint=paint.slice();
   const top=prism.faces[2]!;
   const ridge0=projectIsometric({x:rect.x,y:rect.y+rect.height/2},style.height+style.rise,origin);
   const ridge1=projectIsometric({x:rect.x+rect.width,y:rect.y+rect.height/2},style.height+style.rise,origin);
@@ -96,5 +103,11 @@ export function planBuildingArt(rect:Readonly<IsometricRect>, appearance:Buildin
       lerp(ridge1,top[2]!,t+.025),lerp(ridge0,top[3]!,t+.025)],shade(style.roof,-22),false);
   }
   add('detail',[ridge0,ridge1,lerp(ridge1,top[2]!,.045),lerp(ridge0,top[3]!,.045)],shade(style.roof,22),false);
-  return {base,paint,occluder:{depth:prism.depth,faces:paint.filter(p=>p.opaque).map(p=>p.points)}};
+  const group=(kind:BuildingPaintGroup['kind'],faces:readonly BuildingPaint[]):BuildingPaintGroup=>({
+    kind,paint:faces,occluder:{depth:prism.depth,faces:faces.filter(p=>p.opaque).map(p=>p.points)}
+  });
+  // Keep roof slopes, gable and trim in one independent painter group.
+  // The common ground-depth key and insertion order preserve original layering.
+  const layers=[group('facade',facadePaint),group('roof',paint.slice(facadePaint.length))];
+  return {base,paint,layers,occluder:{depth:prism.depth,faces:paint.filter(p=>p.opaque).map(p=>p.points)}};
 }
