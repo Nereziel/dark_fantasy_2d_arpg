@@ -3,7 +3,7 @@ import {describe,expect,it,vi} from 'vitest';
 import {GameSimulation} from '../../src/game/core/GameSimulation';
 import {buildWilderness} from '../../src/game/world/wildernessRuntime';
 import {planActIDungeonEntrances,buildActIDungeonInterior} from '../../src/game/world/actIDungeonEntrances';
-import {planOptionalDungeonFeatures} from '../../src/game/world/optionalDungeonFeatures';
+import {planOptionalDungeonFeatures,rollOptionalDungeonTreasure} from '../../src/game/world/optionalDungeonFeatures';
 import {ACTOR_RADIUS,canOccupy,findPath} from '../../src/game/world/navigation';
 import {createWorldRecord,readWorldRecord} from '../../src/persistence/WorldProgressRepository';
 
@@ -87,6 +87,44 @@ describe('Issue #208 C3.4: optional dungeon treasure and hazards',()=>{
     internal.tickCryptTraps(plan.trap.telegraphSeconds+.1);
     expect(damage).toHaveBeenCalledOnce();
     damage.mockRestore();
+  },30000);
+
+  it('preserves an unclaimed chest at full capacity and drops exactly one item when space is freed',()=>{
+    const seed=42,id='mine',sim=new GameSimulation(seed);
+    const entry=planActIDungeonEntrances(buildWilderness(seed)).find(e=>e.id===id)!;
+    const start=sim.snapshot();
+    expect(sim.restore({...start,player:{...start.player,...entry.position}})).toBe(true);
+    sim.command({type:'usePortal',dungeonId:id});
+    const plan=planOptionalDungeonFeatures(buildActIDungeonInterior(seed,id),id);
+    const entered=sim.snapshot();
+    const item=rollOptionalDungeonTreasure(seed,id,entered.level,entered.classId)!;
+    expect(item).not.toBeNull();
+    const inventory=entered.inventory.map((_,i)=>({...item,id:'capacity-inventory-'+i}));
+    const groundLoot=Array.from({length:100},(_,i)=>{
+      const filler={...item,id:'capacity-ground-'+i};
+      return {id:filler.id,...plan.chest.position,item:filler};
+    });
+    expect(sim.restore({...entered,player:{...entered.player,...plan.chest.position},inventory,groundLoot})).toBe(true);
+    const gold=sim.character().gold;
+    sim.command({type:'interactCrypt',id:plan.chest.id});
+    expect(sim.character().gold).toBe(gold);
+    expect(sim.worldProgress()?.optionalDungeonRewardIds??[]).toEqual([]);
+    expect(sim.snapshot().cryptInteractables).toEqual([plan.chest]);
+    expect(sim.snapshot().groundLoot).toHaveLength(100);
+    const blocked=sim.snapshot();
+    expect(sim.restore({...blocked,groundLoot:blocked.groundLoot.slice(0,99)})).toBe(true);
+    sim.command({type:'interactCrypt',id:plan.chest.id});
+    expect(sim.character().gold).toBe(gold+plan.gold);
+    expect(sim.character().inventory).toEqual(inventory);
+    expect(sim.snapshot().groundLoot).toHaveLength(100);
+    expect(sim.snapshot().groundLoot.filter(loot=>loot.item.id===item.id)).toEqual([
+      {id:item.id,...plan.chest.position,item}
+    ]);
+    expect(sim.worldProgress()?.optionalDungeonRewardIds).toEqual([id+':treasure']);
+    expect(sim.snapshot().cryptInteractables).toEqual([]);
+    sim.command({type:'interactCrypt',id:plan.chest.id});
+    expect(sim.character().gold).toBe(gold+plan.gold);
+    expect(sim.snapshot().groundLoot.filter(loot=>loot.item.id===item.id)).toHaveLength(1);
   },30000);
 
 });
