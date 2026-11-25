@@ -1,6 +1,6 @@
 // GPL-3.0-only
 import { describe, expect, it } from 'vitest';
-import { EnemyPresentation, enemyWindupPose } from '../../src/game/phaser/isometricEnemyPresentation';
+import { EnemyPresentation, enemyWindupPose, snapshotEnemyWindup } from '../../src/game/phaser/isometricEnemyPresentation';
 import type { EnemyUnit } from '../../src/game/enemies/enemies';
 import type { GameEvent } from '../../src/game/core/types';
 
@@ -20,6 +20,16 @@ describe('G1/C2.3 authoritative enemy presentation', () => {
     expect(enemyWindupPose('leap', 0.001, 1)).toEqual({ pose: 'attack', frame: 1 });
     expect(enemyWindupPose('bolt', 0, 1)).toBeUndefined();
     expect(enemyWindupPose('bolt', 1, 0)).toBeUndefined();
+  });
+  it('uses the selected attack pattern rather than the actor default and respects cancellation', () => {
+    const u = unit();
+    const state = { player: { ...u.actor, id: 'hero', x: 300, y: 300 } };
+    u.intent = { pattern: 'bolt', x: 220, y: 240, radius: 50, remaining: .2, total: 1 };
+    expect(snapshotEnemyWindup(state, u)).toEqual({
+      pose: 'cast', frame: 1, aim: { x: 220, y: 240, pattern: 'bolt', radius: 50, remaining: .2, total: 1 }
+    });
+    u.intent = null;
+    expect(snapshotEnemyWindup(state, u)).toBeUndefined();
   });
   it('starts contact only on an actual attack event, even on a miss', () => {
     const p = new EnemyPresentation();
