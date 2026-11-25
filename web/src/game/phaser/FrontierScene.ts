@@ -876,6 +876,12 @@ export class FrontierScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.bridge.tick(delta);
+    // Presentation diagnostics only: the fixed-zoom camera's current screen
+    // origin is not the hero-centered estimate while follow interpolation runs.
+    const camera = this.cameras.main;
+    const cameraOrigin = camera.scrollX + ',' + camera.scrollY;
+    if (this.game.canvas.dataset.cameraOrigin !== cameraOrigin)
+      this.game.canvas.dataset.cameraOrigin = cameraOrigin;
     // Camera-follow changes the world coordinate beneath a stationary held cursor.
     // Update it at the same throttled cadence even without pointermove events.
     if (this.heldMovement.active && this.input.activePointer.isDown) {

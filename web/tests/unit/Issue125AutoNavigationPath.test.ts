@@ -11,12 +11,13 @@ import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../../src/game/wo
 import { ACTOR_RADIUS, canOccupy, findPath, findPickupPath, findAttackApproachPath, hasLineOfSight, moveActor, resolveReachableDestination } from '../../src/game/world/navigation';
 
 describe('F0 — click-to-interact auto-navigation around solid walls', () => {
-  it('reaches the required evidence from the reported stalled position on seed 2683541248', () => {
-    // Postmerge run 45572861430: real browser stopped at this position.
-    // Reconstruct only the pure navigation layer, not the browser quest state.
-    const seed = 2683541248;
+  it.each([
+    { seed: 2683541248, origin: { x: 1174.0370058355718, y: 1059.9999999999989 } },
+    { seed: 546989644, origin: { x: 952.2879061573971, y: 913.8677300618763 } }
+  ])('reaches required evidence from the reported stalled position on seed $seed', ({ seed, origin }) => {
+    // Postmerge runs 45572861430 and 45625761775: real browser stall.
+    // Reconstruct the pure navigation layer, not the browser quest state.
     const { layout, features } = buildWilderness(seed);
-    const origin = { x: 1174.0370058355718, y: 1059.9999999999989 };
     const evidence = features.find(feature => feature.id === 'act1.evidence_lead');
     expect(evidence, 'Required evidence must exist').toBeDefined();
     expect(canOccupy(origin, ACTOR_RADIUS, layout.obstacles), 'Logged player position must be legal').toBe(true);

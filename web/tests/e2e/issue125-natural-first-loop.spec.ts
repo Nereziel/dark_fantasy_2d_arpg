@@ -397,41 +397,62 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
       await map.getByTestId('map-close').click();
       nextMapCheck = Date.now() + 10_000;
     }
-    const rect = await canvas.boundingBox();
-    if (!rect) throw new Error('Phaser canvas missing while finding story evidence');
-    const { width, height } = await canvas.evaluate(node => ({
-      width: node.width, height: node.height
-    }));
-    // Healing and map interactions may have happened since the first sample.
-    // Re-read the current observable player position before mapping the click.
+    // Re-read the player after map/defense actions and use the actual
+    // rendered camera origin, not a hero-centered estimate during follow lag.
     const currentX = Number(await game.getAttribute('data-player-x'));
     const currentY = Number(await game.getAttribute('data-player-y'));
     expect(Number.isFinite(currentX) && Number.isFinite(currentY)).toBe(true);
     const destination = knownEvidence ?? waypoints[index]!;
     const distanceBefore = Math.hypot(currentX - destination.x, currentY - destination.y);
     bestDistance = Math.min(bestDistance, distanceBefore);
-    // Displacement alone misclassified oscillation as progress in run
-    // 45572861430: waypoint 5 is west, but the odd-index escape went east.
-    // Alternate lateral survey detours with a forward component toward the
-    // current objective. Retain the attempt count even after a moving detour.
     let waypoint = destination;
     if (stalled >= 2 && distanceBefore > 32) {
-      const dx = (destination.x - currentX) / distanceBefore;
-      const dy = (destination.y - currentY) / distanceBefore;
-      const side = detours++ % 2 === 0 ? 1 : -1;
-      waypoint = {
-        x: Math.max(120, Math.min(2080, currentX + dx * 100 - dy * side * 220)),
-        y: Math.max(140, Math.min(1250, currentY + dy * 100 + dx * side * 220))
-      };
+      // After a blocked direct attempt, sample distinct points around the
+      // objective, alternating with a new direct attempt. Do not oscillate
+      // between two relative offsets as in seed 546989644.
+      const attempt = detours++;
+      if (attempt % 2 === 0) {
+        const turn = Math.floor(attempt / 2);
+        const angle = turn * Math.PI * (3 - Math.sqrt(5));
+        const radius = Math.min(360, 110 + 45 * Math.floor(turn / 4));
+        waypoint = {
+          x: Math.max(120, Math.min(2080, destination.x + Math.cos(angle) * radius)),
+          y: Math.max(140, Math.min(1250, destination.y + Math.sin(angle) * radius))
+        };
+      }
     }
-    const scrollX = Math.max(0, Math.min(2200 - width, currentX - width / 2));
-    const scrollY = Math.max(0, Math.min(1400 - height, currentY - height / 2));
-    const screenX = Math.max(width * 0.35,
-      Math.min(width * 0.78, waypoint.x - scrollX));
-    const screenY = Math.max(height * 0.23,
-      Math.min(height * 0.94, waypoint.y - scrollY));
-    await page.mouse.click(rect.x + rect.width * screenX / width,
-      rect.y + rect.height * screenY / height, { button: 'middle' });
+    await expect(canvas).toHaveAttribute('data-camera-origin', /^-?[0-9.]+,-?[0-9.]+$/, {
+      timeout: Math.max(1, Math.min(1500, deadline - Date.now()))
+    });
+    const click = await canvas.evaluate((node, goal) => {
+      const element = node as HTMLCanvasElement;
+      const rect = element.getBoundingClientRect();
+      const [scrollX, scrollY] = (element.dataset.cameraOrigin ?? '').split(',').map(Number);
+      if (!Number.isFinite(scrollX) || !Number.isFinite(scrollY)
+        || rect.width <= 0 || rect.height <= 0) return null;
+      // Project the map coordinate into the live canvas. Prefer the exact
+      // location, or the nearest exposed ground point if a HUD blocks it.
+      const desiredX = rect.left + (goal.x - scrollX!) * rect.width / element.width;
+      const desiredY = rect.top + (goal.y - scrollY!) * rect.height / element.height;
+      let best: { x: number; y: number; score: number } | null = null;
+      const consider = (x: number, y: number) => {
+        if (x < rect.left + 12 || x > rect.right - 12
+          || y < rect.top + 12 || y > rect.bottom - 12
+          || document.elementFromPoint(x, y) !== element) return;
+        const score = Math.hypot(x - desiredX, y - desiredY);
+        if (!best || score < best.score) best = { x, y, score };
+      };
+      consider(desiredX, desiredY);
+      for (let y = rect.top + 16; y <= rect.bottom - 12; y += 24)
+        for (let x = rect.left + 16; x <= rect.right - 12; x += 24) consider(x, y);
+      if (!best) return null;
+      const picked = best as { x: number; y: number; score: number };
+      return { x: picked.x, y: picked.y,
+        worldX: scrollX! + (picked.x - rect.left) * element.width / rect.width,
+        worldY: scrollY! + (picked.y - rect.top) * element.height / rect.height };
+    }, waypoint);
+    if (!click) throw new Error('No exposed world canvas while finding evidence');
+    await page.mouse.click(click.x, click.y, { button: 'middle' });
     // Do not cancel a collision-aware route after a fixed 1.2 s: a route
     // can temporarily move away from the goal to go around a wall.
     // Observe movement until it settles, reaches the survey waypoint or
@@ -451,12 +472,13 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
       still = Math.hypot(observedX - nextX, observedY - nextY) < 2 ? still + 1 : 0;
       nextX = observedX;
       nextY = observedY;
-      if (still >= 3 || Math.hypot(nextX - waypoint.x, nextY - waypoint.y) < 20) break;
+      if (still >= 3 || Math.hypot(nextX - click.worldX, nextY - click.worldY) < 20) break;
     }
     const distanceAfter = Math.hypot(nextX - destination.x, nextY - destination.y);
     lastSteps.push(index + ': ' + Math.round(currentX) + ',' + Math.round(currentY)
       + ' -> ' + Math.round(nextX) + ',' + Math.round(nextY)
       + ' goal=' + Math.round(destination.x) + ',' + Math.round(destination.y)
+      + ' clicked=' + Math.round(click.worldX) + ',' + Math.round(click.worldY)
       + ' remaining=' + Math.round(distanceAfter) + ' detours=' + detours);
     if (lastSteps.length > 8) lastSteps.shift();
     if (distanceAfter < bestDistance - 12) {
