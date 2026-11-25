@@ -1,5 +1,5 @@
 // GPL-3.0-only
-import {describe,expect,it} from 'vitest';
+import {describe,expect,it,vi} from 'vitest';
 import {GameSimulation} from '../../src/game/core/GameSimulation';
 import {buildWilderness} from '../../src/game/world/wildernessRuntime';
 import {planActIDungeonEntrances,buildActIDungeonInterior} from '../../src/game/world/actIDungeonEntrances';
@@ -35,11 +35,15 @@ describe('Issue #208 C3.4: optional dungeon treasure and hazards',()=>{
     expect(sim.worldProgress()?.optionalDungeonRewardIds??[]).toEqual([]);
     expect(sim.restore({...entered,player:{...entered.player,...plan.chest.position}})).toBe(true);
     const gold=sim.character().gold;
+    const beforeItems=sim.character().inventory.filter(Boolean).length;
     sim.command({type:'interactCrypt',id:plan.chest.id});
     expect(sim.character().gold).toBe(gold+plan.gold);
     sim.command({type:'interactCrypt',id:plan.chest.id});
     expect(sim.character().gold).toBe(gold+plan.gold);
     expect(sim.snapshot().cryptInteractables).toEqual([]);
+    const item=sim.character().inventory.find(i=>i?.id==='optional-chest-'+seed+'-'+id);
+    expect(item).toMatchObject({rarity:'UNCOMMON',level:sim.character().level});
+    expect(sim.character().inventory.filter(Boolean)).toHaveLength(beforeItems+1);
     const current=sim.snapshot();
     expect(sim.restore({...current,player:{...current.player,...plan.trap.trigger.center}})).toBe(true);
     const internal=sim as unknown as {player:{x:number;y:number;health:number};tickCryptTraps:(dt:number)=>void};
@@ -61,5 +65,28 @@ describe('Issue #208 C3.4: optional dungeon treasure and hazards',()=>{
     expect(loaded.snapshot().cryptInteractables).toEqual([]);
     expect(loaded.worldProgress()?.optionalDungeonRewardIds).toEqual([id+':treasure',id+':trap']);
     expect(loaded.character()).not.toHaveProperty('optionalDungeonRewardIds');
+    expect(loaded.character().inventory.filter(i=>i?.id===item?.id)).toEqual([item]);
   },30000);
+  it('applies cave poison only after successful damage and never on replay',()=>{
+    const seed=42,sim=new GameSimulation(seed);
+    const entry=planActIDungeonEntrances(buildWilderness(seed)).find(e=>e.id==='cave')!;
+    const start=sim.snapshot();
+    expect(sim.restore({...start,player:{...start.player,...entry.position}})).toBe(true);
+    sim.command({type:'usePortal',dungeonId:'cave'});
+    const plan=planOptionalDungeonFeatures(buildActIDungeonInterior(seed,'cave'),'cave');
+    const entered=sim.snapshot();
+    expect(sim.restore({...entered,player:{...entered.player,...plan.trap.trigger.center}})).toBe(true);
+    const internal=sim as unknown as {dealPlayerDamage:(n:number,type:string,source:string)=>boolean;tickCryptTraps:(dt:number)=>void};
+    // Stub only the damage roll, so dodge RNG cannot make this status assertion flaky.
+    const damage=vi.spyOn(internal,'dealPlayerDamage').mockReturnValue(true);
+    internal.tickCryptTraps(.1);
+    internal.tickCryptTraps(plan.trap.telegraphSeconds+.1);
+    expect(damage).toHaveBeenCalledOnce();
+    expect(sim.snapshot().statusEffects?.player).toContainEqual(expect.objectContaining({id:'poisoned',sourceId:plan.trap.id}));
+    internal.tickCryptTraps(.1);
+    internal.tickCryptTraps(plan.trap.telegraphSeconds+.1);
+    expect(damage).toHaveBeenCalledOnce();
+    damage.mockRestore();
+  },30000);
+
 });
