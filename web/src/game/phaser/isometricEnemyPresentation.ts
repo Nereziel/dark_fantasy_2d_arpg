@@ -1,5 +1,6 @@
 // GPL-3.0-only — transient renderer state; no combat or persistence authority.
-import type { GameEvent } from '../core/types';
+import type { GameEvent, GameSnapshot, Point } from '../core/types';
+import { MINI_BOSS_DEFINITIONS } from '../enemies/miniBossRules';
 import type { AttackPattern, EnemySnapshot, EnemyUnit } from '../enemies/enemies';
 import type { PixelAnimation } from './pixelSpriteAtlas';
 
@@ -13,6 +14,42 @@ const MAX_DEATHS = 32;
 export function enemyWindupPose(pattern: AttackPattern, remaining: number, total: number): EnemyPose | undefined {
   if (!Number.isFinite(remaining) || !Number.isFinite(total) || remaining <= 0 || total <= 0) return;
   return { pose: pattern === 'bolt' ? 'cast' : 'attack', frame: remaining > total / 2 ? 0 : 1 };
+}
+
+function kingPattern(ability?: string): AttackPattern {
+  return ability === 'raise_dead' || ability === 'grave_circle' || ability === 'rune_storm'
+    ? 'bolt' : 'sweep';
+}
+
+function miniPattern(boss: keyof typeof MINI_BOSS_DEFINITIONS, abilityId?: string | null): AttackPattern {
+  const ability = MINI_BOSS_DEFINITIONS[boss].abilities.find(a => a.id === abilityId);
+  return ability && ['support', 'hazard', 'summon'].includes(ability.effect) ? 'bolt' : 'sweep';
+}
+
+/** Read the real pending attack from the relevant simulation snapshot. */
+export function snapshotEnemyWindup(state: Pick<GameSnapshot, 'miniBossStates' | 'hollowKing' | 'player'>,
+  unit: EnemyUnit): (EnemyPose & { aim: Point }) | undefined {
+  const king = state.hollowKing;
+  if (king?.actorId === unit.actor.id && king.mode === 'telegraph' && king.warning) {
+    const w = king.warning;
+    const pose = enemyWindupPose(kingPattern(w.ability), w.remainingSeconds, w.windupSeconds);
+    const aim = w.geometry.shape === 'cone'
+      ? { x: unit.actor.x + Math.cos(w.geometry.angleRadians) * 10,
+          y: unit.actor.y + Math.sin(w.geometry.angleRadians) * 10 }
+      : w.geometry.position;
+    return pose && { ...pose, aim };
+  }
+  const mini = state.miniBossStates?.[unit.actor.id];
+  if (mini?.stage === 'windup' && mini.lockedPoint) {
+    const ability = MINI_BOSS_DEFINITIONS[mini.bossId].abilities.find(a => a.id === mini.activeAbilityId);
+    const pose = ability && enemyWindupPose(miniPattern(mini.bossId, ability.id),
+      mini.remainingSeconds, ability.windupSeconds);
+    return pose && { ...pose, aim: mini.lockedPoint };
+  }
+  const intent = unit.intent;
+  if (!intent) return;
+  const pose = enemyWindupPose(intent.pattern, intent.remaining, intent.total);
+  return pose && { ...pose, aim: intent.pattern === 'sweep' ? state.player : intent };
 }
 
 /** Bounded, disposable view memory. Only published events may start reactions. */
@@ -77,10 +114,10 @@ export class EnemyPresentation {
         id = event.targetId; pose = 'hit'; break;
       case 'miniBossCue':
         if (event.kind !== 'impact') return;
-        id = event.enemyId; pose = 'attack'; break;
+        id = event.enemyId; pose = miniPattern(event.bossId, event.abilityId) === 'bolt' ? 'cast' : 'attack'; break;
       case 'hollowKingCue':
         if (event.kind !== 'hitWindow') return;
-        id = 'crypt_lord-4'; pose = 'attack'; break;
+        id = 'crypt_lord-4'; pose = kingPattern(event.ability) === 'bolt' ? 'cast' : 'attack'; break;
       default: return;
     }
     if (!units.some(u => u.actor.id === id && u.actor.alive)) return;
