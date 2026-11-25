@@ -13,6 +13,12 @@ test('isometric preview boots, accepts a pointer and keeps the map controls', as
   await expect(canvas).toHaveAttribute('data-ground-chunks', '24');
   await expect.poll(async () => Number(await canvas.getAttribute('data-ground-resident-chunks'))).toBeGreaterThan(0);
   await expect.poll(async () => Number(await canvas.getAttribute('data-ground-resident-chunks'))).toBeLessThan(24);
+  // Visible layers are a subset; the complete collision/picking art plan
+  // remains present across movement and camera changes.
+  await expect.poll(async () => Number(await canvas.getAttribute('data-static-layers'))).toBeGreaterThan(0);
+  const staticTotal = Number(await canvas.getAttribute('data-static-layers'));
+  await expect.poll(async () => Number(await canvas.getAttribute('data-static-visible-layers'))).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await canvas.getAttribute('data-static-visible-layers'))).toBeLessThan(staticTotal);
   await expect(canvas).toHaveAttribute('data-prop-materials', /(?:^|,)ruin(?:,|$)/);
   await expect(canvas).toHaveAttribute('data-prop-materials', /(?:^|,)timber(?:,|$)/);
   const player = page.locator('[data-minimap="active"] [data-map-marker="player"] circle').first();
@@ -27,6 +33,9 @@ test('isometric preview boots, accepts a pointer and keeps the map controls', as
     Number(await player.getAttribute('cx')) - initial.x,
     Number(await player.getAttribute('cy')) - initial.y
   ), { timeout: 6000 }).toBeGreaterThan(20);
+  await expect(canvas).toHaveAttribute('data-static-layers', String(staticTotal));
+  await expect.poll(async () => Number(await canvas.getAttribute('data-static-visible-layers'))).toBeGreaterThan(0);
+  await expect.poll(async () => Number(await canvas.getAttribute('data-static-visible-layers'))).toBeLessThan(staticTotal);
   await page.keyboard.press('m');
   await expect(page.getByTestId('world-map-dialog')).toBeVisible();
   await page.keyboard.press('Escape');
