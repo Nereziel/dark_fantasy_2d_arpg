@@ -4,7 +4,7 @@ on:
   # Keep the existing required PR check named "verify".
   pull_request:
     branches: [main]
-  # Application and test changes use one validation run. Only app changes deploy.
+  # Application and test changes use one validation run; recover missed publishes.
   push:
     branches: [main]
     paths:
@@ -30,6 +30,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      deployments: read
     outputs:
       publish: ${{ steps.scope.outputs.publish }}
       bundle: game-dist-${{ github.sha }}-${{ github.run_attempt }}
@@ -40,35 +43,17 @@ jobs:
           # Required to compare the entire pushed range, including merge commits.
           fetch-depth: 0
 
+      - name: Test deployment scope and recovery
+        run: bash tests/publish-scope.test.sh
+
       - name: Determine whether the published application changed
         id: scope
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            echo 'publish=true' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [[ "$EVENT_NAME" != "push" ]]; then
-            echo 'publish=false' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [[ -z "$BEFORE_SHA" || "$BEFORE_SHA" =~ ^0+$ ]] || ! git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
-            echo 'publish=true' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          publish=false
-          while IFS= read -r -d '' changed; do
-            case "$changed" in
-              web/index.html|web/src/*|web/public/*|web/package.json|web/package-lock.json|web/npm-shrinkwrap.json|web/vite.config.*|web/svelte.config.*|web/tsconfig*.json|web/postcss.config.*|web/tailwind.config.*|web/scripts/*|.github/actions/*|.github/workflows/quality.yml)
-                publish=true
-                break
-                ;;
-            esac
-          done < <(git diff --name-only -z "$BEFORE_SHA" "$GITHUB_SHA")
-          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/actions/publish-scope.sh
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
