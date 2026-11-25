@@ -87,13 +87,16 @@ export function pixelFrame(animation: PixelAnimation, frame: number): string {
   return animation + '-' + Math.max(0, Math.min(3, Math.floor(Number.isFinite(frame) ? frame : 0)));
 }
 
-function rect(ctx: CanvasRenderingContext2D, color: string,
-  x: number,y: number,w: number,h: number): void {
+/** Last line of defense: never paint into another animation cell. */
+function paintCellRect(ctx: CanvasRenderingContext2D, color: string,
+  x: number, y: number, w: number, h: number): void {
+  const left = Math.max(0, Math.round(x));
+  const top = Math.max(0, Math.round(y));
+  const right = Math.min(PIXEL_FRAME_WIDTH, Math.round(x) + w);
+  const bottom = Math.min(PIXEL_FRAME_HEIGHT, Math.round(y) + h);
+  if (right <= left || bottom <= top) return;
   ctx.fillStyle = color;
-  ctx.fillRect(Math.round(x),Math.round(y),w,h);
-}
-function line(ctx: CanvasRenderingContext2D,color:string,x:number,y:number,w:number,h:number):void{
-  rect(ctx,color,x,y,w,h);
+  ctx.fillRect(left, top, right - left, bottom - top);
 }
 
 /** One 48×56 pixel-art frame, rooted at feet for collision/health-bar alignment. */
@@ -107,8 +110,21 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
   const casting = animation === 'cast' || animation === 'channel';
   const hit = animation === 'hit' && frame >= 1;
   const falling = animation === 'death';
-  const x = 24 + (animation === 'dodge' ? [-9,-5,5,10][frame]! : hit ? 3 : 0);
-  const y = falling ? 14+frame*8 : bob;
+  // Keep the body and equipment inside the original pivot-centered cell.
+  // Wide creatures use shorter lateral shifts; their legs/head still move
+  // relative to the body. This is visual only, never collision displacement.
+  const shift = animation === 'dodge' ? [-4,-2,2,4][frame]! : hit ? 2 : 0;
+  const x = 24 + (look.shape === 'spider' ? Math.max(-2, Math.min(2, shift)) : shift);
+  const y = falling ? 0 : bob;
+  // Earlier death poses collapse toward the planted foot line instead of
+  // translating an upright sprite down into the next row of the atlas.
+  const collapse = falling && frame < 3 ? [0.84,0.62,0.38][frame]! : 1;
+  const rect = (target: CanvasRenderingContext2D, color: string,
+    rx: number, ry: number, w: number, h: number): void => {
+    const top = Math.round(51 + (ry - 51) * collapse);
+    const bottom = Math.round(51 + (ry + h - 51) * collapse);
+    paintCellRect(target, color, rx, top, w, Math.max(1, bottom - top));
+  };
   if (falling && frame >= 3) {
     rect(ctx,look.shadow,10,46,29,5);
     rect(ctx,look.body,12,43,25,4);
@@ -122,10 +138,12 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
     rect(ctx,look.body,x-12,28+y,24,15);
     rect(ctx,look.highlight,x-6,28+y,12,6);
     for(let i=0;i<4;i++) {
-      rect(ctx,look.shadow,x-22-i%2*3,28+i*4+y,10,2);
-      rect(ctx,look.shadow,x+12,28+i*4+y,12+i%2*3,2);
-      rect(ctx,look.body,x-25-i%2*3,29+i*4+y,4,11);
-      rect(ctx,look.body,x+21+i%2*3,29+i*4+y,4,11);
+      const leftFoot = Math.max(0, x-22-i%2*2);
+      const rightFoot = Math.min(PIXEL_FRAME_WIDTH-4, x+18+i%2*2);
+      rect(ctx,look.shadow,leftFoot+2,28+i*4+y,x-10-leftFoot-2,2);
+      rect(ctx,look.shadow,x+10,28+i*4+y,rightFoot+2-x-10,2);
+      rect(ctx,look.body,leftFoot,29+i*4+y,4,11);
+      rect(ctx,look.body,rightFoot,29+i*4+y,4,11);
     }
     if (view === 's') {
       rect(ctx,look.accent,x-6,36+y,4,4);
@@ -144,7 +162,7 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
     rect(ctx,look.highlight,x-7,28+y,18,5);
     // The existing south view retains the legacy silhouette. Other views
     // move the muzzle/head rather than rotating the complete upright sprite.
-    const headX = view === 'n' ? x-7 : view === 'ne' ? x+3 : x+8;
+    const headX = Math.min(PIXEL_FRAME_WIDTH-19, view === 'n' ? x-7 : view === 'ne' ? x+3 : x+8);
     const headY = view === 'n' ? 19+y : view === 'ne' ? 20+y : view === 'se' ? 28+y : 23+y;
     rect(ctx,look.body,headX,headY,15,15);
     if (view !== 'n') {
@@ -156,7 +174,7 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
     rect(ctx,look.body,headX+2,headY-4,6,7);
     rect(ctx,look.body,headX+10,headY-3,5,7);
     if (look.shape==='boar' && view !== 'n') rect(ctx,BONE,headX+12,headY+13,7,3);
-    else rect(ctx,look.shadow,x-23,30+y,9,4);
+    else rect(ctx,look.shadow,Math.max(0,x-23),30+y,9,4);
     return;
   }
   if (look.shape === 'ghost') {
@@ -229,21 +247,27 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
   rect(ctx,look.shadow,x+10,26+armLift+y,6,15);
   rect(ctx,look.body,x+11,25+armLift+y,5,12);
   if(look.shape === 'archer') {
-    rect(ctx,look.accent,x+18,13+armLift+y,3,31);
-    rect(ctx,METAL,x+22,14+armLift+y,1,28);
+    const bowX = Math.min(x+18,PIXEL_FRAME_WIDTH-5);
+    rect(ctx,look.accent,bowX,13+armLift+y,3,31);
+    rect(ctx,METAL,bowX+4,14+armLift+y,1,28);
     rect(ctx,look.accent,x-18,28+y,15,2);
   } else if(look.shape==='mage'||look.shape==='mageEnemy'||look.shape==='cultist'||look.shape==='cleric') {
-    rect(ctx,look.shadow,x+18,17+armLift+y,3,31);
-    rect(ctx,look.accent,x+16,14+armLift+y,7,6);
-    if(casting) rect(ctx,look.accent,x+13,7+armLift+y,12+frame%2*2,5);
+    const staffX = Math.min(x+16,PIXEL_FRAME_WIDTH-7);
+    rect(ctx,look.shadow,staffX+2,17+armLift+y,3,31);
+    rect(ctx,look.accent,staffX,14+armLift+y,7,6);
+    const spellWidth = 12+frame%2*2;
+    if(casting) rect(ctx,look.accent,Math.min(x+13,PIXEL_FRAME_WIDTH-spellWidth),
+      Math.max(0,7+armLift+y),spellWidth,5);
   } else if(look.shape==='rogue') {
-    rect(ctx,METAL,x+16,22+armLift+y,14,3);
-    rect(ctx,look.accent,x+19,19+armLift+y,3,8);
-    rect(ctx,METAL,x-20,26+y,10,2);
+    const bladeX = Math.min(x+16,PIXEL_FRAME_WIDTH-14);
+    rect(ctx,METAL,bladeX,22+armLift+y,14,3);
+    rect(ctx,look.accent,bladeX+3,19+armLift+y,3,8);
+    rect(ctx,METAL,Math.max(0,x-20),26+y,10,2);
   } else {
-    rect(ctx,ARMOR,x+14,20+armLift+y,4,17);
-    rect(ctx,METAL,x+16,12+armLift+y,5,14);
-    rect(ctx,look.accent,x+13,24+armLift+y,10,4);
+    const weaponX = Math.min(x+13,PIXEL_FRAME_WIDTH-10);
+    rect(ctx,ARMOR,weaponX+1,20+armLift+y,4,17);
+    rect(ctx,METAL,weaponX+3,12+armLift+y,5,14);
+    rect(ctx,look.accent,weaponX,24+armLift+y,10,4);
   }
   if(look.shape==='bandit') rect(ctx,look.accent,x-4,12+y,9,4);
   if(hit) rect(ctx,'#e4a897',x-13,27+y,5,5);
