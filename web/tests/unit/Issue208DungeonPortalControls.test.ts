@@ -3,7 +3,7 @@ import {describe,expect,it} from 'vitest';
 import {GameSimulation} from '../../src/game/core/GameSimulation';
 import {buildWilderness} from '../../src/game/world/wildernessRuntime';
 import {planActIDungeonEntrances,buildActIDungeonInterior} from '../../src/game/world/actIDungeonEntrances';
-import {dungeonPortalTargets, dungeonPortalCommand, dungeonRenderSeed} from '../../src/game/world/dungeonPortalPresentation';
+import {dungeonPortalTargets, dungeonPortalCommand, dungeonRenderSeed, projectDiscoveredDungeonEntrances} from '../../src/game/world/dungeonPortalPresentation';
 import {CRYPT_GATE} from '../../src/game/world/generator';
 import {ACTOR_RADIUS,findPath,canOccupy} from '../../src/game/world/navigation';
 
@@ -23,6 +23,29 @@ describe('Issue #208 C2.3 shared dungeon portal controls',()=>{
       expect(dungeonPortalTargets(snapshot,[])[0]!.position).toEqual(buildActIDungeonInterior(seed,id).exitPosition);
     }
     expect(dungeonPortalCommand('forged')).toBeNull();
+  });
+  it('projects only discovered portal cells, in both map modes, without changing the original projection',()=>{
+    const sim=new GameSimulation(42),world=buildWilderness(42);
+    const entries=planActIDungeonEntrances(world).filter(e=>e.id!=='crypt');
+    expect(entries).toHaveLength(2);
+    const initial=sim.mapProjection()!;
+    for(const mode of ['world','minimap'] as const){
+      const entry=entries[0]!,other=entries[1]!;
+      const base={...initial,mode,viewport:{x:0,y:0,width:2200,height:1400},
+        cells:initial.cells.map(cell=>({...cell,visibility:'unexplored' as const}))};
+      expect(projectDiscoveredDungeonEntrances(base,entries).markers).toEqual(base.markers);
+      const cells=base.cells.map(cell=>entry.position.x>=cell.x&&entry.position.x<cell.x+cell.width
+        &&entry.position.y>=cell.y&&entry.position.y<cell.y+cell.height
+        ? {...cell,visibility:'discovered' as const}:cell);
+      const discovered={...base,cells};
+      const next=projectDiscoveredDungeonEntrances(discovered,entries);
+      expect(next.markers.find(m=>m.id==='dungeon-portal:'+entry.id)).toMatchObject({
+        kind:'dungeonEntrance',position:entry.position,presentationKey:'dungeon.'+entry.id+'Name'});
+      expect(next.markers.some(m=>m.id==='dungeon-portal:'+other.id)).toBe(false);
+      expect(discovered.markers).toEqual(base.markers);
+      const clipped={...discovered,viewport:{x:0,y:0,width:1,height:1}};
+      expect(projectDiscoveredDungeonEntrances(clipped,entries).markers).toEqual(base.markers);
+    }
   });
   it.each(['mine','cave'] as const)('approaches %s from outside interaction range, and move cancels approach',id=>{
     const seed=42,world=buildWilderness(seed),sim=new GameSimulation(seed);
