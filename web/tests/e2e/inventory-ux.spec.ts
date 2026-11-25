@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('inventory is compact, compares on hover, and drag-drops gear both ways', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
@@ -34,7 +34,7 @@ test('inventory is compact, compares on hover, and drag-drops gear both ways', a
 
 test('HUD columns and minimap fog stay clear of the seven-skill action bar', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -81,7 +81,7 @@ test('HUD columns and minimap fog stay clear of the seven-skill action bar', asy
 
 test('inventory filter dims hidden items without disguising them as empty or movable', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
@@ -125,7 +125,7 @@ test.describe('touch inventory item preview', () => {
 
   test('mobile keeps the item inspection and equipped comparison accessible above the bag', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 740 });
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: 'Enter the world' }).click();
     await page.getByRole('button', { name: 'Browse wares' }).click();
@@ -190,7 +190,7 @@ test.describe('touch inventory item preview', () => {
 
 
 test('dragging a bag item highlights only the compatible equipment sockets', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();

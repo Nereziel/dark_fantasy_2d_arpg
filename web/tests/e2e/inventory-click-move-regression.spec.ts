@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
  * No GameBridge, debug snapshots, test fixtures or synthetic drag events.
  */
 test('bag click only inspects; equipping, unequipping and dragging preserve the item', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
@@ -52,7 +52,7 @@ test('bag click only inspects; equipping, unequipping and dragging preserve the 
 });
 
 test('desktop click-to-move fallback supports both directions without accidental swaps', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
@@ -86,7 +86,7 @@ test('desktop click-to-move fallback supports both directions without accidental
 });
 
 test('clicking two different bag items does not swap them until Move by click is armed', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
@@ -126,7 +126,7 @@ test.describe('landscape touch equipment management', () => {
     // Move by tap was hidden there even though touch input cannot reliably
     // use native HTML5 draggable buttons.
     await page.setViewportSize({ width: 740, height: 390 });
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: 'Enter the world' }).tap();
     await page.getByRole('button', { name: 'Browse wares' }).tap();
@@ -161,7 +161,7 @@ test.describe('landscape touch equipment management', () => {
 test('equipped item swaps and exact bag placement persist through real Save/Load', async ({ page }) => {
   // Two real save/reload cycles need a scoped CI budget; do not relax the suite.
   test.setTimeout(60_000);
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();

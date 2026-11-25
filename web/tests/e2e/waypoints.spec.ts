@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('town waypoint activates only on arrival and survives world save/reload', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
 

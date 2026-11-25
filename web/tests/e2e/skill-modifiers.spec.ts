@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 /** Real UI projection from validated, character-only v11 data, not a debug API. */
 test('Whirlwind shows modifier radius and pull from learned Warrior talents', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Save' }).click();

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('Q uses an authoritative combat potion, saves charges and refills at the apothecary', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
 

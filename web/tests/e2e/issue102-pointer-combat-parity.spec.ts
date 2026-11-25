@@ -2,10 +2,10 @@
 import { test, expect } from '@playwright/test';
 
 test('mouse-bound potion is usable and mapping persists after reload', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
-  const canvas = page.locator('.phaser-container canvas');
+  const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
   await page.locator('[data-potion-id="resistance"]').click();
   await expect(page.getByTestId('use-potion')).toContainText('1');

@@ -3,7 +3,7 @@
 import { expect, test } from '@playwright/test';
 
 test('rebound map and talent hotkeys work to open/close and survive reload', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await expect(page.locator('.phaser-container canvas')).toBeVisible();

@@ -33,7 +33,7 @@ test('fullscreen toggle and smooth pixels preserve the live game, save and mobil
   });
 
   await page.setViewportSize({ width: 390, height: 740 });
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const canvas = page.locator('.phaser-container canvas');

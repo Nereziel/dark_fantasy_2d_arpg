@@ -3,7 +3,7 @@
 import { test, expect } from '@playwright/test';
 
 test('discovered terrain and soil roads render without exposing hidden POI', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('m');
@@ -54,7 +54,7 @@ test.describe('phone map controls', () => {
   test.use({ viewport: { width: 390, height: 740 }, hasTouch: true });
 
   test('touch-sized controls, drag and two-finger zoom keep close visible', async ({ page }) => {
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('cs');
     await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
     await page.locator('.game-header').getByRole('button', { name: 'Mapa', exact: true }).tap();

@@ -12,7 +12,7 @@ test.describe('Issue #125: landscape touch first-play accessibility', () => {
   for (const width of [740, 844]) {
     test(`${width}x390: guide, NPC, inventory and map remain operable`, async ({ page }) => {
       await page.setViewportSize({ width, height: 390 });
-      await page.goto('./');
+      await page.goto('./?view=iso');
       await page.locator('#menu-language').selectOption('cs');
       await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
 

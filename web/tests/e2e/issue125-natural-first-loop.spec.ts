@@ -1,4 +1,49 @@
-import { errors, expect, test, type Page } from '@playwright/test';
+import { errors, expect, test, type Locator, type Page } from '@playwright/test';
+import { projectIsometric, unprojectIsometric } from '../../src/game/phaser/isometricProjection';
+import { campMovementTarget } from './iso-input';
+
+/** Use read-only renderer diagnostics and actual exposed canvas pixels.
+ * All quest targets remain ordinary Cartesian map coordinates. The only
+ * action that changes gameplay is a real mouse click in the browser.
+ */
+async function exposedIsometricClick(canvas: Locator, goal: { x: number; y: number }, timeout = 1500) {
+  await expect(canvas).toHaveAttribute('data-renderer', 'isometric-preview', { timeout });
+  await expect(canvas).toHaveAttribute('data-camera-origin', /^-?[0-9.]+,-?[0-9.]+$/, { timeout });
+  const originText = await canvas.getAttribute('data-projection-origin');
+  const [ox, oy] = (originText ?? '').split(',').map(Number);
+  if (!originText || !Number.isFinite(ox) || !Number.isFinite(oy)) throw new Error('Missing isometric projection origin');
+  const origin = { x: ox!, y: oy! };
+  const desired = projectIsometric(goal, 0, origin);
+  const click = await canvas.evaluate((node, { desired, origin }) => {
+    const element = node as HTMLCanvasElement;
+    const rect = element.getBoundingClientRect();
+    const [sx, sy] = (element.dataset.cameraOrigin ?? '').split(',').map(Number);
+    if (!Number.isFinite(sx) || !Number.isFinite(sy) || !element.width || !element.height
+      || rect.width <= 0 || rect.height <= 0) return null;
+    const desiredX = rect.left + (desired.x - sx!) * rect.width / element.width;
+    const desiredY = rect.top + (desired.y - sy!) * rect.height / element.height;
+    let best: { x: number; y: number; projectedX: number; projectedY: number; score: number } | null = null;
+    const consider = (x: number, y: number) => {
+      if (x < rect.left + 12 || x > rect.right - 12 || y < rect.top + 12 || y > rect.bottom - 12
+        || document.elementFromPoint(x, y) !== element) return;
+      const projectedX = sx! + (x - rect.left) * element.width / rect.width;
+      const projectedY = sy! + (y - rect.top) * element.height / rect.height;
+      // Exclude the empty corners outside the projected wilderness diamond.
+      const px = projectedX - origin.x, py = projectedY - origin.y;
+      const wx = py + px / 2, wy = py - px / 2;
+      if (wx < 0 || wx >= 2200 || wy < 0 || wy >= 1400) return;
+      const score = Math.hypot(x - desiredX, y - desiredY);
+      if (!best || score < best.score) best = { x, y, projectedX, projectedY, score };
+    };
+    consider(desiredX, desiredY);
+    for (let y = rect.top + 16; y <= rect.bottom - 12; y += 24)
+      for (let x = rect.left + 16; x <= rect.right - 12; x += 24) consider(x, y);
+    return best as { x: number; y: number; projectedX: number; projectedY: number; score: number } | null;
+  }, { desired, origin });
+  if (!click) throw new Error('No exposed isometric world canvas for ' + goal.x + ',' + goal.y);
+  const world = unprojectIsometric({ x: click.projectedX, y: click.projectedY }, 0, origin);
+  return { x: click.x, y: click.y, worldX: world.x, worldY: world.y };
+}
 
 /** Uses only ordinary user-visible controls on the production Vite build.
  * No GameBridge, debug hooks, direct commands, seeded snapshot injection,
@@ -29,6 +74,10 @@ async function keepFighting(
       throw new Error('Natural quest playthrough: the hero died before ' + until + '/3 kills');
     }
 
+    // A dialogue pauses the simulation; fail at the actual UI blocker rather
+    // than misreporting a navigation/combat timeout forty-five seconds later.
+    const openDialog = page.getByRole('dialog');
+    if (await openDialog.count()) throw new Error('Unexpected modal during natural combat: ' + await openDialog.first().innerText());
     const current = await page.locator('.vital-top').first().innerText();
     const hp = current.match(/(\d+)\s*\/\s*(\d+)/);
     if (hp && Number(hp[1]) / Number(hp[2]) < 0.67) {
@@ -79,7 +128,10 @@ async function keepFighting(
     + '; active quest: ' + (await page.locator('.quest-journal').innerText())
     + '; enemies: ' + rosterText.replaceAll('\n', ' ')
     + '; player position: ' + await game.getAttribute('data-player-x')
-    + ',' + await game.getAttribute('data-player-y'));
+    + ',' + await game.getAttribute('data-player-y')
+    + '; seed: ' + await game.getAttribute('data-world-seed')
+    + '; hold: ' + await game.getAttribute('data-hold-position')
+    + '; selected: ' + (await roster.locator('button.targeted').allTextContents()).join(' '));
 }
 
 /** Follow the ordinary world canvas from the finished first quest to Act I's next
@@ -134,11 +186,6 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
       }
     }
 
-    const rect = await canvas.boundingBox();
-    if (!rect) throw new Error('Phaser canvas missing during story exploration');
-    const { width, height } = await canvas.evaluate(node => ({
-      width: node.width, height: node.height
-    }));
     // If the path is pinned against an obstacle, make a real short sideways
     // world click, then retry the authored region search. No simulation
     // teleport, hidden map marker or obstacle lookup is involved.
@@ -147,17 +194,8 @@ async function walkToCorruptionSite(page: Page, timeoutMs: number): Promise<void
         y: y < 570 ? Math.min(1200, y + 270) : Math.max(120, y - 230) }
       : waypoints[waypointIndex]!;
     const waypoint = target;
-    // Phaser's camera clamps to world edges: a hero north of the viewport
-    // midpoint is NOT drawn at canvas center. Project the target using the
-    // clamped camera scroll, then choose a safe on-screen middle-mouse click.
-    const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
-    const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
-    const screenX = Math.max(width * 0.35,
-      Math.min(width * 0.67, waypoint.x - scrollX));
-    const screenY = Math.max(height * 0.23,
-      Math.min(height * 0.94, waypoint.y - scrollY));
-    await page.mouse.click(rect.x + rect.width * screenX / width,
-      rect.y + rect.height * screenY / height, { button: 'middle' });
+    const click = await exposedIsometricClick(canvas, waypoint);
+    await page.mouse.click(click.x, click.y, { button: 'middle' });
     await page.waitForTimeout(1200);
     const nextX = Number(await game.getAttribute('data-player-x'));
     const nextY = Number(await game.getAttribute('data-player-y'));
@@ -222,11 +260,6 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
       }
     }
 
-    const rect = await canvas.boundingBox();
-    if (!rect) throw new Error('Phaser canvas missing during graveyard exploration');
-    const { width, height } = await canvas.evaluate(node => ({
-      width: node.width, height: node.height
-    }));
     // Recover if a procedural obstacle blocks a specific eastward click.
     // This uses real viewport movement; it does not inspect map obstacles.
     const destination = waypoints[index]!;
@@ -234,20 +267,8 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
       ? { x: x - (stalled % 2 ? 95 : 175),
         y: Math.max(130, Math.min(1260, y + (stalled % 2 ? -165 : 245))) }
       : destination;
-    const scrollX = Math.max(0, Math.min(2200 - width, x - width / 2));
-    const scrollY = Math.max(0, Math.min(1400 - height, y - height / 2));
-    // At the east world edge the camera can no longer follow the hero.
-    // Clamping at 67% capped the maximum world-click x to 1777 in a 1280px
-    // viewport (2200 - 1280 + 0.67 * 1280): the exact repeated CI failure.
-    // 78% stays left of the right HUD but reaches the graveyard at x≈1900.
-    const screenX = Math.max(width * 0.35,
-      Math.min(width * 0.78, waypoint.x - scrollX));
-    // The combat controls sit below the canvas, so southern clicks can use
-    // its lower rows. Leave a small edge margin and keep clear of the side HUD.
-    const screenY = Math.max(height * 0.18,
-      Math.min(height * 0.94, waypoint.y - scrollY));
-    await page.mouse.click(rect.x + rect.width * screenX / width,
-      rect.y + rect.height * screenY / height, { button: 'middle' });
+    const click = await exposedIsometricClick(canvas, waypoint);
+    await page.mouse.click(click.x, click.y, { button: 'middle' });
     await page.waitForTimeout(1200);
 
     const nextX = Number(await game.getAttribute('data-player-x'));
@@ -421,37 +442,8 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
         };
       }
     }
-    await expect(canvas).toHaveAttribute('data-camera-origin', /^-?[0-9.]+,-?[0-9.]+$/, {
-      timeout: Math.max(1, Math.min(1500, deadline - Date.now()))
-    });
-    const click = await canvas.evaluate((node, goal) => {
-      const element = node as HTMLCanvasElement;
-      const rect = element.getBoundingClientRect();
-      const [scrollX, scrollY] = (element.dataset.cameraOrigin ?? '').split(',').map(Number);
-      if (!Number.isFinite(scrollX) || !Number.isFinite(scrollY)
-        || rect.width <= 0 || rect.height <= 0) return null;
-      // Project the map coordinate into the live canvas. Prefer the exact
-      // location, or the nearest exposed ground point if a HUD blocks it.
-      const desiredX = rect.left + (goal.x - scrollX!) * rect.width / element.width;
-      const desiredY = rect.top + (goal.y - scrollY!) * rect.height / element.height;
-      let best: { x: number; y: number; score: number } | null = null;
-      const consider = (x: number, y: number) => {
-        if (x < rect.left + 12 || x > rect.right - 12
-          || y < rect.top + 12 || y > rect.bottom - 12
-          || document.elementFromPoint(x, y) !== element) return;
-        const score = Math.hypot(x - desiredX, y - desiredY);
-        if (!best || score < best.score) best = { x, y, score };
-      };
-      consider(desiredX, desiredY);
-      for (let y = rect.top + 16; y <= rect.bottom - 12; y += 24)
-        for (let x = rect.left + 16; x <= rect.right - 12; x += 24) consider(x, y);
-      if (!best) return null;
-      const picked = best as { x: number; y: number; score: number };
-      return { x: picked.x, y: picked.y,
-        worldX: scrollX! + (picked.x - rect.left) * element.width / rect.width,
-        worldY: scrollY! + (picked.y - rect.top) * element.height / rect.height };
-    }, waypoint);
-    if (!click) throw new Error('No exposed world canvas while finding evidence');
+    const click = await exposedIsometricClick(canvas, waypoint,
+      Math.max(1, Math.min(1500, deadline - Date.now())));
     await page.mouse.click(click.x, click.y, { button: 'middle' });
     // Do not cancel a collision-aware route after a fixed 1.2 s: a route
     // can temporarily move away from the goal to go around a wall.
@@ -521,105 +513,132 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
   let resumeAfter = 0;
   let resumeAttack = false;
   let focusRegeneratingKing = false;
+  let evadedWarning = '';
+  let lastEvadeAt = 0;
   const game = page.locator('.game-screen');
   const recent: string[] = [];
-  const pressIfReady = async (button: ReturnType<Page['locator']>): Promise<boolean> => {
-    if (!await button.isEnabled()) return false;
-    try {
-      await button.click({ timeout: 700 });
-      return true;
-    } catch (error) {
-      if (!(error instanceof errors.TimeoutError)) throw error;
-      return false;
-    }
-  };
+  // Read a coherent visible HUD frame in a single browser round trip. The
+  // former loop made many serial calls while the boss kept dealing damage,
+  // then spent another 700 ms waiting for each skill button's click geometry.
+  // Read-only DOM access is not a simulation/debug hook.
+  const hud = () => game.evaluate(root => {
+    const text = (selector: string) => (root.querySelector(selector) as HTMLElement | null)?.innerText ?? '';
+    const ready = (selector: string) => {
+      const button = root.querySelector<HTMLButtonElement>(selector);
+      return !!button && !button.disabled;
+    };
+    const vitals = Array.from(root.querySelectorAll<HTMLElement>('.vital-panel .vital-top'));
+    const ratio = (value: string) => {
+      const match = value.match(/(\d+)\s*\/\s*(\d+)/);
+      return match ? [Number(match[1]), Number(match[2])] : null;
+    };
+    const live = Array.from(root.querySelectorAll<HTMLButtonElement>('.enemy-roster button:not([disabled])'));
+    return {
+      quest: text('.quest-journal'), chamber: text('.dungeon-panel'),
+      warning: text('.dungeon-panel .king-warning'), phase: text('.dungeon-panel .king-phase'),
+      roster: text('.enemy-roster').replaceAll('\n', ' '),
+      dead: !!root.querySelector('[data-testid="death-overlay"]'),
+      hp: ratio(vitals[0]?.innerText ?? ''),
+      faith: ratio(vitals[vitals.length - 1]?.innerText ?? ''),
+      shieldActive: vitals.some(node => node.innerText.includes('Shield')),
+      potion: ready('[data-testid="use-potion"]'),
+      heal: ready('[data-paladin-ability="healingLight"]'),
+      shield: ready('[data-paladin-ability="divineShield"]'),
+      smite: ready('[data-paladin-ability="smite"]'),
+      strike: ready('[data-paladin-ability="holyStrike"]'),
+      targets: live.map(button => ({
+        king: button.innerText.includes('The Hollow King'),
+        regenerating: button.innerText.includes('Regenerating'),
+        pressed: button.getAttribute('aria-pressed') === 'true'
+      }))
+    };
+  });
   while (Date.now() < deadline) {
-    const quest = await journal.innerText();
-    const chamber = await dungeon.innerText();
-    if (quest.includes('Report to Vesna') && chamber.includes('Crypt cleared')) return;
-    if (await page.getByTestId('death-overlay').count()) {
+    const frame = await hud();
+    if (frame.quest.includes('Report to Vesna') && frame.chamber.includes('Crypt cleared')) return;
+    if (frame.dead || await page.getByTestId('death-overlay').count()) {
       throw new Error('Natural crypt battle: hero died before Act I boss victory; seed='
         + await game.getAttribute('data-world-seed') + '; player='
         + await game.getAttribute('data-player-x') + ','
-        + await game.getAttribute('data-player-y') + '; quest=' + quest
-        + '; dungeon=' + chamber + '; roster=' + (await roster.innerText()).replaceAll('\n', ' ')
+        + await game.getAttribute('data-player-y') + '; quest=' + frame.quest
+        + '; dungeon=' + frame.chamber + '; roster=' + frame.roster
         + '; recent=' + recent.join(' | '));
     }
-    const vital = page.locator('.vital-panel .vital-top');
-    const hp = (await vital.first().innerText()).match(/(\d+)\s*\/\s*(\d+)/);
-    const faith = (await vital.last().innerText()).match(/(\d+)\s*\/\s*(\d+)/);
-    const healthRatio = hp ? Number(hp[1]) / Number(hp[2]) : 0;
-    const shieldActive = await vital.filter({ hasText: 'Shield' }).count() > 0;
-    const warning = (await dungeon.locator('.king-warning').allTextContents()).join(' ');
+    const healthRatio = frame.hp && frame.hp[1]! > 0 ? frame.hp[0]! / frame.hp[1]! : 0;
+    const shieldActive = frame.shieldActive;
+    const warning = frame.warning;
     const damageWarning = warning !== '' && !warning.includes('Raise the Dead');
-    const heal = page.locator('[data-paladin-ability="healingLight"]');
-    const shield = page.locator('[data-paladin-ability="divineShield"]');
-    const potion = page.getByTestId('use-potion');
-    // Prevent burst damage instead of waiting until the hero is nearly dead.
-    // Use an emergency potion independently of Faith; reserve the class
-    // action for healing or shielding. Do not recast an existing shield.
+    const warningName = warning.split('·')[0]!.trim();
+    if (!damageWarning) evadedWarning = '';
+    const available = frame.faith?.[0] ?? 0;
     let action = '';
-    if (hp && healthRatio < 0.5 && await pressIfReady(potion)) action = 'potion';
-    if (hp && healthRatio < 0.82 && await pressIfReady(heal)) action += ' heal';
-    else if (!shieldActive && (damageWarning || healthRatio < 0.85)
-      && await pressIfReady(shield)) action += ' shield';
-    else if (!action && hp && healthRatio < 0.7
-      && await pressIfReady(potion)) action = 'potion';
-    // Judgment and Smite are real ranged attacks; Holy Strike is melee.
-    // Use the available damage skills instead of letting regeneration erase
-    // intermittent basic hits. Keep 59 Faith in reserve for heal + shield.
-    // Judgment's normal hotbar control is usable during basic attacks.
-    const live = roster.locator('button:not([disabled])');
-    const adds = live.filter({ hasNotText: 'The Hollow King' });
-    const kings = live.filter({ hasText: 'The Hollow King' });
-    const regenerating = await kings.filter({ hasText: 'Regenerating' }).count() > 0;
-    // Sustained damage on a regenerating boss matters more than endlessly
-    // clearing its finite active add slots. Revert to adds if health is unsafe.
+    // Ordinary player keyboard shortcuts are faster than clicking moving HUD
+    // buttons under headless render load. Cooldowns, costs and damage still
+    // belong to the simulation. Q may be used independently of a class action.
+    if (frame.potion && healthRatio < 0.72) {
+      await page.keyboard.press('q');
+      action = 'potion';
+    }
+    if (healthRatio < 0.82 && frame.heal) {
+      await page.keyboard.press('4');
+      action += ' heal';
+    } else if (!shieldActive && (damageWarning || healthRatio < 0.85) && frame.shield) {
+      await page.keyboard.press('3');
+      action += ' shield';
+    } else if (!shieldActive && damageWarning && evadedWarning !== warningName
+      && Date.now() - lastEvadeAt >= 2500) {
+      // Respect the visible telegraph; Space is the normal dodge control.
+      // Evade clears auto-attack, so don't rush back into the same warning.
+      await page.keyboard.press('Space');
+      evadedWarning = warningName;
+      lastEvadeAt = Date.now();
+      action += ' evade';
+    }
+    const kings = frame.targets.filter(target => target.king);
+    const regenerating = kings.some(target => target.regenerating);
     if (!regenerating || (healthRatio < 0.70 && !shieldActive)) focusRegeneratingKing = false;
     else if (healthRatio >= 0.85 || shieldActive) focusRegeneratingKing = true;
-    const candidate = focusRegeneratingKing && await kings.count() ? kings.first()
-      : (await adds.count()) ? adds.first() : (await kings.count()) ? kings.first() : live.first();
-    const pressed = await candidate.evaluateAll(nodes =>
-      nodes.length ? nodes[0]!.getAttribute('aria-pressed') : null);
+    const preferKing = focusRegeneratingKing && kings.length > 0
+      || !frame.targets.some(target => !target.king);
+    const candidateState = frame.targets.find(target => target.king === preferKing) ?? frame.targets[0];
+    const live = roster.locator('button:not([disabled])');
+    const candidate = preferKing ? live.filter({ hasText: 'The Hollow King' }).first()
+      : live.filter({ hasNotText: 'The Hollow King' }).first();
+    const pressed = candidateState?.pressed ?? null;
+    // Keep enough Faith for Healing Light + Divine Shield (27 + 32).
+    // Smite and Holy Strike use the actual default slots 6 and 2.
     if (!action && !resumeAttack && Date.now() >= resumeAfter
-      && healthRatio >= 0.85 && !damageWarning && faith && pressed === 'true') {
-      const available = Number(faith[1]);
-      if (available >= 79 && await pressIfReady(page.locator('[data-hotbar-ability="judgment"]'))) {
-        action = 'judgment';
-      } else if (available >= 83 && await pressIfReady(page.locator('[data-paladin-ability="smite"]'))) {
+      && healthRatio >= 0.85 && !damageWarning && pressed === true) {
+      if (available >= 83 && frame.smite) {
+        await page.keyboard.press('6');
         action = 'smite';
-      } else if (available >= 71 && await pressIfReady(page.locator('[data-paladin-ability="holyStrike"]'))) {
+      } else if (available >= 71 && frame.strike) {
+        await page.keyboard.press('2');
         action = 'holyStrike';
       }
     }
-    // The roster selection can outlive an interrupted auto-attack. Give the
-    // actual cast its hit/recovery window before explicitly resuming combat;
-    // clicking a roster button during the cast would cancel its timeline.
     if (action && action !== 'potion') {
       resumeAfter = Date.now() + 850;
       resumeAttack = true;
     }
-    recent.push('HP=' + (hp?.[0] ?? '?') + ', Faith=' + (faith?.[0] ?? '?')
+    recent.push('HP=' + (frame.hp?.join('/') ?? '?') + ', Faith=' + (frame.faith?.join('/') ?? '?')
       + ', shield=' + shieldActive + ', warning=' + warning + ', action=' + action
       + ', regenFocus=' + focusRegeneratingKing + ', resume=' + resumeAttack
-      + ', phase=' + (await dungeon.locator('.king-phase').allTextContents()).join(' '));
-    if (recent.length > 12) recent.shift();
-    // A real boss phase may take time, but a minute without ANY visible
-    // combat progress indicates a stuck approach or attack, not slow DPS.
-    // Fail the same acceptance gate early; do not advance or skip the fight.
-    const progress = (await roster.innerText()).replaceAll('\n', ' ');
-    if (progress !== previousRoster) {
-      previousRoster = progress;
+      + ', phase=' + frame.phase);
+    if (recent.length > 20) recent.shift();
+    if (frame.roster !== previousRoster) {
+      previousRoster = frame.roster;
       lastProgressAt = Date.now();
     } else if (Date.now() - lastProgressAt >= 60_000) {
       throw new Error('Natural crypt battle stalled for 60s; seed='
         + await game.getAttribute('data-world-seed') + '; player='
         + await game.getAttribute('data-player-x') + ','
         + await game.getAttribute('data-player-y') + '; roster='
-        + progress + '; dungeon=' + chamber);
+        + frame.roster + '; dungeon=' + frame.chamber + '; recent=' + recent.join(' | '));
     }
     if (pressed !== null && Date.now() >= resumeAfter
-      && (resumeAttack || pressed !== 'true' || Date.now() - lastTargetAt > 10_000)) {
+      && !(damageWarning && !shieldActive && evadedWarning === warningName)
+      && (resumeAttack || !pressed || Date.now() - lastTargetAt > 10_000)) {
       try {
         await candidate.click({ timeout: 1_500 });
         lastTargetAt = Date.now();
@@ -628,14 +647,14 @@ async function clearCryptNaturally(page: Page, timeoutMs: number): Promise<void>
         if (!(error instanceof errors.TimeoutError)) throw error;
       }
     }
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(150);
   }
   throw new Error('Natural crypt battle timed out; seed=' + await game.getAttribute('data-world-seed')
     + '; quest=' + await journal.innerText()
     + '; dungeon=' + await dungeon.innerText() + '; roster='
     + (await roster.innerText()).replaceAll('\n', ' ')
-    + '; player=' + await page.locator('.game-screen').getAttribute('data-player-x')
-    + ',' + await page.locator('.game-screen').getAttribute('data-player-y')
+    + '; player=' + await game.getAttribute('data-player-x')
+    + ',' + await game.getAttribute('data-player-y')
     + '; recent=' + recent.join(' | '));
 }
 
@@ -732,15 +751,16 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
 
   // Real left-click walk (not a simulation command) followed by real roster combat.
   const canvas = page.locator('.phaser-container canvas');
-  const rect = await canvas.boundingBox();
-  expect(rect).not.toBeNull();
   const startX = Number(await game.getAttribute('data-player-x'));
-  await page.mouse.click(rect!.x + rect!.width * 0.63,
-    rect!.y + rect!.height * 0.43);
+  const firstClick = await campMovementTarget(page, canvas);
+  await expect(canvas).toHaveCSS('cursor', 'crosshair');
+  await page.mouse.click(firstClick.x, firstClick.y);
   await expect.poll(async () => Math.abs(
     Number(await game.getAttribute('data-player-x')) - startX
   ), { timeout: 8_000 }).toBeGreaterThan(14);
 
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.enemy-roster button:not([disabled])').first()).toBeEnabled();
   await timedNaturalStage('starter first kill', () => keepFighting(page, 1, 45_000));
   await expect(guide).toHaveAttribute('data-guide-step', 'loot');
   const loot = page.getByTestId('nearby-loot');
@@ -1094,6 +1114,7 @@ test.describe('touch input', () => {
   await page.locator('#menu-language').selectOption('cs');
   await page.getByRole('button', { name: /Paladin/ }).click();
   await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
+  await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toBeVisible();
   await page.getByRole('button', { name: 'Promluvit se strážkyní' }).click();
   const dialog = page.getByRole('dialog', { name: 'Strážkyně Vesna' });
   await dialog.getByRole('button', { name: 'Přijmout úkol' }).click();

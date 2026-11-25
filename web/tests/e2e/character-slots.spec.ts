@@ -21,7 +21,7 @@ async function createHero(page: import('@playwright/test').Page, classId: string
 }
 
 test('two different heroes retain separate slots and character/world identity after reload', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await createHero(page, 'WARRIOR');
   const warriorSeed = await page.locator('.game-screen').getAttribute('data-world-seed');
@@ -45,7 +45,7 @@ test('two different heroes retain separate slots and character/world identity af
 });
 
 test('two-step deletion removes only its own saved character and world record', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await createHero(page, 'WARRIOR');
   await page.getByRole('button', { name: 'Main menu' }).click();
@@ -67,7 +67,7 @@ test('two-step deletion removes only its own saved character and world record', 
 });
 
 test('legacy single-slot hero and its world are preserved when a new hero is created', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await createHero(page, 'WARRIOR');
   await expect.poll(async () => page.evaluate(async () => {

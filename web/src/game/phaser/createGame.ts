@@ -1,15 +1,11 @@
 import Phaser from 'phaser';
-import { FrontierScene } from './FrontierScene';
-import { IsometricPreviewScene } from './IsometricPreviewScene';
+import { IsometricScene } from './IsometricScene';
 import type { GameBridge } from '../bridge/GameBridge';
 import { renderFilterConfig } from '../ui/displayModes';
 import type { PixelFilterPreference } from '../ui/visualPreferences';
 
 export function createGame(parent: HTMLElement, bridge: GameBridge,
   pixelFilter: PixelFilterPreference = 'sharp'): Phaser.Game {
-  // Explicit opt-in until the full projected renderer passes Act I acceptance.
-  const preview = typeof window !== 'undefined'
-    && new URLSearchParams(window.location.search).get('view') === 'iso';
   return new Phaser.Game({
     type: Phaser.AUTO,
     parent,
@@ -23,6 +19,6 @@ export function createGame(parent: HTMLElement, bridge: GameBridge,
       width: '100%',
       height: '100%'
     },
-    scene: [preview ? new IsometricPreviewScene(bridge) : new FrontierScene(bridge)]
+    scene: [new IsometricScene(bridge)]
   });
 }

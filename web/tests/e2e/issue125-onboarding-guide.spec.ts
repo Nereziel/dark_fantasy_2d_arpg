@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('Issue #125: new player gets an optional, quest-aware first-play guide', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const guide = page.getByTestId('onboarding-guide');
@@ -42,7 +42,7 @@ test('Issue #125: new player gets an optional, quest-aware first-play guide', as
 
 test('Issue #125: Czech/touch guide stays in scroll-safe HUD and never blocks other panels', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 740 });
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('cs');
   await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
   const guide = page.getByTestId('onboarding-guide');

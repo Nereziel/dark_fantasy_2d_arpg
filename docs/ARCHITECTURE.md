@@ -20,7 +20,7 @@ screen / pointer
 ```
 
 - `web/src/game/phaser/isometricProjection.ts` defines the shared 2:1 projection: x = origin.x + world.x − world.y, y = origin.y + (world.x + world.y)/2 − elevation. Elevation, camera offsets, sprite pivots and depth are view data; they are not persisted or used as authoritative collision coordinates.
-- `FrontierScene.ts` is the classic fallback; `IsometricPreviewScene.ts` is the opt-in adapter. They consume the same simulation and validated world geometry. G1 must prove interaction parity and natural existing-story gameplay before a separate default-switch PR. Classic remains available through G5.
+- `IsometricScene.ts` is the sole world presentation adapter after G1/E3. It consumes the simulation and validated world geometry; obsolete view URL parameters do not select a renderer. G1 interaction parity and natural existing-story gameplay must be accepted on the exact integration SHA before deployment and G2.
 - `isometricPicking.ts`, `isometricOcclusion.ts`, `isometricCutaway.ts`, `isometricBuildings.ts`, `isometricActorFacing.ts`, `isometricCombat.ts`, `isometricGroundLayer.ts` and `isometricTerrain.ts` own view geometry, not simulation. Independent facade/roof fade is the target of PR #253; eight-direction functional animation and camera-aware streaming require G1 verification.
 - Fog is exclusively a map/minimap projection of seed-scoped discovery. The world scene has no discovery mask or exploration dimming. Natural lighting, opaque faces and cutaway remain independent.
 - A* and interaction authorization stay in the simulation. Body/ground picking issues typed commands; clicking an NPC, portal, loot or chest must not bypass collision or LOS. All combat timing and hit shapes are world-space, projected by the renderer. Camera culling never changes authoritative encounter lifecycle.
@@ -34,7 +34,7 @@ G2 completes #208 and #207: deterministic regional terrain and connected settlem
 The site at `https://nereziel.github.io/dark_fantasy_2d_arpg/` now deploys **`web/dist/`** instead of the old root HTML engine. The original root HTML engine is kept for reference. The [roadmap](ROADMAP.md) tracks campaign and release scope.
 
 - **Svelte 5:** menu, selection of six classes, HUD, inventory/equipment, localized NPC dialogue, merchant and blacksmith panels, quest journal and runtime locale.
-- **Phaser 4.2.1:** classic and opt-in isometric world adapters, camera, projection/picking, actor proxies, seeded terrain, portal drawings, loot, selected-target indicators and telegraphs. The renderer never owns gameplay state.
+- **Phaser 4.2.1:** single isometric world adapter, camera, projection/picking, actor proxies, seeded terrain, portal drawings, loot, selected-target indicators and telegraphs. The renderer never owns gameplay state.
 - **Character model (Prompt 02):** `web/src/game/stats/deriveStats.ts` owns primary and derived character stats; `web/src/game/entities/player.ts` owns spawn, max-health adjustments and resource regeneration. All derive on demand from class base values and equipped items. Svelte `CharacterSheet` is a read-only projection opened with C and is translated in CS/EN. Derived dodge/block and elemental resistances are now applied to incoming attack types; shields absorb after mitigation and are ephemeral. Further life-steal and advanced stat content is deferred to future item/skill prompts.
 - **Strict TypeScript simulation:** authoritative movement and collision, combat timelines, skills, status effects, enemy AI and bosses, zone transitions, progression, loot, economy, inventory/equipment and quest state.
 - **`svelte-i18n`:** Czech and English dictionaries, changed without reloading the game.
@@ -63,7 +63,7 @@ The starter base attributes for Warrior, Paladin, Mage, Rogue, Necromancer and W
 
 - `web/src/game/entities/player.ts` and `web/src/game/stats/deriveStats.ts` are used by the simulation for hero creation, equipment-driven statistics, health and regeneration (Agent 01).
 - `resolveReachableDestination` in `web/src/game/world/navigation.ts` finds the closest reachable point for blocked ground destinations. The simulation computes an A* route to this point, so clicking a wall is not silently ignored (Agent 02).
-- `web/src/game/input/contextResolver.ts` resolves terrain, enemy, loot, NPC and portal targets deterministically. `FrontierScene` uses it for both click commands and contextual cursor hints; blocked ground is forwarded to reachability resolution (Agent 03).
+- `web/src/game/input/contextResolver.ts` resolves terrain, enemy, loot, NPC and portal targets deterministically. `IsometricScene` uses it through inverse projection and occlusion-aware picking for click commands and contextual cursor hints; blocked ground is forwarded to reachability resolution (Agent 03).
 - `web/src/game/input/bindings.ts` maps browser `KeyboardEvent.code` and mouse buttons into actions. `gameBindings.ts` uses the same defaults for live input. Right-click and 1–6 activate skills, Q uses the potion, Shift holds position, middle-click forces movement and Space evades.
 - `web/src/game/combat/typedDamage.ts` resolves physical and elemental damage, dodge/block and healing. The simulation runs on a fixed time step.
 

@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
  * Explicitly exercise the seven-button class across desktop, tablet and mobile.
  */
 test('combat dock contains all seven skills, vitals and clickable actions without overlap', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -61,7 +61,7 @@ test('combat dock contains all seven skills, vitals and clickable actions withou
 });
 
 test('map stays above combat dock and has an accessible close control on every screen', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   for (const viewport of [

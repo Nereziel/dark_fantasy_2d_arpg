@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 test('Paladin offers seven real localized abilities, Faith and keyboard 2–6',async ({page})=>{
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button',{name:/Paladin/}).click();
   await page.getByRole('button',{name:'Enter the world'}).click();

@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { heldIsoMoveEast } from './iso-input';
 
 test('switches Czech/English in the menu and game without losing the scene', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await expect(page.getByRole('heading', { name: 'Aether & Ruin' })).toBeVisible();
 
   await page.locator('#menu-language').selectOption('cs');
@@ -9,7 +10,7 @@ test('switches Czech/English in the menu and game without losing the scene', asy
 
   await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
   await expect(page.locator('.game-hud')).toBeVisible();
-  await expect(page.locator('.phaser-container canvas')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Poražení nepřátelé')).toBeVisible();
   await expect(page.locator('.enemy-roster')).toContainText('Přízrak');
 
@@ -35,7 +36,7 @@ test('switches Czech/English in the menu and game without losing the scene', asy
 });
 
 test('creates a Rogue, opens localized inventory, saves and reloads its class', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   const rogue = page.getByRole('button', { name: /Rogue/ });
   await expect(rogue).toBeVisible();
@@ -58,7 +59,7 @@ test('creates a Rogue, opens localized inventory, saves and reloads its class', 
 });
 
 test('casts a Paladin ability and localizes effects without restarting the game', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -82,7 +83,7 @@ test('casts a Paladin ability and localizes effects without restarting the game'
 });
 
 test('retains character-only save v11 and resumes separate seed-scoped world record', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Rogue/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -128,7 +129,7 @@ test('retains character-only save v11 and resumes separate seed-scoped world rec
 });
 
 test('talks to Warden Vesna, accepts the quest and loads its persistent progress', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const journal = page.locator('.quest-journal');
@@ -164,7 +165,7 @@ test('buys equipment, tempers it at the smith and reloads persistent upgrades', 
   // Buying, tempering, two service visits and real Save/Load all happen in one
   // acceptance flow; permit this scenario realistic time under concurrent CI.
   test.setTimeout(60_000);
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
@@ -218,7 +219,7 @@ test('buys equipment, tempers it at the smith and reloads persistent upgrades', 
 });
 
 test('enters a separate procedurally generated crypt, returns to camp and reloads outdoors', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'wilderness');
@@ -246,7 +247,7 @@ test('enters a separate procedurally generated crypt, returns to camp and reload
 });
 
 test('opens the derived character sheet, switches locales live, and closes with C or Escape', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Character (C)' }).click();
@@ -272,7 +273,7 @@ test('opens the derived character sheet, switches locales live, and closes with 
 });
 
 test('new input mappings evade on Space and toggle pause on Escape', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const game = page.locator('.game-screen');
@@ -311,7 +312,7 @@ test('new input mappings evade on Space and toggle pause on Escape', async ({ pa
 });
 
 test('rebinds inventory from I to O in the controls panel and reloads this preference', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('Escape');
@@ -334,25 +335,16 @@ test('rebinds inventory from I to O in the controls panel and reloads this prefe
 });
 
 test('holding mouse movement updates the destination without creating combat commands', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
-  const canvas = page.locator('.phaser-container canvas');
+  const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
-  const bounds = await canvas.boundingBox();
-  expect(bounds).not.toBeNull();
-  const game = page.locator('.game-screen');
-  const before = Number(await game.getAttribute('data-player-x'));
-  await page.mouse.move(bounds!.x + bounds!.width * 0.61, bounds!.y + bounds!.height * 0.40);
-  await page.mouse.down();
-  await page.mouse.move(bounds!.x + bounds!.width * 0.77, bounds!.y + bounds!.height * 0.40, { steps: 8 });
-  await expect.poll(async () => Number(await game.getAttribute('data-player-x')), { timeout: 5_000 })
-    .toBeGreaterThan(before + 12);
-  await page.mouse.up();
+  await heldIsoMoveEast(page, canvas);
 });
 
 test('Warrior War Cry uses the simulation timeline and localizes active buffs', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const cry = page.getByRole('button', { name: 'War Cry' });
@@ -368,7 +360,7 @@ test('Warrior War Cry uses the simulation timeline and localizes active buffs', 
 });
 
 test('stores a purchased item in the permanent camp stash and retrieves it after reloading', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
 
@@ -403,10 +395,10 @@ test('stores a purchased item in the permanent camp stash and retrieves it after
 test('re-entering the game releases destroyed scene event listeners and keeps movement running', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
-  const canvas = page.locator('.phaser-container canvas');
+  const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
 
   // App reuses its GameBridge, but Svelte destroys and recreates the Phaser game.
@@ -421,15 +413,6 @@ test('re-entering the game releases destroyed scene event listeners and keeps mo
   await page.keyboard.press('q');
   await expect(page.getByTestId('use-potion')).toContainText('0');
 
-  const bounds = await canvas.boundingBox();
-  expect(bounds).not.toBeNull();
-  const screen = page.locator('.game-screen');
-  const before = Number(await screen.getAttribute('data-player-x'));
-  await page.mouse.move(bounds!.x + bounds!.width * 0.61, bounds!.y + bounds!.height * 0.40);
-  await page.mouse.down();
-  await page.mouse.move(bounds!.x + bounds!.width * 0.77, bounds!.y + bounds!.height * 0.40, { steps: 8 });
-  await expect.poll(async () => Number(await screen.getAttribute('data-player-x')), { timeout: 5_000 })
-    .toBeGreaterThan(before + 12);
-  await page.mouse.up();
+  await heldIsoMoveEast(page, canvas);
   expect(errors).toEqual([]);
 });

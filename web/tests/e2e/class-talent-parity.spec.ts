@@ -47,7 +47,7 @@ async function grantThreeTalentPoints(page: Page): Promise<void> {
 
 for (const { id, title, nodes } of examples) {
   test(`${id} can invest, persist, respec and localize three linked talents`, async ({ page }) => {
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: new RegExp(id === 'NECROMANCER' ? 'Necromancer' :
       id === 'WARLOCK' ? 'Warlock' : 'Rogue') }).click();

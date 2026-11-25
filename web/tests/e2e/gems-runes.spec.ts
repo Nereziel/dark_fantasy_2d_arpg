@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('forges a Ruby from naturally salvaged material and persists the gem wallet', async ({page})=>{
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button',{name:'Enter the world'}).click();
   await page.getByRole('button',{name:'Browse wares'}).click();
@@ -38,7 +38,7 @@ test('forges a Ruby from naturally salvaged material and persists the gem wallet
 });
 
 test('inserts gem into a real socket, saves the socket and extracts stone at the smith', async ({page})=>{
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button',{name:'Enter the world'}).click();
   await page.getByRole('button',{name:'Browse wares'}).click();

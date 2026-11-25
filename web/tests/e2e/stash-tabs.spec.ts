@@ -6,7 +6,7 @@ test('multi-tab stash transfers, filters and persists stable item IDs in charact
   test.setTimeout(90_000);
   page.setDefaultTimeout(12_000);
   await test.step('Create hero and buy a real armor item', async () => {
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: 'Enter the world' }).click();
     await page.getByRole('button', { name: 'Browse wares' }).click();
@@ -58,7 +58,7 @@ test('multi-tab stash transfers, filters and persists stable item IDs in charact
 
 
 test('drag and drop moves protected-safe items across bag, stash and tabs', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();

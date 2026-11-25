@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 
 test('F0 HUD columns preserve a usable world canvas and modal focus at 390–1440px', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: /Paladin/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();

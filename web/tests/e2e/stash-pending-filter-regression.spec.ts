@@ -7,7 +7,7 @@ test.describe('touch stash view changes cancel pending transfers', () => {
 
   test('editing search cancels a backpack deposit before tapping another tab', async ({ page }) => {
     await page.setViewportSize({ width: 740, height: 390 });
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: 'Enter the world' }).tap();
     await page.getByRole('button', { name: 'Browse wares' }).tap();
@@ -37,7 +37,7 @@ test.describe('touch stash view changes cancel pending transfers', () => {
 
   test('category and sort changes cancel stored-item transfers but explicit re-arm still works', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 740 });
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: 'Enter the world' }).tap();
     await page.getByRole('button', { name: 'Browse wares' }).tap();

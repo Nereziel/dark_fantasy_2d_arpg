@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * but cannot certify physical keyboard behavior on Windows/Linux/macOS.
  */
 test('AltGr is ignored during Controls capture, and valid chords work afterward', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('Escape');
@@ -38,7 +38,7 @@ test('AltGr is ignored during Controls capture, and valid chords work afterward'
 });
 
 test('AltGr key events cannot activate rebound standalone AltRight hold', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.evaluate(() => {
     localStorage.setItem('aether-ruin-controls-v1', JSON.stringify([
       { action: 'HOLD_POSITION', device: 'keyboard', code: 'AltRight' }

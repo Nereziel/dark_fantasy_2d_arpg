@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 test('Necromancer summons real allies, shows corpse HUD and reloads character-only',async({page})=>{
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button',{name:/Necromancer/}).click();
   await page.getByRole('button',{name:'Enter the world'}).click();

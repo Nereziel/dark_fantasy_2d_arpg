@@ -5,7 +5,7 @@ test.describe('mobile touch HUD', () => {
   test.use({ hasTouch: true });
 
   test('all seven skills and five quick actions remain reachable in portrait and landscape', async ({ page }) => {
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: /Paladin/ }).click();
     await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -83,7 +83,7 @@ test.describe('mobile touch HUD', () => {
 
   test('modal close is visible and background is inert on small screens', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 568 });
-    await page.goto('./');
+    await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('cs');
     await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
 

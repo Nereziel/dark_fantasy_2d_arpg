@@ -1,7 +1,7 @@
-// GPL-3.0-only — opt-in engineering preview, not the production renderer.
+// GPL-3.0-only — default 2:1 isometric presentation; simulation remains Cartesian.
 import Phaser from 'phaser';
 import { get } from 'svelte/store';
-import { _ as translate, locale } from 'svelte-i18n';
+import { _ as translate } from 'svelte-i18n';
 import type { GameBridge } from '../bridge/GameBridge';
 import type { GameEvent, GameSnapshot, Point, ZoneId } from '../core/types';
 import { EnemyPresentation, snapshotEnemyWindup } from './isometricEnemyPresentation';
@@ -20,7 +20,7 @@ import { getTownManifest, townEntry } from '../world/townManifest';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
 import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, type Obstacle } from '../world/navigation';
 import { contextToCommand, cursorForContext } from '../input/contextResolver';
-import { resolvePointerAction } from '../input/bindings';
+import { resolveWorldPointerAction } from '../input/bindings';
 import { dispatchCombatAction } from '../input/combatActionDispatcher';
 import { HeldPointerMovement } from '../input/heldMovement';
 import { projectIsometric, isometricBounds, isometricDepth } from './isometricProjection';
@@ -54,7 +54,7 @@ type ImpactVisual = {
 };
 const MAX_IMPACT_VISUALS = 64;
 
-export class IsometricPreviewScene extends Phaser.Scene {
+export class IsometricScene extends Phaser.Scene {
   private readonly impacts: ImpactVisual[] = [];
   private readonly enemyPresentation = new EnemyPresentation();
   private ground!: IsometricGroundLayer;
@@ -63,7 +63,6 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private missiles!: Phaser.GameObjects.Graphics;
   private healthBars!: Phaser.GameObjects.Graphics;
   private anchor!: Phaser.GameObjects.Graphics;
-  private label!: Phaser.GameObjects.Text;
   private villageResidents: readonly VillageResident[] = [];
   private readonly walls: Phaser.GameObjects.Graphics[] = [];
   private readonly wallPaintBounds: (IsometricRect | null)[] = [];
@@ -81,7 +80,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private dungeonEntrances: ActIDungeonEntrance[] = [];
   private readonly held = new HeldPointerMovement();
 
-  constructor(private readonly bridge: GameBridge) { super({ key: 'IsometricPreview' }); }
+  constructor(private readonly bridge: GameBridge) { super({ key: 'Isometric' }); }
 
   create(): void {
     this.ground = new IsometricGroundLayer(this);
@@ -97,10 +96,9 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.cameras.main.setBounds(bounds.x, bounds.y, bounds.width, bounds.height)
       .setZoom(1).centerOn(p.x, p.y).startFollow(this.anchor, true, 0.12, 0.12);
     this.syncGround(p);
-    this.label = this.add.text(12, 12, '', { fontSize: '13px', color: '#f0dbab',
-      backgroundColor: '#141a20', padding: { x: 6, y: 4 } })
-      .setScrollFactor(0).setDepth(10000);
+    // Stable diagnostic value retained for existing browser tooling.
     this.game.canvas.dataset.renderer = 'isometric-preview';
+    this.game.canvas.dataset.projectionOrigin = ORIGIN.x + ',' + ORIGIN.y;
     this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', this.click, this);
     this.input.on('pointermove', this.hover, this);
@@ -131,6 +129,9 @@ export class IsometricPreviewScene extends Phaser.Scene {
       this.lastCutawayHero = undefined;
       if (this.game.canvas) {
         delete this.game.canvas.dataset.renderer;
+        delete this.game.canvas.dataset.projectionOrigin;
+        delete this.game.canvas.dataset.renderZone;
+        delete this.game.canvas.dataset.cameraOrigin;
         delete this.game.canvas.dataset.groundChunks;
         delete this.game.canvas.dataset.groundResidentChunks;
         delete this.game.canvas.dataset.propMaterials;
@@ -184,6 +185,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       }
     }
     this.game.canvas.dataset.groundChunks = String(this.ground.total);
+    this.game.canvas.dataset.renderZone = state.zone;
     // Static layered art shares the exact collision footprint. Split long
     // obstacles into bounded sections to preserve local painter depth.
     const materials = new Set<ObstacleMaterial>();
@@ -223,7 +225,12 @@ export class IsometricPreviewScene extends Phaser.Scene {
 
   private syncGround(follow: Readonly<Point>): void {
     const camera = this.cameras.main;
-    // The preview camera has fixed zoom=1, no rotation, and follows the hero.
+    // Read-only camera diagnostics for browser acceptance.
+    // Values are projected scene units, not Cartesian world coordinates.
+    const cameraOrigin = camera.scrollX + ',' + camera.scrollY;
+    if (this.game.canvas.dataset.cameraOrigin !== cameraOrigin)
+      this.game.canvas.dataset.cameraOrigin = cameraOrigin;
+    // The isometric camera has fixed zoom=1, no rotation, and follows the hero.
     // Include both current scroll and the destination to cover follow lag.
     if (camera.width <= 0 || camera.height <= 0) return;
     const envelope = groundCameraEnvelope({
@@ -315,7 +322,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
   }
 
   private click(pointer: Phaser.Input.Pointer): void {
-    const action = resolvePointerAction({ button: pointer.button, uiCaptured: this.captured() },
+    const action = resolveWorldPointerAction({ button: pointer.button, wasTouch: pointer.wasTouch, uiCaptured: this.captured() },
       this.bridge.bindings());
     if (!action) return;
     const { context, ground, aim } = this.pick(pointer);
@@ -649,7 +656,5 @@ export class IsometricPreviewScene extends Phaser.Scene {
     }
     this.renderCombat(state);
     this.updateImpacts();
-    this.label.setText(get(locale) === 'cs'
-      ? '2,5D – vývojový náhled' : '2.5D – development preview');
   }
 }

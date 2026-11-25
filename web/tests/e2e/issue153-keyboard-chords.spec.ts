@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('rebinding Ctrl+M changes map gameplay shortcut and HUD, persisting after reload', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('Escape');
@@ -36,7 +36,7 @@ test('rebinding Ctrl+M changes map gameplay shortcut and HUD, persisting after r
 });
 
 test('Shift+1 potion overrides regular skill 1 while Shift still holds position', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.locator('[data-potion-id="resistance"]').click();
@@ -63,7 +63,7 @@ test('Shift+1 potion overrides regular skill 1 while Shift still holds position'
 });
 
 test('standalone modifier captured on keyup, not prematurely on keydown', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('Escape');
@@ -79,7 +79,7 @@ test('standalone modifier captured on keyup, not prematurely on keydown', async 
 });
 
 test('Ctrl+M HOLD_POSITION releases when Ctrl is lifted before M', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('Escape');

@@ -1,11 +1,12 @@
 // Issue #102: LMB/RMB handedness must survive reloading the v1 override set.
 import { test, expect } from '@playwright/test';
+import { isoGroundPoint } from './iso-input';
 
 test('primary and secondary mouse bindings swap atomically and persist across reload', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
-  const canvas = page.locator('.phaser-container canvas');
+  const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
   await expect(page.locator('.skill-shortcut').first()).toHaveText('RMB');
 
@@ -38,13 +39,8 @@ test('primary and secondary mouse bindings swap atomically and persist across re
     x: Number(node.getAttribute('data-player-x')),
     y: Number(node.getAttribute('data-player-y'))
   }));
-  const box = await canvas.boundingBox();
-  expect(box).not.toBeNull();
-  // Camp spawn is west of the camera center on desktop. Clicking far to the
-  // right overlaps the first encounter (enemy context => attack), so choose
-  // nearby open ground away from NPCs and the procedurally seeded encounter.
-  await page.mouse.click(box!.x + box!.width / 2 - 80,
-    box!.y + box!.height / 2 + 75, { button: 'right' });
+  const point = await isoGroundPoint(canvas, { x: start.x + 70, y: start.y });
+  await page.mouse.click(point.x, point.y, { button: 'right' });
   // Playwright executes locator.evaluate in the browser: pass the origin as an
   // explicit argument rather than capturing the test runner's local variable.
   await expect.poll(async () => page.locator('.game-screen').evaluate((node, origin) =>

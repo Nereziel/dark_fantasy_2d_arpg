@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
  * back to an older selection; transfers still require explicit Move.
  */
 test('hovered item remains the inspector action target after cursor leaves the bag or gear', async ({ page }) => {
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();

@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 test('Warlock exposes seven abilities, summons a real demon, and reloads without transient allies',async({page})=>{
-  await page.goto('./');
+  await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await page.getByRole('button',{name:/Warlock/}).click();
   await page.getByRole('button',{name:'Enter the world'}).click();
