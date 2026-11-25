@@ -38,6 +38,7 @@ import {
 import { buildWilderness } from '../world/wildernessRuntime';
 import { CORRUPTION_TRAIL_ID, FOREST_SIDE_TRAIL_ID } from '../world/forestTrail';
 import { buildCryptWorld } from '../world/dungeonRuntime';
+import { planOptionalDungeonDecorations } from '../world/optionalDungeonDecorations';
 import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
 import { dungeonPortalTargets, dungeonPortalCommand, dungeonRenderSeed } from '../world/dungeonPortalPresentation';
 import type { ProceduralDungeonResult, DungeonRoomType } from '../world/proceduralDungeon';
@@ -1481,6 +1482,9 @@ export class FrontierScene extends Phaser.Scene {
         g.fillStyle(style.wallShadow,.18).fillRect(tile.x+9+(v>>>16)%19,tile.y+8+v%17,5,3);
       }else g.lineStyle(1, 0x786c76, 0.11)
         .strokeRect(tile.x + 2, tile.y + 2, 36, 36);
+    }
+    for(const decoration of planOptionalDungeonDecorations(dungeon,dungeonId)){
+      g.fillStyle(decoration.color).fillPoints(decoration.points.map(p=>new Phaser.Math.Vector2(p.x,p.y)),true);
     }
     for (const door of dungeon.doors) {
       const color = door.kind === 'hidden' ? 0x64837c : 0x9b8481;
