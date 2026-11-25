@@ -101,6 +101,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
       backgroundColor: '#141a20', padding: { x: 6, y: 4 } })
       .setScrollFactor(0).setDepth(10000);
     this.game.canvas.dataset.renderer = 'isometric-preview';
+    this.game.canvas.dataset.projectionOrigin = ORIGIN.x + ',' + ORIGIN.y;
     this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', this.click, this);
     this.input.on('pointermove', this.hover, this);
@@ -131,6 +132,8 @@ export class IsometricPreviewScene extends Phaser.Scene {
       this.lastCutawayHero = undefined;
       if (this.game.canvas) {
         delete this.game.canvas.dataset.renderer;
+        delete this.game.canvas.dataset.projectionOrigin;
+        delete this.game.canvas.dataset.cameraOrigin;
         delete this.game.canvas.dataset.groundChunks;
         delete this.game.canvas.dataset.groundResidentChunks;
         delete this.game.canvas.dataset.propMaterials;
@@ -223,6 +226,11 @@ export class IsometricPreviewScene extends Phaser.Scene {
 
   private syncGround(follow: Readonly<Point>): void {
     const camera = this.cameras.main;
+    // Read-only camera diagnostics, matching the classic renderer contract.
+    // Values are projected scene units, not Cartesian world coordinates.
+    const cameraOrigin = camera.scrollX + ',' + camera.scrollY;
+    if (this.game.canvas.dataset.cameraOrigin !== cameraOrigin)
+      this.game.canvas.dataset.cameraOrigin = cameraOrigin;
     // The preview camera has fixed zoom=1, no rotation, and follows the hero.
     // Include both current scroll and the destination to cover follow lag.
     if (camera.width <= 0 || camera.height <= 0) return;
