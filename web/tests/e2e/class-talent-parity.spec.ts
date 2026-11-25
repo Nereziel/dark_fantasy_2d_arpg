@@ -1,3 +1,4 @@
+import { openCharacterCreation, loadCharacterControl } from './character-menu';
 // Issue #122: new class talents are playable, localized and persistent.
 // GPL-3.0-only.
 import { test, expect, type Page } from '@playwright/test';
@@ -49,6 +50,7 @@ for (const { id, title, nodes } of examples) {
   test(`${id} can invest, persist, respec and localize three linked talents`, async ({ page }) => {
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
+    await openCharacterCreation(page);
     await page.getByRole('button', { name: new RegExp(id === 'NECROMANCER' ? 'Necromancer' :
       id === 'WARLOCK' ? 'Warlock' : 'Rogue') }).click();
     await page.getByRole('button', { name: 'Enter the world' }).click();
@@ -56,7 +58,7 @@ for (const { id, title, nodes } of examples) {
     await expect(page.getByRole('status')).toContainText('Hero saved');
     await page.reload();
     await grantThreeTalentPoints(page);
-    await page.getByRole('button', { name: 'Load', exact: true }).click();
+    await loadCharacterControl(page).click();
     await page.getByRole('button', { name: /Talents/ }).click();
     const dialog = page.getByRole('dialog', { name: title });
     await expect(dialog).toBeVisible();
@@ -73,7 +75,7 @@ for (const { id, title, nodes } of examples) {
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('Hero saved');
     await page.reload();
-    await page.getByRole('button', { name: 'Load', exact: true }).click();
+    await loadCharacterControl(page).click();
     await page.getByRole('button', { name: 'Talents' }).click();
     const reloaded = page.getByRole('dialog', { name: title });
     for (const talentId of nodes)

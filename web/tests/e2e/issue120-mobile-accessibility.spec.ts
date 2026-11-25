@@ -1,3 +1,4 @@
+import { openCharacterCreation } from './character-menu';
 // Issue #120 — touch HUD, geometry and modal focus regression. GPL-3.0-only.
 import { expect, test } from '@playwright/test';
 
@@ -7,6 +8,7 @@ test.describe('mobile touch HUD', () => {
   test('all seven skills and five quick actions remain reachable in portrait and landscape', async ({ page }) => {
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
+    await openCharacterCreation(page);
     await page.getByRole('button', { name: /Paladin/ }).click();
     await page.getByRole('button', { name: 'Enter the world' }).click();
 
@@ -85,6 +87,7 @@ test.describe('mobile touch HUD', () => {
     await page.setViewportSize({ width: 320, height: 568 });
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('cs');
+    await openCharacterCreation(page);
     await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
 
     await page.locator('[data-quick-action="inventory"]').tap();

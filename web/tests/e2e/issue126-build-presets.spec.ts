@@ -1,3 +1,4 @@
+import { openCharacterCreation, loadCharacterControl } from './character-menu';
 // F1 — preset UI round trip on a real touch-width HUD. GPL-3.0-only.
 import { test, expect } from '@playwright/test';
 
@@ -6,6 +7,7 @@ test('build presets retain saved layout and preview without changing talents', a
   await page.setViewportSize({ width: 320, height: 740 });
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: /Warrior/ }).click();
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByTestId('edit-hotbar').click();
@@ -23,7 +25,7 @@ test('build presets retain saved layout and preview without changing talents', a
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await loadCharacterControl(page).click();
   await page.getByTestId('edit-hotbar').click();
   await expect(page.getByTestId('build-preset-apply')).toBeEnabled();
   await page.getByTestId('build-preset-clear').click();

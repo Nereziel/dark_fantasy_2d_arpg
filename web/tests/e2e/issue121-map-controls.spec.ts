@@ -1,3 +1,4 @@
+import { openCharacterCreation, loadCharacterControl } from './character-menu';
 // Issue #121 — real map interactions and no fog disclosure.
 // GPL-3.0-only.
 import { test, expect } from '@playwright/test';
@@ -5,6 +6,7 @@ import { test, expect } from '@playwright/test';
 test('discovered terrain and soil roads render without exposing hidden POI', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('m');
 
@@ -40,7 +42,7 @@ test('discovered terrain and soil roads render without exposing hidden POI', asy
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await loadCharacterControl(page).click();
   await expect(page.locator('[data-minimap="active"]')).toBeVisible();
   await expect(page.getByRole('status')).toContainText('Hero loaded');
   await page.keyboard.press('m');
@@ -56,6 +58,7 @@ test.describe('phone map controls', () => {
   test('touch-sized controls, drag and two-finger zoom keep close visible', async ({ page }) => {
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('cs');
+    await openCharacterCreation(page);
     await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
     await page.locator('.game-header').getByRole('button', { name: 'Mapa', exact: true }).tap();
     const dialog = page.getByTestId('world-map-dialog');

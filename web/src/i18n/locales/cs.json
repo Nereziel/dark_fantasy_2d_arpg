@@ -138,9 +138,9 @@
   "menu": {
     "subtitle": "Temná země čeká",
     "start": "Vstoupit do světa",
-    "continue": "Pokračovat v průzkumu",
+    "continue": "Pokračovat ve hře",
     "new": "Nová postava",
-    "help": "Vyber hrdinu. Hra ukládá postavu automaticky. Po dalším spuštění vznikne nové rozložení divočiny.",
+    "help": "Vyber uloženou postavu a pokračuj, nebo vytvoř novou. Postup se ukládá automaticky.",
     "current": "Nová verze · raná vývojová fáze",
     "language": "Jazyk",
     "back": "Zpět do menu",
@@ -180,9 +180,10 @@
     "paused": "Pauza",
     "saving": "Ukládání postavy…",
     "saved": "Postava uložena",
-    "loaded": "Postava načtena – začíná nový svět",
+    "loaded": "Postava načtena",
     "saveError": "Uložení není dostupné",
-    "emptySave": "Není uložená žádná kompatibilní postava"
+    "emptySave": "Není uložená žádná kompatibilní postava",
+    "worldRestoreError": "Postava načtena; uložený průzkum není kompatibilní."
   },
   "controls": {
     "move": "Pohyb: klikni nebo drž levé tlačítko",
@@ -301,7 +302,10 @@
     "resource": "Zdroj",
     "equipment": "Počáteční výbava",
     "overwriteWarning": "Vytvoření nového hrdiny přepíše dosavadní uloženou postavu a její postup ve světě.",
-    "multiSlotHint": "Noví hrdinové mají samostatné pozice. Stávající postavy zůstanou uložené."
+    "multiSlotHint": "Noví hrdinové mají samostatné pozice. Stávající postavy zůstanou uložené.",
+    "name": "Jméno postavy",
+    "namePlaceholder": "např. Šárka z lesa",
+    "nameHint": "1–32 znaků: písmena, číslice, mezery, apostrofy a pomlčky."
   },
   "classes": {
     "WARRIOR": {
@@ -1540,7 +1544,9 @@
     "confirmDelete": "Trvale smazat?",
     "cancel": "Zrušit",
     "deleted": "Uložená postava byla smazána",
-    "full": "Všechny pozice jsou obsazené. Před vytvořením další postavy jednu smaž."
+    "full": "Všechny pozice jsou obsazené. Před vytvořením další postavy jednu smaž.",
+    "loading": "Načítání postav…",
+    "unnamed": "Nepojmenovaná postava"
   },
   "visualSettings": {
     "title": "Nastavení zobrazení a přístupnosti",

@@ -1,8 +1,10 @@
+import { openCharacterCreation } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('mouse HOLD_POSITION follows down/up, clears on pause, persists after reload', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const game = page.locator('.game-screen'), canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
@@ -37,6 +39,7 @@ test('mouse HOLD_POSITION follows down/up, clears on pause, persists after reloa
 
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Controls' }).click();
@@ -55,6 +58,7 @@ test('Shift and mouse are independent; blur and pointercancel unhold safely', as
   ])));
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]'), game = page.locator('.game-screen');
   const rect = await canvas.boundingBox();

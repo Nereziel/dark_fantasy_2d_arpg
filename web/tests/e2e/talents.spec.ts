@@ -1,3 +1,4 @@
+import { openCharacterCreation, loadCharacterControl } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 /**
@@ -8,6 +9,7 @@ import { test, expect } from '@playwright/test';
 test('spends, saves, reloads and refunds Warrior talent ranks through the UI', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
@@ -48,7 +50,7 @@ test('spends, saves, reloads and refunds Warrior talent ranks through the UI', a
     });
   });
 
-  await page.getByRole('button', { name: 'Load' }).click();
+  await loadCharacterControl(page).click();
   await expect(page.getByText('Warrior · Level 10')).toBeVisible();
   await page.getByRole('button', { name: /Talents/ }).click();
   const dialog = page.getByRole('dialog', { name: 'Warrior Talent Tree' });
@@ -70,7 +72,7 @@ test('spends, saves, reloads and refunds Warrior talent ranks through the UI', a
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
-  await page.getByRole('button', { name: 'Load' }).click();
+  await loadCharacterControl(page).click();
   await page.getByRole('button', { name: 'Talents' }).click();
   const reloaded = page.getByRole('dialog', { name: 'Warrior Talent Tree' });
   await expect(reloaded.locator('[data-talent-id="berserker.battleFury"] .ranks')).toHaveText('1/3');

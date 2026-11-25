@@ -1,3 +1,4 @@
+import { openCharacterCreation, loadCharacterControl } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 /**
@@ -7,6 +8,7 @@ import { expect, test } from '@playwright/test';
 test('bag click only inspects; equipping, unequipping and dragging preserve the item', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
@@ -54,6 +56,7 @@ test('bag click only inspects; equipping, unequipping and dragging preserve the 
 test('desktop click-to-move fallback supports both directions without accidental swaps', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
@@ -88,6 +91,7 @@ test('desktop click-to-move fallback supports both directions without accidental
 test('clicking two different bag items does not swap them until Move by click is armed', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
@@ -128,6 +132,7 @@ test.describe('landscape touch equipment management', () => {
     await page.setViewportSize({ width: 740, height: 390 });
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
+    await openCharacterCreation(page);
     await page.getByRole('button', { name: 'Enter the world' }).tap();
     await page.getByRole('button', { name: 'Browse wares' }).tap();
     const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
@@ -163,6 +168,7 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   test.setTimeout(60_000);
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
@@ -207,7 +213,7 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
-  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await loadCharacterControl(page).click();
   // Verify that the asynchronous character restore completed, not just that Load was clicked.
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
   await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
@@ -224,7 +230,7 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
-  await page.getByRole('button', { name: 'Load', exact: true }).click();
+  await loadCharacterControl(page).click();
   // Verify that the asynchronous character restore completed, not just that Load was clicked.
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
   await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();

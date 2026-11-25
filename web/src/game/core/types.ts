@@ -77,6 +77,8 @@ export interface ActorSnapshot extends Point {
 export interface CharacterProgress {
   /** Stable identity for new heroes; absent on legacy v8–v11 saves. */
   characterId?: string;
+  /** Optional display name owned by the character save, never a slot key. */
+  characterName?: string;
   classId: ClassId;
   level: number;
   xp: number;

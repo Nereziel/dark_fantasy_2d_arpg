@@ -1,3 +1,4 @@
+import { openCharacterCreation } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 // Touch regression: changing a stash view filter must never retain an armed
@@ -9,6 +10,7 @@ test.describe('touch stash view changes cancel pending transfers', () => {
     await page.setViewportSize({ width: 740, height: 390 });
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
+    await openCharacterCreation(page);
     await page.getByRole('button', { name: 'Enter the world' }).tap();
     await page.getByRole('button', { name: 'Browse wares' }).tap();
     const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
@@ -39,6 +41,7 @@ test.describe('touch stash view changes cancel pending transfers', () => {
     await page.setViewportSize({ width: 390, height: 740 });
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
+    await openCharacterCreation(page);
     await page.getByRole('button', { name: 'Enter the world' }).tap();
     await page.getByRole('button', { name: 'Browse wares' }).tap();
     const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });

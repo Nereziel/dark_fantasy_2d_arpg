@@ -3,6 +3,7 @@ import type { CharacterProgress } from '../game/core/types';
 import { MAX_LEVEL } from '../game/progression/progressionRules';
 import { createEquipment } from '../game/data/items';
 import { isCharacterId } from '../game/creation/characterCreation';
+import { normalizeCharacterName } from '../game/creation/characterName';
 
 const DATABASE = 'aether-ruin-web';
 const STORE = 'saves';
@@ -17,6 +18,7 @@ export function characterSaveKey(characterId: unknown): string | null {
 
 export interface SavedCharacterInfo {
   characterId: string;
+  characterName?: string;
   classId: CharacterProgress['classId'];
   level: number;
   savedAt: number;
@@ -36,7 +38,7 @@ export function summarizeSaveRecords(
       || (record.savedAt ?? -1) < 0) continue;
     const id = character.characterId ?? 'hero';
     if (key !== SLOT && key !== characterSaveKey(id)) continue;
-    const info = { characterId: id, classId: character.classId,
+    const info = { characterId: id, ...(character.characterName ? { characterName: character.characterName } : {}), classId: character.classId,
       level: character.level, savedAt: record.savedAt! };
     const current = catalog.get(id);
     if (!current || current.savedAt < info.savedAt
@@ -61,9 +63,13 @@ export interface SavedGame {
 
 export function validateCharacter(raw: unknown): CharacterProgress | null {
   if (!raw || typeof raw !== 'object') return null;
+  const input = raw as CharacterProgress;
+  const name = input.characterName === undefined ? undefined : normalizeCharacterName(input.characterName);
+  if (name === null) return null;
   const simulation = new GameSimulation();
-  return simulation.restoreCharacter(raw as CharacterProgress)
-    ? simulation.character() : null;
+  // Display-only metadata stays outside simulation authority.
+  if (!simulation.restoreCharacter(input)) return null;
+  return { ...simulation.character(), ...(name !== undefined ? { characterName: name } : {}) };
 }
 
 /** Export only explicitly whitelisted character fields, never a GameSnapshot. */

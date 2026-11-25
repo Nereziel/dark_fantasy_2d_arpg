@@ -1,9 +1,11 @@
+import { openCharacterCreation } from './character-menu';
 // Issue #102: a mouse-bound potion must affect authoritative gameplay.
 import { test, expect } from '@playwright/test';
 
 test('mouse-bound potion is usable and mapping persists after reload', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const canvas = page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toBeVisible();
@@ -38,6 +40,7 @@ test('mouse-bound potion is usable and mapping persists after reload', async ({ 
   ]));
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await expect(page.locator('.potion-key')).toHaveText('RMB');
   await expect(page.locator('.skill-shortcut').first()).toHaveText('Y');

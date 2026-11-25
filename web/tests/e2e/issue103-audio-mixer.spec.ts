@@ -1,9 +1,11 @@
+import { openCharacterCreation } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 test('seven-bus audio settings persist safely and remain usable on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 740 });
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.locator('.game-header .top-actions .small-button').nth(1).click();
   await page.getByTestId('open-visual-settings').click();
@@ -30,6 +32,7 @@ test('seven-bus audio settings persist safely and remain usable on mobile', asyn
   await page.getByTestId('visual-settings-close').click();
   await page.reload();
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.locator('.game-header .top-actions .small-button').nth(1).click();
   await page.getByTestId('open-visual-settings').click();

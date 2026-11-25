@@ -1,3 +1,4 @@
+import { openCharacterCreation } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 /** All inspector actions must target the item most recently previewed by a
@@ -7,6 +8,7 @@ import { expect, test } from '@playwright/test';
 test('hovered item remains the inspector action target after cursor leaves the bag or gear', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   await page.getByRole('button', { name: 'Browse wares' }).click();
   const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });

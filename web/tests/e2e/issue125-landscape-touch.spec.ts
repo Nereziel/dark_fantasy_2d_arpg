@@ -1,3 +1,4 @@
+import { openCharacterCreation } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 /**
@@ -14,6 +15,7 @@ test.describe('Issue #125: landscape touch first-play accessibility', () => {
       await page.setViewportSize({ width, height: 390 });
       await page.goto('./?view=iso');
       await page.locator('#menu-language').selectOption('cs');
+      await openCharacterCreation(page);
       await page.getByRole('button', { name: 'Vstoupit do světa' }).click();
 
       const guide = page.getByTestId('onboarding-guide');

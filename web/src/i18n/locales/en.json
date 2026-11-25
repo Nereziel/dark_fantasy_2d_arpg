@@ -138,9 +138,9 @@
   "menu": {
     "subtitle": "The dark frontier awaits",
     "start": "Enter the world",
-    "continue": "Continue exploring",
-    "new": "New hero",
-    "help": "Choose your hero. Progress saves automatically. Each new session generates a fresh wilderness layout.",
+    "continue": "Continue playing",
+    "new": "New character",
+    "help": "Choose a saved character to continue, or create a new one. Progress saves automatically.",
     "current": "New version · early development build",
     "language": "Language",
     "back": "Main menu",
@@ -180,9 +180,10 @@
     "paused": "Paused",
     "saving": "Saving hero…",
     "saved": "Hero saved",
-    "loaded": "Hero loaded — a fresh world awaits",
+    "loaded": "Hero loaded",
     "saveError": "Saving is unavailable",
-    "emptySave": "No compatible saved hero found"
+    "emptySave": "No compatible saved hero found",
+    "worldRestoreError": "Character loaded; saved exploration is incompatible."
   },
   "controls": {
     "move": "Move: click or hold left mouse",
@@ -301,7 +302,10 @@
     "resource": "Resource",
     "equipment": "Starting equipment",
     "overwriteWarning": "Creating a new hero replaces the current saved character and world progress.",
-    "multiSlotHint": "New heroes have separate save slots. Your existing characters will be kept."
+    "multiSlotHint": "New heroes have separate save slots. Your existing characters will be kept.",
+    "name": "Character name",
+    "namePlaceholder": "e.g. Ael-Thorn",
+    "nameHint": "1–32 characters: letters, numbers, spaces, apostrophes and hyphens."
   },
   "classes": {
     "WARRIOR": {
@@ -1540,7 +1544,9 @@
     "confirmDelete": "Delete permanently?",
     "cancel": "Cancel",
     "deleted": "Saved hero deleted",
-    "full": "All character slots are occupied. Delete one to create a new hero."
+    "full": "All character slots are occupied. Delete one to create a new hero.",
+    "loading": "Loading characters…",
+    "unnamed": "Unnamed hero"
   },
   "visualSettings": {
     "title": "Display and accessibility",

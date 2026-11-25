@@ -1,3 +1,4 @@
+import { openCharacterCreation } from './character-menu';
 // Issue #128: reduced motion and readable combat overlays must not affect controls.
 // GPL-3.0-only.
 import { test, expect } from '@playwright/test';
@@ -7,6 +8,7 @@ test('reduced-motion mobile combat keeps authoritative abilities and canvas resp
   await page.setViewportSize({ width: 390, height: 740 });
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const canvas = page.locator('.phaser-container canvas');
   await expect(canvas).toBeVisible();
@@ -26,6 +28,7 @@ test('combat alerts and class actions remain within the 320–430px mobile canva
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
   const canvas = page.locator('.phaser-container canvas');
   const dock = page.getByTestId('combat-dock');

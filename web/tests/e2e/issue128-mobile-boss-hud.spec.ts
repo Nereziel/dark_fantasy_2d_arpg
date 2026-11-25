@@ -1,3 +1,4 @@
+import { openCharacterCreation } from './character-menu';
 // Issue #128: boss/elite roster stays reachable on small screens without
 // masking the bottom dock, minimap close control or inventory overlay.
 // GPL-3.0-only.
@@ -6,6 +7,7 @@ import { test, expect } from '@playwright/test';
 test('mobile enemy HUD stays ahead of minimap and clear of combat dock', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button', { name: 'Enter the world' }).click();
 
   const right = page.locator('.hud-right-column');

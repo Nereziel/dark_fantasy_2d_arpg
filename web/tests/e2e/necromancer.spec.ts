@@ -1,8 +1,10 @@
+import { openCharacterCreation, loadCharacterControl } from './character-menu';
 import {test,expect} from '@playwright/test';
 
 test('Necromancer summons real allies, shows corpse HUD and reloads character-only',async({page})=>{
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page);
   await page.getByRole('button',{name:/Necromancer/}).click();
   await page.getByRole('button',{name:'Enter the world'}).click();
   await expect(page.getByText('Necromancer · Level 1')).toBeVisible();
@@ -21,6 +23,6 @@ test('Necromancer summons real allies, shows corpse HUD and reloads character-on
   await page.getByRole('button',{name:'Uložit'}).click();
   await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
-  await page.getByRole('button',{name:'Načíst'}).click();
+  await loadCharacterControl(page).click();
   await expect(page.getByTestId('necromancer-minions')).toContainText('Přisluhovači: 0/5');
 });
