@@ -4,6 +4,7 @@ import {
   rebindAction,
   resolveKeyboardAction,
   resolvePointerAction,
+  resolveWorldPointerAction,
   type InputAction,
   type InputBinding
 } from '../../src/game/input/bindings';
@@ -47,6 +48,18 @@ describe('Agent 04: default bindings', () => {
     expect(mouse(-1)).toBeNull();
     expect(mouse(Number.NaN)).toBeNull();
     expect(mouse(Number.POSITIVE_INFINITY)).toBeNull();
+  });
+
+  it('routes touch as primary without inheriting mouse button or handedness', () => {
+    const swapped = DEFAULT_BINDINGS.map(binding => binding.device === 'mouse'
+      ? { ...binding, action: binding.action === 'PRIMARY' ? 'SECONDARY' as const
+        : binding.action === 'SECONDARY' ? 'PRIMARY' as const : binding.action }
+      : binding);
+    expect(resolveWorldPointerAction({ button: -1, wasTouch: true, uiCaptured: false })).toBe('PRIMARY');
+    expect(resolveWorldPointerAction({ button: 2, wasTouch: true, uiCaptured: false }, swapped)).toBe('PRIMARY');
+    expect(resolveWorldPointerAction({ button: 0, wasTouch: false, uiCaptured: false }, swapped)).toBe('SECONDARY');
+    expect(resolveWorldPointerAction({ button: 1, wasTouch: false, uiCaptured: false })).toBe('FORCE_MOVE');
+    expect(resolveWorldPointerAction({ button: -1, wasTouch: true, uiCaptured: true })).toBeNull();
   });
 
   it('never emits world actions while typing or while UI captures input', () => {

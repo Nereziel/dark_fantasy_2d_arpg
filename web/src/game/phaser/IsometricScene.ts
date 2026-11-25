@@ -20,7 +20,7 @@ import { getTownManifest, townEntry } from '../world/townManifest';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
 import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, type Obstacle } from '../world/navigation';
 import { contextToCommand, cursorForContext } from '../input/contextResolver';
-import { resolvePointerAction } from '../input/bindings';
+import { resolveWorldPointerAction } from '../input/bindings';
 import { dispatchCombatAction } from '../input/combatActionDispatcher';
 import { HeldPointerMovement } from '../input/heldMovement';
 import { projectIsometric, isometricBounds, isometricDepth } from './isometricProjection';
@@ -322,7 +322,7 @@ export class IsometricScene extends Phaser.Scene {
   }
 
   private click(pointer: Phaser.Input.Pointer): void {
-    const action = resolvePointerAction({ button: pointer.button, uiCaptured: this.captured() },
+    const action = resolveWorldPointerAction({ button: pointer.button, wasTouch: pointer.wasTouch, uiCaptured: this.captured() },
       this.bridge.bindings());
     if (!action) return;
     const { context, ground, aim } = this.pick(pointer);

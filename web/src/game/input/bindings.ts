@@ -225,6 +225,16 @@ export function resolvePointerAction(
   return action;
 }
 
+/** Touch is a primary world interaction independent of physical mouse
+ * handedness. Phaser touch pointers need not carry a valid mouse button. */
+export function resolveWorldPointerAction(
+  input: PointerInput & { wasTouch: boolean },
+  bindings: readonly InputBinding[] = DEFAULT_BINDINGS
+): InputAction | null {
+  if (!input || input.uiCaptured) return null;
+  return input.wasTouch ? 'PRIMARY' : resolvePointerAction(input, bindings);
+}
+
 function bindingKey(binding: InputBinding): string {
   return binding.device === 'keyboard'
     ? `keyboard:${binding.code}:${binding.modifiers?.ctrl ? 1 : 0}${binding.modifiers?.alt ? 1 : 0}${binding.modifiers?.shift ? 1 : 0}`

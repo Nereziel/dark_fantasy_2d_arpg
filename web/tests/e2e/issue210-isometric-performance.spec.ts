@@ -1,5 +1,6 @@
 // GPL-3.0-only — D5.4: observational browser performance baseline.
 import { test, expect, type Locator, type Page } from '@playwright/test';
+import { isoGroundPoint } from './iso-input';
 
 const renderer = 'canvas[data-renderer="isometric-preview"]';
 const screen = '.game-screen[data-world-seed]';
@@ -77,18 +78,21 @@ function checkSample(value: Sample, groundTotal: number, staticTotal: number) {
   // Hardware-dependent FPS/heap figures are diagnostic, not CI thresholds.
 }
 
-async function move(page: Page, canvas: Locator, touch: boolean) {
-  const target = await canvas.evaluate(node => {
-    const b = node.getBoundingClientRect();
-    for (const [dx, dy] of [[100, 30], [85, -30], [-90, 25], [-75, -35], [0, 65], [0, -65]]) {
-      const x = b.x + b.width / 2 + dx!, y = b.y + b.height / 2 + dy!;
-      if (document.elementFromPoint(x, y) === node) return { x, y };
+async function movementTarget(page: Page, canvas: Locator) {
+  const hero = await point(page);
+  // Known local camp ground, not an arbitrary offset from the canvas midpoint.
+  // Hover is only an exposure/context probe; actual movement uses mouse or tap.
+  for (const [dx, dy] of [[80, 0], [90, -20], [65, 5], [0, -55], [-35, 40], [35, 50]]) {
+    try {
+      const target = await isoGroundPoint(canvas, { x: hero.x + dx!, y: hero.y + dy! });
+      await page.mouse.move(target.x, target.y);
+      if (await canvas.evaluate(node => (node as HTMLCanvasElement).style.cursor) === 'crosshair')
+        return target;
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.startsWith('Projected ground is not exposed')) throw error;
     }
-    return null;
-  });
-  if (!target) throw new Error('No unobstructed canvas movement target');
-  if (touch) await page.touchscreen.tap(target.x, target.y);
-  else await page.mouse.click(target.x, target.y);
+  }
+  throw new Error('No exposed camp ground movement target');
 }
 
 for (const profile of profiles) {
@@ -109,12 +113,15 @@ for (const profile of profiles) {
       await sample(canvas, 500); // warm-up; excluded from measurements
       const idle = await sample(canvas, 1500);
       checkSample(idle, groundTotal, staticTotal);
+      const target = await movementTarget(page, canvas);
       const before = await point(page);
       const movingPromise = sample(canvas, 2000);
-      await move(page, canvas, profile.hasTouch);
+      if (profile.hasTouch) await page.touchscreen.tap(target.x, target.y);
+      else await page.mouse.click(target.x, target.y);
       const moving = await movingPromise;
       checkSample(moving, groundTotal, staticTotal);
       const after = await point(page);
+      console.log('D5.4_MOVEMENT ' + JSON.stringify({ profile: profile.name, seed, target, before, after, moving }));
       expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeGreaterThan(20);
       expect(moving.maximumDisplacement).toBeGreaterThan(0);
 

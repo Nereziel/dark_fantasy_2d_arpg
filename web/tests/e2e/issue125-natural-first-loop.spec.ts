@@ -61,6 +61,10 @@ async function keepFighting(
   const roster = page.locator('.enemy-roster');
   let previousCount = -1;
   let lastTargetRefreshAt = 0;
+  let lastProgressAt = Date.now();
+  let progressKey = '';
+  let nextCandidate = 0;
+  const game = page.locator('.game-screen');
   while (Date.now() < deadline) {
     const journal = await page.locator('.quest-journal').innerText();
     // The starter hunt is NPC-gated and stays at 3/3. Act I boar kills,
@@ -98,7 +102,15 @@ async function keepFighting(
     const candidates = boarVisible ? boars : hasNormal ? otherEncounterTargets : liveTargets;
     const targetingOptional = hasNormal && await roster
       .locator('button.targeted.bossTarget:not([disabled])').count() > 0;
-    const refreshTarget = targetingOptional || (huntBoars
+    const position = [await game.getAttribute('data-player-x'), await game.getAttribute('data-player-y')]
+      .map(value => Math.round(Number(value) / 8));
+    const health = await roster.locator('.roster-health').allTextContents();
+    const observed = JSON.stringify([achieved, position, health]);
+    if (observed !== progressKey) { progressKey = observed; lastProgressAt = Date.now(); }
+    // If a selected foe stays inaccessible, try another visible ordinary foe
+    // instead of leaving the same autoattack pinned for the entire stage.
+    const stalledTarget = !huntBoars && Date.now() - Math.max(lastTargetRefreshAt, lastProgressAt) > 8000;
+    const refreshTarget = stalledTarget || targetingOptional || (huntBoars
       && (Date.now() - lastTargetRefreshAt > 10_000
       || (boarVisible && await activeTarget.filter({ hasText: 'Corrupted Boar' }).count() === 0)));
     if (await activeTarget.count() === 0 || achieved !== previousCount || refreshTarget) {
@@ -106,7 +118,10 @@ async function keepFighting(
         try {
           // A real click may race with an enemy death, as in PR #187. Bound
           // only the transient control wait, never the quest/death conditions.
-          await candidates.first().click({ timeout: 1_500 });
+          const count = await candidates.count();
+          if (stalledTarget) nextCandidate = (nextCandidate + 1) % count;
+          else if (achieved !== previousCount) nextCandidate = 0;
+          await candidates.nth(nextCandidate % count).click({ timeout: 1_500 });
           lastTargetRefreshAt = Date.now();
         } catch (error) {
           if (!(error instanceof errors.TimeoutError)) throw error;
@@ -117,13 +132,15 @@ async function keepFighting(
     await page.waitForTimeout(400);
   }
   const rosterText = await roster.innerText();
-  const game = page.locator('.game-screen');
   throw new Error('Natural quest playthrough timed out at ' +
     await activeQuestCount(page) + '/3 kills; target ' + until
     + '; active quest: ' + (await page.locator('.quest-journal').innerText())
     + '; enemies: ' + rosterText.replaceAll('\n', ' ')
     + '; player position: ' + await game.getAttribute('data-player-x')
-    + ',' + await game.getAttribute('data-player-y'));
+    + ',' + await game.getAttribute('data-player-y')
+    + '; seed: ' + await game.getAttribute('data-world-seed')
+    + '; hold: ' + await game.getAttribute('data-hold-position')
+    + '; selected: ' + (await roster.locator('button.targeted').allTextContents()).join(' '));
 }
 
 /** Follow the ordinary world canvas from the finished first quest to Act I's next
