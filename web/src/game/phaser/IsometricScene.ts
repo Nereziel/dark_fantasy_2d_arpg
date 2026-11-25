@@ -54,7 +54,7 @@ type ImpactVisual = {
 };
 const MAX_IMPACT_VISUALS = 64;
 
-export class IsometricPreviewScene extends Phaser.Scene {
+export class IsometricScene extends Phaser.Scene {
   private readonly impacts: ImpactVisual[] = [];
   private readonly enemyPresentation = new EnemyPresentation();
   private ground!: IsometricGroundLayer;
@@ -80,7 +80,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
   private dungeonEntrances: ActIDungeonEntrance[] = [];
   private readonly held = new HeldPointerMovement();
 
-  constructor(private readonly bridge: GameBridge) { super({ key: 'IsometricPreview' }); }
+  constructor(private readonly bridge: GameBridge) { super({ key: 'Isometric' }); }
 
   create(): void {
     this.ground = new IsometricGroundLayer(this);
@@ -96,6 +96,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     this.cameras.main.setBounds(bounds.x, bounds.y, bounds.width, bounds.height)
       .setZoom(1).centerOn(p.x, p.y).startFollow(this.anchor, true, 0.12, 0.12);
     this.syncGround(p);
+    // Stable diagnostic value retained for existing browser tooling.
     this.game.canvas.dataset.renderer = 'isometric-preview';
     this.game.canvas.dataset.projectionOrigin = ORIGIN.x + ',' + ORIGIN.y;
     this.input.mouse?.disableContextMenu();
@@ -224,7 +225,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
 
   private syncGround(follow: Readonly<Point>): void {
     const camera = this.cameras.main;
-    // Read-only camera diagnostics, matching the classic renderer contract.
+    // Read-only camera diagnostics for browser acceptance.
     // Values are projected scene units, not Cartesian world coordinates.
     const cameraOrigin = camera.scrollX + ',' + camera.scrollY;
     if (this.game.canvas.dataset.cameraOrigin !== cameraOrigin)

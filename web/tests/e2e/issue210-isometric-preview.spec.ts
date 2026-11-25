@@ -85,16 +85,8 @@ test('default isometric view boots, accepts a pointer and keeps the map controls
   expect(errors).toEqual([]);
 });
 
-test('explicit classic fallback remains available only during E2', async ({ page }) => {
-  await page.goto('./?view=classic');
-  await page.locator('#menu-language').selectOption('en');
-  await page.getByRole('button', { name: 'Enter the world' }).click();
-  await expect(page.locator('canvas').first()).toBeVisible();
-  await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toHaveCount(0);
-});
-
-for (const query of ['?view=iso', '?view=unknown', '?view=']) {
-  test('isometric entry for ' + query, async ({ page }) => {
+for (const query of ['?view=iso', '?view=classic', '?view=unknown', '?view=']) {
+  test('obsolete view parameter does not change the renderer: ' + query, async ({ page }) => {
     await page.goto('./' + query);
     await page.locator('#menu-language').selectOption('en');
     await page.getByRole('button', { name: 'Enter the world' }).click();

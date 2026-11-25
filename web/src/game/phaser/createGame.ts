@@ -1,16 +1,11 @@
 import Phaser from 'phaser';
-import { FrontierScene } from './FrontierScene';
-import { IsometricPreviewScene } from './IsometricPreviewScene';
+import { IsometricScene } from './IsometricScene';
 import type { GameBridge } from '../bridge/GameBridge';
 import { renderFilterConfig } from '../ui/displayModes';
 import type { PixelFilterPreference } from '../ui/visualPreferences';
 
 export function createGame(parent: HTMLElement, bridge: GameBridge,
   pixelFilter: PixelFilterPreference = 'sharp'): Phaser.Game {
-  // G1/E2: ordinary entry is isometric. The explicit classic escape hatch is
-  // temporary until the G1/E3 cleanup; no persisted display-mode preference.
-  const classic = typeof window !== 'undefined'
-    && new URLSearchParams(window.location.search).get('view') === 'classic';
   return new Phaser.Game({
     type: Phaser.AUTO,
     parent,
@@ -24,6 +19,6 @@ export function createGame(parent: HTMLElement, bridge: GameBridge,
       width: '100%',
       height: '100%'
     },
-    scene: [classic ? new FrontierScene(bridge) : new IsometricPreviewScene(bridge)]
+    scene: [new IsometricScene(bridge)]
   });
 }
