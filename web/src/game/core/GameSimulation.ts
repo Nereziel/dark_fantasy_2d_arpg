@@ -76,6 +76,7 @@ import { planOptionalDungeonEntry, planOptionalDungeonExit, type OptionalDungeon
 import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
 import { projectDiscoveredDungeonEntrances } from '../world/dungeonPortalPresentation';
 import {optionalDungeonRewardId,validOptionalDungeonRewardIds,type OptionalDungeonRewardId} from '../world/optionalDungeonRewards';
+import {planOptionalDungeonFeatures,optionalDungeonChestProjection} from '../world/optionalDungeonFeatures';
 import {
   applyTalentStats, planSpendTalent, planRespecTalents, projectTalentBonuses,
   validateTalentBuild, type TalentRanks, type TalentId
@@ -771,7 +772,9 @@ export class GameSimulation {
 
   /** Actionable dungeon facts only; decorative theme props never grant loot. */
   cryptInteractables(): CryptInteractable[] {
-    if (this.zone !== 'crypt' || !this.cryptTheme) return [];
+    if (this.zone !== 'crypt') return [];
+    if (this.optionalVisit) return optionalDungeonChestProjection(planOptionalDungeonFeatures(this.optionalVisit.interior,this.optionalVisit.identity.dungeonId),this.optionalVisit.identity.dungeonId,[...this.optionalDungeonRewards]);
+    if (!this.cryptTheme) return [];
     return this.cryptTheme.interactables.filter(prop => prop.initiallyVisible
       && !this.cryptUsedPropIds.has(prop.id))
       .map(prop => structuredClone(prop));
@@ -781,8 +784,16 @@ export class GameSimulation {
     if (this.zone !== 'crypt' || !this.pendingCryptPropId || !this.player.alive) return;
     const prop = this.cryptInteractables().find(candidate => candidate.id === this.pendingCryptPropId);
     if (!prop) { this.pendingCryptPropId = null; return; }
-    if (distance(this.player, prop.position) > prop.reach) return;
+    if (distance(this.player, prop.position) > prop.reach
+      || (this.optionalVisit && !hasLineOfSight(this.player,prop.position,this.world.obstacles))) return;
     this.pendingCryptPropId = null;
+    if (this.optionalVisit) {
+      const plan=planOptionalDungeonFeatures(this.optionalVisit.interior,this.optionalVisit.identity.dungeonId);
+      if (prop.id!==plan.chest.id || !this.claimDungeonReward('treasure')) return;
+      this.gold=Math.min(Number.MAX_SAFE_INTEGER,this.gold+plan.gold);
+      this.events.push({type:'cryptInteract',id:prop.id,capability:prop.capability,goldAwarded:plan.gold});
+      return;
+    }
     // Commit idempotency BEFORE emitting the event/reward. Rendering is a projection only.
     if (this.cryptUsedPropIds.has(prop.id)) return;
     this.cryptUsedPropIds.add(prop.id);
@@ -795,9 +806,12 @@ export class GameSimulation {
 
   /** One-shot world hazards give a visible warning and can be dodged before impact. */
   private tickCryptTraps(dt: number): void {
-    if (this.zone !== 'crypt' || !this.cryptTheme || !this.player.alive) return;
-    for (const trap of this.cryptTheme.traps) {
-      if (this.cryptTriggeredTrapIds.has(trap.id)) continue;
+    if (this.zone !== 'crypt' || !this.player.alive) return;
+    const optionalId=this.optionalVisit?.identity.dungeonId;
+    const traps=this.optionalVisit && optionalId
+      ? [planOptionalDungeonFeatures(this.optionalVisit.interior,optionalId).trap] : this.cryptTheme?.traps??[];
+    for (const trap of traps) {
+      if (optionalId ? this.optionalDungeonRewards.has(optionalDungeonRewardId(optionalId,'trap')!) : this.cryptTriggeredTrapIds.has(trap.id)) continue;
       const remaining = this.cryptArmedTraps.get(trap.id);
       if (remaining === undefined) {
         if (distance(this.player, trap.trigger.center) > trap.trigger.radius) continue;
@@ -808,7 +822,8 @@ export class GameSimulation {
       }
       if (remaining > dt) { this.cryptArmedTraps.set(trap.id, remaining - dt); continue; }
       this.cryptArmedTraps.delete(trap.id);
-      this.cryptTriggeredTrapIds.add(trap.id);
+      if (optionalId) {if (!this.claimDungeonReward('trap')) continue;}
+      else this.cryptTriggeredTrapIds.add(trap.id);
       if (distance(this.player, trap.trigger.center) > trap.trigger.radius) continue;
       const damage = trap.damage.maxBaseDamage;
       this.dealPlayerDamage(damage, trap.damage.type, trap.id);
@@ -4197,8 +4212,9 @@ export class GameSimulation {
     } else if (this.pendingCryptPropId) {
       const prop = this.cryptInteractables().find(p => p.id === this.pendingCryptPropId);
       if (!prop) this.pendingCryptPropId = null;
-      else if (distance(this.player, prop.position) <= prop.reach) this.tryInteractCrypt();
-      else this.follow(this.player, prop.position, speed, dt, Math.max(6, prop.reach - 12), true);
+      else if (distance(this.player, prop.position) <= prop.reach
+        && (!this.optionalVisit || hasLineOfSight(this.player,prop.position,this.world.obstacles))) this.tryInteractCrypt();
+      else this.follow(this.player, prop.position, speed, dt, this.optionalVisit ? 0 : Math.max(6, prop.reach - 12), true);
     } else if(this.pendingEnvironmentId) {
       const object=planEnvironmentInteraction(this.pendingEnvironmentId,
         this.environmentPlan,[...this.environmentUsed]);
@@ -5021,8 +5037,10 @@ export class GameSimulation {
         cryptManifest?.traps.map(trap => trap.id) ?? [])
       || (s.cryptInteractables !== undefined && (!Array.isArray(s.cryptInteractables)
         || JSON.stringify(s.cryptInteractables) !== JSON.stringify(
-          s.zone === 'crypt' && !restoredVisit ? (cryptManifest?.interactables ?? []).filter(prop =>
-            prop.initiallyVisible && !(s.cryptUsedPropIds ?? []).includes(prop.id)) : [])))
+          s.zone === 'crypt' ? (restoredVisit
+            ? optionalDungeonChestProjection(planOptionalDungeonFeatures(restoredVisit.interior,restoredVisit.identity.dungeonId),restoredVisit.identity.dungeonId,s.optionalDungeonRewardIds??[])
+            : (cryptManifest?.interactables ?? []).filter(prop =>
+              prop.initiallyVisible && !(s.cryptUsedPropIds ?? []).includes(prop.id))) : [])))
       || (s.dungeonStage !== 0 && s.dungeonStage !== 1)
       || typeof s.dungeonCleared !== 'boolean'
       || (s.zone === 'wilderness' && (s.dungeonStage !== 0 || s.dungeonCleared))
