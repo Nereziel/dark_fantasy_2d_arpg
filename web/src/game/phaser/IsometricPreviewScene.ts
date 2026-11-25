@@ -160,7 +160,7 @@ export class IsometricPreviewScene extends Phaser.Scene {
     } else {
       const world = buildCryptWorld(dungeonRenderSeed(state));
       this.obstacles = world.layout.obstacles;
-      this.ground.rebuild(cryptGroundLayout(world.dungeon), ORIGIN);
+      this.ground.rebuild(cryptGroundLayout(world.dungeon,state.dungeonId), ORIGIN);
     }
     this.game.canvas.dataset.groundChunks = String(this.ground.count);
     // Static layered art shares the exact collision footprint. Split long
@@ -178,12 +178,12 @@ export class IsometricPreviewScene extends Phaser.Scene {
         this.occluders.push(art.occluder);
         continue;
       }
-      const material = obstacleMaterial(wall.id, state.zone);
+      const material = obstacleMaterial(wall.id, state.zone,state.dungeonId);
       materials.add(material);
       for (let dy = 0; dy < wall.height; dy += 80) for (let dx = 0; dx < wall.width; dx += 80) {
         const rect = { x: wall.x + dx, y: wall.y + dy,
           width: Math.min(80, wall.width - dx), height: Math.min(80, wall.height - dy) };
-        const art = planObstacleArt(rect, material, state.worldSeed, ORIGIN);
+        const art = planObstacleArt(rect, material, dungeonRenderSeed(state), ORIGIN);
         const g = this.add.graphics().setDepth(art.occluder.depth);
         for (const layer of art.paint) this.polygon(g, layer.points, layer.color);
         this.walls.push(g);
