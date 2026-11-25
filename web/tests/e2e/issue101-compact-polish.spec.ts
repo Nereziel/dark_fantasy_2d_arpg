@@ -9,6 +9,7 @@ test('compact HUD exposes skill descriptions and hamburger commands without cast
   await enterWorld(page);
   const dock=page.getByTestId('combat-dock');
   const shield=dock.locator('[data-paladin-ability="divineShield"]');
+  await shield.scrollIntoViewIfNeeded();
   await shield.hover();
   const hint=page.getByTestId('skill-hint');
   await expect(hint).toContainText('Divine Shield');
@@ -34,6 +35,7 @@ test('compact HUD exposes skill descriptions and hamburger commands without cast
   await expect(toggle).toHaveAttribute('aria-pressed','false');
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-pressed','true');
+  await expect.poll(async()=>Number(await page.locator('canvas[data-renderer="isometric-preview"]').getAttribute('data-world-labels'))).toBeGreaterThan(0);
 });
 
 test.describe('touch info mode',()=>{

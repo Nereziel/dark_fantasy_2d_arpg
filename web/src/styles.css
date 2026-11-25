@@ -271,3 +271,24 @@ html[data-ar-high-contrast="true"] .roster-health {
   .game-hud.compact-dock { grid-template-columns:minmax(100px,130px) minmax(0,1fr) minmax(140px,150px); }
   .compact-dock .hud-actions button { min-height:44px; }
 }
+
+/* Health and class energy bracket the icon rail on desktop. On touch, both
+   meters share a single row and the ? control stays outside the scroll rail. */
+.game-hud.compact-dock { grid-template-columns:minmax(110px,155px) minmax(0,1fr) minmax(98px,145px) minmax(105px,130px); }
+.compact-dock .resource-meter { grid-column:3; min-width:0; }
+.compact-dock .hud-actions { grid-column:4; }
+.compact-dock > .experience-track { grid-column:1/-1; height:2px; }
+.system-pause-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.system-pause-heading h2 { margin:0; }
+.system-menu-close { min-width:44px; min-height:44px; font-size:1.25rem; }
+@media(max-width:650px){
+  .game-hud.compact-dock { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:auto auto auto auto; }
+  .compact-dock .vital-panel { grid-column:1; grid-row:1; display:block; }
+  .compact-dock .resource-meter { grid-column:2; grid-row:1; }
+  .compact-dock .skill-ui { grid-column:1/-1; grid-row:2; }
+  .compact-dock .hud-actions { grid-column:1/-1; grid-row:3; }
+  .compact-dock > .experience-track { grid-row:4; }
+}
+@media(max-height:480px) and (min-width:651px){
+  .game-hud.compact-dock { grid-template-columns:minmax(92px,120px) minmax(0,1fr) minmax(80px,110px) minmax(130px,145px); }
+}

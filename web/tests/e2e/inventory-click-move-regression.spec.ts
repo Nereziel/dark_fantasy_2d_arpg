@@ -216,7 +216,7 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await continueGame(page);
   // Verify that the asynchronous character restore completed, not just that Load was clicked.
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
-  await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
+  await expect(page.getByTestId('system-menu')).toBeEnabled();
   await page.getByRole('button', { name: 'Inventory (I)' }).click();
   await expect(gear).not.toHaveClass(/has-item/);
   await expect(secondCell).toHaveAttribute('data-item-id', firstId!);
@@ -233,7 +233,7 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await continueGame(page);
   // Verify that the asynchronous character restore completed, not just that Load was clicked.
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
-  await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
+  await expect(page.getByTestId('system-menu')).toBeEnabled();
   await expect(page.locator('.game-screen')).toBeVisible();
   // Exercise the real, default inventory hotkey after the second reload.
   // Waiting for the live HUD action button to become geometrically stable

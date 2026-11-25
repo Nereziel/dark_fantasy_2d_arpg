@@ -106,7 +106,6 @@ function paintFrame(ctx: CanvasRenderingContext2D, actor: PixelActor, look: Pixe
   const stride = animation === 'walk' || run ? [-3,1,4,-1][frame]! : 0;
   const bob = animation === 'idle' || animation === 'channel' ? [0,-1,0,1][frame]!
     : run ? [0,-2,0,-2][frame]! : 0;
-  const striking = animation === 'attack' && frame === 1;
   const casting = animation === 'cast' || animation === 'channel';
   const hit = animation === 'hit' && frame >= 1;
   const falling = animation === 'death';

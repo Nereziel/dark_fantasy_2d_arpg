@@ -1282,12 +1282,13 @@
           {#if view.shield > 0}
             <div class="vital-top resource-label"><span>{$t('hud.shield')}</span><strong>{view.shield}</strong></div>
           {/if}
-          </div><div class="resource-meter"><div class="vital-top resource-label"><span>{$t('resource.' + CLASSES[view.classId].resourceId)}</span><strong>{Math.round(view.resource)} / {view.stats.maxResource}</strong></div>
-          <div class="health-track resource-track"><div class="resource-fill" style:width={`${100 * view.resource / view.stats.maxResource}%`}></div></div>
-          </div><div class="hud-details">{#if activeCharacterName}<span class="hero-name">{activeCharacterName}</span>{/if}<span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
-          <div class="experience-track"><div style:width={`${xpRequiredForLevel(view.level) > 0 ? 100 * view.xp / xpRequiredForLevel(view.level) : 100}%`}></div></div>
+          </div>
+<div class="hud-details">{#if activeCharacterName}<span class="hero-name">{activeCharacterName}</span>{/if}<span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
+
         </div>
         <SkillBar {bridge} {view} bindings={controlBindings} bind:infoMode={skillInfoMode} editRequest={hotbarEditRequest} />
+        <div class="resource-meter"><div class="vital-top resource-label"><span>{$t('resource.' + CLASSES[view.classId].resourceId)}</span><strong>{Math.round(view.resource)} / {view.stats.maxResource}</strong></div>
+          <div class="health-track resource-track"><div class="resource-fill" style:width={`${100 * view.resource / view.stats.maxResource}%`}></div></div></div>
         <div class="hud-actions">
           <button onclick={(event) => openInventory(event.currentTarget)} aria-label={$t('inventory.open')} title={$t('inventory.open')}
             data-quick-action="inventory"><span aria-hidden="true">▦</span><span class="quick-key">{shortcutHint(controlBindings, 'INVENTORY')}</span></button>
@@ -1305,6 +1306,7 @@
             aria-label={$t('menu.system')} title={$t('menu.system')}
             data-testid="system-menu" data-quick-action="menu"><span aria-hidden="true">☰</span></button>
         </div>
+        <div class="experience-track"><div style:width={`${xpRequiredForLevel(view.level) > 0 ? 100 * view.xp / xpRequiredForLevel(view.level) : 100}%`}></div></div>
       </div>
 
       {#if messageKey}
@@ -1454,8 +1456,8 @@
         </div>
       {:else if view.paused}
         <div class="modal-shield">
-          <div class="pause-card" role="dialog" aria-modal="true" aria-label={$t('menu.paused')}>
-            <h2>{$t('menu.paused')}</h2>
+          <div class="pause-card system-pause-card" role="dialog" aria-modal="true" aria-label={$t('menu.paused')}>
+            <div class="system-pause-heading"><h2>{$t('menu.paused')}</h2><button type="button" disabled={busy} aria-label={$t('visualSettings.close')} class="system-menu-close" onclick={()=>togglePause()}>×</button></div>
             <button class="primary" disabled={busy} onclick={() => togglePause()}>{$t('menu.resume')}</button>
             <button class="secondary" data-testid="pause-save" disabled={busy} onclick={save}>{$t('menu.save')}</button>
             <button class="secondary" data-testid="pause-load" disabled={busy} onclick={() => load()}>{$t('menu.load')}</button>

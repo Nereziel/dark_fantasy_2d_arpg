@@ -54,7 +54,7 @@ export async function saveFromMenu(page: Page, gesture: Gesture = 'click') {
 
 export async function returnToMenu(page: Page, gesture: Gesture = 'click') {
   await openSystemMenu(page, gesture);
-  await page.getByRole('button', { name: /^(Main menu|Hlavní menu)$/ })[gesture]();
+  await page.getByRole('button', { name: /^(Main menu|Zpět do menu)$/ })[gesture]();
   await expect(page.locator('.main-menu')).toBeVisible();
 }
 

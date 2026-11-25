@@ -148,6 +148,8 @@ export class IsometricScene extends Phaser.Scene {
         delete this.game.canvas.dataset.buildingCount;
         delete this.game.canvas.dataset.staticLayers;
         delete this.game.canvas.dataset.staticVisibleLayers;
+        delete this.game.canvas.dataset.worldLabels;
+        delete this.game.canvas.dataset.lootLabels;
         this.game.canvas.style.cursor = 'default';
       }
     });
@@ -612,7 +614,8 @@ export class IsometricScene extends Phaser.Scene {
       g.fillStyle(style.color,.18).fillCircle(0,0,r+5);
       g.lineStyle(style.basic?2:3,style.color,.95).strokeCircle(0,0,r);
       g.lineStyle(2,0xffefd7,.88).strokeCircle(0,0,r*.55);
-      if(!style.basic)for(let i=0;i<6;i++){
+      const reduced=shouldReduceMotion(getVisualPreferences(),window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      if(!style.basic&&!reduced)for(let i=0;i<6;i++){
         const a=i*Math.PI/3;
         g.fillStyle(style.color,.9).fillCircle(Math.cos(a)*(r+5),Math.sin(a)*(r+5),3);
       }
