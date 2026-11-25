@@ -273,8 +273,8 @@ async function walkToAbandonedGraveyard(page: Page, timeoutMs: number): Promise<
 }
 
 /** Continue from Morrow using ordinary world clicks, not a prepared save.
- * The evidence marker is seed-dependent; only the visible Inspect button
- * proves the live player reached its interaction radius.
+ * The evidence marker is seed-dependent; the real Inspect button must be
+ * clicked in range and advance the live quest journal before returning.
  */
 async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void> {
   const game = page.locator('.game-screen');
@@ -306,6 +306,10 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
   // button. The simulation still checks proximity and quest prerequisites.
   const inspectIfInReach = async (): Promise<boolean> => {
     if (Date.now() >= deadline || !await inspect.isVisible()) return false;
+    if (await page.getByTestId('death-overlay').count()) {
+      throw new Error('Natural Act I evidence search: hero died before inspection; seed='
+        + await game.getAttribute('data-world-seed'));
+    }
     inspectAttempts++;
     await page.keyboard.down('Shift');
     try {
