@@ -1,8 +1,30 @@
-# 2D Dark Fantasy ARPG — Sequential Implementation Prompts for Codex
+# Aether & Ruin — 2.5D Isometric ARPG Implementation Prompts (01–63)
 
 These **63 numbered prompts** define the scope and acceptance criteria. Use the [roadmap](docs/ROADMAP.md) for current integration order and dependencies and the [implementation status](docs/IMPLEMENTATION_STATUS.md) to identify work already integrated. Preserve a playable, testable browser game at every step.
 
-This plan modernizes the **existing Aether & Ruin HTML5 Canvas prototype**. Reuse its functioning classes, quests, combat, inventory and world systems where practical. **Preserve the supported web save formats and their migrations.** Importing saves from the original HTML prototype is outside this project scope. The target is a top-down dark-fantasy ARPG with Diablo-like mouse movement, six classes, five acts, procedural locations and future multiplayer-readiness.
+This plan modernizes the **existing Aether & Ruin HTML5 Canvas prototype**. Reuse its functioning classes, quests, combat, inventory and world systems where practical. **Preserve the supported web save formats and their migrations.** Importing saves from the original HTML prototype is outside this project scope. The target is a 2.5D isometric (2:1) dark-fantasy ARPG with Diablo-like mouse movement, six classes, a complete procedural Act I and future multiplayer-readiness. Five acts remain the long-term product scope, not permission to start Acts II–V.
+
+## Binding architecture and integration contract — Roadmap v3 (2026-11-25)
+
+These requirements apply to **all 63 prompts**, including earlier integrated features and future reference specifications. Where older text conflicts, this contract and the prompt-specific updates prevail. Prompt numbers identify capabilities, not execution order. Do not reimplement a completed capability simply because its original prompt is written in imperative form.
+
+**Single source of sequencing:** [Roadmap #119](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/119) and its repository mirror [docs/ROADMAP.md](docs/ROADMAP.md). G0: finish existing PRs #250 → #252 → #253; G1: technical isometry (#210); G2: complete Act I region/content/session (#208) and living population (#207); G3: gameplay systems and balancing; G4: final art/audio/polish (#124); G5: complete player acceptance (#125). Do one active implementation package at a time, test-first, exact-head CI and merge before moving on. No Act II–V planning, content preparation, implementation or integration before explicit user approval of G5. Future prompts stay reference-only until their gate.
+
+### Coordinate, rendering and input ownership
+
+- Simulation, collision, pathfinding, world generation, combat ranges and persistence use **Cartesian world-space coordinates**. Isometry is a presentation transform only: at a chosen render origin, projected x = world x − world y and projected y = (world x + world y)/2 − visual elevation. Use the existing `isometricProjection.ts` contract, not another transform.
+- Phaser 4 projects world geometry, actors, loot, NPCs, portals, effects and telegraphs through the shared projection. Camera screen → projected scene → inverse world plane; perform body/ground and opaque-depth picking before issuing the existing typed commands. The simulation authorizes range, line of sight, reachability and interaction; interactive auto-approach uses the same collision-aware navigation as movement.
+- Depth derives from ground contact/footprint, not sprite height or screen y after elevation. Buildings have independently faded facade/roof groups; opaque picking uses the same silhouettes as visible art. Visual elevation/occlusion never creates a traversable floor or removes collision. Real multi-level geometry requires a separate approved navigation contract.
+- Use eight visual facing directions, animation state and authoritative combat timelines. No damage or quest state in animation callbacks. Technical G1 may use functional procedural placeholder assets; final licensable cohesive art belongs to G4. Switch the default renderer only after G1 technical acceptance of existing playable content; retain classic as fallback through G5. No production cutover based on compilation alone.
+- Fog of war is **map/minimap only**. Unobserved terrain, roads and POIs are hidden on both maps; the world scene has no discovery mask or exploration dimming. Natural lighting and occlusion are independent.
+
+### Procedural Act I, population and persistence
+
+- Stable semantic IDs and authored approximate settlement anchors; variable coherent terrain, forests, ridges/passes, routes, structures and POIs. At least three inhabited settlements and three distinct playable dungeons (story crypt, mine, cave), quests, services, shrines, waypoints and events. Main roads connect settlements; optional trails may end or omit POIs. All required targets must be walkable, not necessarily road-connected. One validated geometry contract for generation, collision, maps and both renderers.
+- Domain-separated deterministic seeds for region, chunks, dungeon instances, encounters and loot; bounded retries and safe fallback. Preserve actual entrance/exit identity and story/optional dungeon separation. No renderer RNG may alter authoritative content.
+- Replace ordinary global encounter waves with seeded groups and stable IDs in biomes, rooms and chunks (#207). Waves are allowed for explicit events and authored boss mechanics only. Use bounded active simulation population, preserve defeated/consumed state, and prevent reward or HP reset exploits on unload/reentry. Rendering culling is not simulation despawning.
+- Character v11 remains durable (items, XP, level, gold, talents, quests/reward claims). World v1 is per-character and seed-scoped (discovery, checkpoints and validated world facts). **New launch/session chooses a new seed even for an existing hero**; save, death, portal, travel and same-session reload must not change it. Explicit same-seed restoration may restore compatible world facts; a fresh launch must not accidentally restore old discovery, encounter or waypoint state. No requirement to migrate historical positions. No schema bump without approval. Do not claim atomic cross-record persistence unless the transaction actually covers both records. Prompt 45 defines the target; implementation evidence is tracked separately.
+- Final acceptance requires natural gameplay, actual input/interaction, multiple seeds, all six classes, CS/EN, desktop and physical Android/iOS, accessibility, performance and exact-head CI plus verified public Pages deployment. A fixture, green build or single story completion is not G5 approval.
 
 ## Project licensing and third-party material
 
@@ -112,14 +134,14 @@ The repo already includes `dark_fantasy_2d_arpg_engine.html`, `visuals.js`, `vis
 2. Build Svelte/Phaser in **`web/`**, preserving the old root HTML for reference. Deploy a tested `web/dist/` to the main Pages URL as a public development release.
 3. Extract typed content, simulation, stat/combat formulas, seeded RNG, command handling and save DTOs into testable TypeScript modules; preserve balance and IDs.
 4. Migrate scenes, pixel sprites, movement/input and graphical effects incrementally into Phaser. Replace UI panels with Svelte, communicating only through the typed bridge.
-5. Persist explicit character and world-progress DTOs, never a full `GameSnapshot`. Loading creates a fresh session at a safe starting point and restores validated durable world facts for the saved seed. Preserve the existing web-format migrations described in Prompt 45.
+5. Persist explicit character and world-progress DTOs, never a full `GameSnapshot`. Distinguish new launch (new seed, durable character retained) from explicit same-session/same-seed restore (eligible world facts only). Preserve supported web-format migrations described in Prompt 45.
 6. Incrementally complete a parity slice: town → NPC quest → mouse movement → combat → loot → inventory → save → reload. Pages already deploys `web/dist/`; every additional release must pass quality gates. Keep root legacy HTML as an offline reference.
 
 Never replace working systems with empty Phaser/Svelte placeholders just to satisfy file structure.
 
 ## Milestone Gates and Definition of Done
 
-Milestones define the evidence needed to declare a feature complete. For current sequencing, use the roadmap.
+Milestones below are historical capability groups, not active scheduling gates. For current sequencing and acceptance use Roadmap v3 G0–G5 above.
 
 | Gate | Prompts | Evidence required |
 | --- | --- | --- |
@@ -128,7 +150,7 @@ Milestones define the evidence needed to declare a feature complete. For current
 | Act I world slice | 18–29 | Reachable town/quest → wilderness → dungeon → boss → loot → return, in browser, with bilingual NPC dialogue, objectives, item names and map labels |
 | Progression and classes | 30–44 | No duplicated item/skill rules; each class uses shared systems; representative builds tested |
 | Persistence and UI | 45–48 | Current and supported migrated saves retain progression after reload. Unsupported records fail gracefully. Keyboard/UI interactions and mid-game `cs`↔`en` switching are verified. |
-| Campaign and endgame | 49–56 | Region/act transitions and generated objectives are navigable, saveable, testable |
+| Campaign and endgame (blocked beyond Act I) | 49–56 | Reference only for Acts II–V/endgame until G5 user approval; 53/55 may be scoped to Act I in G3 |
 | Release readiness | 57–63 | Profiler evidence, deterministic seed suite, combat tests, full vertical-slice E2E, no console errors and successful Pages preview |
 
 Every implemented feature needs: a clearly owned TypeScript state, a Phaser presentation adapter where needed, a Svelte UI projection where needed, validation/automated tests, documentation of changed public interfaces, and no unplanned regression of the legacy prototype.
@@ -178,6 +200,8 @@ Use a consistent **dark-fantasy pixel-art** direction with legible silhouettes, 
 ---
 
 # PROMPT 01 — Project Foundation and Architecture
+
+**Roadmap v3 contract:** Audit the existing web implementation; do not scaffold a second engine. Reuse GameSimulation, GameBridge, FrontierScene and the opt-in IsometricPreviewScene. Technical G1 validates the latter before default cutover.
 
 Establish a scalable **Svelte 5 + Phaser 4 + TypeScript + Vite** foundation and keep migrating incrementally. The old HTML engine remains only as a repository reference, while `web/dist/` is the published game.
 
@@ -308,6 +332,8 @@ Acceptance criteria:
 
 # PROMPT 02 — Player Entity and Character Core
 
+**Roadmap v3 contract:** Player position, speed, radius, stats and resources remain world-space; sprite facing and screen elevation are renderer-only.
+
 Implement the reusable player character foundation.
 
 The player should contain separate components/systems for:
@@ -381,6 +407,8 @@ Acceptance criteria:
 
 # PROMPT 03 — Diablo-Style Mouse Movement
 
+**Roadmap v3 contract:** Convert camera/DPR/zoom-adjusted pointer coordinates through inverse isometric projection; the same authoritative navigation handles ground clicks, held movement and interactive approach. Test both mouse and touch.
+
 Implement **Diablo-style click-to-move controls**.
 
 Do not use WASD as the default movement scheme.
@@ -444,6 +472,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 04 — Mouse Context Resolver and Interaction Model
+
+**Roadmap v3 contract:** Use shared typed context/picking; select projected actor bodies and ground targets with opaque occluder depth, then authorize range and LOS in simulation. Cover NPC, loot, doors, chests and all dungeon portals.
 
 Build a centralized mouse/context interaction system.
 
@@ -510,6 +540,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 05 — Force Move, Hold Position, and Skill Aiming
+
+**Roadmap v3 contract:** All aim types carry world-space point/entity/direction values. Isometric input, held movement and modifiers use existing bindings and respect modal capture; test mouse, keyboard, touch and AltGr.
 
 Expand the input system with standard ARPG control helpers.
 
@@ -587,6 +619,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 06 — Combat Foundation
+
+**Roadmap v3 contract:** Damage, ranges, LOS, projectiles and hit areas use Cartesian world-space; project the authoritative shapes for isometric warnings.
 
 Implement the centralized real-time combat system.
 
@@ -715,6 +749,8 @@ Acceptance criteria:
 
 # PROMPT 08 — Animation and Combat Feel
 
+**Roadmap v3 contract:** G1: functional eight-direction atlas and combat timeline parity, projected shadows, effects and hit feedback; G4: final authored assets. Use footpoint depth and independent occlusion without changing attack timing.
+
 Add the animation framework and improve game feel.
 
 Player animation states:
@@ -819,6 +855,8 @@ Acceptance criteria:
 
 # PROMPT 10 — Enemy Framework and AI
 
+**Roadmap v3 contract:** G2/#207 replaces ordinary global packs/waves with deterministic spatial groups, stable IDs, budgeted activation and persistent visit facts. Existing wave systems are transitional except explicit events and boss mechanics.
+
 Create the reusable enemy framework.
 
 Implement AI archetypes:
@@ -871,6 +909,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 11 — Monster Families
+
+**Roadmap v3 contract:** Populate actual biomes/dungeon rooms from typed family catalogs; reuse monster actions and stable encounter IDs, not fixed global pack indices.
 
 Add initial monster families for Act I.
 
@@ -1085,6 +1125,8 @@ Acceptance criteria:
 
 # PROMPT 15 — Inventory and Equipment
 
+**Roadmap v3 contract:** Use #123 as the sole inventory task: inspect-only first click/tap, explicit equip/unequip and drag/move, compatible target hints, 2H/offhand and rings, stash, same item identity, accessible CS/EN errors.
+
 Implement inventory and equipment systems.
 
 Support:
@@ -1129,6 +1171,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 16 — Loot Drops
+
+**Roadmap v3 contract:** Seeded loot is simulation-owned. Ground loot has world positions; projected picking and filters never mutate drop identity or RNG. One-shot encounter/treasure rewards are seed-scoped.
 
 Implement loot generation and world drops.
 
@@ -1207,6 +1251,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 18 — First Persistent Town
+
+**Roadmap v3 contract:** G2/#208: at least three inhabited settlements (hub and two villages) with stable identities/approximate anchors but variable layout and paths. Render shared structure footprints and NPC manifests; protect safe zones and ensure reachable service approaches.
 
 Create the first permanent town.
 
@@ -1300,6 +1346,8 @@ Acceptance criteria:
 
 # PROMPT 20 — Dialogue and Quest Foundation
 
+**Roadmap v3 contract:** NPC and quest IDs are semantic, independent of generated positions. Require real NPC interaction range/LOS and character-scoped one-time quest claims across new seeds.
+
 Implement a reusable dialogue and quest system.
 
 Dialogue should support:
@@ -1356,6 +1404,8 @@ Acceptance criteria:
 
 # PROMPT 21 — Act I Quest Chain
 
+**Roadmap v3 contract:** Keep the existing nine-story-quest chain and local side quests; optional mine/cave must not advance story crypt milestones. Unlock eligibility is not permission to build Act II before G5.
+
 Create the first playable quest chain.
 
 Suggested flow:
@@ -1393,6 +1443,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 22 — Procedural Wilderness Generation
+
+**Roadmap v3 contract:** Use #208 regional terrain and settlement/road manifests. Plan coherent terrain and navigable corridors before road routes; main trade roads connect settlements, optional trails may terminate or leave POIs off-road. Guarantee walkable required targets, not a road to every object. Validate fresh seeds and bounded fallbacks.
 
 Implement the first procedurally generated wilderness region.
 
@@ -1446,6 +1498,8 @@ Acceptance criteria:
 
 # PROMPT 23 — World Chunking and Streaming
 
+**Roadmap v3 contract:** Separate simulation lifecycle (#207) from camera-driven isometric render culling/texture cache (G1/#210). Stable chunk IDs and facts survive unloading within a seed; no enemy HP or reward reset exploit. Profile mobile memory and release textures on rebuild/shutdown.
+
 Prepare the open world for larger maps.
 
 Divide the procedural world into chunks.
@@ -1483,11 +1537,13 @@ Acceptance criteria:
 
 # PROMPT 24 — Map, Minimap, and Fog of War
 
+**Roadmap v3 contract:** Fog only on large map and minimap. Known regions remain revealed within the same seed; fresh launch resets discovery. Clip roads, landmarks, portals and quest hints to discovered cells. No scene fog/dimming or leak of unknown POIs.
+
 Implement:
 
 - minimap
 - world map
-- fog of war
+- fog of war on map and minimap only
 - discovered areas
 - landmarks
 - quest markers
@@ -1495,7 +1551,7 @@ Implement:
 - towns
 - waypoints
 
-Map discovery must persist.
+Map discovery persists only within the active seed and compatible same-seed restoration; a new launch starts a new undiscovered world.
 
 Do not reveal unexplored procedural locations automatically.
 
@@ -1509,11 +1565,13 @@ Acceptance criteria:
 - unexplored map starts hidden
 - exploring reveals terrain
 - known towns remain visible
-- map state persists
+- map state persists within the same seed; a fresh launch resets discovery
 
 ---
 
 # PROMPT 25 — Procedural Dungeon Generator
+
+**Roadmap v3 contract:** Generate independent interiors for story crypt, mine and cave from region seed + dungeon identity. Shared validated room/door geometry; distinct spawns, layouts, rewards and exact return entrance. Never route optional bosses into story quest state.
 
 Implement procedurally generated dungeons using modular rooms.
 
@@ -1557,6 +1615,8 @@ Acceptance criteria:
 
 # PROMPT 26 — First Dungeon Theme
 
+**Roadmap v3 contract:** Keep story crypt identity; mine/cave use their own materials, decorations, enemies, treasure and telegraphed hazards. Shared isometric floor/wall silhouettes and collision; decoration is not a functional prop unless authorized by simulation. G4 final art follows content.
+
 Create the first complete dungeon theme:
 
 **Corrupted Crypt**
@@ -1591,6 +1651,8 @@ Acceptance criteria:
 
 # PROMPT 27 — Mini Boss Framework
 
+**Roadmap v3 contract:** Assign seeded miniboss identity to actual regions/POIs; defeat facts and one-shot rewards must not reset when chunks unload. Project attacks and health independently of gameplay.
+
 Create reusable mini-boss infrastructure.
 
 Mini bosses should support:
@@ -1624,6 +1686,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 28 — Boss Framework and First Act Boss
+
+**Roadmap v3 contract:** Story Hollow King remains distinct from optional dungeon bosses. World-space windups, reachable movement and LOS; telegraphs projected through the shared renderer. Unique mechanics and balance only in their active roadmap gate.
 
 Implement reusable boss encounter architecture.
 
@@ -1663,6 +1727,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 29 — Death and Respawn
+
+**Roadmap v3 contract:** Respawn preserves active session seed, relevant discovery and consumed/defeated facts; avoid granting duplicate quest or same-seed rewards. No positional migration requirement.
 
 Implement player death.
 
@@ -1900,6 +1966,8 @@ Acceptance criteria:
 
 # PROMPT 35 — Player Stash
 
+**Roadmap v3 contract:** Stash is durable character state, not region seed state; explicit move/equip/drop transactions preserve item identity.
+
 Create a town stash.
 
 Features:
@@ -1929,6 +1997,8 @@ Acceptance criteria:
 
 # PROMPT 36 — Fast Travel and Waypoints
 
+**Roadmap v3 contract:** Use discovered/activated waypoints with stable IDs and authoritative destination validation. New launch resets world activation; travel within a session does not regenerate the region.
+
 Implement waypoints.
 
 Rules:
@@ -1954,6 +2024,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 37 — World Events
+
+**Roadmap v3 contract:** Events are explicit seeded local encounters; bounded event waves are valid, but not global default population. Stable one-shot facts across same-seed reentry and appropriate reset on fresh launch.
 
 Implement random world events.
 
@@ -1992,6 +2064,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 38 — Shrines and Environmental Interactions
+
+**Roadmap v3 contract:** Place shrines and actionable objects in actual valid terrain/rooms; use manifest IDs, range/LOS and collision-aware approach. Claims committed before rewards; project warnings/props without renderer ownership.
 
 Add interactable environment systems.
 
@@ -2273,6 +2347,8 @@ Acceptance criteria:
 
 # PROMPT 44 — Class Selection and Character Creation
 
+**Roadmap v3 contract:** Selecting an existing character for a new launch preserves character progression but generates a fresh region seed; selecting/creating a character must not leak another character's world facts.
+
 Create character creation.
 
 Allow selection of:
@@ -2311,26 +2387,30 @@ Acceptance criteria:
 
 # PROMPT 45 — Save/Load System
 
+**Roadmap v3 contract:** G2 defines the launch/session distinction below. This is the target contract, not a claim that the current bridge already implements it.
+
 Maintain versioned IndexedDB saves for multiple characters. Keep durable hero and world progression independently scoped to the selected character.
 
 - **Character v11:** class, level, XP, points, inventory/equipment, stash, gold, materials, skill/talent progression, and durable quest and campaign milestones. Preserve stable inventory instance IDs and completed reward flags.
 - **World v1:** seed, map discovery, waypoint/checkpoint activation and allowlisted world facts, such as consumed props and defeated persistent encounters. Validate the character ID, seed and referenced content before restoring.
 - **Browser preferences:** locale, bindings, accessibility and audio settings have browser-local storage and do not enter either record.
 
-Load into a fresh session at the safe hub with full health. Restore validated durable facts and regenerate world geometry from the seed. Current position, active fights, enemy health, dropped ground loot, general combat cooldowns and active temporary effects are session data. Explicit durable consumable bookkeeping uses the existing validated character fields.
+New launch or selecting a character to begin a new session starts at the safe hub with full health and a newly chosen world seed, retaining character v11 progression and durable reward claims. An explicit compatible same-seed restore within the active session regenerates geometry and restores only validated world v1 facts. Saving, respawning, travel and portal transitions never reroll the seed. Current position, active fights, enemy health, dropped ground loot, general combat cooldowns and active temporary effects are session data; no historical position migration is required. Explicit durable consumable bookkeeping uses existing validated character fields.
 
-Use stable IDs, atomic IndexedDB writes and explicit migrations from Svelte/Phaser character formats v8–v10. Handle unsupported versions, damaged records and browser storage failures gracefully. Keep the original HTML saves outside the web migration path.
+Use stable IDs, validated IndexedDB writes and explicit migrations from Svelte/Phaser character formats v8–v10. Character/world records are separate; do not claim atomicity across them unless implemented and tested in a shared transaction. Handle unsupported versions, damaged records and browser storage failures gracefully. Keep the original HTML saves outside the web migration path.
 
 Acceptance criteria:
 
-- Save/Load preserves the selected hero, gear identities, quest outcomes and compatible world facts after closing and reopening the game.
+- Save/Load preserves the selected hero, gear identities and quest outcomes after closing and reopening. A fresh launch chooses a new seed and resets world-specific discovery, encounters, waypoints and claims; character quest rewards remain one-shot.
 - Two characters can be switched and reloaded without sharing map discovery, items or quest rewards.
 - Supported web-format migrations are tested with equipment and already-claimed rewards. Invalid and unsupported records produce recoverable behavior.
-- Reload starts combat in a clean state and restores the saved seed and eligible world facts when the world record is valid.
+- Explicit same-seed restore keeps the seed and eligible world facts; a fresh launch starts combat clean with a new seed. Neither path duplicates durable character rewards; validate cross-character and mismatched-seed rejection.
 
 ---
 
 # PROMPT 46 — Full HUD and Main Gameplay UI
+
+**Roadmap v3 contract:** Use existing Svelte projections and modal stack; no duplicate HUD/gameplay rules. G1 checks technical interaction parity; G3/G5 checks full HUD/inventory/touch/accessibility, with #123 owning inventory.
 
 Build production-oriented gameplay UI.
 
@@ -2378,13 +2458,15 @@ Write Svelte 5 HUD/menus as small components observing read-only selectors. Comm
 
 Acceptance criteria:
 
-- Keep key actions reachable at 390, 560, 740, 900 and 1440 px in browser tests. Check small touch portrait and landscape on physical devices before F0 sign-off.
+- Keep key actions reachable at 390, 560, 740, 900 and 1440 px in browser tests. Check small touch portrait and landscape on physical devices before G5 sign-off.
 - Test keyboard focus entry/return, accessible names and prevention of world click-through or game hotkeys while interacting with a modal.
 - Verify the same item and skill identities in HUD, inventory and tooltips after panel changes and live CS/EN switching. The simulation remains authoritative for equip, loot and skill actions.
 
 ---
 
 # PROMPT 47 — Settings, Accessibility, and Input Rebinding
+
+**Roadmap v3 contract:** Preferences are browser-local; renderer/view selection does not alter simulation or save. Test isometric mouse/touch/keyboard bindings, modifier chords, UI capture and focus.
 
 Implement settings.
 
@@ -2422,6 +2504,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 48 — Audio Framework
+
+**Roadmap v3 contract:** G4 final audio; authoritative game events feed one audio adapter regardless of renderer. Avoid double-playing events, handle browser autoplay and mobile lifecycle.
 
 Implement audio architecture.
 
@@ -2461,6 +2545,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 49 — Act II Region
+
+**Roadmap v3 contract:** BLOCKED until explicit G5 approval; no Act II planning, data preparation, code or PR. Future region must reuse the accepted isometric/seed/quest contracts.
 
 Add Act II:
 
@@ -2514,6 +2600,8 @@ Acceptance criteria:
 
 # PROMPT 50 — Act III Region
 
+**Roadmap v3 contract:** BLOCKED until explicit G5 approval and Act II acceptance. Reuse the shared isometric world pipeline.
+
 Add Act III:
 
 **Ashen Highlands**
@@ -2561,6 +2649,8 @@ Acceptance criteria:
 
 # PROMPT 51 — Act IV Region
 
+**Roadmap v3 contract:** BLOCKED until explicit G5 approval and Act III acceptance. Reuse the shared isometric world pipeline.
+
 Add Act IV:
 
 **The Dead Kingdom**
@@ -2606,6 +2696,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 52 — Act V and Campaign Finale
+
+**Roadmap v3 contract:** BLOCKED until explicit G5 approval and Act IV acceptance. Reuse the shared isometric world pipeline.
 
 Add Act V:
 
@@ -2654,6 +2746,8 @@ Acceptance criteria:
 
 # PROMPT 53 — Difficulty Modes and Controlled Scaling
 
+**Roadmap v3 contract:** G3 after #207 population; reassess draft #206 against actual Act I encounters, no runtime merge based on old global waves. No Act II balancing.
+
 Implement difficulty modes.
 
 Difficulty can affect:
@@ -2690,6 +2784,8 @@ Acceptance criteria:
 
 # PROMPT 54 — Reputation and Factions
 
+**Roadmap v3 contract:** Deferred beyond Act I approval; reference only.
+
 Implement optional faction reputation.
 
 Reputation may unlock:
@@ -2719,6 +2815,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 55 — Advanced Legendary Items
+
+**Roadmap v3 contract:** G3 only for necessary Act I item/build diversity; broader campaign/endgame effects deferred. Audit existing item systems first.
 
 Expand legendary loot.
 
@@ -2750,6 +2848,8 @@ Acceptance criteria:
 
 # PROMPT 56 — Endgame Foundation
 
+**Roadmap v3 contract:** BLOCKED until explicit G5 approval and completed campaign; reference only.
+
 Create a minimal extensible endgame foundation.
 
 Do not build an enormous endgame yet.
@@ -2780,6 +2880,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 57 — Performance Pass
+
+**Roadmap v3 contract:** G1 technical baseline and G4/G5 final performance: measure isometric render/culling, texture memory, active enemy budget, navigation, particles and Svelte updates on desktop/mobile. Never skip authoritative combat or change RNG due to visibility.
 
 Profile and optimize.
 
@@ -2823,6 +2925,8 @@ Acceptance criteria:
 
 # PROMPT 58 — Procedural Generation Validation Suite
 
+**Roadmap v3 contract:** G2 rerun strict 1,000-distinct-seed wilderness/dungeon validation (#113) plus boundary and historical regressions after topology/population changes; verify both graph and actual geometry, all settlements, off-road required targets, exact returns, safe spawns and discovery. Report all failing seeds without weakening gates.
+
 Build automated/debug validation for procedural content.
 
 Test many generated seeds.
@@ -2856,6 +2960,8 @@ Acceptance criteria:
 
 # PROMPT 59 — Combat and Item Test Suite
 
+**Roadmap v3 contract:** G3/G5: deterministic combat/item regression including seed-scoped rewards, persistent character claims, full-inventory ground fallback, optional bosses and projected interaction parity. Do not replace natural E2E with fixture-only tests.
+
 Add automated tests/debug validation for:
 
 - damage formulas
@@ -2888,6 +2994,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 60 — Developer Console and Debug Tools
+
+**Roadmap v3 contract:** Only if required by active gate; dev-only, no production debug commands or hidden bridge bypass. Debug fixtures do not count as acceptance.
 
 Create development-only debug tools.
 
@@ -2926,6 +3034,8 @@ Acceptance criteria:
 ---
 
 # PROMPT 61 — Multiplayer-Readiness Architecture Review
+
+**Roadmap v3 contract:** Deferred review until after Act I approval and stable campaign scope; no netcode or speculative architectural rewrite.
 
 Do **not** implement multiplayer.
 
@@ -2975,7 +3085,9 @@ Acceptance criteria:
 
 # PROMPT 62 — Final Vertical Slice Verification
 
-Perform the release-wide vertical-slice verification after campaign integration. F0 uses the [Act I acceptance gate](docs/ROADMAP.md#f0--přejímka-aktuálního-buildu) earlier and already exercises the story through Vesna. This prompt also checks progression, economy, crafting, travel and the release build.
+**Roadmap v3 contract:** Deferred release-wide verification; earlier G5/#125 requires a full natural Act I in default isometry, multiple seeds, all six classes, physical devices and public build. Distinguish same-seed restoration from fresh-launch reset.
+
+Perform the release-wide vertical-slice verification after campaign integration. G5 uses the [Act I acceptance gate](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/125) earlier and exercises the full story through Vesna. This prompt also checks progression, economy, crafting, travel and the release build.
 
 Run this sequence from a fresh character with ordinary player-facing controls:
 
@@ -3005,7 +3117,7 @@ Run this sequence from a fresh character with ordinary player-facing controls:
 24. Save.
 25. Exit game.
 26. Reload game.
-27. Confirm the same item identities, character progression, durable quest rewards, seed, map and applicable world facts after reload.
+27. Confirm the same item identities, character progression and durable quest rewards after reload. For a new launch require a fresh seed and reset session map/waypoints/world facts; separately test explicit same-seed restoration of compatible facts and seed stability during travel/death/save.
 
 Fix all blocking issues discovered.
 
@@ -3021,6 +3133,8 @@ Run Playwright against the built Vite bundle on `/dark_fantasy_2d_arpg/`: verify
 ---
 
 # PROMPT 63 — Full Game Systems Audit
+
+**Roadmap v3 contract:** Deferred final release audit after campaign; G5 is a separate Act I gate. Audit coordinate ownership, seed/session boundary, stable IDs, resource cleanup, map-only fog and renderer independence.
 
 Perform a final architecture and quality audit.
 
@@ -3075,7 +3189,7 @@ Audit Svelte component ownership, Phaser scene cleanup, simulation independence,
 
 # Final Target
 
-The finished application must be a **Svelte 5 + Phaser 4 + TypeScript + Vite static SPA**, housed in `web/`, with independent deterministic simulation, a typed UI/game bridge, **full Czech/English localization via `svelte-i18n`**, versioned IndexedDB saves, static assets under the GitHub Pages repository path and passing Vitest/Playwright tests. Its release workflow deploys `web/dist/` only for changes to published game/build inputs; documentation-only commits do not redeploy.
+The finished application must be a **2.5D isometric Svelte 5 + Phaser 4 + TypeScript + Vite static SPA**, housed in `web/`, with independent deterministic simulation, a typed UI/game bridge, **full Czech/English localization via `svelte-i18n`**, versioned IndexedDB saves, static assets under the GitHub Pages repository path and passing Vitest/Playwright tests. Its release workflow deploys `web/dist/` only for changes to published game/build inputs; documentation-only commits do not redeploy.
 
 The completed project should provide:
 
@@ -3108,7 +3222,7 @@ The completed project should provide:
 - elite enemies
 - mini bosses
 - act bosses
-- five Acts
+- complete Act I before explicit approval; five Acts as the long-term scope
 - persistent towns
 - procedural wilderness
 - procedural dungeons
@@ -3129,18 +3243,17 @@ The completed project should provide:
 - performance-conscious world streaming
 - future multiplayer-ready architecture
 
-Priority order:
+Integration order (Roadmap v3):
 
 ```text
-gameplay correctness
-→ clean architecture
-→ responsive controls
-→ combat feel
-→ progression
-→ procedural replayability
-→ content
-→ polish
+G0 stabilize existing PRs
+→ G1 technical isometry
+→ G2 complete procedural Act I and population
+→ G3 gameplay systems and balance
+→ G4 final art/audio/polish
+→ G5 natural player acceptance and user approval
 ```
+Gameplay correctness and clean architecture apply at every gate.
 
 Do not sacrifice maintainability for rapid content generation.
 
