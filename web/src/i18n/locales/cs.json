@@ -833,6 +833,8 @@
     "noForgeable": "Nasaď zbraň nebo zbroj v inventáři a vrať se ke kováři."
   },
   "dungeon": {
+    "mineBoss": "Zvrácený předák",
+    "caveBoss": "Kanec z hlubin",
     "mineName": "Opuštěný důl",
     "caveName": "Lesní jeskyně",
     "optionalGuards": "Strážci podzemí",

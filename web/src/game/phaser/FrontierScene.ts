@@ -39,6 +39,7 @@ import { buildWilderness } from '../world/wildernessRuntime';
 import { CORRUPTION_TRAIL_ID, FOREST_SIDE_TRAIL_ID } from '../world/forestTrail';
 import { buildCryptWorld } from '../world/dungeonRuntime';
 import { planOptionalDungeonDecorations } from '../world/optionalDungeonDecorations';
+import { planOptionalDungeonFeatures } from '../world/optionalDungeonFeatures';
 import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
 import { dungeonPortalTargets, dungeonPortalCommand, dungeonRenderSeed } from '../world/dungeonPortalPresentation';
 import type { ProceduralDungeonResult, DungeonRoomType } from '../world/proceduralDungeon';
@@ -712,8 +713,10 @@ export class FrontierScene extends Phaser.Scene {
         });
       }
     } else if (event.type === 'cryptInteract') {
-      const prop = buildCryptWorld(this.bridge.snapshot().worldSeed).theme.interactables
-        .find(value => value.id === event.id);
+      const view=this.bridge.snapshot();
+      const world=buildCryptWorld(dungeonRenderSeed(view));
+      const props=view.dungeonId?[planOptionalDungeonFeatures(world.dungeon,view.dungeonId).chest]:world.theme.interactables;
+      const prop=props.find(value=>value.id===event.id);
       if (prop) {
         const ring = this.obtainImpact(prop.position.x, prop.position.y, 85);
         ring.lineStyle(3, 0xebcb85).strokeCircle(0, 0, 24);

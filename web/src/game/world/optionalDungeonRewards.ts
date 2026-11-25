@@ -2,10 +2,10 @@
 import type {OptionalDungeonId} from './optionalDungeonVisit';
 
 const ACTORS=['skeleton-1','wolf-2','wraith-3','crypt_lord-4','skeleton-5','wraith-6'] as const;
-type Slot=typeof ACTORS[number]|'clear';
+type Slot=typeof ACTORS[number]|'clear'|'treasure'|'trap';
 export type OptionalDungeonRewardId=`${OptionalDungeonId}:${Slot}`;
 const IDS:readonly OptionalDungeonRewardId[]=(['mine','cave'] as const)
-  .flatMap(id=>[...ACTORS,'clear' as const].map(slot=>`${id}:${slot}` as OptionalDungeonRewardId));
+  .flatMap(id=>[...ACTORS,'clear' as const,'treasure' as const,'trap' as const].map(slot=>`${id}:${slot}` as OptionalDungeonRewardId));
 const ID_SET:ReadonlySet<string>=new Set(IDS);
 
 export function validOptionalDungeonRewardIds(value:unknown):value is OptionalDungeonRewardId[]{

@@ -24,7 +24,7 @@
       <p>{$t('dungeon.guardsHint')} ·
         {view.enemies.filter(u => !u.actor.alive).length}/{view.enemies.length}</p>
     {:else}
-      <strong>{$t(view.dungeonId?'dungeon.optionalBoss':'boss.hollowKing.name')}</strong>
+      <strong>{$t(view.dungeonId==='mine'?'dungeon.mineBoss':view.dungeonId==='cave'?'dungeon.caveBoss':'boss.hollowKing.name')}</strong>
       {#if view.hollowKing}
         <div class="king-phase">{$t('boss.hollowKing.phase' + view.hollowKing.phase)}
           · {Math.ceil(100 * view.hollowKing.health / view.hollowKing.maxHealth)}%</div>
