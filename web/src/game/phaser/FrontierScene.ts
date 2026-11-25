@@ -42,6 +42,7 @@ import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/act
 import { dungeonPortalTargets, dungeonPortalCommand, dungeonRenderSeed } from '../world/dungeonPortalPresentation';
 import type { ProceduralDungeonResult, DungeonRoomType } from '../world/proceduralDungeon';
 import type { CryptThemePlan } from '../world/cryptTheme';
+import { optionalDungeonVisualStyle } from '../world/optionalDungeonVisuals';
 import {
   createChunkIndex, planVisibleChunks,
   type ChunkIndex, type ChunkManifest
@@ -1454,12 +1455,14 @@ export class FrontierScene extends Phaser.Scene {
   private paintCrypt(
     g: Phaser.GameObjects.Graphics, seed: number,
     walls: readonly { x: number; y: number; width: number; height: number }[],
-    dungeon: ProceduralDungeonResult, theme: CryptThemePlan, optional=false
+    dungeon: ProceduralDungeonResult, theme: CryptThemePlan, dungeonId?: GameSnapshot['dungeonId']
   ): void {
-    g.fillStyle(0x0a0c14).fillRect(0, 0, WIDTH, HEIGHT);
+    const style=optionalDungeonVisualStyle(dungeonId);
+    const optional=!!style;
+    g.fillStyle(style?.background??0x0a0c14).fillRect(0, 0, WIDTH, HEIGHT);
     // Render only walkable tiles supplied by the same pure plan as collisions.
     // No decorative path is allowed to pass through an authoritative wall.
-    const roomPalette: Record<DungeonRoomType, number> = {
+    const roomPalette: Readonly<Record<DungeonRoomType, number>> = style?.roomPalette ?? {
       entrance: 0x343a3a, corridor: 0x2d323b, combat: 0x3b3034,
       elite: 0x45313b, event: 0x333c42, treasure: 0x4c4031,
       trap: 0x49363b, secret: 0x303b39, boss: 0x493038
@@ -1468,10 +1471,15 @@ export class FrontierScene extends Phaser.Scene {
     for (const tile of dungeon.tiles) {
       if (tile.kind !== 'floor') continue;
       const room = tile.roomId ? roomById.get(tile.roomId) : undefined;
-      const palette = room ? roomPalette[room.type] : 0x34313b;
+      const palette = room ? roomPalette[room.type] : style?.floor??0x34313b;
       const shade = ((tile.x / 40 + tile.y / 40 + seed) % 4) * 0.035;
       g.fillStyle(palette, 0.76 + shade).fillRect(tile.x + 1, tile.y + 1, 38, 38);
-      g.lineStyle(1, 0x786c76, 0.11)
+      if(style){
+        // Seeded grain/stone flecks, strictly inside the actual walkable tile.
+        const v=(Math.imul(tile.x+1,31)^Math.imul(tile.y+1,131)^seed)>>>0;
+        g.fillStyle(style.detail,.20).fillRect(tile.x+5+v%22,tile.y+5+(v>>>8)%22,3,2);
+        g.fillStyle(style.wallShadow,.18).fillRect(tile.x+9+(v>>>16)%19,tile.y+8+v%17,5,3);
+      }else g.lineStyle(1, 0x786c76, 0.11)
         .strokeRect(tile.x + 2, tile.y + 2, 36, 36);
     }
     for (const door of dungeon.doors) {
@@ -1490,11 +1498,11 @@ export class FrontierScene extends Phaser.Scene {
         .strokeCircle(room.center.x, room.center.y, room.type === 'boss' ? 120 : 52);
     }
     for (const wall of walls) {
-      g.fillStyle(0x42434f).fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 4);
-      g.lineStyle(3, 0x77727a, 0.85)
+      g.fillStyle(style?.wall??0x42434f).fillRoundedRect(wall.x, wall.y, wall.width, wall.height, 4);
+      g.lineStyle(3, style?.wallEdge??0x77727a, 0.85)
         .strokeRoundedRect(wall.x, wall.y, wall.width, wall.height, 4);
       if (wall.width > 120) {
-        g.lineStyle(2, 0x232530, 0.8)
+        g.lineStyle(2, style?.wallShadow??0x232530, 0.8)
           .lineBetween(wall.x + 13, wall.y + 14, wall.x + wall.width - 13, wall.y + 14);
       }
     }
@@ -1553,7 +1561,7 @@ export class FrontierScene extends Phaser.Scene {
       g.fillStyle(0xb56c65, 0.65)
         .fillCircle(boss.x + Math.cos(a) * 155, boss.y + Math.sin(a) * 155, 5);
     }
-    this.paintPortal(g, dungeon.exitPosition.x, dungeon.exitPosition.y, 0xa4c7b0);
+    this.paintPortal(g, dungeon.exitPosition.x, dungeon.exitPosition.y, style?.portal??0xa4c7b0);
     g.lineStyle(12, 0x6a656d, 0.8).strokeRect(6, 6, WIDTH - 12, HEIGHT - 12);
   }
 
@@ -1583,7 +1591,7 @@ export class FrontierScene extends Phaser.Scene {
       this.villageDecor.push(g);
     }
     if (zone === 'crypt') {
-      this.paintCrypt(ground, dungeonRenderSeed(state), layout.obstacles, crypt!.dungeon, crypt!.theme, !!state.dungeonId);
+      this.paintCrypt(ground, dungeonRenderSeed(state), layout.obstacles, crypt!.dungeon, crypt!.theme, state.dungeonId);
       return;
     }
     ground.fillStyle(0x10161d).fillRect(0, 0, WIDTH, HEIGHT);
