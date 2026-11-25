@@ -8,5 +8,5 @@ export async function openCharacterCreation(page: Page, name = 'Test hero') {
 
 /** Menu continues a selected character; the pause dialog still has explicit Load. */
 export function loadCharacterControl(page: Page) {
-  return page.getByTestId('continue-character').or(page.getByRole('button', { name: 'Load', exact: true }));
+  return page.getByTestId('continue-character').or(page.getByRole('button', { name: /^(Load|Načíst)$/ }));
 }

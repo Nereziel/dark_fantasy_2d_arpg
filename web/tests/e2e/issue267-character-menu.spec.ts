@@ -1,4 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
+import {campMovementTarget, heroPoint} from './iso-input';
 async function create(page: Page, name:string) {
   await page.getByTestId('new-character').click();
   await page.getByTestId('character-name').fill(name);
@@ -19,8 +20,18 @@ test('named same-class heroes resume the selected world, not the in-memory defau
   await create(page,'Šárka');
   const game=page.locator('.game-screen');
   const seed=await game.getAttribute('data-world-seed');
+  const spawn=await heroPoint(page);
+  const canvas=page.locator('canvas[data-renderer="isometric-preview"]');
+  const ground=await campMovementTarget(page,canvas);
+  await page.mouse.click(ground.x,ground.y);
+  await expect.poll(async()=>{const p=await heroPoint(page);return Math.hypot(p.x-spawn.x,p.y-spawn.y);},{timeout:8000}).toBeGreaterThan(20);
   await page.getByRole('button',{name:'Main menu'}).click();
   await expect(page.locator('.saved-character-row')).toHaveCount(1);
+  await next.click();
+  await expect(game).toHaveAttribute('data-world-seed',seed!);
+  const resumed=await heroPoint(page);
+  expect(Math.hypot(resumed.x-spawn.x,resumed.y-spawn.y)).toBeGreaterThan(20);
+  await page.getByRole('button',{name:'Main menu'}).click();
   await create(page,'Morrow');
   const otherSeed=await game.getAttribute('data-world-seed');
   await page.getByRole('button',{name:'Main menu'}).click();
@@ -42,4 +53,23 @@ test('named same-class heroes resume the selected world, not the in-memory defau
   await page.getByRole('button',{name:'Main menu'}).click();
   await next.click();
   await expect(game).toHaveAttribute('data-world-seed',otherSeed!);
+});
+
+test('Czech mobile creation has a labelled name field and cancel returns to the list',async({page})=>{
+  await page.setViewportSize({width:390,height:740});
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('cs');
+  await page.getByRole('button',{name:'Nová postava',exact:true}).click();
+  const name=page.getByRole('textbox',{name:'Jméno postavy'});
+  await expect(name).toBeFocused();
+  await name.fill('  ');
+  await expect(page.getByRole('button',{name:'Vstoupit do světa'})).toBeDisabled();
+  await name.fill('Šárka z lesa');
+  await expect(page.getByRole('button',{name:'Vstoupit do světa'})).toBeEnabled();
+  await page.locator('[data-class-id="MAGE"]').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-class-id="MAGE"]')).toHaveAttribute('aria-pressed','true');
+  await page.getByTestId('cancel-character').click();
+  await expect(page.getByTestId('new-character')).toBeFocused();
+  await expect(page.getByTestId('continue-character')).toBeDisabled();
 });

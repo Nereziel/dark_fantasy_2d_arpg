@@ -1546,7 +1546,8 @@
     "deleted": "Uložená postava byla smazána",
     "full": "Všechny pozice jsou obsazené. Před vytvořením další postavy jednu smaž.",
     "loading": "Načítání postav…",
-    "unnamed": "Nepojmenovaná postava"
+    "unnamed": "Nepojmenovaná postava",
+    "retry": "Zkusit načíst postavy znovu"
   },
   "visualSettings": {
     "title": "Nastavení zobrazení a přístupnosti",

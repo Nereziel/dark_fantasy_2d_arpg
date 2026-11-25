@@ -1546,7 +1546,8 @@
     "deleted": "Saved hero deleted",
     "full": "All character slots are occupied. Delete one to create a new hero.",
     "loading": "Loading characters…",
-    "unnamed": "Unnamed hero"
+    "unnamed": "Unnamed hero",
+    "retry": "Retry loading characters"
   },
   "visualSettings": {
     "title": "Display and accessibility",

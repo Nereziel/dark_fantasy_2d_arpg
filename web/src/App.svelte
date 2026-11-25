@@ -132,6 +132,7 @@
   let activeSessionId = $state<string | null>(null);
   let activeCharacterName = $state<string | undefined>(undefined);
   let menuReady = $state(false);
+  let catalogReadError = $state(false);
   let creatingCharacter = $state(false);
   let newCharacterName = $state('');
   let selectedCharacter = $derived(savedCharacters.find(entry => entry.characterId === selectedCharacterId));
@@ -157,6 +158,19 @@
     newCharacterName = '';
     await tick();
     document.querySelector<HTMLElement>('[data-testid="new-character"]')?.focus();
+  }
+
+  async function initializeCatalog(): Promise<void> {
+    menuReady = false;
+    catalogReadError = false;
+    try {
+      await refreshCharacters();
+      menuReady = true;
+      if (messageKey === 'status.saveError') messageKey = '';
+    } catch {
+      catalogReadError = true;
+      messageKey = 'status.saveError';
+    }
   }
 
   async function refreshCharacters(): Promise<void> {
@@ -410,7 +424,7 @@
     };
     window.addEventListener('pointerdown', unlockAudio, true);
     window.addEventListener('keydown', unlockAudio, true);
-    void refreshCharacters().then(() => { menuReady = true; }).catch(() => { messageKey = 'status.saveError'; });
+    void initializeCatalog();
     try {
       const raw = JSON.parse(window.localStorage.getItem(controlsStorage) ?? '[]');
       if (Array.isArray(raw) && raw.length <= 25) {
@@ -981,7 +995,9 @@
               <strong>{$t('saveSlots.title')}</strong>
               <span>{savedCharacters.length}/{MAX_SAVED_CHARACTERS}</span>
             </div>
-            {#if !menuReady}
+            {#if catalogReadError}
+              <button type="button" class="secondary" onclick={initializeCatalog}>{$t('saveSlots.retry')}</button>
+            {:else if !menuReady}
               <p class="saved-empty">{$t('saveSlots.loading')}</p>
             {:else if savedCharacters.length === 0}
               <p class="saved-empty">{$t('saveSlots.empty')}</p>
