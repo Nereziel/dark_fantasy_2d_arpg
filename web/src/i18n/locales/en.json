@@ -1547,7 +1547,8 @@
     "full": "All character slots are occupied. Delete one to create a new hero.",
     "loading": "Loading characters…",
     "unnamed": "Unnamed hero",
-    "retry": "Retry loading characters"
+    "retry": "Retry loading characters",
+    "doubleActivateHint": "Double-click or double-tap a character to continue immediately."
   },
   "visualSettings": {
     "title": "Display and accessibility",

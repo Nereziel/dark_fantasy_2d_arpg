@@ -14,6 +14,7 @@
     type PointerUiOperation } from './game/input/pointerUiActions';
   import { dispatchCombatAction } from './game/input/combatActionDispatcher';
   import { prioritizeCombatRoster } from './game/ui/combatRoster';
+  import { CharacterDoubleTap } from './game/ui/characterDoubleTap';
   import { loadGame, saveGame, listCharacters, deleteCharacter, MAX_SAVED_CHARACTERS, type SavedCharacterInfo } from './persistence/SaveRepository';
   import { loadWorldProgress, saveWorldProgress } from './persistence/WorldProgressRepository';
   import type { WorldSessionProgress } from './game/core/types';
@@ -138,12 +139,49 @@
   let selectedCharacter = $derived(savedCharacters.find(entry => entry.characterId === selectedCharacterId));
   let validCharacterName = $derived(normalizeCharacterName(newCharacterName));
   let restoring = false;
+  const characterTaps = new CharacterDoubleTap();
+  let touchDown: { id: string; time: number; x: number; y: number } | null = null;
+  let lastSelectionWasTouch = false;
+
+  function resetCharacterGesture(): void {
+    characterTaps.reset();
+    touchDown = null;
+    lastSelectionWasTouch = false;
+  }
+
+  function selectSavedCharacter(id: string, event: MouseEvent): void {
+    if (busy || playing || !menuReady || creatingCharacter
+      || !savedCharacters.some(entry => entry.characterId === id)) return;
+    selectedCharacterId = id;
+    pendingDeleteId = null;
+    const now = performance.now();
+    const explicitTouch = 'pointerType' in event && event.pointerType === 'touch';
+    const down = touchDown;
+    touchDown = null;
+    // Safari may synthesize a MouseEvent for a real touch click. Match the
+    // preceding primary touch pointerdown on this row, never keyboard clicks.
+    const matchingTouch = !!down && down.id === id && now - down.time <= 1000
+      && Math.hypot(event.clientX - down.x, event.clientY - down.y) <= 24;
+    lastSelectionWasTouch = explicitTouch || (event.detail > 0 && matchingTouch);
+    if (!lastSelectionWasTouch) { characterTaps.reset(); return; }
+    if (!matchingTouch) { characterTaps.reset(); return; }
+    if (characterTaps.tap(id, now, event.clientX, event.clientY)) {
+      void continueCharacter(id);
+    }
+  }
+
+  function doubleClickSavedCharacter(id: string, event: MouseEvent): void {
+    // Some touch browsers also emit dblclick; only the touch tracker handles
+    // those gestures. Native desktop dblclick respects OS click timing.
+    if (event.button === 0 && !lastSelectionWasTouch) void continueCharacter(id);
+  }
 
   function characterForSave(): CharacterProgress {
     return { ...bridge.character(), ...(activeCharacterName ? { characterName: activeCharacterName } : {}) };
   }
   async function openCreation(): Promise<void> {
     if (busy || !menuReady || savedCharacters.length >= MAX_SAVED_CHARACTERS) return;
+    resetCharacterGesture();
     selectedClass = 'WARRIOR';
     newCharacterName = '';
     pendingDeleteId = null;
@@ -587,11 +625,17 @@
     }
   }
   async function continueSelected(): Promise<void> {
-    if (busy || !menuReady || !selectedCharacterId) return;
-    if (!selectedCharacter || selectedCharacter.characterId !== selectedCharacterId) return;
+    if (selectedCharacterId) await continueCharacter(selectedCharacterId);
+  }
+  async function continueCharacter(id: string): Promise<void> {
+    if (busy || playing || !menuReady || creatingCharacter
+      || !savedCharacters.some(entry => entry.characterId === id)) return;
+    selectedCharacterId = id;
+    pendingDeleteId = null;
+    resetCharacterGesture();
     heldPosition.clear();
-    if (activeSessionId !== selectedCharacterId) {
-      await load(selectedCharacterId);
+    if (activeSessionId !== id) {
+      await load(id);
       return;
     }
     // Only the matching live hero resumes its exact position and combat state.
@@ -602,6 +646,7 @@
   }
   async function menu(): Promise<void> {
     if (busy) return;
+    resetCharacterGesture();
     busy = true;
     talentsOpen = false; controlsOpen = false; settingsOpen = false;
     mapOpen = false;
@@ -708,6 +753,17 @@
   }
 
   function handlePointerUiDown(event: PointerEvent): void {
+    if (!playing) {
+      const row = event.target instanceof Element
+        ? event.target.closest('.saved-select')?.closest<HTMLElement>('[data-saved-character]') : null;
+      const id = row?.dataset.savedCharacter;
+      if (event.pointerType === 'touch' && event.isPrimary && id && !busy && !creatingCharacter) {
+        touchDown = { id, time: performance.now(), x: event.clientX, y: event.clientY };
+      } else {
+        resetCharacterGesture();
+      }
+      return;
+    }
     if (event.pointerType !== 'mouse') return;
     handleHoldPointerDown(event);
     const operation = pointerUiOperation(event.button, event.target);
@@ -745,6 +801,7 @@
       heldPosition.pointerUp(event.pointerId, event.button);
   }
   function handleHoldPointerCancel(event: PointerEvent): void {
+    if (!playing) resetCharacterGesture();
     if (event.pointerType === 'mouse') heldPosition.pointerCancel(event.pointerId);
   }
   function handleHoldPointerOut(event: PointerEvent): void {
@@ -764,7 +821,7 @@
   }
 
   function handleKeydown(event: KeyboardEvent): void {
-    if (!playing) return;
+    if (!playing) { resetCharacterGesture(); return; }
     if (settingsOpen) {
       if (event.code === 'Escape') {
         event.preventDefault();
@@ -888,6 +945,7 @@
     });
   }
   function handleBlur(): void {
+    resetCharacterGesture();
     heldPosition.clear();
   }
   async function save(): Promise<void> {
@@ -1008,7 +1066,8 @@
                   <div class="saved-character-row" data-saved-character={entry.characterId}>
                     <button type="button" class="saved-select" class:chosen={selectedCharacterId === entry.characterId}
                       aria-pressed={selectedCharacterId === entry.characterId} disabled={busy}
-                      onclick={() => { selectedCharacterId = entry.characterId; pendingDeleteId = null; }}>
+                      onclick={(event) => selectSavedCharacter(entry.characterId, event)}
+                      ondblclick={(event) => doubleClickSavedCharacter(entry.characterId, event)}>
                       <strong>{displayName}</strong>
                       <span>{$t('classes.' + entry.classId + '.name')} · {$t('saveSlots.level')} {entry.level}</span>
                     </button>
@@ -1025,6 +1084,9 @@
                   </div>
                 {/each}
               </div>
+            {/if}
+            {#if savedCharacters.length > 0}
+              <p class="saved-gesture-hint">{$t('saveSlots.doubleActivateHint')}</p>
             {/if}
             {#if selectedCharacter}
               <div class="selected-character-details" data-testid="selected-character" aria-live="polite">
@@ -1482,7 +1544,8 @@
   .saved-character-list { display:grid; gap:5px; max-height:175px; overflow-y:auto; }
   .saved-character-row { display:flex; align-items:stretch; gap:6px; min-width:0; }
   .saved-character-row button { min-height:38px; padding:6px 9px; font-size:.72rem; }
-  .saved-character-row .saved-select { flex:1; display:flex; flex-direction:column; gap:4px; align-items:flex-start;
+  .saved-gesture-hint { color:#bdab92;font-size:.72rem;margin:8px 0;text-align:left; }
+  .saved-character-row .saved-select { touch-action:manipulation; flex:1; display:flex; flex-direction:column; gap:4px; align-items:flex-start;
     justify-content:center; min-width:0; text-align:left; color:#e1d7c7; overflow-wrap:anywhere; }
   .saved-select.chosen { border-color:#ddbc82; background:#302a22; }
   .saved-select span { color:#bdaf9b; flex-shrink:0; }

@@ -1547,7 +1547,8 @@
     "full": "Všechny pozice jsou obsazené. Před vytvořením další postavy jednu smaž.",
     "loading": "Načítání postav…",
     "unnamed": "Nepojmenovaná postava",
-    "retry": "Zkusit načíst postavy znovu"
+    "retry": "Zkusit načíst postavy znovu",
+    "doubleActivateHint": "Dvojklikem nebo dvojtapem na postavu rovnou pokračuješ ve hře."
   },
   "visualSettings": {
     "title": "Nastavení zobrazení a přístupnosti",
