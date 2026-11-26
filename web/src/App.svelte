@@ -1410,14 +1410,14 @@
       {:else if townModal?.role === 'blacksmith'}
         <TradePanel {view} {bridge} npc={BLACKSMITH_ID} close={closeDialogue}
           regionalNameKey={townModal.nameKey} regionalDescriptionKey={townModal.descriptionKey} />
+      {:else if townModal?.role === 'stash'}
+        <StashPanel {view} {bridge} nameKey={townModal.nameKey} descriptionKey={townModal.descriptionKey} close={closeDialogue} />
       {:else if townModal}
         <div class="modal-shield town-service-shield" role="dialog" aria-modal="true" aria-label={$t(townModal.nameKey)}>
           <section class="pause-card town-service-card">
             <h2>{$t(townModal.nameKey)}</h2>
             <p>{$t(townModal.descriptionKey)}</p>
-            {#if townModal.role === 'stash'}
-              <StashPanel {view} {bridge} />
-            {:else if townModal.role === 'waypoint'}
+            {#if townModal.role === 'waypoint'}
               <WaypointPanel {view} {bridge} />
             {:else if townModal.role === 'healer'}
               <button class="primary" disabled={view.gold < 15 || view.player.health >= view.player.maxHealth}
