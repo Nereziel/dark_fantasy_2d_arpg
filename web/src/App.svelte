@@ -310,6 +310,7 @@
   let fullscreenError = $state(false);
   let audioPreferences: AudioPreferences = $state({ ...DEFAULT_AUDIO_PREFERENCES });
   let mapOpen = $state(false);
+  let journalOpen = $state(false);
   let mapZoom = $state(1);
   let mapCenter: Point | null = $state(null);
   let selectedQuestId = $state<string|null>(null);
@@ -418,7 +419,7 @@
       ? document.activeElement : null);
   }
   let modalKind = $derived(!playing ? '' :
-    mapOpen ? 'map' : townModal !== null ? 'town' : tradeNpc !== null ? 'trade'
+    journalOpen ? 'journal' : mapOpen ? 'map' : townModal !== null ? 'town' : tradeNpc !== null ? 'trade'
     : skillEditorOpen ? 'skills' : settingsOpen ? 'settings' : controlsOpen ? 'controls' : dialogueOpen ? 'dialogue' : inventoryOpen ? 'inventory'
     : characterOpen ? 'character' : talentsOpen ? 'talents'
     : !view.player.alive ? 'death' : view.paused ? 'pause' : '');
@@ -469,7 +470,7 @@
   });
 
   function openMap(origin?: HTMLElement): void {
-    if (!playing || mapOpen || !view.player.alive
+    if (!playing || mapOpen || journalOpen || view.zone !== 'wilderness' || !view.player.alive
       || view.paused || inventoryOpen || characterOpen || talentsOpen || controlsOpen || dialogueOpen
       || tradeNpc !== null || townModal !== null) return;
     rememberModalOrigin(origin);
@@ -478,8 +479,23 @@
     bridge.command({ type: 'pause', value: true });
     mapOpen = true;
   }
+  function openJournal(origin?: HTMLElement):void {
+    if (!playing || modalKind !== '' || !view.player.alive || view.paused) return;
+    rememberModalOrigin(origin);
+    journalOpen=true;
+    bridge.command({type:'pause',value:true});
+  }
+  function closeJournal():void {
+    journalOpen=false;
+    bridge.command({type:'pause',value:false});
+  }
+  function selectTrackedQuest(id:string):void {
+    selectedQuestId=id;
+    if(mapOpen){mapZoom=1;mapCenter=null;}
+  }
   function closeMap(): void {
     mapOpen = false;
+    journalOpen = false;
     bridge.command({ type: 'pause', value: false });
   }
 
@@ -654,6 +670,7 @@
     talentsOpen = false;
     controlsOpen = false; settingsOpen = false;
     mapOpen = false;
+    journalOpen = false;
     dialogueOpen = false;
     tradeNpc = null;
     townModal = null;
@@ -684,7 +701,7 @@
       activeSessionId = id;
       notify('');
       inventoryOpen = false; characterOpen = false; talentsOpen = false;
-      controlsOpen = false; settingsOpen = false; mapOpen = false;
+      controlsOpen = false; settingsOpen = false; mapOpen = false; journalOpen = false;
       dialogueOpen = false; tradeNpc = null; townModal = null;
       creatingCharacter = false;
       newCharacterName = '';
@@ -726,6 +743,7 @@
     busy = true;
     talentsOpen = false; controlsOpen = false; settingsOpen = false;
     mapOpen = false;
+    journalOpen = false;
     heldPosition.clear();
     tradeNpc = null; townModal = null; dialogueOpen = false;
     inventoryOpen = false; characterOpen = false;
@@ -815,6 +833,7 @@
 
   function pointerUiState(): PointerUiState {
     if (!playing || skillEditorOpen || settingsOpen || controlsOpen || !view.player.alive) return 'blocked';
+    if (journalOpen) return 'journal';
     if (mapOpen) return 'map';
     if (talentsOpen) return 'talents';
     if (inventoryOpen) return 'inventory';
@@ -846,6 +865,8 @@
     if (!operation) return;
     event.preventDefault();
     switch (operation) {
+      case 'openJournal': openJournal(); break;
+      case 'closeJournal': closeJournal(); break;
       case 'openMap': openMap(); break;
       case 'closeMap': closeMap(); break;
       case 'openTalents': openTalents(); break;
@@ -892,7 +913,7 @@
     const action = resolvePointerAction({ button: event.button, uiCaptured: false }, bridge.bindings());
     if (pointerUiSurface(event.target) !== 'other'
       && (action === 'MAP' || action === 'TALENTS' || action === 'INVENTORY'
-        || action === 'CHARACTER' || action === 'MENU'
+        || action === 'CHARACTER' || action === 'MENU' || action === 'JOURNAL'
         || action === 'HOLD_POSITION')) event.preventDefault();
   }
 
@@ -929,6 +950,15 @@
       shiftKey: event.shiftKey, metaKey: event.metaKey,
       altGraphKey: event.getModifierState('AltGraph') || event.key === 'AltGraph'
     }, bridge.bindings());
+    if (journalOpen) {
+      if(event.code==='Escape' || action==='JOURNAL' || action==='MENU'){
+        event.preventDefault();closeJournal();
+      }
+      return;
+    }
+    if (action==='JOURNAL') {
+      event.preventDefault();openJournal();return;
+    }
     if (talentsOpen) {
       if (event.code === 'Escape' || action === 'MENU' || action === 'TALENTS') {
         event.preventDefault();
@@ -1071,6 +1101,7 @@
         talentsOpen = false;
         controlsOpen = false; settingsOpen = false;
         mapOpen = false;
+        journalOpen = false;
         dialogueOpen = false;
         tradeNpc = null;
         townModal = null;
@@ -1225,6 +1256,9 @@
           </select>
           <button class="small-button" disabled={view.zone !== 'wilderness' || view.paused}
             onclick={(event) => openMap(event.currentTarget)}>{$t('map.open')}</button>
+          <button class="small-button desktop-journal-button" data-testid="open-quest-journal" disabled={view.paused}
+            title={`${$t('map.questLog')} (${shortcutHint(controlBindings,'JOURNAL')})`}
+            onclick={event=>openJournal(event.currentTarget)}>{$t('map.questLog')}</button>
 
         </div>
       </header>
@@ -1297,6 +1331,10 @@
       {#if miniProjection}
         <div class="minimap-overlay" data-minimap="active">
           <WorldMapCanvas projection={miniProjection} compact />
+          {#if tracked}<div class="tracked-quest-summary" data-testid="tracked-quest-summary">
+            <strong>◆ {$t(tracked.titleKey)}</strong>
+            <span>{$t(tracked.hintKey??tracked.objectiveKey)}{#if tracked.status==='active' && tracked.goal>1} · {tracked.count}/{tracked.goal}{/if}</span>
+          </div>{/if}
           <div class="minimap-caption">{shortcutHint(controlBindings, 'MAP')} <span class="minimap-touch-hint">· {$t('worldLabels.doubleTapMap')}</span></div>
         </div>
       {/if}
@@ -1385,7 +1423,18 @@
           {/if}
         </div>
       {/if}
-      {#if mapOpen}
+      {#if journalOpen}
+        <div class="modal-shield map-shield" role="dialog" aria-modal="true" aria-label={$t('map.questLog')} data-testid="quest-journal-dialog">
+          <section class="pause-card standalone-quest-card">
+            <header class="world-map-header">
+              <h2>{$t('map.questLog')}</h2>
+              <button type="button" class="close-button map-close-button" data-testid="quest-journal-close"
+                aria-label={$t('map.closeJournal')} onclick={closeJournal}>✕</button>
+            </header>
+            <MapQuestLog entries={quests} trackedId={tracked?.id??null} select={selectTrackedQuest}/>
+          </section>
+        </div>
+      {:else if mapOpen && fullProjection}
         <div class="modal-shield map-shield" role="dialog" aria-modal="true" aria-label={$t('map.title')}
           data-testid="world-map-dialog">
           <section class="pause-card world-map-card">
@@ -1405,8 +1454,8 @@
                 <span>◎ {$t('map.waypoint')}</span>
               </div>
             </div>
-            <div class="world-map-layout" class:journal-only={!fullProjection}>
-            {#if fullProjection}<div class="world-map-content">
+            <div class="world-map-layout">
+            <div class="world-map-content">
               <WorldMapCanvas projection={fullProjection} onPan={panMap} onZoom={zoomMap} />
               <div class="world-map-toolbar" role="group" aria-label={$t('map.controls')}>
                 <button type="button" data-testid="map-zoom-in" title={$t('map.zoomIn')}
@@ -1420,13 +1469,12 @@
                   aria-label={$t('map.reset')} onclick={resetMapView}>⤢</button>
               </div>
             </div>
-            {/if}
-              <MapQuestLog entries={quests} trackedId={tracked?.id??null}
-                select={id=>{selectedQuestId=id;}} />
+              <MapQuestLog compact entries={quests} trackedId={tracked?.id??null}
+                select={selectTrackedQuest} />
             </div>
-            {#if fullProjection}<div class="world-map-footer">
+            <div class="world-map-footer">
               <WaypointPanel {view} {bridge} />
-            </div>{:else}<p class="world-map-legend">{$t('map.noLocalMap')}</p>{/if}
+            </div>
           </section>
         </div>
       {:else if townModal?.role === 'blacksmith'}
@@ -1733,8 +1781,9 @@
   .tracked-quest-summary{display:grid;gap:3px;padding:6px 3px;color:#e6d4b1;font-size:.69rem;line-height:1.3;overflow-wrap:anywhere}
   .tracked-quest-summary strong{color:#f2d08a;font-size:.75rem}
   .tracked-quest-summary span{color:#c7c4b8}
-  .world-map-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(235px,31%);gap:10px;min-height:0;overflow:hidden}
-  .world-map-layout.journal-only{grid-template-columns:minmax(0,1fr)}
+  .world-map-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,23%);gap:10px;min-height:0;overflow:hidden}
+  .standalone-quest-card{width:min(900px,100%);height:min(640px,100%);min-height:0;min-width:0;max-width:none;max-height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px;overflow:hidden;text-align:left}
+  @media(max-width:700px){.desktop-journal-button{display:none}}
   .world-map-content { position: relative; min-width: 0; min-height: 0;
     display: grid; overflow: hidden; }
   .world-map-toolbar {
@@ -1755,8 +1804,7 @@
   @media (max-width: 700px) {
     .minimap-overlay { width: 145px; min-width: 0; right: 8px; top: 110px; }
     .world-map-card { width: 100%; height: 100%; }
-    .world-map-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(110px,1fr) minmax(0,.8fr);gap:5px}
-    .world-map-layout.journal-only{grid-template-rows:minmax(0,1fr)}
+    .world-map-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(90px,1fr) minmax(0,90px);gap:5px}
     .world-map-legend { font-size: .65rem; }
     .world-map-guide { max-height: 66px; overflow-y: auto; }
     .world-map-key { font-size: .65rem; gap: 3px 8px; }

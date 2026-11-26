@@ -928,7 +928,7 @@
       "SKILLS": "Skills (future)",
       "TALENTS": "Talents",
       "MAP": "Map",
-      "JOURNAL": "Journal (future)",
+      "JOURNAL": "Quest journal",
       "MENU": "Menu / pause",
       "SLOT_5": "Ability 5 – Execute",
       "SLOT_6": "Ability 6 – Basic Attack"
@@ -971,6 +971,8 @@
     "optionalEvent": "Wilderness Event"
   },
   "map": {
+    "closeJournal": "Close quest journal",
+    "objective": "Objective",
     "questLog": "Quest log",
     "track": "Track",
     "tracked": "Tracking",

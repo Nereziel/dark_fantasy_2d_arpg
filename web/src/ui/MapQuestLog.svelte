@@ -1,38 +1,68 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
   import type { JournalEntry } from '../game/ui/questTracking';
-  let {entries,trackedId,select}:{entries:JournalEntry[];trackedId:string|null;select:(id:string)=>void}=$props();
+  let {entries,trackedId,select,compact=false}:{entries:JournalEntry[];trackedId:string|null;select:(id:string)=>void;compact?:boolean}=$props();
+  let inspectedId=$state<string|null>(null);
+  let inspected=$derived(entries.find(e=>e.id===inspectedId)??entries.find(e=>e.id===trackedId)??entries[0]??null);
+  let openEntries=$derived(entries.filter(e=>e.status!=='completed'));
+  let completed=$derived(entries.filter(e=>e.status==='completed'));
 </script>
-<aside class="map-quest-log" data-testid="map-quest-log" aria-label={$t('map.questLog')}>
-  <h3>{$t('map.questLog')}</h3>
-  {#each entries as entry (entry.id)}
-    <article class:tracked={entry.id===trackedId} class:finished={entry.status==='completed'}>
-      <div class="quest-title"><strong>{$t(entry.titleKey)}</strong><small>{$t('map.'+entry.status)}</small></div>
-      {#if entry.status!=='completed'}
-        <p>{$t(entry.hintKey??entry.objectiveKey)}</p>
-        {#if entry.status==='active'}<progress value={entry.count} max={entry.goal} aria-label={$t(entry.objectiveKey)}></progress><small>{entry.count}/{entry.goal}</small>{/if}
-        <p class="description">{$t(entry.descriptionKey)}</p>
-        <p class="reward">{$t('quest.ashes.reward')}: {entry.gold} {$t('hud.gold')} · {entry.xp} XP</p>
-        <button type="button" data-testid={'track-quest-'+entry.id} aria-pressed={entry.id===trackedId}
-          onclick={()=>select(entry.id)}>{entry.id===trackedId?'◆ ':''}{$t(entry.id===trackedId?'map.tracked':'map.track')}</button>
-      {/if}
+{#snippet row(entry:JournalEntry)}
+  <button type="button" class="quest-row" class:tracked={entry.id===trackedId} class:inspected={!compact&&entry.id===inspected?.id}
+    data-testid={compact?'track-quest-'+entry.id:'inspect-quest-'+entry.id}
+    aria-pressed={compact?entry.id===trackedId:entry.id===inspected?.id}
+    onclick={()=>{if(compact)select(entry.id);else inspectedId=entry.id;}}>
+    <span aria-hidden="true">{entry.id===trackedId?'◆':entry.status==='completed'?'✓':'◇'}</span>
+    <span><strong>{$t(entry.titleKey)}</strong><small>{$t('map.'+entry.status)}{#if entry.status==='active'} · {entry.count}/{entry.goal}{/if}</small></span>
+  </button>
+{/snippet}
+{#if compact}
+  <aside class="quest-selector" data-testid="map-quest-selector" aria-label={$t('map.tracked')}>
+    <h3>{$t('map.questLog')}</h3>
+    {#each openEntries as entry (entry.id)}{@render row(entry)}{:else}<p>{$t('map.noQuests')}</p>{/each}
+  </aside>
+{:else}
+  <div class="quest-book" data-testid="quest-book">
+    <aside class="quest-selector" aria-label={$t('map.questLog')}>
+      <h3>{$t('map.active')}</h3>
+      {#each openEntries as entry (entry.id)}{@render row(entry)}{:else}<p>{$t('map.noQuests')}</p>{/each}
+      {#if completed.length}<h3>{$t('map.completed')}</h3>{#each completed as entry (entry.id)}{@render row(entry)}{/each}{/if}
+    </aside>
+    <article class="quest-detail" data-testid="quest-detail">
+      {#if inspected}
+        <h3>{$t(inspected.titleKey)}</h3>
+        <small>{$t('map.'+inspected.status)}</small>
+        <p class="description">{$t(inspected.descriptionKey)}</p>
+        <h4>{$t('map.objective')}</h4>
+        <p>{$t(inspected.hintKey??inspected.objectiveKey)}</p>
+        {#if inspected.status==='active'||inspected.status==='ready'}
+          <progress value={inspected.count} max={inspected.goal} aria-label={$t(inspected.objectiveKey)}></progress>
+          <small>{inspected.count}/{inspected.goal}</small>
+        {/if}
+        <h4>{$t('quest.ashes.reward')}</h4>
+        <p class="reward">{inspected.gold} {$t('hud.gold')} · {inspected.xp} XP</p>
+        {#if inspected.status!=='completed'}<button type="button" class="track-action" data-testid={'journal-track-'+inspected.id} aria-pressed={inspected.id===trackedId}
+          onclick={()=>{if(inspected)select(inspected.id);}}>{inspected.id===trackedId?'◆ ':''}{$t(inspected.id===trackedId?'map.tracked':'map.track')}</button>{/if}
+      {:else}<p>{$t('map.noQuests')}</p>{/if}
     </article>
-  {:else}<p>{$t('map.noQuests')}</p>{/each}
-</aside>
+  </div>
+{/if}
 <style>
-  .map-quest-log{min-width:0;min-height:0;overflow:auto;scrollbar-gutter:stable;background:#111a24;border:1px solid #6f5a3e;padding:10px}
+  .quest-book{display:grid;grid-template-columns:minmax(150px,30%) minmax(0,1fr);gap:12px;min-height:0;overflow:hidden}
+  .quest-selector,.quest-detail{min-width:0;min-height:0;overflow:auto;scrollbar-gutter:stable;background:#111a24;border:1px solid #6f5a3e;padding:10px}
   h3{font:1rem Georgia,serif;color:#e8ce9c;margin:0 0 9px}
-  article{padding:9px;margin-bottom:7px;background:#18232d;border:1px solid #44515a;overflow-wrap:anywhere}
-  article.tracked{border-color:#d8ad68;background:#302b23}
-  article.finished{opacity:.75}
-  .quest-title{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;justify-content:space-between}
-  strong{font:.85rem Georgia,serif;color:#ecd8b5}
-  small{font-size:.68rem;color:#d2bc96}
-  p{font-size:.73rem;line-height:1.4;margin:6px 0;color:#d4d5cd}
-  .description{color:#aeb9bb}
+  .quest-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;text-align:left;width:100%;padding:8px;margin-bottom:5px;background:#18232d;border:1px solid #44515a;color:#d4c2a0}
+  .quest-row.tracked{border-color:#d8ad68}
+  .quest-row.inspected{background:#302b23}
+  .quest-row strong{display:block;font:.8rem Georgia,serif;color:#ecd8b5;overflow-wrap:anywhere}
+  small{font-size:.69rem;color:#d2bc96}
+  .quest-detail{padding:20px}
+  .quest-detail h3{font-size:1.35rem}
+  h4{font:.9rem Georgia,serif;color:#e8ce9c;margin:18px 0 6px}
+  p{font-size:.8rem;line-height:1.5;margin:6px 0;color:#d4d5cd}
+  .description{color:#b8c3c4}
   .reward{color:#d9bc82}
-  progress{width:100%;height:6px;accent-color:#d7b471}
-  button{width:100%;min-height:36px;background:#262d35;border:1px solid #847052;color:#e9d4ae;font-size:.75rem;padding:6px}
-  button[aria-pressed=true]{border-color:#dcba78;color:#ffe4aa}
-  @media(pointer:coarse){button{min-height:44px}}
+  progress{width:100%;height:7px;accent-color:#d7b471}
+  .track-action{min-height:36px;background:#262d35;border:1px solid #847052;color:#e9d4ae;padding:7px 14px;margin-top:10px}
+  .track-action[aria-pressed=true]{border-color:#dcba78;color:#ffe4aa}
 </style>

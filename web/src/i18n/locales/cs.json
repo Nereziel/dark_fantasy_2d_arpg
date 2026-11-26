@@ -928,7 +928,7 @@
       "SKILLS": "Schopnosti (připravují se)",
       "TALENTS": "Talenty",
       "MAP": "Mapa",
-      "JOURNAL": "Deník (připravuje se)",
+      "JOURNAL": "Deník úkolů",
       "MENU": "Menu / pauza",
       "SLOT_5": "Schopnost 5 – Poprava",
       "SLOT_6": "Schopnost 6 – Základní úder"
@@ -971,6 +971,8 @@
     "optionalEvent": "Událost v pustině"
   },
   "map": {
+    "closeJournal": "Zavřít deník úkolů",
+    "objective": "Cíl úkolu",
     "questLog": "Deník úkolů",
     "track": "Sledovat",
     "tracked": "Sledováno",
