@@ -17,7 +17,7 @@ export function journalEntries(view:Pick<GameSnapshot,'quest'|'questLedger'>):Jo
     const starter=definition.id===FIRST_QUEST_ID;
     const status=starter?view.quest.status:state?.status;
     if(status!=='active'&&status!=='ready'&&status!=='completed'&&!(starter&&status==='available'))continue;
-    const objective=definition.objectives[0];
+    const objective=definition.objectives.find(o=>(starter?view.quest.defeated:state?.counters[o.id]??0)<o.targetCount)??definition.objectives.at(-1);
     const count=starter?view.quest.defeated:state?.counters[objective?.id??'']??0;
     const hintKey=starter&&status==='available'?'quest.ashes.unstarted':starter&&status==='ready'?'quest.ashes.readyHint':
       status==='ready'&&definition.id==='vesnas_report'?'quest.actI.returnToVesna':activeStoryRegionHint(definition.id,status);

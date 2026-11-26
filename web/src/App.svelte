@@ -316,8 +316,8 @@
   let selectedQuestId = $state<string|null>(null);
   let quests = $derived(journalEntries(view));
   let tracked = $derived(trackedQuest(quests,selectedQuestId));
-  let miniProjection = $derived(view.zone === 'wilderness' ? bridge.mapProjection('minimap',{trackedQuestId:tracked?.id}) : null);
-  let fullProjection = $derived(mapOpen && view.zone === 'wilderness'
+  let miniProjection = $derived(playing && view.player.alive ? bridge.mapProjection('minimap',{trackedQuestId:tracked?.id}) : null);
+  let fullProjection = $derived(mapOpen && view.player.alive
     ? bridge.mapProjection('world', {
       zoom: mapZoom, trackedQuestId:tracked?.id, ...(mapCenter ? { center: mapCenter } : {})
     }) : null);
@@ -470,7 +470,7 @@
   });
 
   function openMap(origin?: HTMLElement): void {
-    if (!playing || mapOpen || journalOpen || view.zone !== 'wilderness' || !view.player.alive
+    if (!playing || mapOpen || journalOpen || !view.player.alive
       || view.paused || inventoryOpen || characterOpen || talentsOpen || controlsOpen || dialogueOpen
       || tradeNpc !== null || townModal !== null) return;
     rememberModalOrigin(origin);
@@ -1254,7 +1254,7 @@
               <option value={option.code}>{option.label}</option>
             {/each}
           </select>
-          <button class="small-button" disabled={view.zone !== 'wilderness' || view.paused}
+          <button class="small-button" disabled={view.paused}
             onclick={(event) => openMap(event.currentTarget)}>{$t('map.open')}</button>
           <button class="small-button desktop-journal-button" data-testid="open-quest-journal" disabled={view.paused}
             title={`${$t('map.questLog')} (${shortcutHint(controlBindings,'JOURNAL')})`}
@@ -1333,6 +1333,7 @@
           <WorldMapCanvas projection={miniProjection} compact />
           {#if tracked}<div class="tracked-quest-summary" data-testid="tracked-quest-summary">
             <strong>◆ {$t(tracked.titleKey)}</strong>
+            {#if miniProjection.navigationStage==='exit'}<span>{$t('map.questExit')}</span>{:else if miniProjection.navigationStage==='enter'}<span>{$t('map.questEntrance')}</span>{/if}
             <span>{$t(tracked.hintKey??tracked.objectiveKey)}{#if tracked.status==='active' && tracked.goal>1} · {tracked.count}/{tracked.goal}{/if}</span>
           </div>{/if}
           <div class="minimap-caption">{shortcutHint(controlBindings, 'MAP')} <span class="minimap-touch-hint">· {$t('worldLabels.doubleTapMap')}</span></div>
@@ -1439,7 +1440,7 @@
           data-testid="world-map-dialog">
           <section class="pause-card world-map-card">
             <header class="world-map-header">
-              <h2>{$t('map.title')}</h2>
+              <h2>{$t(fullProjection.area&&fullProjection.area!=='wilderness'?(fullProjection.area==='crypt'?'dungeon.name':'dungeon.'+fullProjection.area+'Name'):'map.title')}</h2>
               <button class="map-close-button" data-testid="map-close"
                 aria-label={$t('map.close')} title={$t('map.close')}
                 onclick={closeMap}><span aria-hidden="true">✕</span><span>{$t('map.close')}</span></button>
@@ -1472,9 +1473,9 @@
               <MapQuestLog compact entries={quests} trackedId={tracked?.id??null}
                 select={selectTrackedQuest} />
             </div>
-            <div class="world-map-footer">
+            {#if view.zone==='wilderness'}<div class="world-map-footer">
               <WaypointPanel {view} {bridge} />
-            </div>
+            </div>{:else}<p class="world-map-legend">{$t('map.dungeonExploration')}</p>{/if}
           </section>
         </div>
       {:else if townModal?.role === 'blacksmith'}

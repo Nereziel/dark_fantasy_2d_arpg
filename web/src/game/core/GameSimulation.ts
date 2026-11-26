@@ -75,6 +75,7 @@ import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonR
 import { planOptionalDungeonEntry, planOptionalDungeonExit, type OptionalDungeonVisit } from '../world/optionalDungeonVisit';
 import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
 import { projectDiscoveredDungeonEntrances } from '../world/dungeonPortalPresentation';
+import { questTravelLeg, knownQuestRoute, projectDungeonMap, type QuestArea } from '../world/questNavigation';
 import {optionalDungeonRewardId,validOptionalDungeonRewardIds,type OptionalDungeonRewardId} from '../world/optionalDungeonRewards';
 import {planOptionalDungeonFeatures,optionalDungeonChestProjection,rollOptionalDungeonTreasure} from '../world/optionalDungeonFeatures';
 import {
@@ -366,6 +367,8 @@ export class GameSimulation {
   private worldFacts: WorldFactLedger | null = null;
   private mapWorld: MapWorldInput | null = null;
   private mapDiscovery: MapDiscoveryState | null = null;
+  private dungeonMap: {layout:WorldLayout;input:MapWorldInput;state:MapDiscoveryState}|null=null;
+  private questRouteCache: {layout:WorldLayout;from:Point;to:Point;path:Point[]}|null=null;
   /** Renderer-only seed geometry; never included in either persistence contract. */
   private mapTerrain: WildernessRuntimeWorld['terrain'] | null = null;
   private pendingNpc: NpcId | null = null;
@@ -469,9 +472,72 @@ export class GameSimulation {
     this.worldFacts = applyWorldFact(this.worldIndex, this.worldFacts, fact).state;
   }
 
+  private get questArea():QuestArea {
+    return this.zone==='wilderness'?'wilderness':this.optionalVisit?.identity.dungeonId??'crypt';
+  }
+  private dungeonMapState():{layout:WorldLayout;input:MapWorldInput;state:MapDiscoveryState}|null{
+    if(this.dungeonMap?.layout===this.world)return this.dungeonMap;
+    const input:MapWorldInput={seed:this.world.seed,worldInstanceId:'dungeon-'+this.questArea,features:[]};
+    const initial=createMapDiscovery(input,this.player,105);
+    return initial.ok?{layout:this.world,input,state:initial.value}:null;
+  }
+  private observedQuestRoute(target:Readonly<Point>,state:MapDiscoveryState):Point[]{
+    const from={x:this.player.x,y:this.player.y},to={...target};
+    let cache=this.questRouteCache;
+    if(!cache||cache.layout!==this.world||distance(cache.from,from)>12||distance(cache.to,to)>12){
+      cache={layout:this.world,from,to,path:findPath(from,to,ACTOR_RADIUS,this.world.obstacles)};
+      this.questRouteCache=cache;
+    }
+    // Revalidate every displayed segment from the live position; never reuse a
+    // stale path across a corner, layout switch, or newly occupied target.
+    const path=cache.path.length?[...cache.path.slice(0,-1),to]:[];
+    return knownQuestRoute(from,to,this.world.obstacles,state.revealedCells,path);
+  }
+  private questDestinationArea(id:string):QuestArea{
+    return ACT_I_MILESTONES.find(beat=>beat.questId===id)?.regionHint==='crypt'?'crypt':'wilderness';
+  }
+  private dungeonQuestProjection(mode:'world'|'minimap',
+    options:Pick<MapProjectionOptions,'zoom'|'center'|'trackedQuestId'>):MapProjection|null{
+    const observed=this.dungeonMapState();
+    if(!observed)return null;
+    const area=this.questArea;
+    if(area==='wilderness')return null;
+    const id=options.trackedQuestId;
+    const status=id?this.questStatus(id):null;
+    const open=id&&(status==='active'||status==='ready'||(id===FIRST_QUEST_ID&&status==='available'));
+    const leg=open?questTravelLeg(area,this.questDestinationArea(id)):null;
+    let target:Readonly<Point>|null=null;
+    if(leg==='exit')target=this.portalPosition;
+    else if(leg==='objective'&&id==='crypt_lord_fallen'){
+      // Stage zero requires the actual surviving guardians before the boss
+      // spawns; stage one follows the live story boss, never optional bosses.
+      const live=this.aliveEnemies.map(unit=>unit.actor);
+      target=this.dungeonStage===0
+        ? [...live].sort((a,b)=>distance(a,this.player)-distance(b,this.player))[0]??null
+        : live.find(actor=>actor.id==='crypt_lord-4')??null;
+    }else if(leg==='objective'&&id==='crypt_descent')target=this.portalPosition;
+    const hint=id&&target?{id,status:'active' as const,position:target,
+      presentationKey:leg==='exit'?'worldLabels.portalExit':'map.quest'}:null;
+    const route=target?this.observedQuestRoute(target,observed.state):[];
+    const projection=projectDungeonMap(observed.state,observed.input,this.player,this.world.obstacles,hint,mode,
+      mode==='world'?options:{},area,route);
+    return projection?{...projection,...(leg?{navigationStage:leg}:{})}:null;
+  }
   private observeExploration(): void {
-    if (this.zone !== 'wilderness' || !this.mapWorld || !this.mapDiscovery
-      || !this.player.alive) return;
+    if(!this.player.alive)return;
+    if(this.zone==='crypt'){
+      const observed=this.dungeonMapState();
+      if(!observed)return;
+      this.dungeonMap=observed;
+      const last=observed.state.lastObservedPosition;
+      if(last&&distance(last,this.player)<18)return;
+      // Only actual position observations, not the route, reveal dungeon cells.
+      const next=revealAtPosition(observed.state,this.player,105,observed.input);
+      if(next.ok)this.dungeonMap={...observed,state:next.value};
+      return;
+    }
+    this.dungeonMap=null;
+    if (!this.mapWorld || !this.mapDiscovery) return;
     const previous = this.mapDiscovery;
     const last = previous.lastObservedPosition;
     if (last && distance(last, this.player) < 18) return;
@@ -490,14 +556,16 @@ export class GameSimulation {
   /** Only discovered areas and markers ever cross into the UI-facing map projection. */
   mapProjection(mode: 'world' | 'minimap' = 'world',
     options: Pick<MapProjectionOptions, 'zoom' | 'center' | 'trackedQuestId'> = {}): MapProjection | null {
-    if (!this.mapWorld || !this.mapDiscovery || this.zone !== 'wilderness') return null;
+    if(this.zone==='crypt')return this.dungeonQuestProjection(mode,options);
+    if (!this.mapWorld || !this.mapDiscovery) return null;
     const featureIdByQuest: Record<string, string> = {
       trail_of_black_ash: 'act1.corruption_site',
       blighted_pack: 'act1.tainted_beasts',
       forgotten_graves: 'act1.abandoned_graveyard',
       morrow_gravebound: 'act1.grave_warden',
       seal_of_rot: 'act1.evidence_lead',
-      crypt_descent: 'act1.crypt_entrance'
+      crypt_descent: 'act1.crypt_entrance',
+      crypt_lord_fallen: 'act1.crypt_entrance'
     };
     const hints: MapQuestHint[] = ACT_I_MILESTONES.flatMap(beat => {
       const state = this.actILedger.quests.find(entry => entry.questId === beat.questId);
@@ -526,7 +594,12 @@ export class GameSimulation {
     if (!result.ok) return null;
     const terrainProjection = this.mapTerrain
       ? projectVisibleTerrain(result.value, this.mapTerrain) : result.value;
-    const projection = projectDiscoveredDungeonEntrances(terrainProjection,this.dungeonEntrances);
+    const baseProjection = projectDiscoveredDungeonEntrances(terrainProjection,this.dungeonEntrances);
+    const selected=baseProjection.navigationTarget;
+    const id=options.trackedQuestId;
+    const projection:MapProjection={...baseProjection,area:'wilderness',
+      ...(id?{navigationStage:questTravelLeg('wilderness',this.questDestinationArea(id))}:{}),
+      ...(selected?{navigationRoute:this.observedQuestRoute(selected.position,this.mapDiscovery)}:{})};
     // A historic respawn shrine is also a travel waypoint when actually activated.
     // Derive this marker from the existing seed-scoped checkpoint fact; do not
     // expand mapWorld.waypoints (that would invalidate legacy map fingerprints).
@@ -3996,6 +4069,7 @@ export class GameSimulation {
     if (wilderness && this.optionalVisit && !returnPosition) { this.pendingPortal = false; this.pendingDungeonEntrance = null; return; }
     this.optionalVisit = destination === 'crypt' ? visit : null;
     this.zone = destination;
+    this.dungeonMap=null;this.questRouteCache=null;
     this.shrineBlessings=[];
     this.pendingEnvironmentId=null;
     this.activeWorldEventId = null;
@@ -4062,6 +4136,7 @@ export class GameSimulation {
     if (destination === 'crypt') {
       if (!this.optionalVisit) this.storyEvent('crypt_descent', 'crypt_gate_entered', 'crypt_entry');
     } else this.spawnMorrow();
+    this.observeExploration();
     this.events.push({ type: 'zoneChanged', zone: destination });
   }
 
