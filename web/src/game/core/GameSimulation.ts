@@ -489,7 +489,7 @@ export class GameSimulation {
 
   /** Only discovered areas and markers ever cross into the UI-facing map projection. */
   mapProjection(mode: 'world' | 'minimap' = 'world',
-    options: Pick<MapProjectionOptions, 'zoom' | 'center'> = {}): MapProjection | null {
+    options: Pick<MapProjectionOptions, 'zoom' | 'center' | 'trackedQuestId'> = {}): MapProjection | null {
     if (!this.mapWorld || !this.mapDiscovery || this.zone !== 'wilderness') return null;
     const featureIdByQuest: Record<string, string> = {
       trail_of_black_ash: 'act1.corruption_site',
@@ -506,9 +506,12 @@ export class GameSimulation {
       return [{
         id: beat.questId, status: 'active' as const,
         ...(featureId ? { featureId } : {}),
-        ...(beat.questId === 'vesnas_report' ? { position: CAMP } : {}),
+        ...(beat.questId === 'vesnas_report' ? { position: NPC_POSITIONS[WARDEN_ID] } : {}),
         presentationKey: 'map.quest'
       }];
+    });
+    if (this.quest.status === 'available' || this.quest.status === 'ready') hints.push({
+      id:FIRST_QUEST_ID,status:'active',position:{...NPC_POSITIONS[WARDEN_ID]},presentationKey:'quest.ashes.title'
     });
     for (const quest of VILLAGE_QUESTS) {
       const state = this.questStatus(quest.id);
@@ -518,7 +521,7 @@ export class GameSimulation {
         presentationKey:'quest.village.' + quest.id + '.title'});
     }
     const result = projectMap(this.mapDiscovery, this.mapWorld, this.player, hints, { mode,
-      ...(mode === 'world' ? options : {})
+      ...(mode === 'world' ? options : {trackedQuestId:options.trackedQuestId})
     });
     if (!result.ok) return null;
     const terrainProjection = this.mapTerrain

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
+  import { navigationArrow } from '../game/ui/questTracking';
   import type { MapProjection, MapMarkerKind } from '../game/world/mapDiscovery';
   import type { TerrainId } from '../game/world/wildernessTerrain';
 
@@ -15,6 +16,7 @@
 
   let svgElement: SVGSVGElement;
   // Two projections can coexist: IDs must not share a clipPath or visual fog.
+  let direction = $derived(navigationArrow(projection.viewport,projection.markers.find(m=>m.kind==='player')?.position??null,projection.navigationTarget?.position??null));
   let clipId = $derived(compact ? 'ar-discovered-mini' : 'ar-discovered-world');
 
   function terrainColor(id?: TerrainId): string {
@@ -148,7 +150,9 @@
       {/each}
     </g>
     {#each projection.markers as marker (marker.id)}
-      <g data-map-marker={marker.id} data-marker-kind={marker.kind}>
+      <g data-map-marker={marker.id} data-marker-kind={marker.kind}
+        data-tracked-quest={marker.id===projection.navigationTarget?.id?marker.id.slice(6):undefined}>
+        {#if marker.id===projection.navigationTarget?.id}<circle cx={marker.position.x} cy={marker.position.y} r={compact?23:32} fill="none" stroke="#fff0a6" stroke-width="4" stroke-dasharray="7 3"/>{/if}
         {#if marker.kind === 'dungeonEntrance'}
           <path d={`M${marker.position.x} ${marker.position.y-15} l15 27 h-30 z`}
             fill={markerColor(marker.kind)} stroke="#0a1017" stroke-width="4"/>
@@ -182,6 +186,9 @@
         <title>{$t(marker.presentationKey)}</title>
       </g>
     {/each}
+    {#if compact && direction}<g data-quest-direction transform={`translate(${direction.x} ${direction.y}) rotate(${direction.angle})`}>
+      <path d="M-12 -10 L13 0 -12 10 -5 0 Z" fill="#ffe19a" stroke="#12151b" stroke-width="3"/>
+    </g>{/if}
   </svg>
   {#if !compact && projection.hints.length}
     <div class="map-hints">

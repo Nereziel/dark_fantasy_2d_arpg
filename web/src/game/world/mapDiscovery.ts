@@ -94,6 +94,7 @@ export interface MapProjectionOptions {
   readonly zoom?: number;
   /** Optional map camera center, clamped to the world. Never changes discovery. */
   readonly center?: Readonly<Point>;
+  readonly trackedQuestId?: string;
 }
 
 export interface MapFogCell extends MapViewport {
@@ -135,6 +136,8 @@ export interface MapProjection {
   readonly cells: readonly MapFogCell[];
   readonly markers: readonly MapMarker[];
   readonly hints: readonly MapHiddenQuestHint[];
+  /** Selected discovered target, even outside the current viewport. No hidden coordinates. */
+  readonly navigationTarget?: MapMarker;
 }
 
 export type MapDiscoveryError =
@@ -606,6 +609,7 @@ export function projectMap(
   }
 
   const hints: MapHiddenQuestHint[] = [];
+  let navigationTarget: MapMarker | undefined;
   for (const hint of questHints) {
     const target = hint.featureId !== undefined
       ? (state.discoveredLandmarkIds.includes(hint.featureId)
@@ -613,6 +617,9 @@ export function projectMap(
       : hint.position;
     const isTown = hint.featureId === undefined && target?.x === CAMP.x && target.y === CAMP.y;
     if (target && (isTown || knownCells.has(pointCell(target)))) {
+      if (hint.id===options.trackedQuestId && hint.status==='active') navigationTarget=freezeMarker({
+        id:'quest/'+hint.id,kind:'quest',position:target,presentationKey:hint.presentationKey??'map.quest',questStatus:hint.status
+      });
       // A discovered but off-viewport quest has an unlocated hint for this view.
       if (observedRect(viewport, target)) {
         append({
@@ -633,7 +640,8 @@ export function projectMap(
   hints.sort((a, b) => a.id.localeCompare(b.id));
   return succeeded(Object.freeze({
     mode, zoom, viewport, cells: Object.freeze(cells),
-    markers: Object.freeze(markers), hints: Object.freeze(hints)
+    markers: Object.freeze(markers), hints: Object.freeze(hints),
+    ...(navigationTarget?{navigationTarget}:{})
   }));
 }
 
