@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { journalEntries, trackedQuest, navigationArrow } from '../../src/game/ui/questTracking';
+import { rewardForActivity } from '../../src/game/progression/progressionRules';
 import { freshQuest } from '../../src/game/quests/firstQuest';
 
 describe('read-only quest tracking', () => {
@@ -18,6 +19,13 @@ describe('read-only quest tracking', () => {
     expect(entries.map(q=>q.id)).toContain('village_smith_supplies');
     expect(trackedQuest(entries,'village_smith_supplies')?.id).toBe('village_smith_supplies');
     expect(trackedQuest(entries,'ashes_at_gate')?.id).toBe('trail_of_black_ash');
+  });
+  it('reports the real level-scaled starter reward and the ready side quest return hint',()=>{
+    const entries=journalEntries({quest:freshQuest(),level:12,questLedger:{quests:[
+      {questId:'village_smith_supplies',status:'ready',counters:{visit:1},processedEventIds:['visit'],rewardClaimed:false}
+    ]}});
+    expect(entries.find(q=>q.id==='ashes_at_gate')?.xp).toBe(Math.max(100,rewardForActivity('quest',12,12)));
+    expect(entries.find(q=>q.id==='village_smith_supplies')?.hintKey).toBe('map.returnToGiver');
   });
   it('clamps a direction indicator within the viewport and hides it for a local or unknown target', () => {
     const viewport={x:0,y:0,width:480,height:320};

@@ -36,6 +36,35 @@ describe('Act I authoritative quest progression integration', () => {
     expect(restored.snapshot().gold).toBe(after.gold);
   });
 
+  it('exposes evidence only during its active quest and requires a real nearby interaction',()=>{
+    const game=new GameSimulation(42);
+    const snapshot=game.snapshot();
+    expect(snapshot.storyEvidence).toBeUndefined();
+    const ledger=createActIQuestLedger(snapshot.quest)!;
+    let beforeSeal=true;
+    const prepared={quests:ledger.quests.map(entry=>{
+      if(entry.questId==='seal_of_rot'){beforeSeal=false;return {...entry,status:'active' as const};}
+      if(!beforeSeal)return entry;
+      const definition=ACT_I_QUEST_CATALOG.quests.find(q=>q.id===entry.questId)!;
+      return {...entry,status:'completed' as const,counters:Object.fromEntries(definition.objectives.map(o=>[o.id,o.targetCount])),
+        processedEventIds:['fixture_'+entry.questId],rewardClaimed:true};
+    })};
+    expect(game.restore({...snapshot,quest:{id:FIRST_QUEST_ID,status:'completed',defeated:3},questLedger:prepared})).toBe(true);
+    const active=game.snapshot();
+    const target=buildWilderness(42).features.find(f=>f.id==='act1.evidence_lead')!;
+    expect(active.storyEvidence?.position).toEqual(target.position);
+    game.command({type:'inspectStoryEvidence'});
+    expect(game.snapshot().questLedger?.quests.find(q=>q.questId==='seal_of_rot')?.status).toBe('active');
+    expect(game.restore({...active,player:{...active.player,...target.position}})).toBe(true);
+    game.command({type:'inspectStoryEvidence'});
+    const done=game.snapshot();
+    expect(done.storyEvidence).toBeUndefined();
+    expect(done.questLedger?.quests.find(q=>q.questId==='crypt_descent')?.status).toBe('active');
+    expect(done.gold).toBe(active.gold+75);
+    game.command({type:'inspectStoryEvidence'});
+    expect(game.snapshot().gold).toBe(done.gold);
+  });
+
   it('requires Vesna in town for the final report and pays once after unlocking Act II', () => {
     const game = new GameSimulation(42);
     const snapshot = game.snapshot();
