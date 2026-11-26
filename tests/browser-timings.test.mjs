@@ -32,3 +32,29 @@ test('browser timings count failed attempts and order nested tests by total exec
     assert.match(absent, /No browser JSON report/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('browser diagnostics include every failed test and attempt, and missing reports reach job summary', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'arpg-diagnostics-'));
+  try {
+    const report = join(dir, 'report.json');
+    const summary = join(dir, 'summary.md');
+    const specs = Array.from({length: 13}, (_, i) => ({
+      title: 'slow pass ' + i, file: 'pass.spec.ts',
+      tests: [{status: 'expected', results: [{duration: 1000}]}]
+    }));
+    specs.push({title: 'fast failure', file: 'failure.spec.ts', tests: [{
+      status: 'unexpected', results: [{duration: 2, status: 'failed', errors: [{message: 'Expected 4, received 5'}]},
+        {duration: 3, status: 'timedOut', errors: [{message: 'Tap intercepted'}]}]
+    }]});
+    writeFileSync(report, JSON.stringify({suites: [{specs}], errors: [{message: 'Global setup error'}]}));
+    const env = {...process.env, GITHUB_STEP_SUMMARY: summary};
+    const out = execFileSync(process.execPath, [script, report, 'quick-2'], {encoding: 'utf8', env});
+    assert.match(out, /unexpected: 1/);
+    assert.match(out, /fast failure/);
+    assert.match(out, /Expected 4, received 5/);
+    assert.match(out, /Tap intercepted/);
+    assert.match(out, /Global setup error/);
+    execFileSync(process.execPath, [script, join(dir, 'absent.json'), 'act-i'], {encoding: 'utf8', env});
+    assert.match(readFileSync(summary, 'utf8'), /No browser JSON report/);
+  } finally { rmSync(dir, {recursive: true, force: true}); }
+});

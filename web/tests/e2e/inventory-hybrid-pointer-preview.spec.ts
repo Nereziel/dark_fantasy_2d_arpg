@@ -34,7 +34,19 @@ test.describe('hybrid pointer inventory inspection', () => {
     // Both belts have the same name; favorite only the FIRST instance so the
     // inspector's localized favorite action identifies which item is previewed.
     await first.tap();
-    await inspector.getByRole('button', { name: 'Favorite', exact: true }).tap();
+    const favorite = inspector.getByRole('button', { name: 'Favorite', exact: true });
+    // Real touch action must not be intercepted by overflowing equipment slots.
+    await favorite.tap();
+    const layout = await inventory.evaluate(node => {
+      const measure = (selector: string) => {
+        const el = node.querySelector(selector)!;
+        const { x, y, width, height } = el.getBoundingClientRect();
+        return { x, y, width, height };
+      };
+      return { gear: measure('.equipment-section'), bag: measure('.backpack-section'), inspector: measure('.item-inspector') };
+    });
+    expect(layout.gear.x + layout.gear.width, JSON.stringify(layout)).toBeLessThanOrEqual(layout.inspector.x + 1);
+    expect(layout.bag.x + layout.bag.width, JSON.stringify(layout)).toBeLessThanOrEqual(layout.inspector.x + 1);
     await expect(first).toHaveClass(/favorite/);
     await expect(second).not.toHaveClass(/favorite/);
     await expect(inspector.getByRole('button', { name: 'Unfavorite' })).toBeVisible();
