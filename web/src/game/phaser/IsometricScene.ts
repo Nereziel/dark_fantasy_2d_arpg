@@ -45,6 +45,7 @@ import { playerAnimation } from '../entities/playerAnimation';
 import { projectCombatCircle, projectCombatCone, combatHealthBar } from './isometricCombat';
 import { classGroundEffects, summonPresentation } from './isometricClassEffects';
 import { planIsometricImpact } from './isometricImpactFeedback';
+import { enemyHoverIdentity } from '../ui/enemyHoverIdentity';
 import { getVisualPreferences, shouldReduceMotion } from '../ui/visualPreferences';
 import {
   PIXEL_ANIMATIONS, PIXEL_ANIMATION_FRAMES, PIXEL_FRAME_WIDTH, PIXEL_FRAME_HEIGHT,
@@ -163,6 +164,7 @@ export class IsometricScene extends Phaser.Scene {
         delete this.game.canvas.dataset.npcLabels;
         delete this.game.canvas.dataset.npcVisuals;
         delete this.game.canvas.dataset.focusedWorldObject;
+        delete this.game.canvas.dataset.enemyHover;
         delete this.game.canvas.dataset.lootLabels;
         this.game.canvas.style.cursor = 'default';
       }
@@ -355,7 +357,7 @@ export class IsometricScene extends Phaser.Scene {
   private release(): void { this.held.release(); }
   private clearWorldFocus():void {this.release();this.focusedWorldId='';this.focusUntil=0;this.nextLabelUpdate=0;this.focusRing?.clear();}
   private focusTarget(context: ReturnType<IsometricScene['pick']>['context'], touch:boolean, label:string|null=null):void {
-    const id=label?'loot/'+label:context.kind==='NPC'?'npc/'+context.id:context.kind==='LOOT'?'loot/'+context.id:context.kind==='INTERACTABLE'?'object/'+context.id:'';
+    const id=label?'loot/'+label:context.kind==='NPC'?'npc/'+context.id:context.kind==='LOOT'?'loot/'+context.id:context.kind==='INTERACTABLE'?'object/'+context.id:context.kind==='ENEMY'?'enemy/'+context.id:'';
     if(id!==this.focusedWorldId){this.focusedWorldId=id;this.nextLabelUpdate=0;}
     this.focusUntil=touch?this.time.now+1800:Infinity;
   }
@@ -484,6 +486,14 @@ export class IsometricScene extends Phaser.Scene {
       specs.push({id:'loot/'+drop.id,point:drop,elevation:19,
         text:itemDisplayName(drop.item,language,t('item.base.'+drop.item.templateId)),color:RARITIES[drop.item.rarity].color});
     }
+    const hoveredEnemy=state.enemies.find(u=>u.actor.alive&&'enemy/'+u.actor.id===this.focusedWorldId);
+    if(hoveredEnemy){
+      const identity=enemyHoverIdentity(hoveredEnemy,state.zone,state.dungeonId,state.level);
+      const rank=identity.rank==='normal'?'':' · '+t('worldLabels.enemyRank.'+identity.rank);
+      specs.push({id:'enemy/'+hoveredEnemy.actor.id,point:hoveredEnemy.actor,elevation:66,
+        text:t(identity.nameKey)+'  ·  '+t('worldLabels.enemyLevel',{values:{level:identity.level}})+rank,
+        color:identity.rank==='boss'?'#f4ce84':identity.rank==='elite'?'#efcc91':'#f1c2b8'});
+    }
     const live=new Set<string>(),npcMarkers=new Set<string>(),npcLabels=new Set<string>(),rects:{id:string;x:number;y:number;width:number;height:number}[]=[];
     for(const spec of specs){
       const p=project(spec.point,spec.elevation),foot=project(spec.point);
@@ -494,8 +504,9 @@ export class IsometricScene extends Phaser.Scene {
         occluderDepthAt(p,this.opaqueOccluders)>=isometricDepth(spec.point)+.5)continue;
       const focused=spec.id===this.focusedWorldId;
       if(focused&&prefs.highlight){
-        this.focusRing.lineStyle(2,0xffd58e,.96).strokeEllipse(foot.x,foot.y,48,24);
-        this.focusRing.fillStyle(0xffd58e,.14).fillEllipse(foot.x,foot.y,48,24);
+        const accent=spec.id.startsWith('enemy/')?0xe58170:0xffd58e;
+        this.focusRing.lineStyle(2,accent,.96).strokeEllipse(foot.x,foot.y,48,24);
+        this.focusRing.fillStyle(accent,.14).fillEllipse(foot.x,foot.y,48,24);
       }
       const kind=spec.id.split('/')[0]!;
       const npc=kind==='npc'?npcWorldLabel(spec.text,spec.marker??'',focused,prefs):null;
@@ -527,6 +538,9 @@ export class IsometricScene extends Phaser.Scene {
     this.game.canvas.dataset.npcMarkers=JSON.stringify([...npcMarkers]);
     this.game.canvas.dataset.npcLabels=JSON.stringify([...npcLabels]);
     this.game.canvas.dataset.focusedWorldObject=this.focusedWorldId;
+    const enemyLabel=[...this.worldLabels].find(([id])=>id.startsWith('enemy/'));
+    if(enemyLabel)this.game.canvas.dataset.enemyHover=enemyLabel[1].text;
+    else delete this.game.canvas.dataset.enemyHover;
     this.game.canvas.dataset.lootLabels=String([...this.worldLabels.keys()].filter(id=>id.startsWith('loot/')).length);
   }
 

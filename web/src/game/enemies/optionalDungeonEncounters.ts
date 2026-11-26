@@ -33,7 +33,7 @@ export function createOptionalDungeonPack(id:OptionalDungeonId,stage:Stage,level
     const health=Math.round(boss
       ? Math.max(420,def.health*2.5)+Math.max(0,level-1)*32
       : def.health*1.35+Math.max(0,level-1)*18);
-    return {actor:{id:actorId(type,stage,index),type,...position,health,maxHealth:health,alive:true},
+    return {actor:{id:actorId(type,stage,index),type,level,...position,health,maxHealth:health,alive:true},
       intent:null,cooldown:.65+index*.3,effects:[],abilityCooldowns:{}};
   });
 }
