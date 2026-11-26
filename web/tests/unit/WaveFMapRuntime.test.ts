@@ -20,6 +20,15 @@ describe('Wave F integrated exploration and seed-scoped persistence', () => {
     expect(sim.snapshot().mapDiscovery?.worldSeed).toBe(seed);
   });
 
+  it('reveals a broader starting neighborhood without uncovering distant locations',()=>{
+    const sim=new GameSimulation(42);
+    const state=sim.snapshot().mapDiscovery!;
+    const larger=sim.mapProjection('world')!;
+    // The camp reveal must be substantially larger than the old 105-unit radius.
+    expect(state.revealedCells.length).toBeGreaterThanOrEqual(20);
+    expect(larger.cells.some(c=>c.visibility==='unexplored')).toBe(true);
+    expect(larger.cells.filter(c=>c.visibility==='unexplored').every(c=>c.terrainId===undefined)).toBe(true);
+  });
   it('reveals surroundings only after authoritative player movement', () => {
     const sim = new GameSimulation(42);
     const before = sim.snapshot();
