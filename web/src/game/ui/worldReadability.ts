@@ -66,3 +66,12 @@ export function worldLabelVisible(kind:string,focused:boolean,prefs:WorldHudPref
   if(kind==='loot')return prefs.loot==='always'||(prefs.loot==='hover'&&focused);
   return focused||(kind==='npc'&&prefs.npcNames);
 }
+
+/** NPC role/quest markers are independent of text-label preferences.
+ * Focus (mouse or transient touch) replaces the marker with the name.
+ * An explicit always-show-names preference still takes precedence. */
+export function npcWorldLabel(name:string,marker:string,focused:boolean,prefs:WorldHudPreferences):
+  {text:string;markerOnly:boolean}|null {
+  if(worldLabelVisible('npc',focused,prefs))return {text:name,markerOnly:false};
+  return marker?{text:marker,markerOnly:true}:null;
+}

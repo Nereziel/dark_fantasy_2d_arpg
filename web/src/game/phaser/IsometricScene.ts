@@ -7,7 +7,7 @@ import { ACT_I_QUEST_CATALOG } from '../quests/actIQuestChain';
 import { VILLAGE_QUESTS } from '../quests/villageQuests';
 import { presentedNpcQuest, questOfferMarker } from '../quests/npcQuestPresentation';
 import { itemDisplayName } from '../items/itemName';
-import { layoutWorldLabels, getWorldHud, worldLabelVisible, roleMarker, skillCueStyle } from '../ui/worldReadability';
+import { layoutWorldLabels, getWorldHud, worldLabelVisible, npcWorldLabel, roleMarker, skillCueStyle } from '../ui/worldReadability';
 import { occluderDepthAt } from './isometricOcclusion';
 import type { GameBridge } from '../bridge/GameBridge';
 import type { GameEvent, GameSnapshot, Point, ZoneId } from '../core/types';
@@ -156,6 +156,8 @@ export class IsometricScene extends Phaser.Scene {
         delete this.game.canvas.dataset.staticLayers;
         delete this.game.canvas.dataset.staticVisibleLayers;
         delete this.game.canvas.dataset.worldLabels;
+        delete this.game.canvas.dataset.npcMarkers;
+        delete this.game.canvas.dataset.npcLabels;
         delete this.game.canvas.dataset.focusedWorldObject;
         delete this.game.canvas.dataset.lootLabels;
         this.game.canvas.style.cursor = 'default';
@@ -441,19 +443,19 @@ export class IsometricScene extends Phaser.Scene {
       }else{this.focusedWorldId='';this.focusUntil=0;}
     }
     const t=get(translate),camera=this.cameras.main;
-    const specs:{id:string;point:Readonly<Point>;elevation:number;text:string;color:string}[]=[];
+    const specs:{id:string;point:Readonly<Point>;elevation:number;text:string;color:string;marker?:string}[]=[];
     if(state.zone==='wilderness'){
       const story=presentedNpcQuest(ACT_I_QUEST_CATALOG,state.questLedger);
       for(const npc of getTownManifest()) {
         const marker=npc.role==='quest'?questOfferMarker(story?.state.status??state.quest.status):roleMarker(npc.role);
-        specs.push({id:'npc/'+npc.id,point:npc.position,elevation:48,text:(marker?marker+'  ':'')+t(npc.nameKey),color:npc.role==='quest'&&marker?'#f4d18d':'#e4d9c6'});
+        specs.push({id:'npc/'+npc.id,point:npc.position,elevation:48,text:t(npc.nameKey),marker,color:npc.role==='quest'&&marker?'#f4d18d':'#e4d9c6'});
       }
       for(const npc of this.villageResidents){
         const local=VILLAGE_QUESTS.find(q=>q.giverId===npc.id);
         const status=state.questLedger?.quests.find(q=>q.questId===local?.id)?.status;
         const questMarker=questOfferMarker(status);
         const marker=questMarker||(npc.role==='quest'?'':roleMarker(npc.role));
-        specs.push({id:'npc/'+npc.id,point:npc.position,elevation:56,text:(marker?marker+'  ':'')+t('village.'+npc.id+'.name'),color:questMarker?'#f4d18d':'#e4d9c6'});
+        specs.push({id:'npc/'+npc.id,point:npc.position,elevation:56,text:t('village.'+npc.id+'.name'),marker,color:questMarker?'#f4d18d':'#e4d9c6'});
       }
     }
     for(const portal of dungeonPortalTargets(state,this.dungeonEntrances)){
@@ -467,7 +469,7 @@ export class IsometricScene extends Phaser.Scene {
       specs.push({id:'loot/'+drop.id,point:drop,elevation:19,
         text:itemDisplayName(drop.item,language,t('item.base.'+drop.item.templateId)),color:RARITIES[drop.item.rarity].color});
     }
-    const live=new Set<string>(),rects:{id:string;x:number;y:number;width:number;height:number}[]=[];
+    const live=new Set<string>(),npcMarkers=new Set<string>(),npcLabels=new Set<string>(),rects:{id:string;x:number;y:number;width:number;height:number}[]=[];
     for(const spec of specs){
       const p=project(spec.point,spec.elevation),foot=project(spec.point);
       const w=camera.worldView;
@@ -480,17 +482,24 @@ export class IsometricScene extends Phaser.Scene {
         this.focusRing.lineStyle(2,0xffd58e,.96).strokeEllipse(foot.x,foot.y,48,24);
         this.focusRing.fillStyle(0xffd58e,.14).fillEllipse(foot.x,foot.y,48,24);
       }
-      if(!worldLabelVisible(spec.id.split('/')[0]!,focused,prefs))continue;
+      const kind=spec.id.split('/')[0]!;
+      const npc=kind==='npc'?npcWorldLabel(spec.text,spec.marker??'',focused,prefs):null;
+      if(kind==='npc'?!npc:!worldLabelVisible(kind,focused,prefs))continue;
+      const text=npc?.text??spec.text;
+      const color=npc?.markerOnly?'#f4d18d':spec.color;
+      const fontSize=npc?.markerOnly?'16px':'13px';
+      if(npc)(npc.markerOnly?npcMarkers:npcLabels).add(spec.id);
       live.add(spec.id);
       let label=this.worldLabels.get(spec.id);
       if(!label){
-        label=this.add.text(p.x,p.y,spec.text,{fontFamily:'Arial, sans-serif',fontSize:'13px',fontStyle:'bold',
-          color:spec.color,backgroundColor:'#0d1119e8',stroke:'#080b0f',strokeThickness:2,padding:{x:5,y:3}})
+        label=this.add.text(p.x,p.y,text,{fontFamily:'Arial, sans-serif',fontSize,fontStyle:'bold',
+          color,backgroundColor:'#0d1119e8',stroke:'#080b0f',strokeThickness:2,padding:{x:5,y:3}})
           .setOrigin(.5,1).setDepth(9350);
         this.worldLabels.set(spec.id,label);
       }else{
-        if(label.text!==spec.text)label.setText(spec.text);
-        if(label.style.color!==spec.color)label.setColor(spec.color);
+        if(label.text!==text)label.setText(text);
+        if(label.style.color!==color)label.setColor(color);
+        if(label.style.fontSize!==fontSize)label.setFontSize(fontSize);
       }
       rects.push({id:spec.id,x:p.x,y:p.y-label.height/2,width:label.width,height:label.height});
     }
@@ -499,7 +508,9 @@ export class IsometricScene extends Phaser.Scene {
       label?.setPosition(placed.x,placed.y+placed.height/2).setVisible(true);
     }
     for(const [id,label] of this.worldLabels)if(!live.has(id)){label.destroy();this.worldLabels.delete(id);}
-    this.game.canvas.dataset.worldLabels=String(this.worldLabels.size);
+    this.game.canvas.dataset.worldLabels=String(this.worldLabels.size-npcMarkers.size);
+    this.game.canvas.dataset.npcMarkers=JSON.stringify([...npcMarkers]);
+    this.game.canvas.dataset.npcLabels=JSON.stringify([...npcLabels]);
     this.game.canvas.dataset.focusedWorldObject=this.focusedWorldId;
     this.game.canvas.dataset.lootLabels=String([...this.worldLabels.keys()].filter(id=>id.startsWith('loot/')).length);
   }
