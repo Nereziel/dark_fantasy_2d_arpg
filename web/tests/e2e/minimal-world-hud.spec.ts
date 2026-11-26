@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { WARDEN_POSITION } from '../../src/game/world/npcs';
+import { isoGroundPoint } from './iso-input';
 import { openCharacterCreation, enterWorld, openSystemMenu, toggleHotbarEditor } from './character-menu';
 
 test('default HUD is minimal, settings show clear modes and editor is a separate modal',async({page})=>{
@@ -9,6 +11,15 @@ test('default HUD is minimal, settings show clear modes and editor is a separate
   await enterWorld(page);
   await expect(page.locator('.enemy-roster,.camp-services,.dungeon-panel,.environment-panel')).toHaveCount(0);
   await expect(page.getByTestId('loot-label-mode')).toHaveCount(0);
+  const canvas=page.locator('canvas[data-renderer="isometric-preview"]');
+  await page.locator('.game-header').hover();
+  await expect(canvas).toHaveAttribute('data-world-labels','0');
+  const point=await isoGroundPoint(canvas,WARDEN_POSITION);
+  await page.mouse.move(point.x,point.y-16);
+  await expect(canvas).toHaveAttribute('data-focused-world-object','npc/warden_vesna');
+  await expect(canvas).toHaveAttribute('data-world-labels','1');
+  await page.locator('.game-header').hover();
+  await expect(canvas).toHaveAttribute('data-world-labels','0');
   const dock=page.getByTestId('combat-dock');
   const bounds=await dock.evaluate(el=>['.health-meter','.skill-ui','.resource-meter','.hud-actions'].map(sel=>{
     const b=el.querySelector(sel)!.getBoundingClientRect();return {left:b.left,right:b.right};

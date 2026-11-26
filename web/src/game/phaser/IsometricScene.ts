@@ -427,6 +427,16 @@ export class IsometricScene extends Phaser.Scene {
     this.nextLabelUpdate=this.time.now+100;
     this.hudKey=key;this.labelLanguage=language;
     this.focusRing.clear();
+    // Re-evaluate a stationary mouse when the camera follows a moving hero.
+    const pointer=this.input.activePointer;
+    if(this.focusUntil===Infinity&&!this.captured()&&!pointer.wasTouch){
+      const rect=this.game.canvas.getBoundingClientRect();
+      const x=rect.left+pointer.x*rect.width/Math.max(1,this.scale.width);
+      const y=rect.top+pointer.y*rect.height/Math.max(1,this.scale.height);
+      if(document.elementFromPoint(x,y)===this.game.canvas){
+        this.focusTarget(this.pick(pointer).context,false,this.lootLabelAt(pointer));
+      }else{this.focusedWorldId='';this.focusUntil=0;}
+    }
     const t=get(translate),camera=this.cameras.main;
     const specs:{id:string;point:Readonly<Point>;elevation:number;text:string;color:string}[]=[];
     if(state.zone==='wilderness'){
@@ -447,7 +457,7 @@ export class IsometricScene extends Phaser.Scene {
     for(const obj of state.environmentObjects??[])specs.push({id:'object/'+obj.id,point:obj.position,elevation:25,text:t('environment.objects.'+obj.id.slice(4)),color:'#ecd8af'});
     for(const obj of state.interactables)specs.push({id:'object/'+obj.id,point:obj.position,elevation:30,text:t(obj.kind==='shrine'?'worldLabels.shrine':'worldLabels.treasure'),color:'#ecd8af'});
     for(const obj of state.cryptInteractables??[])specs.push({id:'object/'+obj.id,point:obj.position,elevation:26,text:t(obj.capability==='lootContainer'?'worldLabels.treasure':obj.capability==='breakable'?'worldLabels.breakable':obj.capability==='trap'?'worldLabels.trap':'worldLabels.secret'),color:'#ecd8af'});
-    if(prefs.loot!=='off')for(const drop of this.bridge.visibleGroundLoot(state)){
+    for(const drop of this.bridge.visibleGroundLoot(state)){
       specs.push({id:'loot/'+drop.id,point:drop,elevation:19,
         text:itemDisplayName(drop.item,language,t('item.base.'+drop.item.templateId)),color:RARITIES[drop.item.rarity].color});
     }

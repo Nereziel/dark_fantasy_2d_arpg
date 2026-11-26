@@ -1349,9 +1349,6 @@
             title={$t('talents.open')}
             data-quick-action="talents"><span aria-hidden="true">✧</span><span class="quick-key">{shortcutHint(controlBindings, 'TALENTS')}</span>
             {#if (view.talentPoints ?? 0) > 0}<span class="quick-notice">{view.talentPoints}</span>{/if}</button>
-          <button type="button" disabled={view.zone!=='wilderness'||view.paused} onclick={(event)=>openMap(event.currentTarget)}
-            aria-label={$t('map.open')+' · '+shortcutHint(controlBindings,'MAP')} title={$t('map.open')}
-            data-quick-action="map"><span aria-hidden="true">◇</span><span class="quick-key">{shortcutHint(controlBindings,'MAP')}</span></button>
           <button type="button" disabled={busy || !view.player.alive} onclick={(event)=>togglePause(event.currentTarget)}
             aria-label={$t('menu.system')} title={$t('menu.system')}
             data-testid="system-menu" data-quick-action="menu"><span aria-hidden="true">☰</span></button>

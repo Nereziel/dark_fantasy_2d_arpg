@@ -106,8 +106,8 @@
   }
 
   function editorKey(event: KeyboardEvent): void {
-    event.stopPropagation();
     if (event.key === 'Escape') {
+      event.stopPropagation();
       event.preventDefault();
       toggleEditor();
     }
