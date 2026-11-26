@@ -138,6 +138,10 @@ export interface MapProjection {
   readonly hints: readonly MapHiddenQuestHint[];
   /** Selected discovered target, even outside the current viewport. No hidden coordinates. */
   readonly navigationTarget?: MapMarker;
+  readonly area?: 'wilderness'|'crypt'|'mine'|'cave';
+  readonly walls?: readonly MapViewport[];
+  readonly navigationRoute?: readonly Readonly<Point>[];
+  readonly navigationStage?: 'enter'|'exit'|'objective';
 }
 
 export type MapDiscoveryError =
