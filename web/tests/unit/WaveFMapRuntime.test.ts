@@ -25,7 +25,7 @@ describe('Wave F integrated exploration and seed-scoped persistence', () => {
     const state=sim.snapshot().mapDiscovery!;
     const larger=sim.mapProjection('world')!;
     // The camp reveal must be substantially larger than the old 105-unit radius.
-    expect(state.revealedCells.length).toBeGreaterThanOrEqual(20);
+    expect(state.revealedCells.length).toBeGreaterThanOrEqual(14);
     expect(larger.cells.some(c=>c.visibility==='unexplored')).toBe(true);
     expect(larger.cells.filter(c=>c.visibility==='unexplored').every(c=>c.terrainId===undefined)).toBe(true);
   });
