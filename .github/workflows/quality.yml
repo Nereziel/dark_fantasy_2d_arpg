@@ -35,6 +35,8 @@ jobs:
       deployments: read
     outputs:
       publish: ${{ steps.scope.outputs.publish }}
+      browser_matrix: ${{ steps.validation.outputs.matrix }}
+      validation_profile: ${{ steps.validation.outputs.profile }}
       bundle: game-dist-${{ github.sha }}-${{ github.run_attempt }}
     steps:
       - name: Checkout
@@ -51,6 +53,17 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           GH_TOKEN: ${{ github.token }}
         run: bash .github/actions/publish-scope.sh
+
+      - name: Determine required validation profile
+        id: validation
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/actions/validation-scope.sh
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -102,6 +115,9 @@ jobs:
 
       - name: Test mandatory validation gate
         run: bash tests/quality-validation.test.sh
+
+      - name: Test validation scope classification
+        run: bash tests/validation-scope.test.sh
 
       - name: Test browser timing report
         run: node --test tests/browser-timings.test.mjs
@@ -157,22 +173,7 @@ jobs:
     timeout-minutes: 25
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - lane: quick-1
-            shard: 1/6
-          - lane: quick-2
-            shard: 2/6
-          - lane: quick-3
-            shard: 3/6
-          - lane: quick-4
-            shard: 4/6
-          - lane: quick-5
-            shard: 5/6
-          - lane: quick-6
-            shard: 6/6
-          - lane: act-i
-            shard: ''
+      matrix: ${{ fromJSON(needs.build.outputs.browser_matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -204,8 +205,8 @@ jobs:
           LANE: ${{ matrix.lane }}
           SHARD: ${{ matrix.shard }}
         run: |
-          # Complementary filters: every test runs exactly once across the
-          # lanes. The touch-loot case in the same file stays in quick tests.
+          # Every quick test runs exactly once; the natural Act I test is
+          # included only in the full profile. Touch-loot stays in quick tests.
           # Each quick runner uses one renderer-heavy browser worker; test-level
           # sharding balances large spec files without sharing browser state.
           if [[ "$LANE" == "act-i" ]]; then
@@ -227,7 +228,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Preserve the required check name. No skipped/failed lane can publish.
+  # Preserve the required check name. Every selected lane must succeed.
   verify:
     needs: [build, checks, browser]
     if: ${{ always() && !cancelled() }}
@@ -244,7 +245,10 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           CHECKS_RESULT: ${{ needs.checks.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
-        run: bash .github/actions/require-validation.sh "$BUILD_RESULT" "$CHECKS_RESULT" "$BROWSER_RESULT"
+          PROFILE: ${{ needs.build.outputs.validation_profile }}
+        run: |
+          case "$PROFILE" in quick|full) ;; *) echo 'Invalid validation profile' >&2; exit 1 ;; esac
+          bash .github/actions/require-validation.sh "$BUILD_RESULT" "$CHECKS_RESULT" "$BROWSER_RESULT"
 
       - name: Download verified production bundle
         if: needs.build.outputs.publish == 'true'
