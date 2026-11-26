@@ -11,6 +11,7 @@
   <button type="button" class="quest-row" class:tracked={entry.id===trackedId} class:inspected={!compact&&entry.id===inspected?.id}
     data-testid={compact?'track-quest-'+entry.id:'inspect-quest-'+entry.id}
     aria-pressed={compact?entry.id===trackedId:entry.id===inspected?.id}
+    title={compact?$t(entry.id===trackedId?'map.untrack':'map.track'):undefined}
     onclick={()=>{if(compact)select(entry.id);else inspectedId=entry.id;}}>
     <span aria-hidden="true">{entry.id===trackedId?'◆':entry.status==='completed'?'✓':'◇'}</span>
     <span><strong>{$t(entry.titleKey)}</strong><small>{$t('map.'+entry.status)}{#if entry.status==='active'} · {entry.count}/{entry.goal}{/if}</small></span>
@@ -19,6 +20,7 @@
 {#if compact}
   <aside class="quest-selector" data-testid="map-quest-selector" aria-label={$t('map.tracked')}>
     <h3>{$t('map.questLog')}</h3>
+    {#if openEntries.length}<p class="tracking-hint">{$t(trackedId?'map.toggleTracking':'map.noTracking')}</p>{/if}
     {#each openEntries as entry (entry.id)}{@render row(entry)}{:else}<p>{$t('map.noQuests')}</p>{/each}
   </aside>
 {:else}
@@ -42,7 +44,7 @@
         <h4>{$t('quest.ashes.reward')}</h4>
         <p class="reward">{inspected.gold} {$t('hud.gold')} · {inspected.xp} XP</p>
         {#if inspected.status!=='completed'}<button type="button" class="track-action" data-testid={'journal-track-'+inspected.id} aria-pressed={inspected.id===trackedId}
-          onclick={()=>{if(inspected)select(inspected.id);}}>{inspected.id===trackedId?'◆ ':''}{$t(inspected.id===trackedId?'map.tracked':'map.track')}</button>{/if}
+          onclick={()=>{if(inspected)select(inspected.id);}}>{inspected.id===trackedId?'◆ ':''}{$t(inspected.id===trackedId?'map.untrack':'map.track')}</button>{/if}
       {:else}<p>{$t('map.noQuests')}</p>{/if}
     </article>
   </div>
@@ -53,6 +55,7 @@
   h3{font:1rem Georgia,serif;color:#e8ce9c;margin:0 0 9px}
   .quest-row{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;text-align:left;width:100%;padding:8px;margin-bottom:5px;background:#18232d;border:1px solid #44515a;color:#d4c2a0}
   .quest-row.tracked{border-color:#d8ad68}
+  .tracking-hint{font-size:.68rem;color:#b8c3c4;margin-bottom:8px}
   .quest-row.inspected{background:#302b23}
   .quest-row strong{display:block;font:.8rem Georgia,serif;color:#ecd8b5;overflow-wrap:anywhere}
   small{font-size:.69rem;color:#d2bc96}

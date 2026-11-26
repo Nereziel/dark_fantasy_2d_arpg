@@ -29,7 +29,9 @@ export function journalEntries(view:Pick<GameSnapshot,'quest'|'questLedger'>&Par
   }
   return result;
 }
-export function trackedQuest(entries:readonly JournalEntry[],selected:string|null):JournalEntry|null{
+/** null = automatic choice, false = explicit no tracking, string = chosen quest. */
+export function trackedQuest(entries:readonly JournalEntry[],selected:string|null|false):JournalEntry|null{
+  if(selected===false)return null;
   const open=entries.filter(q=>q.status!=='completed');
   return open.find(q=>q.id===selected)??open.find(q=>q.status==='ready')??open.find(q=>q.status==='active')??open[0]??null;
 }

@@ -971,6 +971,9 @@
     "optionalEvent": "Wilderness Event"
   },
   "map": {
+    "untrack": "Stop tracking",
+    "toggleTracking": "Click the tracked quest to stop tracking.",
+    "noTracking": "No tracked quest. Click a quest to track it.",
     "returnToGiver": "Return to the quest giver.",
     "questEntrance": "Reach the dungeon entrance",
     "questExit": "Leave the current dungeon",
