@@ -24,6 +24,7 @@ import { staticPaintBounds, staticPaintVisible } from './isometricStaticCulling'
 import type { IsometricRect } from './isometricProjection';
 import { wildernessGroundLayout, cryptGroundLayout } from './isometricTerrain';
 import { getTownManifest, townEntry } from '../world/townManifest';
+import { npcVisualPreset, renderNpcTexture, type NpcVisualPreset } from './npcVisuals';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
 import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, type Obstacle } from '../world/navigation';
 import { contextToCommand, cursorForContext } from '../input/contextResolver';
@@ -78,6 +79,7 @@ export class IsometricScene extends Phaser.Scene {
   private healthBars!: Phaser.GameObjects.Graphics;
   private anchor!: Phaser.GameObjects.Graphics;
   private villageResidents: readonly VillageResident[] = [];
+  private readonly npcPresets = new Map<string,NpcVisualPreset>();
   private readonly walls: Phaser.GameObjects.Graphics[] = [];
   private readonly wallPaintBounds: (IsometricRect | null)[] = [];
   private readonly occluders: IsometricOccluder[] = [];
@@ -195,12 +197,15 @@ export class IsometricScene extends Phaser.Scene {
     this.enemyPresentation.clear();
     this.facingMemory.clear();
     this.villageResidents = [];
+    this.npcPresets.clear();
     const buildings = new Map<string, SettlementStructure>();
     if (state.zone === 'wilderness') {
       const world = buildWilderness(state.worldSeed);
       this.dungeonEntrances=planActIDungeonEntrances(world);
       for (const structure of world.structures ?? []) buildings.set(structure.obstacle.id, structure);
       this.villageResidents = (world.villages ?? []).flatMap(v=>v.residents);
+      for(const npc of [...getTownManifest(),...this.villageResidents])
+        this.npcPresets.set(npc.id,npcVisualPreset(npc.id,npc.role));
       this.obstacles = world.layout.obstacles;
       this.ground.rebuild(wildernessGroundLayout(world.terrain), ORIGIN);
     } else {
@@ -557,6 +562,25 @@ export class IsometricScene extends Phaser.Scene {
     }
   }
 
+  private renderNpc(id:string,point:Readonly<Point>):NpcVisualPreset {
+    const preset=this.npcPresets.get(id)??npcVisualPreset(id,'civilian');
+    const texture='ar-npc-'+preset;
+    if(!this.textures.exists(texture)){
+      const registered=this.textures.addCanvas(texture,renderNpcTexture(preset));
+      if(!registered)throw Error('Unable to register NPC texture: '+texture);
+      registered.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+    const key='NPC/'+id;
+    let sprite=this.sprites.get(key);
+    if(!sprite){
+      sprite=this.add.sprite(0,0,texture).setOrigin(.5,.9);
+      this.sprites.set(key,sprite);
+    }else if(sprite.texture.key!==texture)sprite.setTexture(texture);
+    const p=project(point);
+    sprite.setPosition(p.x,p.y).setDepth(isometricDepth(point)+.5).setVisible(true);
+    return preset;
+  }
+
   private ensureAtlas(actor: PixelActor, view: DirectionalPixelView): string {
     const key = directionalPixelAtlasKey(actor, view);
     if (this.textures.exists(key)) return key;
@@ -803,6 +827,7 @@ export class IsometricScene extends Phaser.Scene {
     const aim = combatPose ? activeFacingAim(state.player, action?.aim,
       action ? action.targetId : state.selectedTargetId, liveEnemy) : undefined;
     this.sprite('hero', state.classId, state.player, pose, frame, aim);
+    const npcVisuals:Record<string,NpcVisualPreset>={};
     for (const t of this.targets(state)) {
       if (t.alive === false) continue;
       const key = t.kind + '/' + t.id;
@@ -821,11 +846,11 @@ export class IsometricScene extends Phaser.Scene {
           Math.floor(this.time.now / (pose === 'run' ? 110 : 170)) % PIXEL_ANIMATION_FRAMES;
         this.sprite(key, unit.actor.type, t.position, pose, frame, windup?.aim);
         this.lastEnemyPositions.set(t.id, { ...t.position });
-      } else if (t.kind === 'NPC' && this.villageResidents.some(n=>n.id===t.id)) {
-        // Render the resident sprite below, rather than a second proxy actor.
+      } else if (t.kind === 'NPC') {
+        npcVisuals[t.id]=this.renderNpc(t.id,t.position);
       } else {
         const color = t.id==='story-evidence'?0xe9bf70:t.id==='dungeon-portal:mine'?0xd8af75:t.id==='dungeon-portal:cave'?0x83c3a0
-          : t.kind === 'NPC' ? 0xb0986c : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
+          : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
         this.entity(key, t.position, color, t.bodyHeight > 0);
       }
     }
@@ -836,14 +861,8 @@ export class IsometricScene extends Phaser.Scene {
       visible.add(key);
       this.sprite(key, death.actor.type, death.actor, death.pose, death.frame);
     }
-    // Resident hit targets use the same town interaction command as camp services.
-    for (const resident of this.villageResidents) {
-      const key = 'resident/' + resident.id;
-      visible.add(key);
-      const actor: PixelActor = resident.role === 'healer' ? 'MAGE' : 'WARRIOR';
-      this.sprite(key, actor, resident.position, 'idle', Math.floor(this.time.now / 220) % PIXEL_ANIMATION_FRAMES);
-      this.sprites.get(key)?.setTint(resident.role === 'blacksmith' ? 0xb7a18b : 0xd1c8b0);
-    }
+    const npcDiagnostic=JSON.stringify(npcVisuals);
+    if(this.game.canvas.dataset.npcVisuals!==npcDiagnostic)this.game.canvas.dataset.npcVisuals=npcDiagnostic;
     // Friendly allies use the same depth/cleanup rules as the other actors.
     for (const summon of state.summons ?? []) {
       if (summon.zone !== state.zone || summon.remaining <= 0 || summon.health <= 0) continue;

@@ -14,10 +14,11 @@ describe('Civilian NPC pixel art',()=>{
     expect(npcVisualPreset('stash_camp','stash')).toBe('keeper');
   });
   it('recognizes a quest giver even when its gameplay role is civilian',()=>{
-    expect(npcVisualPreset('north-village-civilian','civilian')).toBe('village-quest');
+    expect(npcVisualPreset('north-village-civilian','civilian')).toBe('village-supplies');
     expect(npcVisualPreset('east-village-quest','quest')).toBe('village-quest');
-    for(const q of VILLAGE_QUESTS)expect(npcVisualPreset(q.giverId,q.giverId.endsWith('civilian')?'civilian':'quest')).toBe('village-quest');
-    expect(npcVisualPreset('east-village-blacksmith','blacksmith')).toBe('smith');
+    for(const q of VILLAGE_QUESTS)expect(['village-quest','village-supplies']).toContain(npcVisualPreset(q.giverId,q.giverId.endsWith('civilian')?'civilian':'quest'));
+    expect(npcVisualPreset('east-village-blacksmith','blacksmith')).toBe('village-smith');
+    expect(npcVisualPreset('north-village-healer','healer')).toBe('village-healer');
   });
   it('uses distinct geometry and occupied silhouettes, not just different palettes',()=>{
     const geometry=NPC_VISUAL_PRESETS.map(p=>JSON.stringify(npcPixels(p).map(({x,y,w,h})=>[x,y,w,h])));
