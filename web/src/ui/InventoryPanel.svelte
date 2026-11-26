@@ -85,7 +85,7 @@
   }
   function clearDrag(): void { dragged = null; dropHover = null; }
   function previewWithMouse(event: PointerEvent, source: Source | null): void {
-    if (event.pointerType !== 'mouse' || moveArmed) return;
+    if (event.pointerType !== 'mouse' || moveArmed || dragged) return;
     // A resize can put a stationary cursor over a slot after a touch tap.
     if (touchInput && (event.type === 'pointerenter'
       || (event.movementX === 0 && event.movementY === 0))) return;
@@ -100,9 +100,11 @@
    * Otherwise clearing hovered on leave silently retargets action buttons to
    * an older selected item. Never modify a touch selection or armed move. */
   function pinMousePreviewOnLeave(event: PointerEvent, source: Source, item: Item | null): void {
-    if (event.pointerType === 'mouse' && item && hovered && !moveArmed && !dragged) {
-      selected = source;
-    }
+    if (event.pointerType !== 'mouse' || !hovered || moveArmed || dragged) return;
+    const matches = hovered.kind === 'bag' && source.kind === 'bag' ? hovered.index === source.index
+      : hovered.kind === 'gear' && source.kind === 'gear' && hovered.slot === source.slot;
+    if (!matches) return;
+    if (item) selected = source;
     hovered = null;
   }
   /** Clearing a selection also cancels its pending two-step transfer. Otherwise
@@ -373,7 +375,7 @@
             {@const item = view.equipment[slot]}
             <button type="button" class="equipment-slot"
               class:has-item={!!item}
-              class:selected={selected?.kind === 'gear' && selected.slot === slot}
+              class:selected={!!inspected && displayed?.kind === 'gear' && displayed.slot === slot}
                class:drop-valid={!!placementSource && canPlace({ kind: 'gear', slot })}
                class:drop-hover-valid={!!placementSource && isDropHover({ kind: 'gear', slot }) && canPlace({ kind: 'gear', slot })}
                class:drop-invalid={!!placementSource && isDropHover({ kind: 'gear', slot }) && !canPlace({ kind: 'gear', slot })}
@@ -391,7 +393,7 @@
               onpointerenter={(event) => previewWithMouse(event, { kind: 'gear', slot })}
               onpointermove={(event) => previewWithMouse(event, { kind: 'gear', slot })}
               onpointerleave={(event) => pinMousePreviewOnLeave(event, { kind: 'gear', slot }, item)}
-              onfocus={() => { if (!touchInput) hovered = { kind: 'gear', slot }; }}
+              onfocus={() => { if (!touchInput && !moveArmed && !dragged) hovered = { kind: 'gear', slot }; }}
               onclick={() => pickGear(slot)}
               ondblclick={() => { if (!touchInput) unequip(slot); }}
               aria-label={$t('item.slot.' + slot) + (item ? ': ' + itemName(item) : ': ' + $t('inventory.empty'))}
@@ -442,7 +444,7 @@
             <button type="button" class="bag-slot"
               class:occupied={!!item}
               class:filtered-out={filtered}
-              class:selected={!filtered && selected?.kind === 'bag' && selected.index === index}
+              class:selected={!!inspected && !filtered && displayed?.kind === 'bag' && displayed.index === index}
               class:favorite={!!(item && view.itemFlags?.[item.id]?.favorite)}
               class:locked={!!(item && view.itemFlags?.[item.id]?.locked)}
                class:drop-valid={!filtered && !!placementSource && canPlace({ kind: 'bag', index })}
@@ -462,7 +464,7 @@
               onpointerenter={(event) => previewWithMouse(event, item && !filtered ? { kind: 'bag', index } : null)}
               onpointermove={(event) => previewWithMouse(event, item && !filtered ? { kind: 'bag', index } : null)}
               onpointerleave={(event) => pinMousePreviewOnLeave(event, { kind: 'bag', index }, filtered ? null : item)}
-              onfocus={() => { if (!touchInput) hovered = item && !filtered ? { kind: 'bag', index } : null; }}
+              onfocus={() => { if (!touchInput && !moveArmed && !dragged) hovered = item && !filtered ? { kind: 'bag', index } : null; }}
               onclick={() => { if (!filtered) pickBag(index); }}
               ondblclick={() => { if (item && !filtered && !touchInput) equip(index); }}
               oncontextmenu={(event) => { if (item && !filtered) { event.preventDefault(); if (!touchInput) equip(index); } }}
@@ -533,7 +535,7 @@
         {/if}
       </section>
 
-      <aside class="item-inspector" data-testid="item-inspector"
+      <aside class="item-inspector" data-testid="item-inspector" data-inspected-item-id={inspected?.id}
         aria-label={$locale === 'cs' ? 'Porovnání výbavy' : 'Equipment comparison'}>
         <h3>{$t('inventory.comparison')}</h3>
         {#if inspected}

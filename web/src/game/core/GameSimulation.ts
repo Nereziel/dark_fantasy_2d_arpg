@@ -1770,7 +1770,10 @@ export class GameSimulation {
           : command.type === 'stashMove'
             ? planStashMove(state, command.fromTab, command.index, command.toTab)
             : planStashSort(state, command.tab);
-      if (!plan.ok) return;
+      if (!plan.ok) {
+        if(command.type==='stashWithdraw' && plan.reason==='INVENTORY_FULL')this.events.push({type:'inventoryFull',source:'stash'});
+        return;
+      }
       const sourceTab = command.type === 'stashMove' ? command.fromTab
         : command.type === 'stashWithdraw' ? (command.tab ?? 0) : 0;
       const slots = validStashTab(sourceTab)
@@ -2004,6 +2007,11 @@ export class GameSimulation {
     } else if (command.type === 'pickup') {
       const loot = this.groundLoot.find(item => item.id === command.id);
       if (!loot) return;
+      if (!this.inventory.some(item=>item===null)) {
+        this.pickupTarget=null;
+        this.events.push({type:'inventoryFull',source:'pickup'});
+        return;
+      }
       this.pickupTarget = { id: loot.id,
         path: findPickupPath(this.player, loot, PICKUP_RANGE, this.world.obstacles) };
       this.movePath = [];
@@ -4716,7 +4724,11 @@ export class GameSimulation {
 
   private collectLoot(loot: GroundItem): void {
     const index = this.inventory.findIndex(item => item === null);
-    if (index < 0) { this.pickupTarget = null; return; }
+    if (index < 0) {
+      this.pickupTarget = null;
+      this.events.push({type:'inventoryFull',source:'pickup'});
+      return;
+    }
     this.inventory[index] = loot.item;
     this.groundLoot = this.groundLoot.filter(item => item.id !== loot.id);
     this.pickupTarget = null;

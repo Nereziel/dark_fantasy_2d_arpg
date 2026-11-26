@@ -597,6 +597,7 @@
         bridge.command({ type: 'pause', value: true });
       }
       if (event.type === 'townServiceUsed' && playing) notify('town.serviceSuccess');
+      if (event.type === 'inventoryFull' && playing) notify('inventory.full');
       if (event.type === 'tradeRejected' && playing) notify('trade.error.' + event.reason);
       if (event.type === 'npcDialogue' && playing) {
         rememberModalOrigin();
