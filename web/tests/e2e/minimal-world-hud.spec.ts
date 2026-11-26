@@ -50,7 +50,7 @@ test('default HUD is minimal, settings show clear modes and editor is a separate
   await expect(editor).toHaveCount(0);
 });
 
-test('quest tracking lives on map and loading toast expires',async({page})=>{
+test('standalone quest journal, compact map tracking and expiring loading toast',async({page})=>{
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page,'Tracking hero');
@@ -58,11 +58,22 @@ test('quest tracking lives on map and loading toast expires',async({page})=>{
   await enterWorld(page);
   await expect(page.locator('.quest-journal')).toHaveCount(0);
   await expect(page.getByTestId('tracked-quest-summary')).toContainText(/Ashes/i);
+  await page.keyboard.press('j');
+  const journal=page.getByTestId('quest-journal-dialog');
+  await expect(journal).toBeVisible();
+  await expect(journal.getByTestId('quest-detail')).toContainText('Ashes at the Gate');
+  await expect(journal.getByTestId('quest-detail')).toContainText('Reward');
+  await expect(page.getByTestId('world-map-dialog')).toHaveCount(0);
+  await page.keyboard.press('j');
+  await expect(journal).toHaveCount(0);
   await page.keyboard.press('m');
   const dialog=page.getByTestId('world-map-dialog');
-  await expect(dialog.getByTestId('map-quest-log')).toBeVisible();
+  await expect(dialog.getByTestId('map-quest-selector')).toBeVisible();
+  await expect(dialog.getByTestId('quest-detail')).toHaveCount(0);
+  await expect(dialog.getByTestId('quest-journal-dialog')).toHaveCount(0);
   await expect(dialog.getByTestId('track-quest-ashes_at_gate')).toHaveAttribute('aria-pressed','true');
   await expect(dialog.locator('[data-tracked-quest="ashes_at_gate"]')).toHaveCount(1);
+  await dialog.getByTestId('track-quest-ashes_at_gate').click();
   await dialog.getByTestId('map-close').click();
   await expect(page.getByTestId('tracked-quest-summary')).toContainText(/Ashes/i);
   await saveFromMenu(page);
