@@ -971,6 +971,7 @@
     "optionalEvent": "Událost v pustině"
   },
   "map": {
+    "returnToGiver": "Vrať se k zadavateli úkolu.",
     "questEntrance": "Dojdi ke vstupu do dungeonu",
     "questExit": "Opusť aktuální dungeon",
     "dungeonExploration": "Zobrazují se pouze prozkoumané chodby. Sleduj zvýrazněnou průchozí trasu.",

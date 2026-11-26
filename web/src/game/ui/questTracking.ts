@@ -3,6 +3,7 @@ import type { GameSnapshot, Point } from '../core/types';
 import type { MapViewport } from '../world/mapDiscovery';
 import { ACT_I_QUEST_CATALOG } from '../quests/actIQuestChain';
 import { VILLAGE_QUEST_CATALOG } from '../quests/villageQuests';
+import { rewardForActivity } from '../progression/progressionRules';
 import { FIRST_QUEST_ID } from '../quests/firstQuest';
 import { activeStoryRegionHint } from './storyRegionHints';
 export interface JournalEntry {
@@ -10,7 +11,7 @@ export interface JournalEntry {
   status:'available'|'active'|'ready'|'completed'; count:number;goal:number;
   gold:number;xp:number;hintKey:string|null;
 }
-export function journalEntries(view:Pick<GameSnapshot,'quest'|'questLedger'>):JournalEntry[]{
+export function journalEntries(view:Pick<GameSnapshot,'quest'|'questLedger'>&Partial<Pick<GameSnapshot,'level'>>):JournalEntry[]{
   const result:JournalEntry[]=[];
   for(const definition of [...ACT_I_QUEST_CATALOG.quests,...VILLAGE_QUEST_CATALOG.quests]){
     const state=view.questLedger?.quests.find(q=>q.questId===definition.id);
@@ -20,10 +21,11 @@ export function journalEntries(view:Pick<GameSnapshot,'quest'|'questLedger'>):Jo
     const objective=definition.objectives.find(o=>(starter?view.quest.defeated:state?.counters[o.id]??0)<o.targetCount)??definition.objectives.at(-1);
     const count=starter?view.quest.defeated:state?.counters[objective?.id??'']??0;
     const hintKey=starter&&status==='available'?'quest.ashes.unstarted':starter&&status==='ready'?'quest.ashes.readyHint':
-      status==='ready'&&definition.id==='vesnas_report'?'quest.actI.returnToVesna':activeStoryRegionHint(definition.id,status);
+      status==='ready'&&definition.id==='vesnas_report'?'quest.actI.returnToVesna':
+      status==='ready'&&VILLAGE_QUEST_CATALOG.quests.some(q=>q.id===definition.id)?'map.returnToGiver':activeStoryRegionHint(definition.id,status);
     result.push({id:definition.id,titleKey:definition.titleKey,objectiveKey:definition.objectiveKey,
       descriptionKey:definition.descriptionKey,status,count,goal:objective?.targetCount??1,
-      gold:definition.reward.gold,xp:definition.reward.xp,hintKey});
+      gold:definition.reward.gold,xp:starter&&status!=='completed'&&view.level!==undefined?Math.max(definition.reward.xp,rewardForActivity('quest',view.level,view.level)):definition.reward.xp,hintKey});
   }
   return result;
 }

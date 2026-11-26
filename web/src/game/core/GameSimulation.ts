@@ -578,6 +578,13 @@ export class GameSimulation {
         presentationKey: 'map.quest'
       }];
     });
+    if(this.quest.status==='active'){
+      const known=new Set(this.mapDiscovery.revealedCells);
+      const enemy=this.aliveEnemies.filter(u=>!u.summoned&&!u.actor.id.startsWith('world-event.')
+        &&known.has('fog/'+Math.floor(u.actor.x/80)+'/'+Math.floor(u.actor.y/80)))
+        .sort((a,b)=>distance(a.actor,this.player)-distance(b.actor,this.player))[0];
+      if(enemy)hints.push({id:FIRST_QUEST_ID,status:'active',position:{x:enemy.actor.x,y:enemy.actor.y},presentationKey:'quest.ashes.objective'});
+    }
     if (this.quest.status === 'available' || this.quest.status === 'ready') hints.push({
       id:FIRST_QUEST_ID,status:'active',position:{...NPC_POSITIONS[WARDEN_ID]},presentationKey:'quest.ashes.title'
     });
@@ -1103,11 +1110,18 @@ export class GameSimulation {
   }
 
   /** The seal's evidence must be inspected, not completed merely by walking past. */
+  private activeStoryEvidence(): {position:Point;hitRadius:number}|undefined {
+    if(this.zone!=='wilderness'||this.questStatus('seal_of_rot')!=='active')return undefined;
+    const marker=this.storyFeatures.find(f=>f.id==='act1.evidence_lead');
+    return marker?{position:{...marker.position},hitRadius:marker.radius}:undefined;
+  }
+
   private canInspectStoryEvidence(): boolean {
     if (this.zone !== 'wilderness' || !this.player.alive || this.paused
       || this.questStatus('seal_of_rot') !== 'active') return false;
     const marker = this.storyFeatures.find(feature => feature.id === 'act1.evidence_lead');
-    return !!marker && distance(this.player, marker.position) <= marker.radius + 18;
+    return !!marker && distance(this.player, marker.position) <= marker.radius + 18
+      && hasLineOfSight(this.player,marker.position,this.world.obstacles);
   }
 
   private discoverStoryLocations(): void {
@@ -4916,6 +4930,7 @@ export class GameSimulation {
       quest: { ...this.quest },
       questLedger: structuredClone(this.actILedger),
       canInspectStoryEvidence: this.canInspectStoryEvidence(),
+      storyEvidence: this.activeStoryEvidence(),
       actIIUnlocked: this.questStatus('vesnas_report') === 'completed',
       ...(this.mapDiscovery ? { mapDiscovery: structuredClone(this.mapDiscovery) } : {}),
       ...(this.worldFacts ? { worldFacts: structuredClone(this.worldFacts) } : {}),

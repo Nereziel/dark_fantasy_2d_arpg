@@ -232,6 +232,8 @@ export interface GameSnapshot {
   questLedger?: QuestLedger;
   /** Proximity/quest-gated UI affordance, computed by the simulation only. */
   canInspectStoryEvidence?: boolean;
+  /** Active evidence world interaction, not persisted and not a map discovery. */
+  storyEvidence?: {position: Point; hitRadius:number};
   actIIUnlocked?: boolean;
   /** Session/world scoped map and immutable facts (not character progression). */
   mapDiscovery?: MapDiscoveryState;

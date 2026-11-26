@@ -307,6 +307,8 @@ export class IsometricScene extends Phaser.Scene {
     const actor = { bodyHeight: 42, bodyHalfWidth: 18 };
     const targets: IsometricTarget[] = [
       ...dungeonPortalTargets(state,this.dungeonEntrances).map(p=>({...p,bodyHeight:58,bodyHalfWidth:26})),
+      ...(state.storyEvidence?[{kind:'INTERACTABLE' as const,id:'story-evidence',
+        position:state.storyEvidence.position,hitRadius:state.storyEvidence.hitRadius,...ground}]:[]),
       ...(state.cryptInteractables ?? []).map(p => ({ kind: 'INTERACTABLE' as const,
         id: p.id, position: p.position, hitRadius: p.hitRadius, ...ground })),
       ...(state.environmentObjects ?? []).map(p => ({ kind: 'INTERACTABLE' as const,
@@ -403,6 +405,10 @@ export class IsometricScene extends Phaser.Scene {
     this.release();
     if (context.kind === 'NPC' && townEntry(context.id)?.capability !== 'existing') {
       this.bridge.command({ type: 'interactTown', entryId: context.id });
+    } else if(context.kind==='INTERACTABLE'&&context.id==='story-evidence'){
+      const state=this.bridge.snapshot();
+      if(state.canInspectStoryEvidence)this.bridge.command({type:'inspectStoryEvidence'});
+      else if(state.storyEvidence)this.bridge.command({type:'move',destination:state.storyEvidence.position});
     } else if (context.kind === 'INTERACTABLE' && context.id.startsWith('env.')) {
       this.bridge.command({ type: 'interactEnvironment', id: context.id as EnvironmentObjectId });
     } else if (context.kind === 'INTERACTABLE' && context.id.startsWith('crypt/')) {
@@ -462,6 +468,8 @@ export class IsometricScene extends Phaser.Scene {
       const name=state.zone==='crypt'?t('worldLabels.portalExit'):t(portal.id.endsWith(':mine')?'dungeon.mineName':portal.id.endsWith(':cave')?'dungeon.caveName':'dungeon.name');
       specs.push({id:'object/'+portal.id,point:portal.position,elevation:64,text:'◇  '+name,color:'#b9dcff'});
     }
+    if(state.storyEvidence)specs.push({id:'object/story-evidence',point:state.storyEvidence.position,elevation:25,
+      text:t('quest.actI.inspectEvidence'),color:'#f4d18d'});
     for(const obj of state.environmentObjects??[])specs.push({id:'object/'+obj.id,point:obj.position,elevation:25,text:t('environment.objects.'+obj.id.slice(4)),color:'#ecd8af'});
     for(const obj of state.interactables)specs.push({id:'object/'+obj.id,point:obj.position,elevation:30,text:t(obj.kind==='shrine'?'worldLabels.shrine':'worldLabels.treasure'),color:'#ecd8af'});
     for(const obj of state.cryptInteractables??[])specs.push({id:'object/'+obj.id,point:obj.position,elevation:26,text:t(obj.capability==='lootContainer'?'worldLabels.treasure':obj.capability==='breakable'?'worldLabels.breakable':obj.capability==='trap'?'worldLabels.trap':'worldLabels.secret'),color:'#ecd8af'});
@@ -816,7 +824,7 @@ export class IsometricScene extends Phaser.Scene {
       } else if (t.kind === 'NPC' && this.villageResidents.some(n=>n.id===t.id)) {
         // Render the resident sprite below, rather than a second proxy actor.
       } else {
-        const color = t.id==='dungeon-portal:mine'?0xd8af75:t.id==='dungeon-portal:cave'?0x83c3a0
+        const color = t.id==='story-evidence'?0xe9bf70:t.id==='dungeon-portal:mine'?0xd8af75:t.id==='dungeon-portal:cave'?0x83c3a0
           : t.kind === 'NPC' ? 0xb0986c : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
         this.entity(key, t.position, color, t.bodyHeight > 0);
       }

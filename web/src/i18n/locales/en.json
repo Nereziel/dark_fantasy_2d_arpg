@@ -971,6 +971,7 @@
     "optionalEvent": "Wilderness Event"
   },
   "map": {
+    "returnToGiver": "Return to the quest giver.",
     "questEntrance": "Reach the dungeon entrance",
     "questExit": "Leave the current dungeon",
     "dungeonExploration": "Only explored passages are shown. Follow the highlighted reachable route.",
