@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { WARDEN_POSITION } from '../../src/game/world/npcs';
 import { isoGroundPoint } from './iso-input';
-import { openCharacterCreation, enterWorld, openSystemMenu, toggleHotbarEditor } from './character-menu';
+import { openCharacterCreation, enterWorld, openSystemMenu, toggleHotbarEditor, saveFromMenu, continueGame } from './character-menu';
 
 test('default HUD is minimal, settings show clear modes and editor is a separate modal',async({page})=>{
   await page.goto('./');
@@ -48,4 +48,26 @@ test('default HUD is minimal, settings show clear modes and editor is a separate
   await expect(dock.locator('.skill-toolbar')).toBeVisible();
   await toggleHotbarEditor(page);
   await expect(editor).toHaveCount(0);
+});
+
+test('quest tracking lives on map and loading toast expires',async({page})=>{
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page,'Tracking hero');
+  await page.evaluate(()=>localStorage.removeItem('aether-ruin-world-hud-v2'));
+  await enterWorld(page);
+  await expect(page.locator('.quest-journal')).toHaveCount(0);
+  await expect(page.getByTestId('tracked-quest-summary')).toContainText(/Ashes/i);
+  await page.keyboard.press('m');
+  const dialog=page.getByTestId('world-map-dialog');
+  await expect(dialog.getByTestId('map-quest-log')).toBeVisible();
+  await expect(dialog.getByTestId('track-quest-ashes_at_gate')).toHaveAttribute('aria-pressed','true');
+  await expect(dialog.locator('[data-tracked-quest="ashes_at_gate"]')).toHaveCount(1);
+  await dialog.getByTestId('map-close').click();
+  await expect(page.getByTestId('tracked-quest-summary')).toContainText(/Ashes/i);
+  await saveFromMenu(page);
+  await page.reload();
+  await continueGame(page);
+  await expect(page.locator('.toast')).toBeVisible();
+  await expect(page.locator('.toast')).toHaveCount(0,{timeout:8000});
 });
