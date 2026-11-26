@@ -82,7 +82,6 @@
   h2{font-family:Georgia,serif;color:#f0dcb9;font-size:1.8rem;margin:7px 0 20px}
   h3{font-family:Georgia,serif;color:#d8b88a;font-size:1.1rem;margin:0 0 10px}
   p{font-family:Georgia,serif;line-height:1.6;color:#dbd9d1;font-size:.9rem;min-height:0}
-  .quest-current-story{opacity:.82;font-size:.82rem}
   .npc-objective{border-top:1px solid #5b5b58;border-bottom:1px solid #5b5b58;
     padding:12px 0;display:flex;flex-direction:column;gap:7px;font-size:.76rem;color:#c8bb9c}
   .npc-objective span{font-size:.7rem;color:#a4bdac}
