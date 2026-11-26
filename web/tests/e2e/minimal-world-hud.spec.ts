@@ -14,12 +14,21 @@ test('default HUD is minimal, settings show clear modes and editor is a separate
   const canvas=page.locator('canvas[data-renderer="isometric-preview"]');
   await page.locator('.game-header').hover();
   await expect(canvas).toHaveAttribute('data-world-labels','0');
+  await expect(canvas).toHaveAttribute('data-npc-markers', /"npc\/warden_vesna"/);
+  await expect(canvas).toHaveAttribute('data-npc-markers', /"npc\/merchant_bram"/);
+  await expect(canvas).toHaveAttribute('data-npc-markers', /"npc\/smith_odan"/);
+  await expect(canvas).not.toHaveAttribute('data-npc-markers', /"npc\/civilian_mira"/);
   const point=await isoGroundPoint(canvas,WARDEN_POSITION);
   await page.mouse.move(point.x,point.y-16);
   await expect(canvas).toHaveAttribute('data-focused-world-object','npc/warden_vesna');
   await expect(canvas).toHaveAttribute('data-world-labels','1');
+  await expect(canvas).not.toHaveAttribute('data-npc-markers', /"npc\/warden_vesna"/);
+  await expect(canvas).toHaveAttribute('data-npc-labels', /"npc\/warden_vesna"/);
+  await expect(canvas).toHaveAttribute('data-npc-markers', /"npc\/merchant_bram"/);
   await page.locator('.game-header').hover();
   await expect(canvas).toHaveAttribute('data-world-labels','0');
+  await expect(canvas).toHaveAttribute('data-npc-markers', /"npc\/warden_vesna"/);
+  await expect(canvas).not.toHaveAttribute('data-npc-labels', /"npc\/warden_vesna"/);
   const dock=page.getByTestId('combat-dock');
   const bounds=await dock.evaluate(el=>['.health-meter','.skill-ui','.resource-meter','.hud-actions'].map(sel=>{
     const b=el.querySelector(sel)!.getBoundingClientRect();return {left:b.left,right:b.right};
