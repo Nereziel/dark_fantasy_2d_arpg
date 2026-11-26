@@ -39,3 +39,30 @@ export function setLootLabelsEnabled(value:boolean,source?:StorageLike|null):voi
   if(source===undefined)cached=value;
   try{(source===undefined?storage():source)?.setItem(KEY,value?'on':'off');}catch{/* private mode */}
 }
+
+export type LootLabelMode = 'off'|'hover'|'always';
+export interface WorldHudPreferences {
+  loot: LootLabelMode; npcNames:boolean; highlight:boolean; assistance:boolean;
+}
+export const WORLD_HUD_KEY='aether-ruin-world-hud-v2';
+export function normalizeWorldHud(raw:unknown):WorldHudPreferences {
+  const p=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw as Partial<WorldHudPreferences>:{};
+  return {loot:p.loot==='off'||p.loot==='always'||p.loot==='hover'?p.loot:'hover',
+    npcNames:p.npcNames===true,highlight:p.highlight!==false,assistance:p.assistance===true};
+}
+let hudCache:WorldHudPreferences|undefined;
+export function reloadWorldHud():WorldHudPreferences {
+  try {hudCache=normalizeWorldHud(JSON.parse(storage()?.getItem(WORLD_HUD_KEY)??'null'));}
+  catch {hudCache=normalizeWorldHud(null);}
+  return hudCache;
+}
+export function getWorldHud():WorldHudPreferences {return hudCache??reloadWorldHud();}
+export function setWorldHud(next:WorldHudPreferences):WorldHudPreferences {
+  hudCache=normalizeWorldHud(next);
+  try{storage()?.setItem(WORLD_HUD_KEY,JSON.stringify(hudCache));}catch{/* presentation only */}
+  return hudCache;
+}
+export function worldLabelVisible(kind:string,focused:boolean,prefs:WorldHudPreferences):boolean{
+  if(kind==='loot')return prefs.loot==='always'||(prefs.loot==='hover'&&focused);
+  return focused||(kind==='npc'&&prefs.npcNames);
+}

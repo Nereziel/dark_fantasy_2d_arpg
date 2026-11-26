@@ -16,8 +16,10 @@ test('combat dock contains all seven skills, vitals and clickable actions withou
   const skills = dock.locator('.skill-ui');
   const vitals = dock.locator('.vital-panel');
   const actions = dock.locator('.hud-actions');
+  const resource = dock.locator('.resource-meter');
   await expect(dock.locator('.skill-button')).toHaveCount(7);
-  await expect(dock.locator('[data-quick-action]')).toHaveCount(5);
+  await expect(dock.locator('[data-quick-action]')).toHaveCount(4);
+  expect(await dock.locator('[data-quick-action]').evaluateAll(nodes => nodes.map(n => n.getAttribute('data-quick-action')))).toEqual(['inventory', 'character', 'talents', 'menu']);
   await expect(dock.getByRole('button', { name: 'Inventory (I)' })).toBeVisible();
 
   for (const viewport of [
@@ -27,24 +29,26 @@ test('combat dock contains all seven skills, vitals and clickable actions withou
     { width: 560, height: 720 }
   ]) {
     await page.setViewportSize(viewport);
-    const [outer, left, center, right] = await Promise.all([
-      dock.boundingBox(), vitals.boundingBox(), skills.boundingBox(), actions.boundingBox()
+    const [outer, left, center, energy, right] = await Promise.all([
+      dock.boundingBox(), vitals.boundingBox(), skills.boundingBox(), resource.boundingBox(), actions.boundingBox()
     ]);
-    expect(outer && left && center && right).toBeTruthy();
-    if (!outer || !left || !center || !right) continue;
-    for (const box of [left, center, right]) {
+    expect(outer && left && center && energy && right, JSON.stringify({ viewport, outer, left, center, energy, right })).toBeTruthy();
+    if (!outer || !left || !center || !energy || !right) throw new Error('Missing combat dock geometry');
+    const diagnostic = JSON.stringify({ viewport, outer, left, center, energy, right });
+    for (const box of [left, center, energy, right]) {
       expect(box.x).toBeGreaterThanOrEqual(outer.x - 1);
       expect(box.y).toBeGreaterThanOrEqual(outer.y - 1);
       expect(box.x + box.width).toBeLessThanOrEqual(outer.x + outer.width + 1);
       expect(box.y + box.height).toBeLessThanOrEqual(outer.y + outer.height + 1);
     }
-    if (viewport.width <= 650) {
+    if (viewport.width <= 800) {
       // Touch devices use readable, independently tappable stacked rows.
-      expect(left.y + left.height).toBeLessThanOrEqual(center.y + 1);
+      expect(Math.max(left.y + left.height, energy.y + energy.height), diagnostic).toBeLessThanOrEqual(center.y + 1);
       expect(center.y + center.height).toBeLessThanOrEqual(right.y + 1);
     } else {
       expect(left.x + left.width).toBeLessThanOrEqual(center.x + 1);
-      expect(center.x + center.width).toBeLessThanOrEqual(right.x + 1);
+      expect(center.x + center.width, diagnostic).toBeLessThanOrEqual(energy.x + 1);
+      expect(energy.x + energy.width, diagnostic).toBeLessThanOrEqual(right.x + 1);
     }
     const buttons = dock.locator('.skill-button');
     const first = await buttons.first().boundingBox();

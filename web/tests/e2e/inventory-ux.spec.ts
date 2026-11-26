@@ -15,19 +15,37 @@ test('inventory is compact, compares on hover, and drag-drops gear both ways', a
   await expect(modal).toBeVisible();
   await expect(modal.locator('[data-bag-index]')).toHaveCount(24);
   await expect(modal.locator('[data-equipment-slot]')).toHaveCount(12);
+  const bounds = await modal.boundingBox();
+  expect(bounds).not.toBeNull();
+  const assertStableWindow = async () => {
+    const next = await modal.boundingBox();
+    expect(next).not.toBeNull();
+    for (const key of ['x', 'y', 'width', 'height'] as const)
+      expect(Math.abs(next![key] - bounds![key])).toBeLessThanOrEqual(1);
+  };
+  await modal.getByRole('button', { name: 'Controls' }).click();
+  await assertStableWindow();
+  await modal.getByRole('button', { name: 'Controls' }).click();
+  await assertStableWindow();
   const belt = modal.locator('.bag-slot.occupied').first();
   await belt.hover();
+  const detail = modal.locator('.item-detail').first();
+  await expect(detail.locator('[data-item-property="armor"]')).toBeVisible();
+  await expect(detail.locator('[data-item-property="damage"], [data-item-property="block"]')).toHaveCount(0);
+  await assertStableWindow();
   await expect(modal.getByTestId('item-stat-comparison')).toBeVisible();
   await expect(modal.locator('[data-stat="armor"]')).toContainText('→');
   await expect(modal.locator('[data-stat="maxHealth"]')).toBeVisible();
   await belt.dragTo(modal.locator('[data-equipment-slot="BELT"]'));
   await expect(modal.locator('[data-equipment-slot="BELT"]')).toHaveClass(/has-item/);
   await expect(modal.locator('.bag-slot.occupied')).toHaveCount(0);
+  await assertStableWindow();
   const equipped = modal.locator('[data-equipment-slot="BELT"]');
   const empty = modal.locator('[data-bag-index="17"]');
   await equipped.dragTo(empty);
   await expect(modal.locator('[data-equipment-slot="BELT"]')).not.toHaveClass(/has-item/);
   await expect(empty).toHaveClass(/occupied/);
+  await assertStableWindow();
   await empty.hover();
   await expect(modal.getByTestId('item-stat-comparison')).toBeVisible();
   await expect(modal.locator('.item-detail').first()).toContainText('Studded War Belt');

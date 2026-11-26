@@ -34,7 +34,7 @@
     DEFAULT_AUDIO_PREFERENCES, type AudioPreferences } from './game/audio/audioPreferences';
   import { WebAudioDirector } from './game/audio/WebAudioDirector';
   import SkillBar from './ui/SkillBar.svelte';
-  import { lootLabelsEnabled, setLootLabelsEnabled } from './game/ui/worldReadability';
+  import { getWorldHud, reloadWorldHud, setWorldHud, type WorldHudPreferences } from './game/ui/worldReadability';
   import { shortcutHint } from './game/ui/shortcutHints';
   import OnboardingGuide from './ui/OnboardingGuide.svelte';
   import {
@@ -278,17 +278,17 @@
   let talentsOpen = $state(false);
   let controlsOpen = $state(false);
   let skillInfoMode = $state(false);
-  let hotbarEditRequest = $state(0);
-  let showLootLabels = $state(lootLabelsEnabled());
-  function toggleLootLabels(): void {
-    showLootLabels = !showLootLabels;
-    setLootLabelsEnabled(showLootLabels);
-  }
+  let skillEditorOpen = $state(false);
+  let worldHud = $state<WorldHudPreferences>(getWorldHud());
+  function updateWorldHud(next:WorldHudPreferences):void {worldHud=setWorldHud(next);}
   function editSkillsFromMenu(): void {
     if (!view.paused || !view.player.alive || busy) return;
     skillInfoMode = false;
-    bridge.command({ type:'pause', value:false });
-    hotbarEditRequest += 1;
+    skillEditorOpen=true;
+  }
+  function closeSkillEditor():void {
+    skillEditorOpen=false;
+    bridge.command({type:'pause',value:false});
   }
   let settingsOpen = $state(false);
   let visualPreferences: VisualPreferences = $state({ ...DEFAULT_VISUAL_PREFERENCES });
@@ -404,7 +404,7 @@
   }
   let modalKind = $derived(!playing ? '' :
     mapOpen ? 'map' : townModal !== null ? 'town' : tradeNpc !== null ? 'trade'
-    : settingsOpen ? 'settings' : controlsOpen ? 'controls' : dialogueOpen ? 'dialogue' : inventoryOpen ? 'inventory'
+    : skillEditorOpen ? 'skills' : settingsOpen ? 'settings' : controlsOpen ? 'controls' : dialogueOpen ? 'dialogue' : inventoryOpen ? 'inventory'
     : characterOpen ? 'character' : talentsOpen ? 'talents'
     : !view.player.alive ? 'death' : view.paused ? 'pause' : '');
 
@@ -647,6 +647,7 @@
 
   async function newGame(): Promise<void> {
     guideVisible=false;
+    worldHud=reloadWorldHud();
     const name = normalizeCharacterName(newCharacterName);
     if (busy || !menuReady || !creatingCharacter || !name
       || savedCharacters.length >= MAX_SAVED_CHARACTERS) return;
@@ -797,7 +798,7 @@
   }
 
   function pointerUiState(): PointerUiState {
-    if (!playing || settingsOpen || controlsOpen || !view.player.alive) return 'blocked';
+    if (!playing || skillEditorOpen || settingsOpen || controlsOpen || !view.player.alive) return 'blocked';
     if (mapOpen) return 'map';
     if (talentsOpen) return 'talents';
     if (inventoryOpen) return 'inventory';
@@ -881,6 +882,7 @@
 
   function handleKeydown(event: KeyboardEvent): void {
     if (!playing) { resetCharacterGesture(); return; }
+    if(skillEditorOpen){if(event.code==='Escape'){event.preventDefault();closeSkillEditor();}return;}
     if (skillInfoMode && event.code === 'Escape') {
       event.preventDefault(); skillInfoMode = false; return;
     }
@@ -1032,6 +1034,7 @@
   }
   async function load(requestedId?: string): Promise<void> {
     if (busy) return;
+    worldHud=reloadWorldHud();
     heldPosition.clear();
     busy = true;
     restoring = true;
@@ -1210,7 +1213,7 @@
       </header>
 
       <div class="hud-left-column" aria-label="Game information" inert={modalKind !== ''}>
-      {#if modalKind === '' && view.player.alive && !view.paused}
+      {#if worldHud.assistance && modalKind === '' && view.player.alive && !view.paused}
         <NearbyLootPanel {view} {bridge} />
       {/if}
       {#if guideVisible && modalKind === '' && view.player.alive && !view.paused}
@@ -1243,7 +1246,7 @@
       {/if}
       <QuestJournal {view} talk={talkToWarden}
         inspectEvidence={() => bridge.command({ type: 'inspectStoryEvidence' })} />
-      {#if view.zone === 'wilderness' &&
+      {#if worldHud.assistance && view.zone === 'wilderness' &&
         Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS + 40}
         <div class="camp-services" aria-label={$t('trade.campServices')}>
           <div class="camp-services-label">{$t('trade.campServices')}</div>
@@ -1265,7 +1268,7 @@
           </button>
         </div>
       {/if}
-        <EnvironmentPanel {view} />
+        {#if worldHud.assistance}<EnvironmentPanel {view} />{/if}
       </div>
       <div class="hud-right-column" aria-label="Map and combat status" inert={modalKind !== ''}>
       {#if view.enemies.some(unit => unit.intent !== null) && !inventoryOpen}
@@ -1281,7 +1284,7 @@
         </div>
       {/if}
         <WorldEventPanel {view} />
-        <DungeonPanel {view} {bridge} />
+        {#if worldHud.assistance}<DungeonPanel {view} {bridge} />
       <aside class="enemy-roster" aria-label={$t('hud.enemies')}>
         <div class="enemy-roster-title">{$t('hud.enemies')} · {view.enemies.filter(unit => unit.actor.alive).length}/{view.enemies.length} · {$t('hud.wave')} {view.wave + 1}</div>
         {#each rosterUnits as unit (unit.actor.id)}
@@ -1319,7 +1322,7 @@
             {/if}
           </button>
         {/each}
-      </aside>
+      </aside>{/if}
       </div>
       </div>
       <div class="game-hud compact-dock" data-testid="combat-dock" inert={modalKind !== ''}>
@@ -1333,7 +1336,7 @@
 <div class="hud-details">{#if activeCharacterName}<span class="hero-name">{activeCharacterName}</span>{/if}<span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
 
         </div>
-        <SkillBar {bridge} {view} bindings={controlBindings} bind:infoMode={skillInfoMode} editRequest={hotbarEditRequest} />
+        <SkillBar {bridge} {view} bindings={controlBindings} bind:infoMode={skillInfoMode} />
         <div class="resource-meter"><div class="vital-top resource-label"><span>{$t('resource.' + CLASSES[view.classId].resourceId)}</span><strong>{Math.round(view.resource)} / {view.stats.maxResource}</strong></div>
           <div class="health-track resource-track"><div class="resource-fill" style:width={`${100 * view.resource / view.stats.maxResource}%`}></div></div></div>
         <div class="hud-actions">
@@ -1346,9 +1349,6 @@
             title={$t('talents.open')}
             data-quick-action="talents"><span aria-hidden="true">✧</span><span class="quick-key">{shortcutHint(controlBindings, 'TALENTS')}</span>
             {#if (view.talentPoints ?? 0) > 0}<span class="quick-notice">{view.talentPoints}</span>{/if}</button>
-          <button type="button" aria-pressed={showLootLabels} onclick={toggleLootLabels}
-            aria-label={$t('worldLabels.toggle')} title={$t('worldLabels.toggle')}
-            data-testid="toggle-loot-labels" data-quick-action="loot-labels"><span aria-hidden="true">◇</span></button>
           <button type="button" disabled={busy || !view.player.alive} onclick={(event)=>togglePause(event.currentTarget)}
             aria-label={$t('menu.system')} title={$t('menu.system')}
             data-testid="system-menu" data-quick-action="menu"><span aria-hidden="true">☰</span></button>
@@ -1410,14 +1410,14 @@
       {:else if townModal?.role === 'blacksmith'}
         <TradePanel {view} {bridge} npc={BLACKSMITH_ID} close={closeDialogue}
           regionalNameKey={townModal.nameKey} regionalDescriptionKey={townModal.descriptionKey} />
+      {:else if townModal?.role === 'stash'}
+        <StashPanel {view} {bridge} nameKey={townModal.nameKey} descriptionKey={townModal.descriptionKey} close={closeDialogue} />
       {:else if townModal}
         <div class="modal-shield town-service-shield" role="dialog" aria-modal="true" aria-label={$t(townModal.nameKey)}>
           <section class="pause-card town-service-card">
             <h2>{$t(townModal.nameKey)}</h2>
             <p>{$t(townModal.descriptionKey)}</p>
-            {#if townModal.role === 'stash'}
-              <StashPanel {view} {bridge} />
-            {:else if townModal.role === 'waypoint'}
+            {#if townModal.role === 'waypoint'}
               <WaypointPanel {view} {bridge} />
             {:else if townModal.role === 'healer'}
               <button class="primary" disabled={view.gold < 15 || view.player.health >= view.player.maxHealth}
@@ -1448,18 +1448,18 @@
             {#each VILLAGE_QUESTS.filter(q => q.giverId === townModal?.id) as localQuest (localQuest.id)}
               {@const state = view.questLedger?.quests.find(q => q.questId === localQuest.id)}
               {@const prefix = 'quest.village.' + localQuest.id}
-              <h3>{$t(prefix + '.title')}</h3>
-              <p>{$t(prefix + '.briefing')}</p>
-              <p>{$t(prefix + '.objective')}</p>
-              <p>{localQuest.gold} {$t('hud.gold')} · {localQuest.xp} XP</p>
-              {#if state?.status === 'available'}
-                <button class="primary" data-testid={'village-accept-' + localQuest.id}
-                  onclick={() => acceptQuest(localQuest.id)}>{$t(prefix + '.accept')}</button>
-              {:else if state?.status === 'ready'}
-                <button class="primary" data-testid={'village-turnin-' + localQuest.id}
-                  onclick={() => turnInQuest(localQuest.id)}>{$t(prefix + '.turnIn')}</button>
-              {:else if state?.status === 'completed'}
-                <p>{$t('quest.ashes.completed')}</p>
+              {#if state?.status === 'available' || state?.status === 'active' || state?.status === 'ready'}
+                <h3>{$t(prefix + '.title')}</h3>
+                <p>{$t(prefix + (state.status === 'available' ? '.briefing' : '.description'))}</p>
+                <p>{$t(prefix + '.objective')}{#if state.status !== 'available'} · {state.counters.visit ?? 0}/1{/if}</p>
+                <p data-testid={'village-reward-' + localQuest.id}>{$t('quest.ashes.reward')}: {localQuest.gold} {$t('hud.gold')} · {localQuest.xp} XP</p>
+                {#if state.status === 'available'}
+                  <button class="primary" data-testid={'village-accept-' + localQuest.id}
+                    onclick={() => acceptQuest(localQuest.id)}>{$t('quest.ashes.accept')}</button>
+                {:else if state.status === 'ready'}
+                  <button class="primary" data-testid={'village-turnin-' + localQuest.id}
+                    onclick={() => turnInQuest(localQuest.id)}>{$t(prefix + '.turnIn')}</button>
+                {/if}
               {/if}
             {/each}
             <button class="secondary" onclick={closeDialogue}>{$t('npc.leave')}</button>
@@ -1467,10 +1467,15 @@
         </div>
       {:else if tradeNpc}
         <TradePanel {view} {bridge} npc={tradeNpc} close={closeDialogue} />
+      {:else if skillEditorOpen}
+        <div class="modal-shield"><section class="skill-editor-dialog" role="dialog" aria-modal="true" aria-label={$t('menu.editSkills')} data-testid="skill-editor-dialog">
+          <h2>{$t('menu.editSkills')}</h2>
+          <SkillBar {bridge} {view} bindings={controlBindings} editorOnly closeEditor={closeSkillEditor} />
+        </section></div>
       {:else if settingsOpen}
         <div class="modal-shield">
           <VisualSettingsPanel preferences={visualPreferences}
-            save={updateVisualPreferences} {audioPreferences} saveAudio={updateAudioPreferences}
+            save={updateVisualPreferences} worldHud={worldHud} saveWorldHud={updateWorldHud} {audioPreferences} saveAudio={updateAudioPreferences}
             {fullscreenSupported} {fullscreenActive} {fullscreenError} {toggleFullscreen}
             close={() => { settingsOpen = false; }} />
         </div>
@@ -1480,7 +1485,7 @@
             close={() => { controlsOpen = false; settingsOpen = false; }} />
         </div>
       {:else if dialogueOpen}
-        <NpcDialogue quest={view.quest} questLedger={view.questLedger} accept={acceptQuest} turnIn={turnInQuest} close={closeDialogue} />
+        <NpcDialogue quest={view.quest} questLedger={view.questLedger} level={view.level} accept={acceptQuest} turnIn={turnInQuest} close={closeDialogue} />
       {:else if inventoryOpen}
         <InventoryPanel {view} {bridge} close={closeInventory} />
       {:else if characterOpen}
@@ -1510,7 +1515,6 @@
             <button class="secondary" data-testid="pause-load" disabled={busy} onclick={() => load()}>{$t('menu.load')}</button>
             <button class="secondary" data-testid="pause-guide" disabled={busy} onclick={openGuideFromMenu}>{$t('worldLabels.showGuide')}</button>
             <button class="secondary" data-testid="pause-edit-hotbar" disabled={busy} onclick={editSkillsFromMenu}>{$t('menu.editSkills')}</button>
-            <button class="secondary" aria-pressed={showLootLabels} onclick={toggleLootLabels}>{$t('worldLabels.toggle')}</button>
             <button class="secondary" onclick={(event) => openControls(event.currentTarget)}>{$t('bindings.open')}</button>
             <button class="secondary" data-testid="open-visual-settings"
               onclick={(event) => openVisualSettings(event.currentTarget)}>{$t('visualSettings.open')}</button>

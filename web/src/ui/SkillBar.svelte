@@ -1,6 +1,5 @@
 <script lang="ts">
   import { _ as t, locale } from 'svelte-i18n';
-  import { untrack } from 'svelte';
   import type { GameBridge } from '../game/bridge/GameBridge';
   import type { GameSnapshot } from '../game/core/types';
   import type { InputBinding } from '../game/input/bindings';
@@ -20,20 +19,14 @@
   import { projectEquippedSkill } from '../game/skills/skillModifiers';
   import { projectTalentBonuses } from '../game/progression/talentTree';
   import { BUILD_PRESET_COUNT, previewBuildPreset } from '../game/progression/buildPresets';
-  let { bridge, view, bindings, infoMode = $bindable(false), editRequest = 0 }: {
+  let { bridge, view, bindings, infoMode = $bindable(false), editorOnly = false, closeEditor = () => {} }: {
     bridge: GameBridge; view: GameSnapshot; bindings: readonly InputBinding[];
-    infoMode?: boolean; editRequest?: number;
+    infoMode?: boolean; editorOnly?: boolean; closeEditor?:()=>void;
   } = $props();
   let skillRoot = $state<HTMLElement>();
   let hint = $state<{name:string;description:string;shortcut:string;cooldown:string}|null>(null);
-  let appliedRequest = untrack(()=>editRequest);
   let previousInfo = false;
   $effect(()=>{ if(previousInfo && !infoMode) hint=null; previousInfo=infoMode; });
-  $effect(() => {
-    if (editRequest !== appliedRequest && !view.paused && view.player.alive) {
-      appliedRequest = editRequest; editorOwner = owner;
-    }
-  });
   $effect(() => { if (view.paused || !view.player.alive || editing) { infoMode = false; hint = null; } });
   function showHint(button: HTMLButtonElement): void {
     hint = { name: button.getAttribute('aria-label') ?? '', description: button.title,
@@ -51,8 +44,7 @@
 
   let layout = $derived(view.hotbarLayout ?? defaultHotbarLayout(view.classId));
   let owner = $derived((view.characterId ?? 'hero') + ':' + view.classId);
-  let editorOwner = $state<string | null>(null);
-  let editing = $derived(editorOwner === owner && !view.paused && view.player.alive);
+  let editing = $derived(editorOnly && view.player.alive);
   let selectedSlot = $state<HotbarInput | null>(null);
   let dragSlot = $state<HotbarInput | null>(null);
   let presetIndex = $state(0);
@@ -71,23 +63,7 @@
     cancelDrag();
   }
 
-  $effect(() => {
-    if (editorOwner !== null && (editorOwner !== owner || view.paused || !view.player.alive)) {
-      editorOwner = null;
-      confirmReplace = false;
-      presetIndex = 0;
-      selectedSlot = null;
-      dragSlot = null;
-    }
-  });
-
-  function toggleEditor(): void {
-    editorOwner = editing ? null : owner;
-    confirmReplace = false;
-    presetIndex = 0;
-    selectedSlot = null;
-    dragSlot = null;
-  }
+  function toggleEditor():void { cancelDrag(); closeEditor(); }
 
   function swap(from: HotbarInput, to: HotbarInput): void {
     if (!editing) return;
@@ -130,11 +106,10 @@
   }
 
   function editorKey(event: KeyboardEvent): void {
-    event.stopPropagation();
     if (event.key === 'Escape') {
+      event.stopPropagation();
       event.preventDefault();
-      editorOwner = null;
-      cancelDrag();
+      toggleEditor();
     }
   }
 
@@ -150,7 +125,7 @@
 </script>
 
 <svelte:window onpointerdown={outsideHint} />
-<div class="skill-ui" bind:this={skillRoot} data-inspecting={infoMode}>
+<div class="skill-ui" class:editor-only={editorOnly} bind:this={skillRoot} data-inspecting={infoMode}>
   <div class="hotbar-controls">
     {#if editing}
       <span class="hotbar-hint">{$locale === 'cs' ? 'Vyber dva sloty nebo přetáhni.' : 'Select two slots or drag.'}</span>
@@ -160,7 +135,7 @@
       }} onkeydown={editorKey}>{$locale === 'cs' ? 'Výchozí' : 'Reset'}</button>
     {/if}
     {#if editing}<button type="button" data-testid="edit-hotbar" aria-pressed={editing}
-      disabled={view.paused || !view.player.alive} onclick={toggleEditor}
+      disabled={!view.player.alive} onclick={toggleEditor}
       onkeydown={editing ? editorKey : undefined}>
       {editing ? ($locale === 'cs' ? 'Hotovo' : 'Done') : ($locale === 'cs' ? 'Upravit schopnosti' : 'Edit skills')}
     </button>{/if}
@@ -394,6 +369,7 @@
     </div>
   {/if}
   {/if}
+  {#if !editorOnly}
   {#if view.classId === 'WARLOCK'}
     <div class="necro-minions" data-testid="warlock-demons"
       aria-label={$t('warlock.demons')}>
@@ -473,6 +449,7 @@
       {/each}
     </div>
   {/if}
+  {/if}
 </div>
 
 
@@ -543,8 +520,14 @@
   .necro-minions,.rogue-status { text-align:center; font-size:.6rem; color:#d5c3a5; line-height:1.2; }
   .hotbar-controls:empty { display:none; }
   .skill-row { display:flex; gap:4px; min-width:0; align-items:stretch; }
-  .skill-row .skill-toolbar { flex:1 1 auto; width:auto; }
-  .skill-slot { flex:1 1 44px; min-width:44px; max-width:64px; display:flex; }
+  .skill-row { justify-content:center; }
+  .skill-row .skill-toolbar { flex:0 1 auto; width:auto; max-width:100%; }
+  .editor-only .hotbar-editor { grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px; }
+  .editor-only .hotbar-editor button { min-height:62px;padding:7px; }
+  .editor-only .hotbar-editor span { white-space:normal;font-size:.8rem;text-align:center; }
+  .editor-only .hotbar-controls button,.editor-only .preset-controls button,.editor-only .preset-controls select { min-height:44px;font-size:.8rem; }
+  .editor-only .hotbar-hint {font-size:.8rem;}
+  .skill-slot { flex:0 0 46px; width:46px; min-width:44px; max-width:46px; display:flex; }
   .skill-slot .skill-button,.skill-slot .skill-button.extra { flex:1; width:100%; min-width:44px; height:46px; min-height:44px; padding:12px 2px 3px; }
   .skill-title,.skill-button.extra .skill-title,.skill-cost { display:none; }
   .skill-shortcut { left:3px; top:2px; z-index:2; }

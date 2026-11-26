@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test';
 test.describe('mobile touch HUD', () => {
   test.use({ hasTouch: true });
 
-  test('all seven skills and five quick actions remain reachable in portrait and landscape', async ({ page }) => {
+  test('all seven skills and four quick actions remain reachable in portrait and landscape', async ({ page }) => {
     await page.goto('./?view=iso');
     await page.locator('#menu-language').selectOption('en');
     await openCharacterCreation(page);
@@ -16,7 +16,7 @@ test.describe('mobile touch HUD', () => {
     const skillButtons = dock.locator('.skill-button');
     const quickActions = dock.locator('[data-quick-action]');
     await expect(skillButtons).toHaveCount(7);
-    await expect(quickActions).toHaveCount(5);
+    await expect(quickActions).toHaveCount(4);
 
     for (const viewport of [
       { width: 320, height: 568 },
@@ -61,10 +61,10 @@ test.describe('mobile touch HUD', () => {
       expect(outer.y + outer.height).toBeLessThanOrEqual(viewport.height + 1);
       expect(outer.height).toBeLessThan(viewport.height * 0.6);
 
-      expect(geometry.actions).toHaveLength(5);
+      expect(geometry.actions, JSON.stringify({ viewport, geometry })).toHaveLength(4);
       for (const action of geometry.actions) {
-        expect(action.width).toBeGreaterThanOrEqual(43);
-        expect(action.height).toBeGreaterThanOrEqual(43);
+        expect(action.width, JSON.stringify({ viewport, action })).toBeGreaterThanOrEqual(43);
+        expect(action.height, JSON.stringify({ viewport, action })).toBeGreaterThanOrEqual(43);
         expect(action.x).toBeGreaterThanOrEqual(outer.x - 1);
         expect(action.x + action.width).toBeLessThanOrEqual(outer.x + outer.width + 1);
         expect(action.y + action.height).toBeLessThanOrEqual(outer.y + outer.height + 1);

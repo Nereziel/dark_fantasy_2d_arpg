@@ -72,6 +72,7 @@
     </header>
     <div class="trade-gold">{$t('hud.gold')}: <strong>{money(view.gold)}</strong></div>
 
+    <div class="trade-body">
     {#if npc === MERCHANT_ID}
       <div class="trade-columns">
         <section>
@@ -229,6 +230,7 @@
       </section>
       <GemForgePanel {view} {bridge} />
     {/if}
+    </div>
     <footer class="trade-footer">
       <button class="secondary" onclick={close}>{$t('npc.leave')}</button>
     </footer>
@@ -236,18 +238,22 @@
 </div>
 
 <style>
-  .trade-overlay{position:absolute;inset:0;z-index:12;background:#060911df;display:grid;place-items:center;padding:16px}
-  .trade-window{width:min(96vw,930px);max-height:92vh;overflow:auto;background:linear-gradient(155deg,#202c32,#0d131c);
+  .trade-overlay{position:absolute;inset:0;z-index:12;background:#060911df;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr);place-items:center;padding:clamp(6px,2vh,18px)}
+  .trade-window{width:min(1080px,100%);height:min(780px,100%);min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(155deg,#202c32,#0d131c);
     border:1px solid #aa8b62;box-shadow:0 23px 80px #000;padding:24px}
-  .trade-header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:1px solid #64533d;padding-bottom:12px}
+  .trade-header{flex-shrink:0;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:1px solid #64533d;padding-bottom:12px}
   .trade-kicker{font-size:.62rem;color:#b2a07f;text-transform:uppercase;letter-spacing:.18em}
   h2{font:1.55rem Georgia,serif;margin:6px 0;color:#efd8b0}
   h3{font:1.06rem Georgia,serif;color:#e3c99e;margin:0 0 12px}
   .trade-header p{color:#b7c3c1;font-size:.79rem;margin:5px 0}
   .trade-close{padding:7px 12px}
-  .trade-gold{padding:11px 0;text-align:right;color:#dfbf82;font-size:.82rem}
+  .trade-gold{flex-shrink:0;padding:11px 0;text-align:right;color:#dfbf82;font-size:.82rem}
   .trade-gold strong{font-size:1.15rem}
-  .trade-columns{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  .trade-body{flex:1 1 0;min-height:0;overflow:auto;scrollbar-gutter:stable}
+  .trade-columns{height:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:minmax(0,1fr);gap:18px}
+  .trade-columns section{display:flex;flex-direction:column;min-height:0;min-width:0}
+  .trade-columns .trade-list{flex:1;min-height:0;max-height:none;scrollbar-gutter:stable}
+  .trade-columns .trade-list>*{flex-shrink:0}
   .trade-list{display:flex;flex-direction:column;gap:7px;max-height:54vh;overflow:auto;padding:2px}
   .trade-item{display:flex;align-items:center;gap:8px;background:#141e28;border:1px solid #41505a;padding:9px}
   .trade-icon{display:block;width:38px;height:38px;flex:0 0 38px;border:1px solid;
@@ -275,9 +281,10 @@
     color:#e6d4b3;padding:7px 9px}
   .craft-actions button small{font-size:.59rem;color:#c1a47a;text-align:left}
   .craft-actions button:disabled{opacity:.4;cursor:not-allowed}
-  .trade-footer{display:flex;justify-content:flex-end;margin-top:16px;border-top:1px solid #594d3e;padding-top:14px}
+  .trade-footer{flex-shrink:0;display:flex;justify-content:flex-end;margin-top:16px;border-top:1px solid #594d3e;padding-top:14px}
   .trade-footer button{font-size:.78rem;padding:9px 21px}
-  @media(max-width:720px){.trade-window{padding:12px}.trade-columns{grid-template-columns:1fr;gap:13px}
-    .trade-list{max-height:28vh}.trade-item{padding:5px;gap:5px}.trade-price{font-size:.6rem}
+  @media(max-width:720px){.trade-window{padding:12px}.trade-columns{height:auto;grid-template-columns:1fr;grid-template-rows:auto;gap:13px}
+    .trade-list,.trade-columns .trade-list{max-height:clamp(130px,35dvh,280px);flex:auto}.trade-item{padding:5px;gap:5px}.trade-price{font-size:.6rem}
     .trade-item button{font-size:.64rem;padding:5px}.trade-item-name strong{font-size:.68rem}}
+  @media(max-height:460px){.trade-window{padding:8px 12px}.trade-header p{display:none}.trade-header{padding-bottom:5px}.trade-gold{padding:4px 0}.trade-footer{margin-top:6px;padding-top:6px}h2{font-size:1.12rem}}
 </style>

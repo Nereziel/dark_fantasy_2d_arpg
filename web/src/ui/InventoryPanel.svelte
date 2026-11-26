@@ -13,6 +13,7 @@
   import { WEAPON_TYPES } from '../game/items/itemCatalog';
   import type { InventoryError } from '../game/inventory/equipmentRules';
   import { itemDisplayName } from '../game/items/itemName';
+  import { itemBaseProperties } from '../game/items/itemPresentation';
 
   let { view, bridge, close }: { view: GameSnapshot; bridge: GameBridge; close: () => void } = $props();
   type EquipmentSlot = keyof GameSnapshot['equipment'];
@@ -564,9 +565,12 @@
                 {itemName(inspected)}
               </strong>
               <span class="rarity-label">{$t('item.rarity.' + inspected.rarity)} · {$t('inventory.requireLevel')} {inspected.requiredLevel ?? 1}</span>
-              <div class="item-property"><span>{$t('stat.damageMin')}–{$t('stat.damageMax')}</span><strong>{inspected.minDmg}–{inspected.maxDmg}</strong></div>
-              <div class="item-property"><span>{$t('stat.armor')}</span><strong>{inspected.armor}</strong></div>
-              <div class="item-property"><span>{$t('stat.blockChance')}</span><strong>{inspected.block}%</strong></div>
+              {#each itemBaseProperties(inspected) as property (property.key)}
+                <div class="item-property" data-item-property={property.key}>
+                  <span>{#if property.key === 'damage'}{$t('stat.damageMin')}–{$t('stat.damageMax')}{:else}{$t(property.key === 'armor' ? 'stat.armor' : 'stat.blockChance')}{/if}</span>
+                  <strong>{property.value}</strong>
+                </div>
+              {/each}
               {#if inspected.twoHanded}
                 <p>{$t('inventory.twoHanded')}</p>
                 {#if displayed?.kind === 'bag' && view.equipment.OFF_HAND}
@@ -588,9 +592,12 @@
                 </span>
                 <strong class="item-title" style:color={RARITIES[equippedItem.rarity].color}>{itemName(equippedItem)}</strong>
                 <span class="rarity-label">{$t('item.rarity.' + equippedItem.rarity)}</span>
-                <div class="item-property"><span>{$t('stat.damageMin')}–{$t('stat.damageMax')}</span><strong>{equippedItem.minDmg}–{equippedItem.maxDmg}</strong></div>
-                <div class="item-property"><span>{$t('stat.armor')}</span><strong>{equippedItem.armor}</strong></div>
-                <div class="item-property"><span>{$t('stat.blockChance')}</span><strong>{equippedItem.block}%</strong></div>
+                {#each itemBaseProperties(equippedItem) as property (property.key)}
+                  <div class="item-property" data-item-property={property.key}>
+                    <span>{#if property.key === 'damage'}{$t('stat.damageMin')}–{$t('stat.damageMax')}{:else}{$t(property.key === 'armor' ? 'stat.armor' : 'stat.blockChance')}{/if}</span>
+                    <strong>{property.value}</strong>
+                  </div>
+                {/each}
                 {#each equippedItem.affixes as affix,i (i)}
                   <div class="affix-line">{$t('item.affix.' + affix.id)} · +{affix.value} {$t('stat.' + affix.stat)}</div>
                 {/each}
@@ -672,16 +679,16 @@
 </div>
 
 <style>
-  .inventory-overlay{position:absolute;inset:0;z-index:40;display:grid;place-items:center;background:#03060bdf;padding:clamp(8px,2vh,24px)}
-  .inventory-window{width:min(1320px,100%);max-height:min(850px,96dvh);min-height:0;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(155deg,#20242c,#0b111a 70%);border:1px solid #9d845d;box-shadow:0 25px 90px #000e}
-  .inventory-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid #61513b}
+  .inventory-overlay{position:absolute;inset:0;z-index:40;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr);place-items:center;box-sizing:border-box;background:#03060bdf;padding:clamp(8px,2vh,24px)}
+  .inventory-window{width:min(1320px,100%);height:min(850px,100%);min-width:0;min-height:0;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;background:linear-gradient(155deg,#20242c,#0b111a 70%);border:1px solid #9d845d;box-shadow:0 25px 90px #000e}
+  .inventory-header{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid #61513b}
   h2{font:1.5rem Georgia,serif;color:#ecdcc0;margin:3px 0 0}
   h3{font:1.1rem Georgia,serif;color:#d8bd8e;margin:0 0 12px}
   .header-controls{display:flex;gap:7px}
   .header-controls button,.bag-toolbar button,.bag-footer button,.inspector-actions button{border:1px solid #70614d;background:#202831;color:#e9dcc1;font-size:.74rem;padding:7px 10px}
-  .help-note{padding:9px 20px;margin:0;color:#e2cda9;background:#232620;border-bottom:1px solid #625745;font-size:.76rem}
-  .inventory-layout{display:grid;grid-template-columns:minmax(245px,.95fr) minmax(275px,1fr) minmax(300px,1.2fr);gap:18px;min-height:0;overflow:auto;padding:18px}
-  .equipment-section,.backpack-section,.item-inspector{min-width:0}
+  .help-note{flex-shrink:0;padding:9px 20px;margin:0;color:#e2cda9;background:#232620;border-bottom:1px solid #625745;font-size:.76rem}
+  .inventory-layout{display:grid;grid-template-columns:minmax(245px,.95fr) minmax(275px,1fr) minmax(300px,1.2fr);grid-template-rows:minmax(0,1fr);gap:18px;flex:1 1 0;min-height:0;overflow:hidden;padding:18px}
+  .equipment-section,.backpack-section,.item-inspector{min-width:0;min-height:0;overflow:auto;scrollbar-gutter:stable}
   .equipment-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:
     ". HELMET ."
     "MAIN_HAND CHEST OFF_HAND"
@@ -735,7 +742,7 @@
   .empty-icon{font-size:1rem;color:#36434b}
   .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
   .bag-footer{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:12px;font-size:.67rem;color:#8f9b9c}
-  .item-inspector{padding:14px;border:1px solid #4f5047;background:linear-gradient(#141e26,#0b141c);overflow:auto;max-height:100%}
+  .item-inspector{padding:14px;border:1px solid #4f5047;background:linear-gradient(#141e26,#0b141c);overflow:auto;max-height:100%;overscroll-behavior:contain}
   .comparison-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .item-detail{min-width:0;display:flex;flex-direction:column;gap:6px;background:#0b121a;border:1px solid #38434b;padding:10px}
   .comparison-equipped{background:#121921}
@@ -761,7 +768,7 @@
   .inspector-actions .primary-action{border-color:#ba9361;background:#4b3a29}
   .inspect-placeholder{text-align:center;display:grid;place-items:center;min-height:220px;color:#99a8a7;font-size:.8rem;line-height:1.65;padding:16px}
   .placeholder-glyph{font:3rem Georgia,serif;color:#796c55}
-  @media(max-width:950px){.inventory-layout{grid-template-columns:minmax(235px,.9fr) minmax(280px,1.1fr)}.item-inspector{grid-column:1/-1;max-height:none}.comparison-grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:950px){.inventory-layout{grid-template-columns:minmax(235px,.9fr) minmax(280px,1.1fr);grid-template-rows:max-content;grid-auto-rows:max-content;align-content:start;align-items:start;overflow:auto;scrollbar-gutter:stable}.equipment-section,.backpack-section{overflow:visible;scrollbar-gutter:auto}.item-inspector{grid-column:1/-1;height:clamp(220px,45dvh,400px);max-height:none;box-sizing:border-box}.comparison-grid{grid-template-columns:1fr 1fr}}
   .touch-hint{display:none}
   .touch-move-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px}
   .touch-move-bar button{min-height:40px;padding:6px 10px;background:#46392a;border:1px solid #af8a58;color:#f3e6ce}
@@ -771,18 +778,18 @@
      the bag; no hover-only tooltip or duplicate comparison logic is necessary. */
   @media(max-width:650px){
     .inventory-overlay{padding:4px}
-    .inventory-window{max-height:99dvh}
+    .inventory-window{height:100%}
     .inventory-header{padding:9px 10px;gap:7px}
     h2{font-size:clamp(1rem,4.5vw,1.3rem)}
     .header-controls{flex-shrink:0;gap:5px}
     .header-controls button{font-size:.65rem;min-height:40px;padding:6px 8px}
     .inventory-layout{
-      grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;
+      grid-template-columns:minmax(0,1fr);grid-template-rows:max-content;grid-auto-rows:max-content;
       align-content:start;padding:8px;gap:12px;overscroll-behavior:contain;
     }
     .item-inspector{
       grid-column:1;order:-2;position:sticky;top:0;z-index:5;
-      max-height:clamp(180px,40dvh,306px);min-height:0;
+      height:clamp(180px,40dvh,306px);max-height:100%;min-height:0;
       padding:9px 11px;overflow-y:auto;overscroll-behavior:contain;
       box-shadow:0 8px 22px #000b;
     }
@@ -813,5 +820,19 @@
     .comparison-grid .item-property{font-size:.64rem}
     .comparison-grid .rarity-label{font-size:.61rem}
     .help-note{padding:7px 11px}
+  }
+  /* Landscape hybrid devices: explicit independent scroll areas prevent
+     the first grid row from collapsing over the inspector and stealing taps. */
+  @media(min-width:651px) and (max-width:950px) and (max-height:520px){
+    .inventory-header{padding:6px 12px}
+    .inventory-layout{grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);
+      grid-template-rows:minmax(0,1fr) minmax(0,1fr);grid-auto-rows:auto;
+      align-content:stretch;align-items:stretch;overflow:hidden;padding:8px;gap:8px}
+    .backpack-section{grid-area:1/1;overflow:auto;scrollbar-gutter:stable}
+    .equipment-section{grid-area:2/1;overflow:auto;scrollbar-gutter:stable}
+    .item-inspector{grid-area:1/2/3/3;height:auto;max-height:none;min-height:0;overflow:auto;scrollbar-gutter:stable;padding:8px}
+    .inspector-actions button{min-height:44px}
+    .bag-slot{min-height:44px;aspect-ratio:1}
+    .help-note{padding:6px 12px}
   }
 </style>

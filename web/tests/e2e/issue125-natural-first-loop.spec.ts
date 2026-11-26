@@ -1082,13 +1082,15 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await page.getByRole('button', { name: 'Speak to the warden' }).click();
   const finalWarden = page.getByRole('dialog', { name: 'Warden Vesna' });
   await expect(finalWarden).toBeVisible({ timeout: 25_000 });
-  // The Act I finale is reached via Vesna's visible dialogue tree, not the
-  // starter quest's root-level Complete quest button.
-  await finalWarden.getByRole('button', { name: 'Threat Beyond the Gate' }).click();
-  await finalWarden.getByRole('button', { name: 'Vesna awaits your final report.' }).click();
+  // The actual ready quest is shown directly, not the completed starter quest.
+  await expect(finalWarden).toContainText('Report to Vesna');
+  await expect(finalWarden).not.toContainText('Ashes at the Gate');
+  await expect(finalWarden.getByTestId('npc-quest-reward')).toContainText('300 XP');
   const report = finalWarden.getByRole('button', { name: 'Deliver the report' });
   await expect(report).toBeEnabled();
   await report.click();
+  await expect(finalWarden.getByTestId('npc-quest-reward')).toHaveCount(0);
+  await expect(finalWarden.getByRole('button')).toHaveCount(1);
   await finalWarden.getByRole('button', { name: 'Leave' }).click();
   await expect(page.locator('.quest-journal')).toContainText('Act I complete');
   await expect(page.locator('.quest-journal')).not.toContainText('Report to Vesna');

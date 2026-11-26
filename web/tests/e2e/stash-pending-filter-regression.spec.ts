@@ -22,7 +22,8 @@ test.describe('touch stash view changes cancel pending transfers', () => {
     const bag = stash.locator('[data-stash-bag] [data-item-id]');
     const id = await bag.getAttribute('data-item-id');
     expect(id).toBeTruthy();
-    await bag.getByRole('button', { name: 'Select for move' }).tap();
+    await bag.tap();
+  await stash.getByRole('button', { name: 'Select for move' }).tap();
     await expect(stash.getByRole('button', { name: 'Cancel move' })).toBeVisible();
     await expect(stash.locator('[data-stash-tab="2"]')).toHaveClass(/drop-ready/);
 
@@ -54,7 +55,8 @@ test.describe('touch stash view changes cancel pending transfers', () => {
     const stored = stash.locator('[data-stash-items="0"] [data-item-id]');
     const id = await stored.getAttribute('data-item-id');
     expect(id).toBeTruthy();
-    await stored.getByRole('button', { name: 'Select for move' }).tap();
+    await stored.tap();
+  await stash.getByRole('button', { name: 'Select for move' }).tap();
     await expect(stash.locator('[data-stash-tab="1"]')).toHaveClass(/drop-ready/);
 
     // The armor belt disappears from the filtered list, so it must no longer
@@ -68,7 +70,8 @@ test.describe('touch stash view changes cancel pending transfers', () => {
     await stash.locator('[data-stash-tab="0"]').tap();
     await stash.getByRole('combobox', { name: 'Category' }).selectOption('');
     await expect(stored).toHaveAttribute('data-item-id', id!);
-    await stored.getByRole('button', { name: 'Select for move' }).tap();
+    await stored.tap();
+  await stash.getByRole('button', { name: 'Select for move' }).tap();
     await stash.getByRole('combobox', { name: 'Order' }).selectOption('name');
     await expect(stash.getByRole('button', { name: 'Cancel move' })).toHaveCount(0);
     await expect(stash.locator('[data-stash-tab="1"]')).not.toHaveClass(/drop-ready/);
@@ -77,7 +80,8 @@ test.describe('touch stash view changes cancel pending transfers', () => {
 
     // Moving is still available after explicitly selecting the visible source again.
     await stash.locator('[data-stash-tab="0"]').tap();
-    await stored.getByRole('button', { name: 'Select for move' }).tap();
+    await stored.tap();
+  await stash.getByRole('button', { name: 'Select for move' }).tap();
     await stash.locator('[data-stash-tab="1"]').tap();
     await expect(stash.locator('[data-stash-items="1"] [data-item-id]'))
       .toHaveAttribute('data-item-id', id!);

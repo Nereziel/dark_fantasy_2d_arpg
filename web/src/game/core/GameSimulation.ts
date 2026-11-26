@@ -1418,7 +1418,8 @@ export class GameSimulation {
     // Presets are character-owned plans, not a second economy or equip path.
     if (command.type === 'captureBuildPreset' || command.type === 'applyBuildPreset'
       || command.type === 'clearBuildPreset') {
-      if (!this.player.alive || this.paused || !isBuildPresetIndex(command.index)) return;
+      // Layout and preset configuration is safe while the dedicated editor pauses combat.
+      if (!this.player.alive || !isBuildPresetIndex(command.index)) return;
       if (command.type === 'captureBuildPreset') {
         this.buildPresets[command.index] = {
           layout: [...(this.hotbarLayout ?? defaultHotbarLayout(this.classId))],
@@ -1435,7 +1436,7 @@ export class GameSimulation {
     // Presentation-only placement never cancels a cast, consumes resources
     // or resets a cooldown. Validate before touching ANY runtime state.
     if (command.type === 'setHotbarLayout') {
-      if (!this.player.alive || this.paused || !validateHotbarLayout(this.classId, command.layout)) return;
+      if (!this.player.alive || !validateHotbarLayout(this.classId, command.layout)) return;
       const defaults = defaultHotbarLayout(this.classId);
       this.hotbarLayout = command.layout.every((id, index) => id === defaults[index])
         ? undefined : [...command.layout];

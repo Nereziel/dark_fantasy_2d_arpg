@@ -4,11 +4,12 @@
   import type { GameBridge } from '../game/bridge/GameBridge';
   import { itemDisplayName } from '../game/items/itemName';
   import ItemArt from './ItemArt.svelte';
-  import { RARITIES, type RarityId } from '../game/data/items';
+  import { itemBaseProperties } from '../game/items/itemPresentation';
+  import { RARITIES, type Item, type RarityId } from '../game/data/items';
   import { STASH_SIZE, STASH_TAB_COUNT, emptyStashTabs, projectStashItems,
     type StashCategory, type StashSort } from '../game/inventory/stashRules';
 
-  let { view, bridge }: { view: GameSnapshot; bridge: GameBridge } = $props();
+  let { view, bridge, nameKey, descriptionKey, close }: { view: GameSnapshot; bridge: GameBridge; nameKey: string; descriptionKey: string; close: () => void } = $props();
   const tabs = Array.from({ length: STASH_TAB_COUNT }, (_, i) => i);
   const rarityIds = Object.keys(RARITIES) as RarityId[];
   const categories: StashCategory[] = ['weapon', 'armor', 'accessory'];
@@ -52,6 +53,7 @@
       moveMessage = $locale === 'cs' ? 'Tento předmět nelze přesunout.' : 'This item cannot be moved.';
       return;
     }
+    selectedId = source.id;
     pendingMove = pendingMove?.id === source.id ? null : source;
     moveMessage = '';
   }
@@ -158,9 +160,44 @@
     }
     target.value = '';
   }
+
+  type PreviewEntry = { source: DragSource; item: Item };
+  let selectedId = $state<string | null>(null);
+  const bagEntries = $derived(view.inventory.flatMap((item, index): PreviewEntry[] =>
+    item ? [{ source: { kind: 'bag', index, id: item.id }, item }] : []));
+  const storedEntries = $derived(storedRows.map(({ index, item }): PreviewEntry =>
+    ({ source: { kind: 'stash', index, tab: activeTab, id: item.id }, item })));
+  const selected = $derived([...bagEntries, ...storedEntries].find(e => e.item.id === selectedId)
+    ?? bagEntries[0] ?? storedEntries[0] ?? null);
+  function name(item: Item): string {
+    return itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId));
+  }
+  // Pin the action target on explicit click/tap; crossing another slot with
+  // the mouse must never silently retarget a deposit or withdrawal.
+  function inspect(item: Item): void {
+    if (pendingMove && pendingMove.id !== item.id) cancelPendingMove();
+    selectedId = item.id;
+  }
+  function quickTransfer(entry: PreviewEntry): void {
+    const { source } = entry;
+    if (!liveSource(source)) return;
+    selectedId = source.id;
+    pendingMove = null;
+    if (source.kind === 'bag' && hasFreeStash) {
+      bridge.command({ type: 'stashDeposit', index: source.index, tab: activeTab });
+    } else if (source.kind === 'stash' && hasFreeBag) {
+      bridge.command({ type: 'stashWithdraw', index: source.index, tab: source.tab });
+    }
+  }
 </script>
 
-<div class="stash-tabs" role="tablist" aria-label={$t('stash.tabs')}>
+<div class="modal-shield stash-overlay">
+  <section class="stash-window" role="dialog" aria-modal="true" aria-label={$t(nameKey)}>
+    <header class="stash-header">
+      <div><h2>{$t(nameKey)}</h2><p>{$t(descriptionKey)}</p></div>
+      <button class="close-button" type="button" aria-label={$t('inventory.close')} onclick={close}>✕</button>
+    </header>
+    <div class="stash-tabs" role="tablist" aria-label={$t('stash.tabs')}>
   {#each tabs as tab}
     <button role="tab" aria-selected={activeTab === tab} class:active={activeTab === tab}
       data-stash-tab={tab} class:drop-ready={!!transferSource && canDropTab(tab)}
@@ -181,7 +218,9 @@
   {/each}
 </div>
 
-{#if pendingMove}
+
+    <div class="stash-body">
+      {#if pendingMove}
   <div class="stash-click-transfer" role="group"
     aria-label={$locale === 'cs' ? 'Přesun předmětu' : 'Move item'}>
     <span role="status">{$locale === 'cs'
@@ -208,50 +247,9 @@
   <p class="stash-transfer-error" role="status">{moveMessage}</p>
 {/if}
 
-<div class="stash-columns">
-  <section>
-    <h3>{$t('town.stashBag')} ({view.inventory.filter(Boolean).length}/{view.inventory.length})</h3>
-    <div class="stash-list" data-stash-bag role="region" aria-label={$t('town.stashBag')}
-      class:drop-ready={canDropBag()}
-      class:drop-hover={dropHover === 'bag' && canDropBag()}
-      ondragover={(event) => allowDrop(event, 'bag')}
-      ondragleave={() => { if (dropHover === 'bag') dropHover = null; }}
-      ondrop={dropIntoBag}>
-      {#each view.inventory as item, index (index)}
-        {#if item}
-          <div class="stash-row" role="group" aria-label={itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))} data-item-id={item.id} data-bag-index={index}
-            class:move-source={pendingMove?.id === item.id}
-            draggable={!view.itemFlags?.[item.id]?.locked && !view.itemFlags?.[item.id]?.favorite}
-            ondragstart={(event) => dragStart(event, { kind: 'bag', index, id: item.id })}
-            ondragend={clearDrag}>
-            <span class="stash-item-ident" style:color={RARITIES[item.rarity].color}>
-              <span class="stash-art" style:border-color={RARITIES[item.rarity].color}>
-                <ItemArt {item} />
-                {#if item.upgrades}<small>+{item.upgrades}</small>{/if}
-              </span>
-              <span class="stash-item-label">{itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</span>
-            </span>
-            <button type="button" class="stash-move-select"
-              aria-pressed={pendingMove?.id === item.id}
-              disabled={!!view.itemFlags?.[item.id]?.locked || !!view.itemFlags?.[item.id]?.favorite}
-              onclick={() => beginMove({ kind: 'bag', index, id: item.id })}>
-              {$locale === 'cs' ? 'Vybrat k přesunu' : 'Select for move'}
-            </button>
-            <button disabled={!hasFreeStash || !!view.itemFlags?.[item.id]?.locked || !!view.itemFlags?.[item.id]?.favorite}
-              onclick={() => { pendingMove = null; bridge.command({ type: 'stashDeposit', index, tab: activeTab }); }}>
-              {$t('town.stashDeposit')}
-            </button>
-          </div>
-        {/if}
-      {/each}
-      {#if view.inventory.every(item => item === null)}
-        <p class="stash-empty">{$t('trade.noItems')}</p>
-      {/if}
-    </div>
-  </section>
-  <section>
-    <h3>{$t('town.stashStored')} ({usedSlots}/{STASH_SIZE})</h3>
-    <div class="stash-controls">
+
+      <div class="stash-filters">
+        <div class="stash-controls">
       <label>
         <span>{$t('stash.search')}</span>
         <input type="search" value={query} maxlength="64"
@@ -290,92 +288,167 @@
     <button class="stash-organize" onclick={() => { cancelPendingMove(); bridge.command({ type: 'stashSort', tab: activeTab }); }}>
       {$t('stash.organize')}
     </button>
-    <div class="stash-list" data-stash-items={activeTab} role="tabpanel" tabindex="0"
-      class:drop-ready={!!transferSource && canDropTab(activeTab)}
-      class:drop-hover={dropHover === 'stash' && canDropTab(activeTab)}
-      ondragover={(event) => allowDrop(event, 'stash')}
-      ondragleave={() => { if (dropHover === 'stash') dropHover = null; }}
-      ondrop={(event) => dropIntoTab(event, activeTab)}>
-      {#each storedRows as { index, item } (item.id)}
-        <div class="stash-row" role="group" aria-label={itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))} data-item-id={item.id} data-slot-index={index} draggable="true"
-          class:move-source={pendingMove?.id === item.id}
-          ondragstart={(event) => dragStart(event, { kind: 'stash', tab: activeTab, index, id: item.id })}
-          ondragend={clearDrag}>
-          <span class="stash-item-ident" style:color={RARITIES[item.rarity].color}>
-              <span class="stash-art" style:border-color={RARITIES[item.rarity].color}>
-                <ItemArt {item} />
-                {#if item.upgrades}<small>+{item.upgrades}</small>{/if}
-              </span>
-              <span class="stash-item-label">{itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId))}</span>
-            </span>
-          <div class="stash-row-actions">
-            <button type="button" class="stash-move-select" aria-pressed={pendingMove?.id === item.id}
-              onclick={() => beginMove({ kind: 'stash', index, tab: activeTab, id: item.id })}>
-              {$locale === 'cs' ? 'Vybrat k přesunu' : 'Select for move'}
-            </button>
-            <button disabled={!hasFreeBag}
-              onclick={() => { pendingMove = null; bridge.command({ type: 'stashWithdraw', index, tab: activeTab }); }}>
-              {$t('town.stashWithdraw')}
-            </button>
-            <select aria-label={$t('stash.moveTo') + ': ' + item.id} value=""
-              onchange={event => moveTo(index, event.currentTarget.value, event.currentTarget)}>
-              <option value="">{$t('stash.moveTo')}</option>
-              {#each tabs.filter(tab => tab !== activeTab) as tab}
-                <option value={tab}>{$t('stash.tab')} {tab + 1}</option>
-              {/each}
-            </select>
+
+      </div>
+      <div class="stash-columns">
+        <section class="stash-pane">
+          <h3>{$t('town.stashBag')} ({view.inventory.filter(Boolean).length}/{view.inventory.length})</h3>
+          <div class="stash-list" data-stash-bag role="region" aria-label={$t('town.stashBag')}
+            class:drop-ready={canDropBag()} class:drop-hover={dropHover === 'bag' && canDropBag()}
+            ondragover={(event) => allowDrop(event, 'bag')}
+            ondragleave={() => { if (dropHover === 'bag') dropHover = null; }} ondrop={dropIntoBag}>
+            {#each view.inventory as item, index (index)}
+              {#if item}
+                <button type="button" class="stash-cell occupied" class:selected={selected?.item.id === item.id}
+                  class:move-source={pendingMove?.id === item.id}
+                  data-stash-cell data-item-id={item.id} data-bag-index={index}
+                  style:border-color={RARITIES[item.rarity].color}
+                  style:color={RARITIES[item.rarity].color}
+                  aria-label={name(item)} aria-pressed={selected?.item.id === item.id} title={name(item)}
+                  draggable={!view.itemFlags?.[item.id]?.locked && !view.itemFlags?.[item.id]?.favorite}
+                  onclick={() => inspect(item)}
+                  ondragstart={event => dragStart(event, { kind: 'bag', index, id: item.id })} ondragend={clearDrag}>
+                  <span class="stash-item-ident"><ItemArt {item} /></span>
+                  {#if item.upgrades}<small>+{item.upgrades}</small>{/if}
+                  {#if view.itemFlags?.[item.id]?.locked || view.itemFlags?.[item.id]?.favorite}<span class="protected-mark" aria-hidden="true">◆</span>{/if}
+                </button>
+              {:else}
+                <span class="stash-cell empty" data-stash-cell aria-hidden="true"></span>
+              {/if}
+            {/each}
           </div>
-        </div>
-      {/each}
-      {#if usedSlots === 0}
-        <p class="stash-empty">{$t('town.stashEmpty')}</p>
-      {:else if storedRows.length === 0}
-        <p class="stash-empty">{$t('stash.noMatches')}</p>
-      {/if}
+        </section>
+        <section class="stash-pane">
+          <h3>{$t('town.stashStored')} ({usedSlots}/{STASH_SIZE})</h3>
+          <div class="stash-list" data-stash-items={activeTab} role="tabpanel" tabindex="0"
+            class:drop-ready={!!transferSource && canDropTab(activeTab)} class:drop-hover={dropHover === 'stash' && canDropTab(activeTab)}
+            ondragover={event => allowDrop(event, 'stash')}
+            ondragleave={() => { if (dropHover === 'stash') dropHover = null; }} ondrop={event => dropIntoTab(event, activeTab)}>
+            {#each storedRows as { index, item } (item.id)}
+              <button type="button" class="stash-cell occupied" class:selected={selected?.item.id === item.id}
+                class:move-source={pendingMove?.id === item.id}
+                data-stash-cell data-item-id={item.id} data-slot-index={index}
+                style:border-color={RARITIES[item.rarity].color} style:color={RARITIES[item.rarity].color}
+                aria-label={name(item)} aria-pressed={selected?.item.id === item.id} title={name(item)}
+                draggable="true"
+                onclick={() => inspect(item)}
+                ondragstart={event => dragStart(event, { kind: 'stash', tab: activeTab, index, id: item.id })} ondragend={clearDrag}>
+                <span class="stash-item-ident"><ItemArt {item} /></span>
+                {#if item.upgrades}<small>+{item.upgrades}</small>{/if}
+              </button>
+            {/each}
+            {#each Array.from({length: STASH_SIZE - storedRows.length}, (_, i) => i) as index (index)}
+              <span class="stash-cell empty" class:filtered={index < usedSlots - storedRows.length} data-stash-cell aria-hidden="true"></span>
+            {/each}
+          </div>
+          {#if usedSlots === 0}<p class="stash-empty">{$t('town.stashEmpty')}</p>
+          {:else if storedRows.length === 0}<p class="stash-empty">{$t('stash.noMatches')}</p>{/if}
+        </section>
+        <aside class="stash-inspector" data-testid="stash-inspector" aria-label={$t('inventory.comparison')}>
+          <h3>{$locale === 'cs' ? 'Detail předmětu' : 'Item details'}</h3>
+          {#if selected}
+            {@const entry = selected}
+            {@const item = entry.item}
+            <div class="detail-heading">
+              <span class="detail-art" style:color={RARITIES[item.rarity].color}><ItemArt {item} detail /></span>
+              <div><small>{$t(entry.source.kind === 'bag' ? 'town.stashBag' : 'town.stashStored')}</small>
+                <strong style:color={RARITIES[item.rarity].color}>{name(item)}</strong>
+                <small>{$t('item.rarity.' + item.rarity)} · {$t('inventory.requireLevel')} {item.requiredLevel ?? 1}</small></div>
+            </div>
+            {#each itemBaseProperties(item) as property (property.key)}
+              <div class="detail-stat"><span>{#if property.key === 'damage'}{$t('stat.damageMin')}–{$t('stat.damageMax')}{:else}{$t(property.key === 'armor' ? 'stat.armor' : 'stat.blockChance')}{/if}</span><strong>{property.value}</strong></div>
+            {/each}
+            {#each item.affixes as affix, index (index)}
+              <p class="detail-affix">{$t('item.affix.' + affix.id)} · +{affix.value} {$t('stat.' + affix.stat)}</p>
+            {/each}
+            {#if item.twoHanded}<p>{$t('inventory.twoHanded')}</p>{/if}
+            {#if item.upgrades}<p>{$t('trade.tempering')} +{item.upgrades}</p>{/if}
+            {#if item.sockets?.length}<p>◯ {item.sockets.length}</p>{/if}
+            {#if item.legendaryPower}<p>{$t('inventory.legendaryPower')}: +{item.legendaryPower.magnitude}</p>{/if}
+            <div class="stash-actions">
+              <button type="button" disabled={!liveSource(entry.source) || (entry.source.kind === 'bag' ? !hasFreeStash : !hasFreeBag)}
+                onclick={() => quickTransfer(entry)}>{$t(entry.source.kind === 'bag' ? 'town.stashDeposit' : 'town.stashWithdraw')}</button>
+              <button type="button" class="stash-move-select" aria-pressed={pendingMove?.id === item.id}
+                disabled={!liveSource(entry.source)} onclick={() => beginMove(entry.source)}>
+                {$locale === 'cs' ? 'Vybrat k přesunu' : 'Select for move'}</button>
+              {#if entry.source.kind === 'stash'}
+                <select aria-label={$t('stash.moveTo') + ': ' + item.id} value=""
+                  onchange={event => moveTo(entry.source.index, event.currentTarget.value, event.currentTarget)}>
+                  <option value="">{$t('stash.moveTo')}</option>
+                  {#each tabs.filter(tab => tab !== activeTab) as tab}
+                    <option value={tab}>{$t('stash.tab')} {tab + 1}</option>
+                  {/each}
+                </select>
+              {/if}
+            </div>
+          {:else}
+            <p class="stash-empty">{$locale === 'cs' ? 'Vyber předmět v batohu nebo úschovně.' : 'Select an item in the backpack or stash.'}</p>
+          {/if}
+        </aside>
+      </div>
     </div>
+    <footer class="stash-footer">
+      <small>{$t('town.stashProtected')} · {$locale === 'cs' ? 'Přetáhni předmět nebo zvol přesun.' : 'Drag an item or select it for transfer.'}</small>
+      <button class="secondary" onclick={close}>{$t('npc.leave')}</button>
+    </footer>
   </section>
 </div>
-<p class="stash-hint">{$t('town.stashProtected')} · {$locale === 'cs'
-    ? 'Přetáhni předmět, nebo zvol Vybrat k přesunu a cílovou záložku či batoh.'
-    : 'Drag an item, or choose Select for move and a destination tab or backpack.'}</p>
 
 <style>
-  .stash-tabs{display:flex;gap:6px;margin:8px 0 13px;flex-wrap:wrap}
-  .stash-click-transfer{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 10px;padding:7px 9px;border:1px solid #6e8c76;background:#1b3329}
-  .stash-click-transfer span{font-size:.73rem;color:#d3ebd6}
-  .stash-click-transfer button{min-height:40px;padding:6px 10px;border:1px solid #87b79b;background:#294637;color:#e2f3db;cursor:pointer}
-  .stash-click-transfer button:disabled{opacity:.4;cursor:not-allowed}
-  .stash-transfer-error{color:#f0b9a2;font-size:.73rem;margin:0 0 8px}
-  .stash-row.move-source{outline:2px solid #86c9a2;background:#233a32}
-  .stash-tabs button{background:#1c222a;border:1px solid #736044;color:#d8c8ab;padding:8px 12px;cursor:pointer}
+  .stash-overlay{padding:clamp(6px,2vh,18px);grid-template:minmax(0,1fr)/minmax(0,1fr)}
+  .stash-window{width:min(1200px,100%);height:min(780px,100%);min-height:0;min-width:0;overflow:hidden;display:flex;flex-direction:column;background:linear-gradient(155deg,#20242c,#0b111a 70%);border:1px solid #9d845d;box-shadow:0 25px 90px #000e}
+  .stash-header,.stash-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;flex-shrink:0}
+  .stash-header{border-bottom:1px solid #61513b}
+  h2{font:1.5rem Georgia,serif;color:#ecdcc0;margin:0}
+  .stash-header p{font-size:.75rem;color:#aeb8b9;margin:4px 0 0}
+  .close-button{min-width:40px;min-height:40px}
+  .stash-tabs{display:flex;gap:6px;padding:8px 18px;flex-shrink:0}
+  .stash-tabs button{flex:1;min-width:0;min-height:40px;background:#1c222a;border:1px solid #736044;color:#d8c8ab;padding:6px;cursor:pointer}
   .stash-tabs button.active{background:#393128;border-color:#e7b86e;color:#ffe0a2}
-  .stash-tabs button.drop-ready{outline:2px solid #81cfa2;outline-offset:2px;box-shadow:0 0 12px #5cbb8299}
+  .stash-tabs button.drop-ready{outline:2px solid #81cfa2;outline-offset:-2px}
   .stash-tabs button.drop-hover{outline:3px solid #c2f7bc;background:#294636}
-  .stash-tabs button small{font-size:.62rem;margin-left:5px}
-  .stash-columns{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:850px}
-  .stash-columns section{min-width:0}
-  .stash-columns h3{color:#f0d5a3;font-size:.85rem;margin:4px 0 10px}
-  .stash-list{max-height:320px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));align-content:start;gap:7px;min-height:80px;border:1px solid transparent;padding:4px}
-  .stash-list.drop-ready{border:2px dashed #81cfa2;box-shadow:inset 0 0 14px #356d4c88}
-  .stash-list.drop-hover{border-style:solid;background:#24403277;box-shadow:inset 0 0 18px #4ca36a66}
-  .stash-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:#17202ab8;border:1px solid #44535d;padding:6px}
-  .stash-row[draggable="true"]{cursor:grab}
-  .stash-row[draggable="true"]:active{cursor:grabbing}
-  .stash-row[draggable="false"]{cursor:not-allowed}
-  .stash-row span{font-size:.75rem;min-width:0;overflow:hidden;text-overflow:ellipsis}
-  .stash-item-ident{display:flex;flex:1 1 140px;align-items:center;gap:8px;min-width:0}
-  .stash-art{position:relative;width:38px;height:38px;flex:0 0 38px;border:1px solid;background:radial-gradient(#26313a,#111820 75%)}
-  .stash-art small{position:absolute;right:1px;bottom:0;color:#fae0a8;background:#111820;font-size:.58rem}
-  .stash-item-label{min-width:0;white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
-  .stash-row button,.stash-organize{white-space:nowrap;font-size:.72rem;border:1px solid #8b7a5f;background:#2d3137;color:#e7dac0;padding:7px;cursor:pointer}
-  .stash-row button:disabled{opacity:.45;cursor:not-allowed}
-  .stash-row-actions{display:flex;flex-wrap:wrap;gap:5px;width:100%}
-  .stash-row select{max-width:105px;font-size:.72rem;border:1px solid #8b7a5f;background:#2d3137;color:#e7dac0;padding:6px}
-  .stash-controls{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin:0 0 8px}
-  .stash-controls label{display:flex;flex-direction:column;gap:3px;min-width:84px;flex:1;font-size:.66rem;color:#cdbb9b}
-  .stash-controls select,.stash-controls input{box-sizing:border-box;width:100%;min-width:0;color:#eee2c7;border:1px solid #675845;background:#17202a;padding:6px;font-size:.7rem}
-  .stash-organize{margin-bottom:8px}
-  .stash-empty{grid-column:1/-1}
-  .stash-empty,.stash-hint{color:#c4b8a6;font-size:.76rem}
-  @media(max-width:660px){.stash-columns{grid-template-columns:1fr}.stash-list{max-height:145px}.stash-tabs button{padding:7px 9px}.stash-controls label{min-width:105px}.stash-row{flex-wrap:wrap}.stash-row-actions{margin-left:auto}}
+  .stash-tabs small{font-size:.65rem;margin-left:4px}
+  .stash-body{flex:1 1 0;min-height:0;overflow:auto;scrollbar-gutter:stable;padding:8px 18px 12px}
+  .stash-filters{display:flex;gap:8px;align-items:flex-end;margin-bottom:12px}
+  .stash-controls{flex:1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+  .stash-controls label{display:flex;flex-direction:column;gap:3px;min-width:0;font-size:.69rem;color:#cdbb9b}
+  .stash-controls input,.stash-controls select,.stash-actions select{width:100%;min-width:0;min-height:36px;color:#eee2c7;border:1px solid #675845;background:#17202a;padding:6px;font-size:.75rem}
+  .stash-organize,.stash-actions button,.stash-click-transfer button{min-height:40px;padding:7px 10px;border:1px solid #8b7a5f;background:#2d3137;color:#e7dac0;cursor:pointer}
+  .stash-columns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(200px,.85fr);gap:14px;align-items:start}
+  .stash-pane,.stash-inspector{min-width:0;background:#111b24;border:1px solid #4f5047;padding:12px}
+  h3{font:1rem Georgia,serif;color:#e3c99e;margin:0 0 10px}
+  .stash-list{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:3px;border:2px solid transparent}
+  .stash-list.drop-ready{border-color:#81cfa2;border-style:dashed}
+  .stash-list.drop-hover{border-style:solid;background:#24403277}
+  .stash-cell{position:relative;min-width:0;aspect-ratio:1;display:grid;place-items:center;padding:3px;border:1px solid #39434c;background:#101820}
+  .stash-cell.occupied{background:radial-gradient(circle at 50% 30%,#26313a,#111820 75%);cursor:grab}
+  .stash-cell.empty{background:#0b121a}
+  .stash-cell.filtered{background:repeating-linear-gradient(135deg,#151e25,#151e25 5px,#0b121a 5px,#0b121a 10px)}
+  .stash-cell.selected{outline:2px solid #e8cc91;outline-offset:-2px}
+  .stash-cell.move-source{outline:2px solid #86c9a2;background:#233a32;outline-offset:-2px}
+  .stash-cell[draggable="false"]{cursor:default}
+  .stash-cell small,.protected-mark{position:absolute;font-size:.64rem;bottom:1px;right:3px;color:#f2d7a0}
+  .protected-mark{top:1px;left:3px;bottom:auto;right:auto}
+  .stash-item-ident{display:block;width:100%;max-width:46px;aspect-ratio:1}
+  .stash-inspector{min-height:200px;max-height:460px;overflow:auto;scrollbar-gutter:stable}
+  .detail-heading{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+  .detail-heading>div{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}
+  .detail-heading small{font-size:.68rem;color:#aeb8b9}
+  .detail-heading strong{font:1rem Georgia,serif}
+  .detail-art{width:54px;height:54px;flex-shrink:0}
+  .detail-stat{display:flex;justify-content:space-between;gap:6px;padding:6px 0;border-bottom:1px solid #29313b;font-size:.77rem;color:#c2cbd0}
+  .detail-stat strong{color:#f0ddbd}
+  .detail-affix{font-size:.73rem;color:#b1d1b7;overflow-wrap:anywhere}
+  .stash-inspector p{font-size:.76rem}
+  .stash-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .stash-actions button,.stash-actions select{flex:1 1 100%}
+  .stash-actions button:disabled,.stash-click-transfer button:disabled{opacity:.45;cursor:not-allowed}
+  .stash-click-transfer{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px;padding:7px;border:1px solid #6e8c76;background:#1b3329;color:#d3ebd6;font-size:.74rem}
+  .stash-transfer-error{color:#f0b9a2;font-size:.73rem}
+  .stash-empty,.stash-footer small{color:#b9b5a7;font-size:.72rem}
+  .stash-footer{border-top:1px solid #61513b}
+  .stash-footer button{min-height:40px}
+  @media(max-width:900px){.stash-columns{grid-template-columns:repeat(2,minmax(0,1fr))}.stash-inspector{grid-column:1/-1;max-height:none;min-height:140px}.stash-actions button,.stash-actions select{flex:1 1 120px}}
+  @media(max-width:600px){.stash-header,.stash-footer{padding:7px 9px}.stash-header p,.stash-footer small{display:none}.stash-tabs{padding:6px 9px}.stash-tabs small{display:block;margin:1px 0 0}.stash-body{padding:6px 9px}.stash-filters{flex-wrap:wrap}.stash-controls{flex-basis:100%;grid-template-columns:repeat(2,minmax(0,1fr))}.stash-columns{gap:7px}.stash-pane,.stash-inspector{padding:7px}.stash-list{grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;padding:1px}.stash-inspector{min-height:120px}.stash-actions button,.stash-click-transfer button,.stash-organize{min-height:44px}h2{font-size:1.2rem}h3{font-size:.82rem}}
+  @media(max-height:460px){.stash-header,.stash-footer{padding:5px 10px}.stash-header p,.stash-footer small{display:none}.stash-tabs{padding:4px 10px}.stash-body{padding:5px 10px}h2{font-size:1.15rem}}
 </style>
