@@ -5,7 +5,7 @@ import { rebindAction, resolvePointerAction, type InputAction } from '../../src/
 
 describe('Issue #153: mouse UI mapping follows panel state', () => {
   it.each([
-    ['MAP', 'openMap'], ['TALENTS', 'openTalents'],
+    ['MAP', 'openMap'], ['JOURNAL','openJournal'], ['TALENTS', 'openTalents'],
     ['INVENTORY', 'openInventory'], ['CHARACTER', 'openCharacter'],
     ['MENU', 'togglePause']
   ] as const)('opens %s only from a bare gameplay canvas', (action, operation) => {
@@ -15,7 +15,7 @@ describe('Issue #153: mouse UI mapping follows panel state', () => {
   });
 
   it.each([
-    ['map', 'MAP', 'closeMap'], ['talents', 'TALENTS', 'closeTalents'],
+    ['map', 'MAP', 'closeMap'], ['journal','JOURNAL','closeJournal'], ['talents', 'TALENTS', 'closeTalents'],
     ['inventory', 'INVENTORY', 'closeInventory'],
     ['character', 'CHARACTER', 'closeCharacter'],
     ['pause', 'MENU', 'togglePause'], ['dialogue', 'MENU', 'closeDialogue']
@@ -26,7 +26,7 @@ describe('Issue #153: mouse UI mapping follows panel state', () => {
   });
 
   it.each([
-    ['map', 'closeMap'], ['talents', 'closeTalents'],
+    ['map', 'closeMap'], ['journal','closeJournal'], ['talents', 'closeTalents'],
     ['inventory', 'closeInventory'], ['character', 'closeCharacter']
   ] as const)('MENU closes existing %s before pausing or opening other panels', (state, operation) => {
     expect(planPointerUiAction('MENU', state, 'backdrop')).toBe(operation);
@@ -37,7 +37,7 @@ describe('Issue #153: mouse UI mapping follows panel state', () => {
   it('never executes combat or unsupported UI actions through the panel shortcut route', () => {
     for (const action of ['PRIMARY', 'SECONDARY', 'FORCE_MOVE', 'HOLD_POSITION',
       'POTION', 'EVADE', 'SLOT_1', 'SLOT_2', 'SLOT_3', 'SLOT_4', 'SLOT_5', 'SLOT_6',
-      'SKILLS', 'JOURNAL'] as InputAction[]) {
+      'SKILLS'] as InputAction[]) {
       for (const state of ['gameplay','map','pause','blocked'] as PointerUiState[]) {
         expect(planPointerUiAction(action, state, 'canvas')).toBeNull();
         expect(planPointerUiAction(action, state, 'backdrop')).toBeNull();
@@ -46,7 +46,7 @@ describe('Issue #153: mouse UI mapping follows panel state', () => {
   });
 
   it('keeps settings, controls, deaths and unrelated dialog content shielded', () => {
-    for (const action of ['MAP', 'TALENTS', 'INVENTORY', 'CHARACTER', 'MENU'] as InputAction[]) {
+    for (const action of ['MAP', 'TALENTS', 'INVENTORY', 'CHARACTER', 'JOURNAL', 'MENU'] as InputAction[]) {
       expect(planPointerUiAction(action, 'blocked', 'canvas')).toBeNull();
       expect(planPointerUiAction(action, 'blocked', 'backdrop')).toBeNull();
       expect(planPointerUiAction(action, 'dialogue', 'other')).toBeNull();

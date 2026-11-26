@@ -1783,7 +1783,7 @@
   .tracked-quest-summary span{color:#c7c4b8}
   .world-map-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,23%);gap:10px;min-height:0;overflow:hidden}
   .standalone-quest-card{width:min(900px,100%);height:min(640px,100%);min-height:0;min-width:0;max-width:none;max-height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px;overflow:hidden;text-align:left}
-  @media(max-width:700px){.desktop-journal-button{display:none}}
+  @media(max-width:700px){.desktop-journal-button,.tracked-quest-summary{display:none}}
   .world-map-content { position: relative; min-width: 0; min-height: 0;
     display: grid; overflow: hidden; }
   .world-map-toolbar {
