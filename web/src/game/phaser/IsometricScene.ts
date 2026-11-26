@@ -3,6 +3,9 @@ import Phaser from 'phaser';
 import { get } from 'svelte/store';
 import { _ as translate, locale } from 'svelte-i18n';
 import { RARITIES } from '../data/items';
+import { ACT_I_QUEST_CATALOG } from '../quests/actIQuestChain';
+import { VILLAGE_QUESTS } from '../quests/villageQuests';
+import { presentedNpcQuest, questOfferMarker } from '../quests/npcQuestPresentation';
 import { itemDisplayName } from '../items/itemName';
 import { layoutWorldLabels, getWorldHud, worldLabelVisible, roleMarker, skillCueStyle } from '../ui/worldReadability';
 import { occluderDepthAt } from './isometricOcclusion';
@@ -440,14 +443,17 @@ export class IsometricScene extends Phaser.Scene {
     const t=get(translate),camera=this.cameras.main;
     const specs:{id:string;point:Readonly<Point>;elevation:number;text:string;color:string}[]=[];
     if(state.zone==='wilderness'){
-      const story=state.questLedger?.quests.find(q=>q.status==='ready'||q.status==='active');
+      const story=presentedNpcQuest(ACT_I_QUEST_CATALOG,state.questLedger);
       for(const npc of getTownManifest()) {
-        const marker=roleMarker(npc.role,npc.role==='quest'?(story?.status??state.quest.status):undefined);
-        specs.push({id:'npc/'+npc.id,point:npc.position,elevation:48,text:(marker?marker+'  ':'')+t(npc.nameKey),color:npc.role==='quest'?'#f4d18d':'#e4d9c6'});
+        const marker=npc.role==='quest'?questOfferMarker(story?.state.status??state.quest.status):roleMarker(npc.role);
+        specs.push({id:'npc/'+npc.id,point:npc.position,elevation:48,text:(marker?marker+'  ':'')+t(npc.nameKey),color:npc.role==='quest'&&marker?'#f4d18d':'#e4d9c6'});
       }
       for(const npc of this.villageResidents){
-        const marker=roleMarker(npc.role,npc.role==='quest'?'completed':undefined);
-        specs.push({id:'npc/'+npc.id,point:npc.position,elevation:56,text:(marker?marker+'  ':'')+t('village.'+npc.id+'.name'),color:'#e4d9c6'});
+        const local=VILLAGE_QUESTS.find(q=>q.giverId===npc.id);
+        const status=state.questLedger?.quests.find(q=>q.questId===local?.id)?.status;
+        const questMarker=questOfferMarker(status);
+        const marker=questMarker||(npc.role==='quest'?'':roleMarker(npc.role));
+        specs.push({id:'npc/'+npc.id,point:npc.position,elevation:56,text:(marker?marker+'  ':'')+t('village.'+npc.id+'.name'),color:questMarker?'#f4d18d':'#e4d9c6'});
       }
     }
     for(const portal of dungeonPortalTargets(state,this.dungeonEntrances)){

@@ -1448,18 +1448,18 @@
             {#each VILLAGE_QUESTS.filter(q => q.giverId === townModal?.id) as localQuest (localQuest.id)}
               {@const state = view.questLedger?.quests.find(q => q.questId === localQuest.id)}
               {@const prefix = 'quest.village.' + localQuest.id}
-              <h3>{$t(prefix + '.title')}</h3>
-              <p>{$t(prefix + '.briefing')}</p>
-              <p>{$t(prefix + '.objective')}</p>
-              <p>{localQuest.gold} {$t('hud.gold')} · {localQuest.xp} XP</p>
-              {#if state?.status === 'available'}
-                <button class="primary" data-testid={'village-accept-' + localQuest.id}
-                  onclick={() => acceptQuest(localQuest.id)}>{$t(prefix + '.accept')}</button>
-              {:else if state?.status === 'ready'}
-                <button class="primary" data-testid={'village-turnin-' + localQuest.id}
-                  onclick={() => turnInQuest(localQuest.id)}>{$t(prefix + '.turnIn')}</button>
-              {:else if state?.status === 'completed'}
-                <p>{$t('quest.ashes.completed')}</p>
+              {#if state?.status === 'available' || state?.status === 'active' || state?.status === 'ready'}
+                <h3>{$t(prefix + '.title')}</h3>
+                <p>{$t(prefix + (state.status === 'available' ? '.briefing' : '.description'))}</p>
+                <p>{$t(prefix + '.objective')}{#if state.status !== 'available'} · {state.counters.visit ?? 0}/1{/if}</p>
+                <p data-testid={'village-reward-' + localQuest.id}>{$t('quest.ashes.reward')}: {localQuest.gold} {$t('hud.gold')} · {localQuest.xp} XP</p>
+                {#if state.status === 'available'}
+                  <button class="primary" data-testid={'village-accept-' + localQuest.id}
+                    onclick={() => acceptQuest(localQuest.id)}>{$t('quest.ashes.accept')}</button>
+                {:else if state.status === 'ready'}
+                  <button class="primary" data-testid={'village-turnin-' + localQuest.id}
+                    onclick={() => turnInQuest(localQuest.id)}>{$t(prefix + '.turnIn')}</button>
+                {/if}
               {/if}
             {/each}
             <button class="secondary" onclick={closeDialogue}>{$t('npc.leave')}</button>
@@ -1485,7 +1485,7 @@
             close={() => { controlsOpen = false; settingsOpen = false; }} />
         </div>
       {:else if dialogueOpen}
-        <NpcDialogue quest={view.quest} questLedger={view.questLedger} accept={acceptQuest} turnIn={turnInQuest} close={closeDialogue} />
+        <NpcDialogue quest={view.quest} questLedger={view.questLedger} level={view.level} accept={acceptQuest} turnIn={turnInQuest} close={closeDialogue} />
       {:else if inventoryOpen}
         <InventoryPanel {view} {bridge} close={closeInventory} />
       {:else if characterOpen}

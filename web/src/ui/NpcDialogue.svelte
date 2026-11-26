@@ -1,47 +1,37 @@
 <script lang="ts">
   import { _ as t } from 'svelte-i18n';
-  import type { QuestProgress } from '../game/quests/firstQuest';
-  import {
-    QUEST_REWARD_GOLD, QUEST_REWARD_XP, QUEST_REQUIRED_KILLS, WARDEN_ID
-  } from '../game/quests/firstQuest';
-  import { evaluateDialogue, chooseDialogueOption } from '../game/quests/questDialogue';
+  import { FIRST_QUEST_ID, WARDEN_ID, type QuestProgress } from '../game/quests/firstQuest';
+  import { evaluateDialogue, chooseDialogueOption, type QuestLedger } from '../game/quests/questDialogue';
   import { ACT_I_QUEST_CATALOG } from '../game/quests/actIQuestChain';
   import { CAMPAIGN_QUEST_CATALOG, createCampaignQuestLedger } from '../game/quests/campaignQuestLedger';
-  import type { QuestLedger } from '../game/quests/questDialogue';
-  import { FIRST_QUEST_ID } from '../game/quests/firstQuest';
+  import { presentedNpcQuest } from '../game/quests/npcQuestPresentation';
+  import { rewardForActivity } from '../game/progression/progressionRules';
 
-  let {
-    quest, questLedger, accept, turnIn, close
-  }: {
+  let { quest, questLedger, level, accept, turnIn, close }: {
     quest: QuestProgress;
     questLedger?: QuestLedger;
+    level: number;
     accept: (questId?: string) => void;
     turnIn: (questId?: string) => void;
     close: () => void;
   } = $props();
 
-  let nodeId = $state('vesna.root');
   const context = { npcId: WARDEN_ID };
   const ledger = $derived(createCampaignQuestLedger(questLedger ?? quest));
-  const dialogue = $derived(ledger
+  const current = $derived(presentedNpcQuest(ACT_I_QUEST_CATALOG, ledger));
+  const starter = $derived(current?.definition.id === FIRST_QUEST_ID);
+  const nodeId = $derived(starter ? 'vesna.root' : 'vesna.act1.' + current?.definition.id);
+  const dialogue = $derived(ledger && current
     ? evaluateDialogue(CAMPAIGN_QUEST_CATALOG, ledger, nodeId, context) : null);
-  const activeStory = $derived(ledger?.quests.find(entry => entry.questId !== FIRST_QUEST_ID
-    && ACT_I_QUEST_CATALOG.quests.some(q => q.id === entry.questId)
-    && (entry.status === 'active' || entry.status === 'ready')) ?? null);
-  const storyDefinition = $derived(ACT_I_QUEST_CATALOG.quests.find(entry =>
-    entry.id === activeStory?.questId));
+  const action = $derived(dialogue?.options.find(option => option.enabled &&
+    ((current?.state.status === 'available' && option.action?.type === 'acceptQuest') ||
+     (current?.state.status === 'ready' && option.action?.type === 'turnInQuest'))) ?? null);
 
-  function choose(optionId: string): void {
-    if (!ledger) return;
-    // Always recheck option visibility/availability against the current
-    // ledger. UI never changes quest state or awards gold/XP itself.
-    const option = chooseDialogueOption(CAMPAIGN_QUEST_CATALOG,
-      ledger, nodeId, optionId, context);
-    if (!option) return;
-    if (option.action?.type === 'acceptQuest') accept(option.action.questId);
-    if (option.action?.type === 'turnInQuest') turnIn(option.action.questId);
-    if (option.action?.type === 'close') close();
-    if (option.nextNodeId) nodeId = option.nextNodeId;
+  function choose(): void {
+    if (!ledger || !action) return;
+    const option = chooseDialogueOption(CAMPAIGN_QUEST_CATALOG, ledger, nodeId, action.id, context);
+    if (option?.action?.type === 'acceptQuest') accept(option.action.questId);
+    if (option?.action?.type === 'turnInQuest') turnIn(option.action.questId);
   }
 </script>
 
@@ -49,34 +39,34 @@
   <div class="npc-dialog" role="dialog" aria-modal="true" aria-label={$t('npc.warden.name')}>
     <div class="npc-kicker">{$t('npc.warden.title')}</div>
     <h2>{$t('npc.warden.name')}</h2>
-    <h3>{storyDefinition ? $t(storyDefinition.titleKey) : $t('quest.ashes.title')}</h3>
-    <p>{$t(dialogue?.textKey ?? 'dialogue.vesna.root')}</p>
-    {#if storyDefinition}
-      <p>{$t(storyDefinition.descriptionKey)}</p>
-    {/if}
-    <p class="quest-current-story">
-      {#if quest.status === 'available'}
-        {$t('quest.ashes.intro')}
-      {:else if quest.status === 'active'}
-        {$t('quest.ashes.inProgress')}
-      {:else if quest.status === 'ready'}
-        {$t('quest.ashes.readyDialogue')}
+    {#if current}
+      <h3>{$t(current.definition.titleKey)}</h3>
+      {#if starter}
+        {#if current.state.status === 'available'}
+          <p>{$t('quest.ashes.intro')}</p>
+          <p>{$t('dialogue.vesna.details')}</p>
+        {:else if current.state.status === 'ready'}
+          <p>{$t('quest.ashes.readyDialogue')}</p>
+        {:else}
+          <p>{$t('quest.ashes.inProgress')}</p>
+        {/if}
       {:else}
-        {$t('quest.ashes.finishDialogue')}
+        <p>{$t('dialogue.vesna.actI.' + current.definition.id + '.' +
+          (current.state.status === 'available' ? 'briefing' : current.state.status))}</p>
+        <p>{$t(current.definition.descriptionKey)}</p>
       {/if}
-    </p>
-    <div class="npc-objective">
-      {$t('quest.ashes.objective')} · {quest.defeated}/{QUEST_REQUIRED_KILLS}
-      <span>{$t('quest.ashes.reward')}: {QUEST_REWARD_GOLD} {$t('hud.gold')}, {QUEST_REWARD_XP} XP</span>
-    </div>
-    <div class="npc-actions">
-      {#if dialogue}
-        {#each dialogue.options as option (option.id)}
-          <button class:primary={option.action?.type === 'acceptQuest' || option.action?.type === 'turnInQuest'}
-            class:secondary={option.action === null}
-            disabled={!option.enabled}
-            onclick={() => choose(option.id)}>{$t(option.textKey)}</button>
+      <div class="npc-objective">
+        {#each current.definition.objectives as objective (objective.id)}
+          <div>{$t(current.definition.objectiveKey)} · {current.state.counters[objective.id] ?? 0}/{objective.targetCount}</div>
         {/each}
+        <span data-testid="npc-quest-reward">{$t('quest.ashes.reward')}: {current.definition.reward.gold} {$t('hud.gold')}, {starter ? Math.max(current.definition.reward.xp, rewardForActivity('quest', level, level)) : current.definition.reward.xp} XP</span>
+      </div>
+    {:else}
+      <p>{$t('quest.ashes.finishDialogue')}</p>
+    {/if}
+    <div class="npc-actions">
+      {#if action}
+        <button class="primary" onclick={choose}>{$t(action.action?.type === 'acceptQuest' ? 'quest.ashes.accept' : action.textKey)}</button>
       {/if}
       <button class="secondary" onclick={close}>{$t('npc.leave')}</button>
     </div>
@@ -87,7 +77,7 @@
   .npc-dialog-shield{position:absolute;inset:0;z-index:12;display:grid;place-items:center;
     background:#07090fd7;padding:18px}
   .npc-dialog{width:min(92vw,490px);background:linear-gradient(160deg,#27303a,#101722);
-    border:1px solid #a88a5a;box-shadow:0 22px 80px #000;padding:30px}
+    border:1px solid #a88a5a;box-shadow:0 22px 80px #000;padding:30px;max-height:calc(100dvh - 36px);overflow:auto;box-sizing:border-box}
   .npc-kicker{color:#b59b75;letter-spacing:.22em;text-transform:uppercase;font-size:.66rem}
   h2{font-family:Georgia,serif;color:#f0dcb9;font-size:1.8rem;margin:7px 0 20px}
   h3{font-family:Georgia,serif;color:#d8b88a;font-size:1.1rem;margin:0 0 10px}
