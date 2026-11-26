@@ -192,7 +192,7 @@ h1 span,.brand-mark span{color:#b88b59}
     font-size:.58rem; touch-action:manipulation; }
   .game-hud .hud-actions {
     grid-column:1; grid-row:3;
-    display:grid; grid-template-columns:repeat(5,minmax(0,1fr));
+    display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
     gap:3px; max-height:none; overflow:visible;
   }
   .game-hud .hud-actions button {
@@ -262,7 +262,7 @@ html[data-ar-high-contrast="true"] .roster-health {
   .compact-dock .vital-panel { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:3px 8px; }
   .compact-dock .experience-track { grid-column:1/-1; height:2px; }
   .compact-dock .hud-details { display:none; }
-  .compact-dock .hud-actions { grid-template-columns:repeat(5,minmax(44px,1fr)); }
+  .compact-dock .hud-actions { grid-template-columns:repeat(4,minmax(44px,1fr)); }
   .compact-dock .hud-actions button { min-height:44px; height:44px; }
   .compact-dock .skill-toolbar { justify-content:flex-start; }
 }

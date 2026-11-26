@@ -768,7 +768,7 @@
   .inspector-actions .primary-action{border-color:#ba9361;background:#4b3a29}
   .inspect-placeholder{text-align:center;display:grid;place-items:center;min-height:220px;color:#99a8a7;font-size:.8rem;line-height:1.65;padding:16px}
   .placeholder-glyph{font:3rem Georgia,serif;color:#796c55}
-  @media(max-width:950px){.inventory-layout{grid-template-columns:minmax(235px,.9fr) minmax(280px,1.1fr);grid-template-rows:auto;grid-auto-rows:max-content;align-content:start;overflow:auto;scrollbar-gutter:stable}.equipment-section,.backpack-section{overflow:visible;scrollbar-gutter:auto}.item-inspector{grid-column:1/-1;height:clamp(220px,45dvh,400px);max-height:none;box-sizing:border-box}.comparison-grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:950px){.inventory-layout{grid-template-columns:minmax(235px,.9fr) minmax(280px,1.1fr);grid-template-rows:max-content;grid-auto-rows:max-content;align-content:start;align-items:start;overflow:auto;scrollbar-gutter:stable}.equipment-section,.backpack-section{overflow:visible;scrollbar-gutter:auto}.item-inspector{grid-column:1/-1;height:clamp(220px,45dvh,400px);max-height:none;box-sizing:border-box}.comparison-grid{grid-template-columns:1fr 1fr}}
   .touch-hint{display:none}
   .touch-move-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px}
   .touch-move-bar button{min-height:40px;padding:6px 10px;background:#46392a;border:1px solid #af8a58;color:#f3e6ce}
@@ -784,7 +784,7 @@
     .header-controls{flex-shrink:0;gap:5px}
     .header-controls button{font-size:.65rem;min-height:40px;padding:6px 8px}
     .inventory-layout{
-      grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;
+      grid-template-columns:minmax(0,1fr);grid-template-rows:max-content;grid-auto-rows:max-content;
       align-content:start;padding:8px;gap:12px;overscroll-behavior:contain;
     }
     .item-inspector{
@@ -820,5 +820,19 @@
     .comparison-grid .item-property{font-size:.64rem}
     .comparison-grid .rarity-label{font-size:.61rem}
     .help-note{padding:7px 11px}
+  }
+  /* Landscape hybrid devices: explicit independent scroll areas prevent
+     the first grid row from collapsing over the inspector and stealing taps. */
+  @media(min-width:651px) and (max-width:950px) and (max-height:520px){
+    .inventory-header{padding:6px 12px}
+    .inventory-layout{grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);
+      grid-template-rows:minmax(0,1fr) minmax(0,1fr);grid-auto-rows:auto;
+      align-content:stretch;align-items:stretch;overflow:hidden;padding:8px;gap:8px}
+    .backpack-section{grid-area:1/1;overflow:auto;scrollbar-gutter:stable}
+    .equipment-section{grid-area:2/1;overflow:auto;scrollbar-gutter:stable}
+    .item-inspector{grid-area:1/2/3/3;height:auto;max-height:none;min-height:0;overflow:auto;scrollbar-gutter:stable;padding:8px}
+    .inspector-actions button{min-height:44px}
+    .bag-slot{min-height:44px;aspect-ratio:1}
+    .help-note{padding:6px 12px}
   }
 </style>

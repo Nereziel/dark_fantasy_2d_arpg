@@ -128,7 +128,18 @@ jobs:
 
       - name: Unit tests
         working-directory: web
-        run: npm run test
+        run: |
+          mkdir -p test-results
+          npm run test -- --reporter=default --reporter=json --outputFile=test-results/unit-results.json
+
+      - name: Retain unit test report
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-results-${{ github.run_attempt }}
+          path: web/test-results/unit-results.json
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Check whether the archived HTML reference changed
         id: legacy
@@ -218,6 +229,15 @@ jobs:
       - name: Report slow tests and retries
         if: ${{ always() && !cancelled() }}
         run: node .github/actions/browser-timings.mjs web/test-results/ci-results.json '${{ matrix.lane }}'
+
+      - name: Retain browser result report (including passing lanes)
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-results-${{ matrix.lane }}-${{ github.run_attempt }}
+          path: web/test-results/ci-results.json
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Retain failing browser traces
         if: failure()
