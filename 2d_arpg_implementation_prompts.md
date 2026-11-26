@@ -1368,6 +1368,8 @@ Acceptance criteria:
 
 **Roadmap v3 contract:** NPC and quest IDs are semantic, independent of generated positions. Require real NPC interaction range/LOS and character-scoped one-time quest claims across new seeds.
 
+**Quest navigation contract (desktop-first):** Every navigable objective and turn-in must declare a stable semantic target ID, objective ID, area/dungeon identity, and localized fallback hint. Resolve the first unfinished objective against the authoritative ledger and current generated world; never store seed-specific coordinates in a quest or use UI clicks as quest events. A location-free kill/count objective may supply a region hint rather than invent an exact target. Future multi-objective and side quests use the same resolver. Quest selection, route and fog never accept/complete a quest or pay rewards.
+
 Implement a reusable dialogue and quest system.
 
 Dialogue should support:
@@ -1426,6 +1428,8 @@ Acceptance criteria:
 # PROMPT 21 — Act I Quest Chain
 
 **Roadmap v3 contract:** Keep the existing nine-story-quest chain and local side quests; optional mine/cave must not advance story crypt milestones. Unlock eligibility is not permission to build Act II before G5.
+
+**Quest travel acceptance:** Track the current quest across area transitions: wilderness → discovered correct dungeon entrance → local unfinished objective (prerequisite guardians before the actual story boss) → exit → current quest giver. When in a different dungeon, route to its exit first. Recompute after objective/event/zone/seed changes; completed objectives disappear and the next eligible objective or quest becomes the target. Unknown areas stay fogged; never mistake mine/cave bosses for the story boss.
 
 Create the first playable quest chain.
 
@@ -1563,6 +1567,8 @@ Acceptance criteria:
 
 **Roadmap v3 contract:** Fog only on large map and minimap. Known regions remain revealed within the same seed; fresh launch resets discovery. Clip roads, landmarks, portals and quest hints to discovered cells. No scene fog/dimming or leak of unknown POIs.
 
+**Tracked navigation:** Standalone journal owns quest details and rewards (rebindable J); the large map provides a compact selector and highlighted target; minimap shows the same tracked objective and direction. Dungeon maps have isolated discovery scoped to the active visit/layout. Resolve a collision-safe path through the existing Cartesian pathfinder; expose only its continuous explored prefix and known target markers, never unknown terrain, walls, secret targets or route geometry. If no safe route is available, use a localized hint, not a direct line through a wall. No auto-walk/teleport, discovery from selection, or extra save schema. Mobile UI redesign follows desktop acceptance.
+
 Implement:
 
 - minimap
@@ -1597,6 +1603,8 @@ Acceptance criteria:
 # PROMPT 25 — Procedural Dungeon Generator
 
 **Roadmap v3 contract:** Generate independent interiors for story crypt, mine and cave from region seed + dungeon identity. Shared validated room/door geometry; distinct spawns, layouts, rewards and exact return entrance. Never route optional bosses into story quest state.
+
+**Quest-compatible interiors:** Expose stable dungeon/entrance/exit IDs and runtime objective anchors (room, NPC, enemy, evidence) resolvable from generated geometry. The tracked quest uses the correct entrance, then the next unfinished reachable interior objective, then exit/turn-in. Validate all mandatory objective anchors and actor-radius paths for multiple seeds; optional dungeon IDs are distinct and cannot satisfy story objectives. Unknown secret geometry remains hidden in map projections.
 
 Implement procedurally generated dungeons using modular rooms.
 
@@ -2458,6 +2466,8 @@ Acceptance criteria:
 
 **Roadmap v3 contract:** Use existing Svelte projections and modal stack; no duplicate HUD/gameplay rules. G1 checks technical interaction parity; G3/G5 checks full HUD/inventory/touch/accessibility, with #123 owning inventory.
 
+**Desktop-first quest UI:** No default HUD shortcut buttons that remotely talk to NPCs or perform quest objectives. Keep existing explicit accessibility assistance until deliberately replaced. J opens a standalone quest journal with details, rewards and progress; M offers a compact selector. Minimap shows only the tracked objective and known route. Same tracked ID across panels; auto-update on progress and area changes. Timed notifications expire (pending save remains visible until completion). Desktop visual/keyboard acceptance first; dedicated mobile layout/touch polish is a separate later phase, existing supported input/regression checks stay enabled.
+
 Build production-oriented gameplay UI.
 
 HUD:
@@ -3148,6 +3158,8 @@ Acceptance criteria:
 # PROMPT 62 — Final Vertical Slice Verification
 
 **Roadmap v3 contract:** Deferred release-wide verification; earlier G5/#125 requires a full natural Act I in default isometry, multiple seeds, all six classes, physical devices and public build. Distinguish same-seed restoration from fresh-launch reset.
+
+**Navigation verification:** Exercise selection of main and side quests, known/unknown map targets, correct entrance, wrong dungeon exit, local objective and stage progression, post-boss exit, NPC turn-in and completed-quest fallback. Test multiple objectives, blocked routes and seed/visit changes; verify no hidden coordinates or quest-state mutation from map interactions. Desktop acceptance precedes dedicated mobile UI work; retain physical device checks for final G5.
 
 Perform the release-wide vertical-slice verification after campaign integration. G5 uses the [Act I acceptance gate](https://github.com/Nereziel/dark_fantasy_2d_arpg/issues/125) earlier and exercises the full story through Vesna. This prompt also checks progression, economy, crafting, travel and the release build.
 

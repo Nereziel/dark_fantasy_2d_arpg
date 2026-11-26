@@ -971,6 +971,9 @@
     "optionalEvent": "Událost v pustině"
   },
   "map": {
+    "questEntrance": "Dojdi ke vstupu do dungeonu",
+    "questExit": "Opusť aktuální dungeon",
+    "dungeonExploration": "Zobrazují se pouze prozkoumané chodby. Sleduj zvýrazněnou průchozí trasu.",
     "closeJournal": "Zavřít deník úkolů",
     "objective": "Cíl úkolu",
     "questLog": "Deník úkolů",
