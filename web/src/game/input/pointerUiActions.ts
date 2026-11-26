@@ -5,11 +5,11 @@
 import type { InputAction } from './bindings';
 
 export type PointerUiState =
-  | 'gameplay' | 'map' | 'talents' | 'inventory' | 'character'
+  | 'gameplay' | 'map' | 'journal' | 'talents' | 'inventory' | 'character'
   | 'pause' | 'dialogue' | 'blocked';
 export type PointerUiSurface = 'canvas' | 'backdrop' | 'other';
 export type PointerUiOperation =
-  | 'openMap' | 'closeMap' | 'openTalents' | 'closeTalents'
+  | 'openMap' | 'closeMap' | 'openJournal' | 'closeJournal' | 'openTalents' | 'closeTalents'
   | 'openInventory' | 'closeInventory'
   | 'openCharacter' | 'closeCharacter'
   | 'togglePause' | 'closeDialogue';
@@ -23,6 +23,7 @@ export function planPointerUiAction(
     if (surface !== 'canvas') return null;
     switch (action) {
       case 'MAP': return 'openMap';
+      case 'JOURNAL': return 'openJournal';
       case 'TALENTS': return 'openTalents';
       case 'INVENTORY': return 'openInventory';
       case 'CHARACTER': return 'openCharacter';
@@ -34,6 +35,8 @@ export function planPointerUiAction(
   // or other controls must never dismiss it via a remapped mouse binding.
   if (surface !== 'backdrop') return null;
   switch (state) {
+    case 'journal':
+      return action === 'JOURNAL' || action === 'MENU' ? 'closeJournal' : null;
     case 'map':
       return action === 'MAP' || action === 'MENU' ? 'closeMap' : null;
     case 'talents':

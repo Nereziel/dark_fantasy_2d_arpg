@@ -8,7 +8,7 @@
   import { ACT_I_QUEST_CATALOG } from '../game/quests/actIQuestChain';
 
   let { progress, context, bindings, next, skip, show, restart,
-    onMap, onTalents, onWarden }: {
+    onMap, onTalents, onWarden, assistance=false }: {
     progress: OnboardingProgress;
     context: OnboardingContext;
     bindings: readonly InputBinding[];
@@ -19,6 +19,7 @@
     onMap: (origin?: HTMLElement) => void;
     onTalents: (origin?: HTMLElement) => void;
     onWarden: () => void;
+    assistance?:boolean;
   } = $props();
   const step = $derived(getOnboardingStep(progress, context));
   const storyDefinition = $derived(context.storyQuestId
@@ -59,8 +60,10 @@
         <button type="button" onclick={(event) => onMap(event.currentTarget)}>
           {$t('onboarding.openMap')}
         </button>
-      {:else if step === 'storyReturn'}
+      {:else if step === 'storyReturn' && assistance}
         <button type="button" onclick={onWarden}>{$t('npc.talk')}</button>
+      {:else if step === 'storyReturn'}
+        <button type="button" onclick={(event) => onMap(event.currentTarget)}>{$t('onboarding.openMap')}</button>
       {:else if step === 'talent'}
         <button type="button" onclick={(event) => onTalents(event.currentTarget)}>
           {$t('onboarding.openTalents')}

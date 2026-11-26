@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
+  import { navigationArrow } from '../game/ui/questTracking';
   import type { MapProjection, MapMarkerKind } from '../game/world/mapDiscovery';
   import type { TerrainId } from '../game/world/wildernessTerrain';
 
@@ -15,6 +16,7 @@
 
   let svgElement: SVGSVGElement;
   // Two projections can coexist: IDs must not share a clipPath or visual fog.
+  let direction = $derived(navigationArrow(projection.viewport,projection.markers.find(m=>m.kind==='player')?.position??null,projection.navigationRoute?.find(p=>p.x<projection.viewport.x||p.y<projection.viewport.y||p.x>=projection.viewport.x+projection.viewport.width||p.y>=projection.viewport.y+projection.viewport.height)??null));
   let clipId = $derived(compact ? 'ar-discovered-mini' : 'ar-discovered-world');
 
   function terrainColor(id?: TerrainId): string {
@@ -101,7 +103,8 @@
 </script>
 
 <div class="map-canvas" class:compact data-map-mode={projection.mode}
-  data-map-zoom={projection.zoom.toFixed(2)}>
+  data-map-zoom={projection.zoom.toFixed(2)} data-map-area={projection.area??'wilderness'}
+  data-navigation-stage={projection.navigationStage}>
   <svg bind:this={svgElement}
     viewBox={`${projection.viewport.x} ${projection.viewport.y} ${projection.viewport.width} ${projection.viewport.height}`}
     preserveAspectRatio="xMidYMid meet" role="img" aria-label={$t('map.title')}
@@ -147,8 +150,18 @@
           stroke-linecap="round" opacity=".59" data-known-road={road.id} />
       {/each}
     </g>
+    {#each projection.walls??[] as wall}
+      <rect x={wall.x} y={wall.y} width={wall.width} height={wall.height} fill="#151820" stroke="#4d5155" stroke-width=".8" data-dungeon-wall="known"/>
+    {/each}
+    {#if (projection.navigationRoute?.length??0)>1}
+      <polyline points={projection.navigationRoute?.map(p=>p.x+','+p.y).join(' ')} fill="none" stroke="#ffe19a"
+        stroke-width={compact?5:7} stroke-dasharray="10 6" stroke-linecap="round" stroke-linejoin="round"
+        clip-path={`url(#${clipId})`} data-quest-route="known"/>
+    {/if}
     {#each projection.markers as marker (marker.id)}
-      <g data-map-marker={marker.id} data-marker-kind={marker.kind}>
+      <g data-map-marker={marker.id} data-marker-kind={marker.kind}
+        data-tracked-quest={marker.id===projection.navigationTarget?.id?marker.id.slice(6):undefined}>
+        {#if marker.id===projection.navigationTarget?.id}<circle cx={marker.position.x} cy={marker.position.y} r={compact?23:32} fill="none" stroke="#fff0a6" stroke-width="4" stroke-dasharray="7 3"/>{/if}
         {#if marker.kind === 'dungeonEntrance'}
           <path d={`M${marker.position.x} ${marker.position.y-15} l15 27 h-30 z`}
             fill={markerColor(marker.kind)} stroke="#0a1017" stroke-width="4"/>
@@ -182,6 +195,9 @@
         <title>{$t(marker.presentationKey)}</title>
       </g>
     {/each}
+    {#if compact && direction}<g data-quest-direction transform={`translate(${direction.x} ${direction.y}) rotate(${direction.angle})`}>
+      <path d="M-12 -10 L13 0 -12 10 -5 0 Z" fill="#ffe19a" stroke="#12151b" stroke-width="3"/>
+    </g>{/if}
   </svg>
   {#if !compact && projection.hints.length}
     <div class="map-hints">

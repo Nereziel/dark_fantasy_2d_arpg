@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { WARDEN_POSITION } from '../../src/game/world/npcs';
 import { isoGroundPoint } from './iso-input';
-import { openCharacterCreation, enterWorld, openSystemMenu, toggleHotbarEditor } from './character-menu';
+import { openCharacterCreation, enterWorld, openSystemMenu, toggleHotbarEditor, saveFromMenu, continueGame } from './character-menu';
 
 test('default HUD is minimal, settings show clear modes and editor is a separate modal',async({page})=>{
   await page.goto('./');
@@ -12,6 +12,17 @@ test('default HUD is minimal, settings show clear modes and editor is a separate
   await expect(page.locator('.enemy-roster,.camp-services,.dungeon-panel,.environment-panel')).toHaveCount(0);
   await expect(page.getByTestId('loot-label-mode')).toHaveCount(0);
   const canvas=page.locator('canvas[data-renderer="isometric-preview"]');
+  await expect(canvas).toHaveAttribute('data-npc-visuals', /"warden_vesna":"warden"/);
+  const looks=JSON.parse((await canvas.getAttribute('data-npc-visuals'))!);
+  expect(looks).toMatchObject({warden_vesna:'warden',merchant_bram:'merchant',smith_odan:'smith',
+    healer_iva:'healer',potion_vendor_lena:'apothecary',stash_camp:'keeper',waypoint_camp:'waystone',
+    civilian_mira:'resident-mira',civilian_toma:'resident-toma',civilian_lio:'resident-lio'});
+  expect(new Set(Object.values(looks)).size).toBe(Object.keys(looks).length);
+  // Optional village residents, when generated, are visually distinct from camp counterparts.
+  for(const [id,preset] of Object.entries({'north-village-civilian':'village-supplies',
+    'north-village-healer':'village-healer','east-village-blacksmith':'village-smith','east-village-quest':'village-quest'})) {
+    if(Object.hasOwn(looks,id))expect(looks[id]).toBe(preset);
+  }
   await page.locator('.game-header').hover();
   await expect(canvas).toHaveAttribute('data-world-labels','0');
   await expect(canvas).toHaveAttribute('data-npc-markers', /"npc\/warden_vesna"/);
@@ -48,4 +59,37 @@ test('default HUD is minimal, settings show clear modes and editor is a separate
   await expect(dock.locator('.skill-toolbar')).toBeVisible();
   await toggleHotbarEditor(page);
   await expect(editor).toHaveCount(0);
+});
+
+test('standalone quest journal, compact map tracking and expiring loading toast',async({page})=>{
+  await page.goto('./');
+  await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page,'Tracking hero');
+  await page.evaluate(()=>localStorage.removeItem('aether-ruin-world-hud-v2'));
+  await enterWorld(page);
+  await expect(page.locator('.quest-journal')).toHaveCount(0);
+  await expect(page.getByTestId('tracked-quest-summary')).toContainText(/Ashes/i);
+  await page.keyboard.press('j');
+  const journal=page.getByTestId('quest-journal-dialog');
+  await expect(journal).toBeVisible();
+  await expect(journal.getByTestId('quest-detail')).toContainText('Ashes at the Gate');
+  await expect(journal.getByTestId('quest-detail')).toContainText('Reward');
+  await expect(page.getByTestId('world-map-dialog')).toHaveCount(0);
+  await page.keyboard.press('j');
+  await expect(journal).toHaveCount(0);
+  await page.keyboard.press('m');
+  const dialog=page.getByTestId('world-map-dialog');
+  await expect(dialog.getByTestId('map-quest-selector')).toBeVisible();
+  await expect(dialog.getByTestId('quest-detail')).toHaveCount(0);
+  await expect(dialog.getByTestId('quest-journal-dialog')).toHaveCount(0);
+  await expect(dialog.getByTestId('track-quest-ashes_at_gate')).toHaveAttribute('aria-pressed','true');
+  await expect(dialog.locator('[data-tracked-quest="ashes_at_gate"]')).toHaveCount(1);
+  await dialog.getByTestId('track-quest-ashes_at_gate').click();
+  await dialog.getByTestId('map-close').click();
+  await expect(page.getByTestId('tracked-quest-summary')).toContainText(/Ashes/i);
+  await saveFromMenu(page);
+  await page.reload();
+  await continueGame(page);
+  await expect(page.locator('.toast')).toBeVisible();
+  await expect(page.locator('.toast')).toHaveCount(0,{timeout:8000});
 });

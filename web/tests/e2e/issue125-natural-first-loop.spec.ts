@@ -1052,6 +1052,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
     .toHaveCount(1);
   await inventory.locator('.close-button').click();
 
+  await expect(page.locator('[data-minimap="active"] [data-map-mode="minimap"]')).toHaveAttribute('data-navigation-stage','enter');
   // Enter through the visible in-game dungeon button; the simulation owns
   // the approach/path and zone transition. Never teleport or mutate quests.
   await page.getByRole('button', { name: 'Enter the crypt' }).click();
@@ -1060,6 +1061,16 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(page.locator('.quest-journal')).toContainText('Defeat the Crypt Lord');
   await expect(page.locator('.quest-journal')).not.toContainText('Descent into the Crypt');
 
+  const dungeonMini=page.locator('[data-minimap="active"] [data-map-mode="minimap"]');
+  await expect(dungeonMini).toHaveAttribute('data-map-area','crypt');
+  await expect(dungeonMini).toHaveAttribute('data-navigation-stage','objective');
+  await page.keyboard.press('m');
+  const dungeonMap=page.getByTestId('world-map-dialog');
+  await expect(dungeonMap.locator('[data-map-area="crypt"]')).toBeVisible();
+  await expect(dungeonMap.locator('[data-map-marker="town.camp"]')).toHaveCount(0);
+  await expect(dungeonMap.locator('[data-fog="unexplored"]').first()).toBeVisible();
+  await dungeonMap.getByTestId('map-close').click();
+
   // The genuine crypt guardian wave and the three-phase Hollow King battle
   // must finish before the authoritative quest allows the final report.
   await timedNaturalStage('crypt boss battle', () => clearCryptNaturally(page, 240_000));
@@ -1067,6 +1078,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await expect(page.locator('.quest-journal')).toContainText('Speak to Vesna in town');
   await expect(page.locator('.dungeon-panel')).toContainText('Crypt cleared');
 
+  await expect(dungeonMini).toHaveAttribute('data-navigation-stage','exit');
   // Normal UI portal auto-approach; no debug teleport or forced zone edit.
   await page.getByRole('button', { name: 'Return to camp' }).click();
   try {
@@ -1079,6 +1091,8 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
       + (await page.locator('.dungeon-panel').innerText()).replaceAll('\n', ' '));
   }
   await expect(page.locator('.quest-journal')).toContainText('Report to Vesna');
+  await expect(page.locator('[data-minimap="active"] [data-map-mode="minimap"]')).toHaveAttribute('data-map-area','wilderness');
+  await expect(page.locator('[data-minimap="active"] [data-map-mode="minimap"]')).toHaveAttribute('data-navigation-stage','objective');
   await page.getByRole('button', { name: 'Speak to the warden' }).click();
   const finalWarden = page.getByRole('dialog', { name: 'Warden Vesna' });
   await expect(finalWarden).toBeVisible({ timeout: 25_000 });

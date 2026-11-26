@@ -44,6 +44,8 @@
     type OnboardingProgress
   } from './game/ui/onboardingGuide';
   import QuestJournal from './ui/QuestJournal.svelte';
+  import MapQuestLog from './ui/MapQuestLog.svelte';
+  import { journalEntries, trackedQuest } from './game/ui/questTracking';
   import NearbyLootPanel from './ui/NearbyLootPanel.svelte';
   import WorldMapCanvas from './ui/WorldMapCanvas.svelte';
   import WorldEventPanel from './ui/WorldEventPanel.svelte';
@@ -162,6 +164,16 @@
     view.enemies, view.miniBossStates, view.selectedTargetId
   ));
   let messageKey = $state('');
+  let messageRevision = $state(0);
+  function notify(key:string):void { messageKey=key; messageRevision++; }
+  $effect(()=>{
+    const revision=messageRevision, key=messageKey;
+    if (!playing || !key || key==='status.saving') return;
+    const timer=setTimeout(()=>{
+      if(messageRevision===revision && messageKey===key) notify('');
+    },4500);
+    return ()=>clearTimeout(timer);
+  });
   let droppedGem = $state<GemId | null>(null);
   let busy = $state(false);
   let selectedClass: ClassId = $state('WARRIOR');
@@ -223,7 +235,7 @@
     selectedClass = 'WARRIOR';
     newCharacterName = '';
     pendingDeleteId = null;
-    messageKey = '';
+    notify('');
     creatingCharacter = true;
     await tick();
     document.getElementById('character-name')?.focus();
@@ -242,10 +254,10 @@
     try {
       await refreshCharacters();
       menuReady = true;
-      if (messageKey === 'status.saveError') messageKey = '';
+      if (messageKey === 'status.saveError') notify('');
     } catch {
       catalogReadError = true;
-      messageKey = 'status.saveError';
+      notify('status.saveError');
     }
   }
 
@@ -266,9 +278,9 @@
       if (activeSessionId === id) { activeSessionId = null; activeCharacterName = undefined; }
       pendingDeleteId = null;
       await refreshCharacters();
-      messageKey = 'saveSlots.deleted';
+      notify('saveSlots.deleted');
     } catch {
-      messageKey = 'status.saveError';
+      notify('status.saveError');
     } finally {
       busy = false;
     }
@@ -298,12 +310,16 @@
   let fullscreenError = $state(false);
   let audioPreferences: AudioPreferences = $state({ ...DEFAULT_AUDIO_PREFERENCES });
   let mapOpen = $state(false);
+  let journalOpen = $state(false);
   let mapZoom = $state(1);
   let mapCenter: Point | null = $state(null);
-  let miniProjection = $derived(view.zone === 'wilderness' ? bridge.mapProjection('minimap') : null);
-  let fullProjection = $derived(mapOpen && view.zone === 'wilderness'
+  let selectedQuestId = $state<string|null>(null);
+  let quests = $derived(journalEntries(view));
+  let tracked = $derived(trackedQuest(quests,selectedQuestId));
+  let miniProjection = $derived(playing && view.player.alive ? bridge.mapProjection('minimap',{trackedQuestId:tracked?.id}) : null);
+  let fullProjection = $derived(mapOpen && view.player.alive
     ? bridge.mapProjection('world', {
-      zoom: mapZoom, ...(mapCenter ? { center: mapCenter } : {})
+      zoom: mapZoom, trackedQuestId:tracked?.id, ...(mapCenter ? { center: mapCenter } : {})
     }) : null);
   let controlBindings: InputBinding[] = $state(GAME_BINDINGS.map(binding => ({ ...binding })));
   const controlsStorage = 'aether-ruin-controls-v1';
@@ -384,12 +400,12 @@
     bridge.command({ type: 'holdPosition', value: held });
   });
   const autosaver = new CharacterAutosaver(saveGame, 1400, () => {
-    messageKey = 'status.saveError';
+    notify('status.saveError');
   });
   type BoundWorldProgress = { characterId:string; progress:WorldSessionProgress };
   const worldAutosaver = new CharacterAutosaver<BoundWorldProgress>(
     record => saveWorldProgress(record.progress,record.characterId),
-    1700, () => { messageKey = 'status.saveError'; }
+    1700, () => { notify('status.saveError'); }
   );
   function boundWorldProgress():BoundWorldProgress|null {
     const progress=bridge.worldProgress();
@@ -403,7 +419,7 @@
       ? document.activeElement : null);
   }
   let modalKind = $derived(!playing ? '' :
-    mapOpen ? 'map' : townModal !== null ? 'town' : tradeNpc !== null ? 'trade'
+    journalOpen ? 'journal' : mapOpen ? 'map' : townModal !== null ? 'town' : tradeNpc !== null ? 'trade'
     : skillEditorOpen ? 'skills' : settingsOpen ? 'settings' : controlsOpen ? 'controls' : dialogueOpen ? 'dialogue' : inventoryOpen ? 'inventory'
     : characterOpen ? 'character' : talentsOpen ? 'talents'
     : !view.player.alive ? 'death' : view.paused ? 'pause' : '');
@@ -454,7 +470,7 @@
   });
 
   function openMap(origin?: HTMLElement): void {
-    if (!playing || mapOpen || view.zone !== 'wilderness' || !view.player.alive
+    if (!playing || mapOpen || journalOpen || !view.player.alive
       || view.paused || inventoryOpen || characterOpen || talentsOpen || controlsOpen || dialogueOpen
       || tradeNpc !== null || townModal !== null) return;
     rememberModalOrigin(origin);
@@ -463,8 +479,23 @@
     bridge.command({ type: 'pause', value: true });
     mapOpen = true;
   }
+  function openJournal(origin?: HTMLElement):void {
+    if (!playing || modalKind !== '' || !view.player.alive || view.paused) return;
+    rememberModalOrigin(origin);
+    journalOpen=true;
+    bridge.command({type:'pause',value:true});
+  }
+  function closeJournal():void {
+    journalOpen=false;
+    bridge.command({type:'pause',value:false});
+  }
+  function selectTrackedQuest(id:string):void {
+    selectedQuestId=id;
+    if(mapOpen){mapZoom=1;mapCenter=null;}
+  }
   function closeMap(): void {
     mapOpen = false;
+    journalOpen = false;
     bridge.command({ type: 'pause', value: false });
   }
 
@@ -535,26 +566,26 @@
       }
       if (event.type === 'gemLoot' && playing) {
         droppedGem = event.gemId;
-        messageKey = 'gems.combatLoot';
+        notify('gems.combatLoot');
       }
-      if (event.type === 'dungeonCleared' && playing) messageKey = bridge.snapshot().dungeonId ? 'dungeon.optionalClearedToast' : 'dungeon.clearedToast';
-      if (event.type === 'worldEventStarted' && playing) messageKey = 'worldEvents.started';
-      if (event.type === 'worldEventCompleted' && playing) messageKey = 'worldEvents.completed';
-      if (event.type === 'checkpointActivated' && playing) messageKey = 'respawn.checkpointActivated';
+      if (event.type === 'dungeonCleared' && playing) notify(bridge.snapshot().dungeonId ? 'dungeon.optionalClearedToast' : 'dungeon.clearedToast');
+      if (event.type === 'worldEventStarted' && playing) notify('worldEvents.started');
+      if (event.type === 'worldEventCompleted' && playing) notify('worldEvents.completed');
+      if (event.type === 'checkpointActivated' && playing) notify('respawn.checkpointActivated');
       if (event.type === 'waypointActivated' && playing && event.id === 'town.waypoint')
-        messageKey = 'waypoints.activated';
+        notify('waypoints.activated');
       if (event.type === 'waypointTravel' && playing) {
-        messageKey = 'waypoints.arrived';
+        notify('waypoints.arrived');
         if (mapOpen) closeMap();
         else if (townModal !== null) closeDialogue();
       }
       if (event.type === 'environmentInteracted' && playing) {
-        messageKey = 'environment.feedback.' + event.kind;
+        notify('environment.feedback.' + event.kind);
       }
       if (event.type === 'worldInteract' && playing && event.id !== 'soul-shrine') {
-        messageKey = event.kind === 'shrine' ? 'worldObjects.shrine' : 'worldObjects.chest';
+        notify(event.kind === 'shrine' ? 'worldObjects.shrine' : 'worldObjects.chest');
       }
-      if (event.type === 'zoneChanged' && playing) messageKey = '';
+      if (event.type === 'zoneChanged' && playing) notify('');
       if (event.type === 'townInteraction' && playing) {
         rememberModalOrigin();
         townModal = townEntry(event.entryId) ?? resolveRegionalTownEntry(event.entryId,
@@ -565,8 +596,8 @@
         inventoryOpen = false;
         bridge.command({ type: 'pause', value: true });
       }
-      if (event.type === 'townServiceUsed' && playing) messageKey = 'town.serviceSuccess';
-      if (event.type === 'tradeRejected' && playing) messageKey = 'trade.error.' + event.reason;
+      if (event.type === 'townServiceUsed' && playing) notify('town.serviceSuccess');
+      if (event.type === 'tradeRejected' && playing) notify('trade.error.' + event.reason);
       if (event.type === 'npcDialogue' && playing) {
         rememberModalOrigin();
         inventoryOpen = false;
@@ -639,6 +670,7 @@
     talentsOpen = false;
     controlsOpen = false; settingsOpen = false;
     mapOpen = false;
+    journalOpen = false;
     dialogueOpen = false;
     tradeNpc = null;
     townModal = null;
@@ -665,10 +697,11 @@
         ...(world ? [worldAutosaver.saveNow(world)] : [])
       ]);
       selectedCharacterId = id;
+      selectedQuestId=null;
       activeSessionId = id;
-      messageKey = '';
+      notify('');
       inventoryOpen = false; characterOpen = false; talentsOpen = false;
-      controlsOpen = false; settingsOpen = false; mapOpen = false;
+      controlsOpen = false; settingsOpen = false; mapOpen = false; journalOpen = false;
       dialogueOpen = false; tradeNpc = null; townModal = null;
       creatingCharacter = false;
       newCharacterName = '';
@@ -676,7 +709,7 @@
       activateOnboardingForHero();
       await refreshCharacters();
     } catch {
-      messageKey = 'status.saveError';
+      notify('status.saveError');
       // Character write may have succeeded even if world write failed.
       await refreshCharacters().catch(() => {});
     } finally {
@@ -698,7 +731,7 @@
       return;
     }
     // Only the matching live hero resumes its exact position and combat state.
-    messageKey = '';
+    notify('');
     bridge.command({ type:'pause', value:false });
     playing = true;
     activateOnboardingForHero();
@@ -710,6 +743,7 @@
     busy = true;
     talentsOpen = false; controlsOpen = false; settingsOpen = false;
     mapOpen = false;
+    journalOpen = false;
     heldPosition.clear();
     tradeNpc = null; townModal = null; dialogueOpen = false;
     inventoryOpen = false; characterOpen = false;
@@ -721,7 +755,7 @@
     try {
       await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
       await refreshCharacters();
-    } catch { messageKey = 'status.saveError'; }
+    } catch { notify('status.saveError'); }
     finally { busy = false; }
   }
   function togglePause(origin?: HTMLElement): void {
@@ -799,6 +833,7 @@
 
   function pointerUiState(): PointerUiState {
     if (!playing || skillEditorOpen || settingsOpen || controlsOpen || !view.player.alive) return 'blocked';
+    if (journalOpen) return 'journal';
     if (mapOpen) return 'map';
     if (talentsOpen) return 'talents';
     if (inventoryOpen) return 'inventory';
@@ -830,6 +865,8 @@
     if (!operation) return;
     event.preventDefault();
     switch (operation) {
+      case 'openJournal': openJournal(); break;
+      case 'closeJournal': closeJournal(); break;
       case 'openMap': openMap(); break;
       case 'closeMap': closeMap(); break;
       case 'openTalents': openTalents(); break;
@@ -876,7 +913,7 @@
     const action = resolvePointerAction({ button: event.button, uiCaptured: false }, bridge.bindings());
     if (pointerUiSurface(event.target) !== 'other'
       && (action === 'MAP' || action === 'TALENTS' || action === 'INVENTORY'
-        || action === 'CHARACTER' || action === 'MENU'
+        || action === 'CHARACTER' || action === 'MENU' || action === 'JOURNAL'
         || action === 'HOLD_POSITION')) event.preventDefault();
   }
 
@@ -913,6 +950,15 @@
       shiftKey: event.shiftKey, metaKey: event.metaKey,
       altGraphKey: event.getModifierState('AltGraph') || event.key === 'AltGraph'
     }, bridge.bindings());
+    if (journalOpen) {
+      if(event.code==='Escape' || action==='JOURNAL' || action==='MENU'){
+        event.preventDefault();closeJournal();
+      }
+      return;
+    }
+    if (action==='JOURNAL') {
+      event.preventDefault();openJournal();return;
+    }
     if (talentsOpen) {
       if (event.code === 'Escape' || action === 'MENU' || action === 'TALENTS') {
         event.preventDefault();
@@ -1016,7 +1062,7 @@
   async function save(): Promise<void> {
     if (busy) return;
     busy = true;
-    messageKey = 'status.saving'; // Visible pending state cannot be confused with old success.
+    notify('status.saving'); // Visible pending state cannot be confused with old success.
     try {
       await tick(); // Commit the saving label before awaiting IndexedDB transactions.
       const world = boundWorldProgress();
@@ -1024,10 +1070,10 @@
         autosaver.saveNow(characterForSave()),
         ...(world ? [worldAutosaver.saveNow(world)] : [])
       ]);
-      messageKey = 'status.saved';
+      notify('status.saved');
       await refreshCharacters();
     } catch {
-      messageKey = 'status.saveError';
+      notify('status.saveError');
     } finally {
       busy = false;
     }
@@ -1048,12 +1094,14 @@
         const worldRestored = world ? bridge.restoreWorldProgress(world) : false;
         activeCharacterName = character.characterName;
         activeSessionId = character.characterId ?? 'hero';
-        messageKey = world && !worldRestored ? 'status.worldRestoreError' : 'status.loaded';
+        selectedQuestId=null;
+        notify(world && !worldRestored ? 'status.worldRestoreError' : 'status.loaded');
         inventoryOpen = false;
         characterOpen = false;
         talentsOpen = false;
         controlsOpen = false; settingsOpen = false;
         mapOpen = false;
+        journalOpen = false;
         dialogueOpen = false;
         tradeNpc = null;
         townModal = null;
@@ -1067,10 +1115,10 @@
         creatingCharacter = false;
         await refreshCharacters();
       } else {
-        messageKey = 'status.emptySave';
+        notify('status.emptySave');
       }
     } catch {
-      messageKey = 'status.saveError';
+      notify('status.saveError');
     } finally {
       restoring = false;
       busy = false;
@@ -1206,8 +1254,11 @@
               <option value={option.code}>{option.label}</option>
             {/each}
           </select>
-          <button class="small-button" disabled={view.zone !== 'wilderness' || view.paused}
+          <button class="small-button" disabled={view.paused}
             onclick={(event) => openMap(event.currentTarget)}>{$t('map.open')}</button>
+          <button class="small-button desktop-journal-button" data-testid="open-quest-journal" disabled={view.paused}
+            title={`${$t('map.questLog')} (${shortcutHint(controlBindings,'JOURNAL')})`}
+            onclick={event=>openJournal(event.currentTarget)}>{$t('map.questLog')}</button>
 
         </div>
       </header>
@@ -1224,7 +1275,7 @@
           context={liveOnboardingContext}
           bindings={controlBindings} next={advanceOnboarding}
           skip={skipGuide} show={showGuide} restart={resetGuide}
-          onMap={openMap} onTalents={openTalents} onWarden={talkToWarden} />
+          onMap={openMap} onTalents={openTalents} onWarden={talkToWarden} assistance={worldHud.assistance} />
         <details class="control-help"><summary>{$t('bindings.open')}</summary><div class="world-guide" aria-live="polite">
         <div>{$t('controls.move')}</div>
         <div>{$t('controls.attack')}</div>
@@ -1244,8 +1295,8 @@
       </div></details>
         </div>
       {/if}
-      <QuestJournal {view} talk={talkToWarden}
-        inspectEvidence={() => bridge.command({ type: 'inspectStoryEvidence' })} />
+      {#if worldHud.assistance}<QuestJournal {view} talk={talkToWarden}
+        inspectEvidence={() => bridge.command({ type: 'inspectStoryEvidence' })} />{/if}
       {#if worldHud.assistance && view.zone === 'wilderness' &&
         Math.hypot(view.player.x - CAMP.x, view.player.y - CAMP.y) <= CAMP_RADIUS + 40}
         <div class="camp-services" aria-label={$t('trade.campServices')}>
@@ -1280,6 +1331,11 @@
       {#if miniProjection}
         <div class="minimap-overlay" data-minimap="active">
           <WorldMapCanvas projection={miniProjection} compact />
+          {#if tracked}<div class="tracked-quest-summary" data-testid="tracked-quest-summary">
+            <strong>◆ {$t(tracked.titleKey)}</strong>
+            {#if miniProjection.navigationStage==='exit'}<span>{$t('map.questExit')}</span>{:else if miniProjection.navigationStage==='enter'}<span>{$t('map.questEntrance')}</span>{/if}
+            <span>{$t(tracked.hintKey??tracked.objectiveKey)}{#if tracked.status==='active' && tracked.goal>1} · {tracked.count}/{tracked.goal}{/if}</span>
+          </div>{/if}
           <div class="minimap-caption">{shortcutHint(controlBindings, 'MAP')} <span class="minimap-touch-hint">· {$t('worldLabels.doubleTapMap')}</span></div>
         </div>
       {/if}
@@ -1368,12 +1424,23 @@
           {/if}
         </div>
       {/if}
-      {#if mapOpen && fullProjection}
+      {#if journalOpen}
+        <div class="modal-shield map-shield" role="dialog" aria-modal="true" aria-label={$t('map.questLog')} data-testid="quest-journal-dialog">
+          <section class="pause-card standalone-quest-card">
+            <header class="world-map-header">
+              <h2>{$t('map.questLog')}</h2>
+              <button type="button" class="close-button map-close-button" data-testid="quest-journal-close"
+                aria-label={$t('map.closeJournal')} onclick={closeJournal}>✕</button>
+            </header>
+            <MapQuestLog entries={quests} trackedId={tracked?.id??null} select={selectTrackedQuest}/>
+          </section>
+        </div>
+      {:else if mapOpen && fullProjection}
         <div class="modal-shield map-shield" role="dialog" aria-modal="true" aria-label={$t('map.title')}
           data-testid="world-map-dialog">
           <section class="pause-card world-map-card">
             <header class="world-map-header">
-              <h2>{$t('map.title')}</h2>
+              <h2>{$t(fullProjection.area&&fullProjection.area!=='wilderness'?(fullProjection.area==='crypt'?'dungeon.name':'dungeon.'+fullProjection.area+'Name'):'map.title')}</h2>
               <button class="map-close-button" data-testid="map-close"
                 aria-label={$t('map.close')} title={$t('map.close')}
                 onclick={closeMap}><span aria-hidden="true">✕</span><span>{$t('map.close')}</span></button>
@@ -1388,6 +1455,7 @@
                 <span>◎ {$t('map.waypoint')}</span>
               </div>
             </div>
+            <div class="world-map-layout">
             <div class="world-map-content">
               <WorldMapCanvas projection={fullProjection} onPan={panMap} onZoom={zoomMap} />
               <div class="world-map-toolbar" role="group" aria-label={$t('map.controls')}>
@@ -1402,9 +1470,12 @@
                   aria-label={$t('map.reset')} onclick={resetMapView}>⤢</button>
               </div>
             </div>
-            <div class="world-map-footer">
-              <WaypointPanel {view} {bridge} />
+              <MapQuestLog compact entries={quests} trackedId={tracked?.id??null}
+                select={selectTrackedQuest} />
             </div>
+            {#if view.zone==='wilderness'}<div class="world-map-footer">
+              <WaypointPanel {view} {bridge} />
+            </div>{:else}<p class="world-map-legend">{$t('map.dungeonExploration')}</p>{/if}
           </section>
         </div>
       {:else if townModal?.role === 'blacksmith'}
@@ -1708,6 +1779,12 @@
   .world-map-key { display: flex; flex-wrap: wrap; gap: 4px 11px;
     color: #e1d8c6; font-size: .7rem; }
   .world-map-key span { white-space: nowrap; }
+  .tracked-quest-summary{display:grid;gap:3px;padding:6px 3px;color:#e6d4b1;font-size:.69rem;line-height:1.3;overflow-wrap:anywhere}
+  .tracked-quest-summary strong{color:#f2d08a;font-size:.75rem}
+  .tracked-quest-summary span{color:#c7c4b8}
+  .world-map-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,23%);gap:10px;min-height:0;overflow:hidden}
+  .standalone-quest-card{width:min(900px,100%);height:min(640px,100%);min-height:0;min-width:0;max-width:none;max-height:100%;display:grid;grid-template-rows:auto minmax(0,1fr);gap:12px;overflow:hidden;text-align:left}
+  @media(max-width:700px){.desktop-journal-button,.tracked-quest-summary{display:none}}
   .world-map-content { position: relative; min-width: 0; min-height: 0;
     display: grid; overflow: hidden; }
   .world-map-toolbar {
@@ -1728,6 +1805,7 @@
   @media (max-width: 700px) {
     .minimap-overlay { width: 145px; min-width: 0; right: 8px; top: 110px; }
     .world-map-card { width: 100%; height: 100%; }
+    .world-map-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(90px,1fr) minmax(0,90px);gap:5px}
     .world-map-legend { font-size: .65rem; }
     .world-map-guide { max-height: 66px; overflow-y: auto; }
     .world-map-key { font-size: .65rem; gap: 3px 8px; }

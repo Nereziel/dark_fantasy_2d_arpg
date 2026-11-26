@@ -122,6 +122,18 @@ describe('Agent 29 — map discovery, fog of war and pure projections', () => {
     }
   });
 
+  it('exposes only the selected discovered destination for off-minimap navigation', () => {
+    const world=fixture();
+    const target=world.features.find(f=>f.id==='act1.crypt_entrance')!;
+    const hints=[{id:'crypt_descent',featureId:target.id,status:'active' as const}];
+    const options={mode:'minimap' as const,trackedQuestId:'crypt_descent'};
+    expect(ok(projectMap(initialized(),world,CAMP,hints,options)).navigationTarget).toBeUndefined();
+    const discovered=ok(revealAtPosition(initialized(),target.position,80,world));
+    expect(ok(projectMap(discovered,world,CAMP,hints,options)).navigationTarget?.position).toEqual(target.position);
+    expect(ok(projectMap(discovered,world,CAMP,hints,{...options,trackedQuestId:'other'})).navigationTarget).toBeUndefined();
+    expect(ok(projectMap(discovered,world,CAMP,[{...hints[0]!,status:'complete'}],options)).navigationTarget).toBeUndefined();
+  });
+
   it('hides unknown dungeon entrances and quest destinations, including exact coordinates', () => {
     const world = fixture(0);
     const state = initialized();

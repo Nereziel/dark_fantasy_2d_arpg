@@ -55,7 +55,7 @@ export class GameBridge implements GameStateReader {
   character(): CharacterProgress { return this.simulation.character(); }
   worldProgress(): WorldSessionProgress | null { return this.simulation.worldProgress(); }
   mapProjection(mode: 'world' | 'minimap' = 'world',
-    options: Pick<MapProjectionOptions, 'zoom' | 'center'> = {}): MapProjection | null {
+    options: Pick<MapProjectionOptions, 'zoom' | 'center' | 'trackedQuestId'> = {}): MapProjection | null {
     return this.simulation.mapProjection(mode, options);
   }
   restoreWorldProgress(progress: WorldSessionProgress): boolean {
