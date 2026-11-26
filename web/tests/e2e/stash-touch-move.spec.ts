@@ -19,7 +19,8 @@ test('landscape touch stash supports explicit transfer across tabs and back to b
   const bagItem = stash.locator('[data-stash-bag] [data-item-id]');
   const id = await bagItem.first().getAttribute('data-item-id');
   expect(id).toBeTruthy();
-  await bagItem.getByRole('button', { name: 'Select for move' }).tap();
+  await bagItem.tap();
+  await stash.getByRole('button', { name: 'Select for move' }).tap();
   await expect(stash.getByRole('button', { name: 'Cancel move' })).toBeVisible();
   await expect(stash.locator('[data-stash-tab="2"]')).toHaveClass(/drop-ready/);
 
@@ -32,19 +33,22 @@ test('landscape touch stash supports explicit transfer across tabs and back to b
   await expect(stash.getByRole('button', { name: 'Cancel move' })).toHaveCount(0);
 
   // Transfer to a different stash tab, then withdraw into backpack.
-  await stored.getByRole('button', { name: 'Select for move' }).tap();
+  await stored.tap();
+  await stash.getByRole('button', { name: 'Select for move' }).tap();
   await expect(stash.locator('[data-stash-tab="1"]')).toHaveClass(/drop-ready/);
   await stash.locator('[data-stash-tab="1"]').tap();
   const moved = stash.locator('[data-stash-items="1"] [data-item-id]');
   await expect(moved).toHaveAttribute('data-item-id', id!);
-  await moved.getByRole('button', { name: 'Select for move' }).tap();
+  await moved.tap();
+  await stash.getByRole('button', { name: 'Select for move' }).tap();
   await expect(stash.getByRole('button', { name: 'To backpack' })).toBeEnabled();
   await stash.getByRole('button', { name: 'To backpack' }).tap();
   await expect(stash.locator('[data-stash-bag] [data-item-id]')).toHaveAttribute('data-item-id', id!);
   await expect(stash.locator('[data-stash-items="1"] [data-item-id]')).toHaveCount(0);
 
   // Explicit selection can always be cancelled without any transaction.
-  await bagItem.getByRole('button', { name: 'Select for move' }).tap();
+  await bagItem.tap();
+  await stash.getByRole('button', { name: 'Select for move' }).tap();
   await stash.getByRole('button', { name: 'Cancel move' }).tap();
   await expect(stash.locator('[data-stash-bag] [data-item-id]')).toHaveAttribute('data-item-id', id!);
   await stash.getByRole('button', { name: 'Leave' }).tap();

@@ -13,16 +13,33 @@ test('multi-tab stash transfers, filters and persists stable item IDs in charact
     await enterWorld(page);
     await page.getByRole('button', { name: 'Browse wares' }).click();
     const merchant = page.getByRole('dialog', { name: 'Merchant Bram' });
+    const before = await merchant.boundingBox();
+    expect(before).not.toBeNull();
     await merchant.getByRole('button', { name: 'Buy Studded War Belt' }).click();
+    const after = await merchant.boundingBox();
+    expect(after).not.toBeNull();
+    for (const key of ['x', 'y', 'width', 'height'] as const)
+      expect(Math.abs(after![key] - before![key])).toBeLessThanOrEqual(1);
     await merchant.getByRole('button', { name: 'Leave' }).click();
   });
 
   await page.getByRole('button', { name: 'Open stash' }).click();
   const stash = page.getByRole('dialog', { name: 'Camp Stash' });
   await expect(stash.getByRole('tab')).toHaveCount(3);
+  const initialBounds = await stash.boundingBox();
+  expect(initialBounds).not.toBeNull();
+  const stableBounds = async () => {
+    const bounds = await stash.boundingBox();
+    expect(bounds).not.toBeNull();
+    for (const key of ['x', 'y', 'width', 'height'] as const)
+      expect(Math.abs(bounds![key] - initialBounds![key])).toBeLessThanOrEqual(1);
+  };
+  await expect(stash.locator('[data-stash-bag] [data-stash-cell]')).toHaveCount(24);
+  await expect(stash.locator('[data-stash-items] [data-stash-cell]')).toHaveCount(24);
   await stash.locator('[data-stash-tab="1"]').click();
   await stash.getByRole('button', { name: 'Store' }).click();
   await expect(stash).toContainText('Stash (1/24)');
+  await stableBounds();
   const first = stash.locator('[data-stash-items="1"] [data-item-id]');
   const itemId = await first.getAttribute('data-item-id');
   expect(itemId).toBeTruthy();
@@ -30,6 +47,8 @@ test('multi-tab stash transfers, filters and persists stable item IDs in charact
   await expect(first).toHaveCount(1);
   await stash.getByRole('searchbox', { name: 'Find item' }).fill('helm');
   await expect(stash).toContainText('No items match the current filters.');
+  await expect(stash.locator('[data-stash-items] [data-stash-cell]')).toHaveCount(24);
+  await stableBounds();
   await stash.getByRole('searchbox', { name: 'Find item' }).fill('');
   await stash.getByRole('combobox', { name: 'Category' }).selectOption('');
   await stash.getByRole('button', { name: 'Organize this tab' }).click();
