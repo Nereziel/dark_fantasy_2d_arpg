@@ -1270,6 +1270,8 @@ Acceptance criteria:
 <a name="prompt-18"></a>
 # PROMPT 18 — First Persistent Town
 
+**NPC presentation:** Every functional NPC must be recognizable without a tooltip through a stable, role-appropriate silhouette, civilian outfit and prop (quest dispatch, merchant pack, smith hammer, healer staff, potion bottles, keeper keys). Named NPCs have distinct visual presets; village quest givers with a civilian gameplay role still use quest-giver art. Keep art independent of quest state, world seed and collision. Role/quest icons remain supplemental, replaced by names on hover. Desktop-first; final art acceptance remains G4/G5.
+
 **Roadmap v3 contract:** G2/#208: at least three inhabited settlements (hub and two villages) with stable identities/approximate anchors but variable layout and paths. Render shared structure footprints and NPC manifests; protect safe zones and ensure reachable service approaches.
 
 Create the first permanent town.

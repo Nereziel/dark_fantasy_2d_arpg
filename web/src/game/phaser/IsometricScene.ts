@@ -141,6 +141,7 @@ export class IsometricScene extends Phaser.Scene {
       this.lastEnemyPositions.clear();
       this.enemyPresentation.clear();
       this.facingMemory.clear();
+      this.npcPresets.clear();
       this.walls.length = 0;
       this.wallPaintBounds.length = 0;
       this.occluders.length = 0;
@@ -160,6 +161,7 @@ export class IsometricScene extends Phaser.Scene {
         delete this.game.canvas.dataset.worldLabels;
         delete this.game.canvas.dataset.npcMarkers;
         delete this.game.canvas.dataset.npcLabels;
+        delete this.game.canvas.dataset.npcVisuals;
         delete this.game.canvas.dataset.focusedWorldObject;
         delete this.game.canvas.dataset.lootLabels;
         this.game.canvas.style.cursor = 'default';

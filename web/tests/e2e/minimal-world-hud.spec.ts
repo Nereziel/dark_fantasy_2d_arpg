@@ -17,7 +17,12 @@ test('default HUD is minimal, settings show clear modes and editor is a separate
   expect(looks).toMatchObject({warden_vesna:'warden',merchant_bram:'merchant',smith_odan:'smith',
     healer_iva:'healer',potion_vendor_lena:'apothecary',stash_camp:'keeper',waypoint_camp:'waystone',
     civilian_mira:'resident-mira',civilian_toma:'resident-toma',civilian_lio:'resident-lio'});
-  expect(new Set(Object.values(looks).slice(0,10)).size).toBeGreaterThanOrEqual(8);
+  expect(new Set(Object.values(looks)).size).toBe(Object.keys(looks).length);
+  // Optional village residents, when generated, are visually distinct from camp counterparts.
+  for(const [id,preset] of Object.entries({'north-village-civilian':'village-supplies',
+    'north-village-healer':'village-healer','east-village-blacksmith':'village-smith','east-village-quest':'village-quest'})) {
+    if(Object.hasOwn(looks,id))expect(looks[id]).toBe(preset);
+  }
   await page.locator('.game-header').hover();
   await expect(canvas).toHaveAttribute('data-world-labels','0');
   await expect(canvas).toHaveAttribute('data-npc-markers', /"npc\/warden_vesna"/);
