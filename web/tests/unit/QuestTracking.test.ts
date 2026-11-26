@@ -10,6 +10,15 @@ describe('read-only quest tracking', () => {
     expect(trackedQuest(entries, null)?.id).toBe('ashes_at_gate');
     expect(trackedQuest(entries, 'future_fake')?.id).toBe('ashes_at_gate');
   });
+  it('keeps manual tracking off even when a new objective becomes available',()=>{
+    const entries=journalEntries({quest:freshQuest()});
+    expect(trackedQuest(entries,false)).toBeNull();
+    const next=journalEntries({quest:{...freshQuest(),status:'completed',defeated:3},questLedger:{quests:[
+      {questId:'trail_of_black_ash',status:'active',counters:{traced:0},processedEventIds:[],rewardClaimed:false}
+    ]}});
+    expect(trackedQuest(next,false)).toBeNull();
+    expect(trackedQuest(next,'trail_of_black_ash')?.id).toBe('trail_of_black_ash');
+  });
   it('shows actual accepted side quests and falls back from completed choices', () => {
     const entries = journalEntries({quest: {...freshQuest(), status: 'completed', defeated: 3},
       questLedger: {quests: [

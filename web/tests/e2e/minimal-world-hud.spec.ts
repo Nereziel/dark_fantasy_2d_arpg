@@ -62,6 +62,7 @@ test('default HUD is minimal, settings show clear modes and editor is a separate
 });
 
 test('standalone quest journal, compact map tracking and expiring loading toast',async({page})=>{
+  test.setTimeout(60_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page,'Tracking hero');
@@ -85,6 +86,24 @@ test('standalone quest journal, compact map tracking and expiring loading toast'
   await expect(dialog.getByTestId('track-quest-ashes_at_gate')).toHaveAttribute('aria-pressed','true');
   await expect(dialog.locator('[data-tracked-quest="ashes_at_gate"]')).toHaveCount(1);
   await dialog.getByTestId('track-quest-ashes_at_gate').click();
+  await expect(dialog.getByTestId('track-quest-ashes_at_gate')).toHaveAttribute('aria-pressed','false');
+  await expect(dialog.locator('[data-marker-kind="quest"],[data-quest-route],[data-tracked-quest]')).toHaveCount(0);
+  await dialog.getByTestId('map-close').click();
+  await expect(page.getByTestId('tracked-quest-summary')).toHaveCount(0);
+  await expect(page.locator('[data-minimap="active"] [data-marker-kind="quest"],[data-minimap="active"] [data-quest-direction]')).toHaveCount(0);
+  await page.keyboard.press('j');
+  const track=journal.getByTestId('journal-track-ashes_at_gate');
+  await expect(track).toHaveAttribute('aria-pressed','false');
+  await track.click();
+  await expect(track).toHaveAttribute('aria-pressed','true');
+  await track.click();
+  await expect(track).toHaveAttribute('aria-pressed','false');
+  await page.keyboard.press('j');
+  await expect(page.getByTestId('tracked-quest-summary')).toHaveCount(0);
+  await page.keyboard.press('m');
+  await expect(dialog.getByTestId('track-quest-ashes_at_gate')).toHaveAttribute('aria-pressed','false');
+  await dialog.getByTestId('track-quest-ashes_at_gate').click();
+  await expect(dialog.locator('[data-tracked-quest="ashes_at_gate"]')).toHaveCount(1);
   await dialog.getByTestId('map-close').click();
   await expect(page.getByTestId('tracked-quest-summary')).toContainText(/Ashes/i);
   await saveFromMenu(page);
