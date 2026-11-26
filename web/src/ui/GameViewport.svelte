@@ -29,5 +29,5 @@
 
 <style>
   .phaser-container { position: absolute; inset: 0; overflow: hidden; background: #121b24; }
-  .phaser-container :global(canvas) { display: block; }
+  .phaser-container :global(canvas) { display: block; touch-action:none; }
 </style>

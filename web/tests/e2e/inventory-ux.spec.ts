@@ -47,15 +47,16 @@ test('HUD columns and minimap fog stay clear of the seven-skill action bar', asy
   const quest = page.locator('.quest-journal');
   await expect(mini).toBeVisible();
   await expect(enemies).toBeVisible();
-  await expect(guide).toBeVisible();
+  await expect(guide).toHaveCount(0);
   await expect(quest).toBeVisible();
-  const a = await mini.boundingBox(), b = await enemies.boundingBox();
-  const c = await guide.boundingBox(), d = await quest.boundingBox();
-  expect(a && b && c && d).toBeTruthy();
-  if (a && b && c && d) {
-    expect(a.y + a.height).toBeLessThanOrEqual(b.y + 1);
-    expect(c.y + c.height).toBeLessThanOrEqual(d.y + 1);
-  }
+  const a = await mini.boundingBox(), b = await enemies.boundingBox(), d = await quest.boundingBox();
+  expect(a && b && d).toBeTruthy();
+  if (a && b) expect(a.y + a.height).toBeLessThanOrEqual(b.y + 1);
+  // A closed guide should free the play area; journal text must pass through.
+  expect(await quest.locator('.quest-progress').first().evaluate(node=>{
+    const b=node.getBoundingClientRect();
+    return document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.tagName;
+  })).toBe('CANVAS');
   // Exact discovered-only clipping replaces the old blurred fog mask.
   await expect(mini.locator('svg clipPath')).toHaveCount(1);
   await expect(mini.locator('svg feGaussianBlur')).toHaveCount(0);

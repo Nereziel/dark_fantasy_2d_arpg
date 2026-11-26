@@ -1,4 +1,4 @@
-import { enterWorld, continueGame } from './character-menu';
+import { enterWorld, continueGame, returnToMenu } from './character-menu';
 import {test,expect,type Page} from '@playwright/test';
 import {campMovementTarget, heroPoint} from './iso-input';
 async function create(page: Page, name:string) {
@@ -26,16 +26,16 @@ test('named same-class heroes resume the selected world, not the in-memory defau
   const ground=await campMovementTarget(page,canvas);
   await page.mouse.click(ground.x,ground.y);
   await expect.poll(async()=>{const p=await heroPoint(page);return Math.hypot(p.x-spawn.x,p.y-spawn.y);},{timeout:8000}).toBeGreaterThan(20);
-  await page.getByRole('button',{name:'Main menu'}).click();
+  await returnToMenu(page);
   await expect(page.locator('.saved-character-row')).toHaveCount(1);
   await continueGame(page);
   await expect(game).toHaveAttribute('data-world-seed',seed!);
   const resumed=await heroPoint(page);
   expect(Math.hypot(resumed.x-spawn.x,resumed.y-spawn.y)).toBeGreaterThan(20);
-  await page.getByRole('button',{name:'Main menu'}).click();
+  await returnToMenu(page);
   await create(page,'Morrow');
   const otherSeed=await game.getAttribute('data-world-seed');
-  await page.getByRole('button',{name:'Main menu'}).click();
+  await returnToMenu(page);
   await expect(page.locator('.saved-character-row')).toHaveCount(2);
   const first=page.locator('.saved-character-row').filter({hasText:'Šárka'});
   await first.locator('.saved-select').click();
@@ -45,13 +45,13 @@ test('named same-class heroes resume the selected world, not the in-memory defau
   await continueGame(page);
   await expect(game).toHaveAttribute('data-world-seed',seed!);
   await expect(page.locator('.hud-details')).toContainText('Šárka');
-  await page.getByRole('button',{name:'Main menu'}).click();
+  await returnToMenu(page);
   await page.reload();
   await page.locator('.saved-character-row').filter({hasText:'Morrow'}).locator('.saved-select').click();
   await continueGame(page);
   await expect(game).toHaveAttribute('data-world-seed',otherSeed!);
   await expect(page.locator('.hud-details')).toContainText('Morrow');
-  await page.getByRole('button',{name:'Main menu'}).click();
+  await returnToMenu(page);
   await continueGame(page);
   await expect(game).toHaveAttribute('data-world-seed',otherSeed!);
 });
@@ -80,9 +80,9 @@ test('double-click opens the clicked saved hero, while a single click only selec
   await page.locator('#menu-language').selectOption('en');
   await create(page,'Aldric');
   const seed = await page.locator('.game-screen').getAttribute('data-world-seed');
-  await page.getByRole('button',{name:'Main menu'}).click();
+  await returnToMenu(page);
   await create(page,'Morgana');
-  await page.getByRole('button',{name:'Main menu'}).click();
+  await returnToMenu(page);
   const row = page.locator('.saved-character-row').filter({hasText:'Aldric'}).locator('.saved-select');
   await row.click();
   await expect(row).toHaveAttribute('aria-pressed','true');
@@ -99,9 +99,9 @@ test.describe('touch character shortcut', () => {
     await page.locator('#menu-language').selectOption('en');
     await create(page,'Aldric');
     const seed = await page.locator('.game-screen').getAttribute('data-world-seed');
-    await page.getByRole('button',{name:'Main menu'}).click();
+    await returnToMenu(page);
     await create(page,'Morgana');
-    await page.getByRole('button',{name:'Main menu'}).click();
+    await returnToMenu(page);
     const first = page.locator('.saved-character-row').filter({hasText:'Aldric'}).locator('.saved-select');
     const other = page.locator('.saved-character-row').filter({hasText:'Morgana'}).locator('.saved-select');
     await expect(first).toBeEnabled();

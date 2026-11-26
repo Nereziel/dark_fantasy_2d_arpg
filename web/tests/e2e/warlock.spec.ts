@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import {test,expect} from '@playwright/test';
 
 test('Warlock exposes seven abilities, summons a real demon, and reloads without transient allies',async({page})=>{
@@ -16,7 +16,7 @@ test('Warlock exposes seven abilities, summons a real demon, and reloads without
   await expect(page.locator('[data-warlock-ability="demonSummoning"]')).toBeDisabled();
   await page.locator('#game-language').selectOption('cs');
   await expect(page.getByTestId('warlock-demons')).toContainText('Démoni: 1/3');
-  await page.getByRole('button',{name:'Uložit'}).click();
+  await saveFromMenu(page);
   await page.reload();
   await continueGame(page);
   await expect(page.getByTestId('warlock-demons')).toContainText('Démoni: 0/3');

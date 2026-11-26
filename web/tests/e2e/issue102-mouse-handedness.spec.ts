@@ -34,7 +34,7 @@ test('primary and secondary mouse bindings swap atomically and persist across re
   await panel.getByRole('button', { name: 'Back' }).click();
   await page.keyboard.press('Escape');
   await expect(page.locator('.skill-shortcut').first()).toHaveText('LMB');
-  await expect(page.locator('.minimap-overlay button')).toContainText('M');
+  await expect(page.locator('.minimap-caption')).toContainText('M');
 
   // A right click now follows the PRIMARY ground-move route, not the cast route.
   const start = await page.locator('.game-screen').evaluate(node => ({

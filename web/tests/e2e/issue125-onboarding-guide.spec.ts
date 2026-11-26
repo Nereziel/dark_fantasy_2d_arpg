@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu, openGuideFromMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('Issue #125: new player gets an optional, quest-aware first-play guide', async ({ page }) => {
@@ -6,6 +6,7 @@ test('Issue #125: new player gets an optional, quest-aware first-play guide', as
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await enterWorld(page);
+  await openGuideFromMenu(page);
   const guide = page.getByTestId('onboarding-guide');
   await expect(guide).toBeVisible();
   await expect(guide).toHaveAttribute('data-guide-step', 'warden');
@@ -33,12 +34,13 @@ test('Issue #125: new player gets an optional, quest-aware first-play guide', as
   await guide.getByRole('button', { name: 'Restart tips' }).click();
   await expect(guide).toHaveAttribute('data-guide-step', 'move');
 
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await guide.getByRole('button', { name: 'Next tip' }).click();
   await expect(guide).toHaveAttribute('data-guide-step', 'attack');
   await page.reload();
   await continueGame(page);
+  await openGuideFromMenu(page);
   await expect(guide).toHaveAttribute('data-guide-step', 'attack');
 });
 
@@ -48,6 +50,7 @@ test('Issue #125: Czech/touch guide stays in scroll-safe HUD and never blocks ot
   await page.locator('#menu-language').selectOption('cs');
   await openCharacterCreation(page);
   await enterWorld(page);
+  await openGuideFromMenu(page);
   const guide = page.getByTestId('onboarding-guide');
   await expect(guide).toHaveAttribute('data-guide-step', 'warden');
   await expect(guide).toContainText('Vesn');

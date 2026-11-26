@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 // Issue #121 — real map interactions and no fog disclosure.
 // GPL-3.0-only.
 import { test, expect } from '@playwright/test';
@@ -39,7 +39,7 @@ test('discovered terrain and soil roads render without exposing hidden POI', asy
   await expect(dialog).toHaveCount(0);
 
   // The map camera was only presentation: saved exploration is unchanged.
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);

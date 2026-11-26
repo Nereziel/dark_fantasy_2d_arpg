@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('multi-tab stash transfers, filters and persists stable item IDs in character v11', async ({ page }) => {
@@ -41,7 +41,7 @@ test('multi-tab stash transfers, filters and persists stable item IDs in charact
   await stash.getByRole('button', { name: 'Leave' }).click();
 
   await test.step('Save and reload the hero with moved item', async () => {
-    await page.getByRole('button', { name: 'Save' }).click();
+    await saveFromMenu(page);
     await expect(page.getByRole('status')).toContainText('Hero saved');
     await page.reload();
     await continueGame(page);

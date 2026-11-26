@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld } from './character-menu';
+import { openCharacterCreation, enterWorld, returnToMenu } from './character-menu';
 // GPL-3.0-only — D5.4: observational browser performance baseline.
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { campMovementTarget } from './iso-input';
@@ -114,7 +114,7 @@ for (const profile of profiles) {
       await sample(canvas, 500);
       const resized = await sample(canvas, 1500);
       checkSample(resized, groundTotal, staticTotal);
-      await page.locator('.game-header').getByRole('button', { name: 'Main menu', exact: true }).click();
+      await returnToMenu(page);
       await expect(page.locator('canvas')).toHaveCount(0);
       await openCharacterCreation(page, 'Restart hero');
       await enterWorld(page);

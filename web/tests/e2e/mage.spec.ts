@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 
 test('Mage extra spells, cooldowns and character-only reload work in both locales', async ({ page }) => {
@@ -25,7 +25,7 @@ test('Mage extra spells, cooldowns and character-only reload work in both locale
 
   await page.locator('#game-language').selectOption('cs');
   await expect(barrier).toHaveAttribute('aria-label', 'Arkanická bariéra');
-  await page.getByRole('button', { name: 'Uložit' }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
   await continueGame(page);

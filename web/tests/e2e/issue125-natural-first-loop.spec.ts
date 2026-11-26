@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu, openGuideFromMenu } from './character-menu';
 import { errors, expect, test, type Locator, type Page } from '@playwright/test';
 import { projectIsometric, unprojectIsometric } from '../../src/game/phaser/isometricProjection';
 import { campMovementTarget } from './iso-input';
@@ -740,6 +740,7 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   await openCharacterCreation(page);
   await page.getByRole('button', { name: /Paladin/ }).click();
   await enterWorld(page);
+  await openGuideFromMenu(page);
 
   const game = page.locator('.game-screen');
   const guide = page.getByTestId('onboarding-guide');
@@ -867,10 +868,11 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // Optional POIs legitimately discovered during combat are visible in the
   // minimap; map IDs before/after reload are compared below.
 
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
+  await openGuideFromMenu(page);
   await expect(guide.getByTestId('onboarding-xp')).toHaveText(progressBeforeSave);
   await expect(page.locator('.hud-details span')).toHaveText(hudBeforeSave);
   await expect(journalProgress).toHaveText(objectiveBeforeSave);
@@ -926,10 +928,11 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   const afterHuntHud = await page.locator('.hud-details span').allTextContents();
   const afterHuntProgress = await guide.getByTestId('onboarding-xp').innerText();
   const afterHuntObjective = await journalProgress.allTextContents();
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
+  await openGuideFromMenu(page);
   await expect(page.locator('.quest-journal')).toContainText('Forgotten Graves');
   await expect(page.locator('.quest-journal')).not.toContainText('The Blighted Pack');
   await expect(journalProgress).toHaveText(afterHuntObjective);
@@ -961,10 +964,11 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   const afterGravesHud = await page.locator('.hud-details span').allTextContents();
   const afterGravesProgress = await guide.getByTestId('onboarding-xp').innerText();
   const afterGravesObjective = await journalProgress.allTextContents();
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
+  await openGuideFromMenu(page);
   await expect(game).toHaveAttribute('data-zone', 'wilderness');
   await expect(page.locator('.quest-journal')).toContainText('Morrow, Gravebound');
   await expect(page.locator('.quest-journal')).not.toContainText('The Forgotten Graves');
@@ -996,10 +1000,11 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   const afterMorrowHud = await page.locator('.hud-details span').allTextContents();
   const afterMorrowXp = await guide.getByTestId('onboarding-xp').innerText();
   const afterMorrowJournal = await journalProgress.allTextContents();
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
+  await openGuideFromMenu(page);
   await expect(game).toHaveAttribute('data-zone', 'wilderness');
   await expect(page.locator('.quest-journal')).toContainText('The Seal of Rot');
   await expect(page.locator('.quest-journal')).not.toContainText('Morrow, Gravebound');
@@ -1030,10 +1035,11 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   const afterEvidenceHud = await page.locator('.hud-details span').allTextContents();
   const afterEvidenceXp = await guide.getByTestId('onboarding-xp').innerText();
   const afterEvidenceJournal = await journalProgress.allTextContents();
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
+  await openGuideFromMenu(page);
   await expect(game).toHaveAttribute('data-zone', 'wilderness');
   await expect(page.locator('.quest-journal')).toContainText('Descent into the Crypt');
   await expect(page.locator('.quest-journal')).not.toContainText('The Seal of Rot');
@@ -1091,10 +1097,11 @@ test('Issue #125 — natural first Act I loop: Warden, movement, combat, loot, e
   // lose item identity, or restart the finished story.
   const completedHud = await page.locator('.hud-details span').allTextContents();
   const completedXp = await guide.getByTestId('onboarding-xp').innerText();
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
+  await openGuideFromMenu(page);
   await expect(game).toHaveAttribute('data-zone', 'wilderness');
   await expect(page.locator('.quest-journal')).toContainText('Act I complete');
   await expect(page.locator('.quest-journal')).not.toContainText('Report to Vesna');

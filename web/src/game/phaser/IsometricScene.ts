@@ -1,7 +1,11 @@
 // GPL-3.0-only — default 2:1 isometric presentation; simulation remains Cartesian.
 import Phaser from 'phaser';
 import { get } from 'svelte/store';
-import { _ as translate } from 'svelte-i18n';
+import { _ as translate, locale } from 'svelte-i18n';
+import { RARITIES } from '../data/items';
+import { itemDisplayName } from '../items/itemName';
+import { layoutWorldLabels, lootLabelsEnabled, roleMarker, skillCueStyle } from '../ui/worldReadability';
+import { occluderDepthAt } from './isometricOcclusion';
 import type { GameBridge } from '../bridge/GameBridge';
 import type { GameEvent, GameSnapshot, Point, ZoneId } from '../core/types';
 import { EnemyPresentation, snapshotEnemyWindup } from './isometricEnemyPresentation';
@@ -56,6 +60,10 @@ const MAX_IMPACT_VISUALS = 64;
 
 export class IsometricScene extends Phaser.Scene {
   private readonly impacts: ImpactVisual[] = [];
+  private readonly worldLabels = new Map<string, Phaser.GameObjects.Text>();
+  private nextLabelUpdate = 0;
+  private lootLabelState = true;
+  private labelLanguage = '';
   private readonly enemyPresentation = new EnemyPresentation();
   private ground!: IsometricGroundLayer;
   private dungeonDecor!: Phaser.GameObjects.Graphics;
@@ -117,6 +125,8 @@ export class IsometricScene extends Phaser.Scene {
       this.input.off('pointerup', this.release, this);
       this.input.off('gameout', this.release, this);
       this.release();
+      this.worldLabels.clear();
+      this.nextLabelUpdate = 0;
       this.actors.clear();
       this.sprites.clear();
       this.lastEnemyPositions.clear();
@@ -138,6 +148,8 @@ export class IsometricScene extends Phaser.Scene {
         delete this.game.canvas.dataset.buildingCount;
         delete this.game.canvas.dataset.staticLayers;
         delete this.game.canvas.dataset.staticVisibleLayers;
+        delete this.game.canvas.dataset.worldLabels;
+        delete this.game.canvas.dataset.lootLabels;
         this.game.canvas.style.cursor = 'default';
       }
     });
@@ -153,6 +165,9 @@ export class IsometricScene extends Phaser.Scene {
     this.dungeonId = state.dungeonId;
     this.dungeonEntrances = [];
     this.dungeonDecor.clear();
+    for (const label of this.worldLabels.values()) label.destroy();
+    this.worldLabels.clear();
+    this.nextLabelUpdate = 0;
     this.clearImpacts();
     for (const wall of this.walls) wall.destroy();
     this.walls.length = 0;
@@ -180,6 +195,16 @@ export class IsometricScene extends Phaser.Scene {
       const world = buildCryptWorld(dungeonRenderSeed(state));
       this.obstacles = world.layout.obstacles;
       this.ground.rebuild(cryptGroundLayout(world.dungeon,state.dungeonId), ORIGIN);
+      // Open passages only: never paint or announce a hidden secret entrance.
+      for(const door of world.dungeon.doors) {
+        if(door.kind!=='open') continue;
+        for(const foot of [door.portalA,door.portalB]) {
+          const p=project(foot);
+          this.dungeonDecor.fillStyle(0xb99c69,.18).fillEllipse(p.x,p.y,42,18);
+          this.dungeonDecor.lineStyle(2,0xd2bb89,.85).strokeEllipse(p.x,p.y,42,18);
+          this.dungeonDecor.fillStyle(0xdac295,.9).fillRect(p.x-20,p.y-7,4,9).fillRect(p.x+16,p.y-7,4,9);
+        }
+      }
       for(const decoration of planOptionalDungeonDecorations(world.dungeon,state.dungeonId)){
         this.polygon(this.dungeonDecor,decoration.points.map(p=>project(p)),decoration.color);
       }
@@ -269,7 +294,7 @@ export class IsometricScene extends Phaser.Scene {
     const ground = { bodyHeight: 0, bodyHalfWidth: 0 };
     const actor = { bodyHeight: 42, bodyHalfWidth: 18 };
     const targets: IsometricTarget[] = [
-      ...dungeonPortalTargets(state,this.dungeonEntrances).map(p=>({...p,...ground})),
+      ...dungeonPortalTargets(state,this.dungeonEntrances).map(p=>({...p,bodyHeight:58,bodyHalfWidth:26})),
       ...(state.cryptInteractables ?? []).map(p => ({ kind: 'INTERACTABLE' as const,
         id: p.id, position: p.position, hitRadius: p.hitRadius, ...ground })),
       ...(state.environmentObjects ?? []).map(p => ({ kind: 'INTERACTABLE' as const,
@@ -310,10 +335,11 @@ export class IsometricScene extends Phaser.Scene {
 
   private hover(pointer: Phaser.Input.Pointer): void {
     const { context, ground, aim } = this.pick(pointer);
+    const label = this.lootLabelAt(pointer);
     this.bridge.setPointerAim(aim, context.kind === 'ENEMY' ? context.id : null);
     const cursors = { move: 'crosshair', hostile: 'crosshair', talk: 'pointer', loot: 'grab',
       interact: 'pointer', blocked: 'not-allowed', ui: 'default' } as const;
-    this.game.canvas.style.cursor = cursors[cursorForContext(context)];
+    this.game.canvas.style.cursor = label ? 'grab' : cursors[cursorForContext(context)];
     if (!pointer.isDown || this.captured() || !this.bridge.snapshot().player.alive) {
       this.release(); return;
     }
@@ -325,6 +351,26 @@ export class IsometricScene extends Phaser.Scene {
     const action = resolveWorldPointerAction({ button: pointer.button, wasTouch: pointer.wasTouch, uiCaptured: this.captured() },
       this.bridge.bindings());
     if (!action) return;
+    // Touch on the passive map always means ground movement, not activation
+    // of an NPC, portal, enemy or loot hidden underneath the overlay. This
+    // preserves the first tap for movement and lets App recognize a double tap.
+    if(pointer.wasTouch&&action==='PRIMARY'&&this.bridge.snapshot().zone==='wilderness'){
+      const canvasRect=this.game.canvas.getBoundingClientRect();
+      const mini=document.querySelector('[data-minimap="active"]')?.getBoundingClientRect();
+      const x=canvasRect.left+pointer.x*canvasRect.width/Math.max(1,this.scale.width);
+      const y=canvasRect.top+pointer.y*canvasRect.height/Math.max(1,this.scale.height);
+      if(mini&&x>=mini.left&&x<=mini.right&&y>=mini.top&&y<=mini.bottom){
+        const {ground}=this.pick(pointer);
+        this.bridge.setPointerAim(ground,null);
+        this.held.begin(ground,this.time.now);
+        this.bridge.command({type:'move',destination:ground});
+        return;
+      }
+    }
+    if(action==='PRIMARY') {
+      const loot=this.lootLabelAt(pointer);
+      if(loot){this.release();this.bridge.command({type:'pickup',id:loot});return;}
+    }
     const { context, ground, aim } = this.pick(pointer);
     this.bridge.setPointerAim(aim, context.kind === 'ENEMY' ? context.id : null);
     if (dispatchCombatAction(this.bridge, action, context.kind === 'ENEMY' ? context.id : undefined)) return;
@@ -348,6 +394,87 @@ export class IsometricScene extends Phaser.Scene {
     }
   }
 
+  private lootLabelAt(pointer:Phaser.Input.Pointer):string|null {
+    if(!lootLabelsEnabled()||this.captured())return null;
+    const p=this.cameras.main.getWorldPoint(pointer.x,pointer.y);
+    const visible=this.bridge.visibleGroundLoot(this.bridge.snapshot());
+    for(const drop of visible){
+      const label=this.worldLabels.get('loot/'+drop.id);
+      if(label?.visible&&label.getBounds().contains(p.x,p.y))return drop.id;
+    }
+    return null;
+  }
+
+  private updateWorldLabels(state:GameSnapshot):void {
+    const labelsOn=lootLabelsEnabled(),language=get(locale)??'en';
+    if(this.time.now<this.nextLabelUpdate&&labelsOn===this.lootLabelState&&language===this.labelLanguage)return;
+    this.nextLabelUpdate=this.time.now+150;
+    this.lootLabelState=labelsOn;this.labelLanguage=language;
+    const t=get(translate),camera=this.cameras.main;
+    const specs:{id:string;point:Readonly<Point>;elevation:number;text:string;color:string}[]=[];
+    if(state.zone==='wilderness'){
+      const story=state.questLedger?.quests.find(q=>q.status==='ready'||q.status==='active');
+      for(const npc of getTownManifest()) {
+        const marker=roleMarker(npc.role,npc.role==='quest'?(story?.status??state.quest.status):undefined);
+        specs.push({id:'npc/'+npc.id,point:npc.position,elevation:48,text:(marker?marker+'  ':'')+t(npc.nameKey),color:npc.role==='quest'?'#f4d18d':'#e4d9c6'});
+      }
+      for(const npc of this.villageResidents){
+        const marker=roleMarker(npc.role,npc.role==='quest'?'completed':undefined);
+        specs.push({id:'npc/'+npc.id,point:npc.position,elevation:56,text:(marker?marker+'  ':'')+t('village.'+npc.id+'.name'),color:'#e4d9c6'});
+      }
+    }
+    for(const portal of dungeonPortalTargets(state,this.dungeonEntrances)){
+      const name=state.zone==='crypt'?t('worldLabels.portalExit'):t(portal.id.endsWith(':mine')?'dungeon.mineName':portal.id.endsWith(':cave')?'dungeon.caveName':'dungeon.name');
+      specs.push({id:'portal/'+portal.id,point:portal.position,elevation:64,text:'◇  '+name,color:'#b9dcff'});
+    }
+    if(labelsOn)for(const drop of this.bridge.visibleGroundLoot(state)){
+      specs.push({id:'loot/'+drop.id,point:drop,elevation:19,
+        text:itemDisplayName(drop.item,language,t('item.base.'+drop.item.templateId)),color:RARITIES[drop.item.rarity].color});
+    }
+    const live=new Set<string>(),rects:{id:string;x:number;y:number;width:number;height:number}[]=[];
+    for(const spec of specs){
+      const p=project(spec.point,spec.elevation),foot=project(spec.point);
+      const w=camera.worldView;
+      if(p.x<w.x-100||p.x>w.right+100||p.y<w.y-80||p.y>w.bottom+80)continue;
+      // Respect opaque walls. No labels above actors/items hidden behind geometry.
+      if(occluderDepthAt(foot,this.opaqueOccluders)>=isometricDepth(spec.point)+.5&&
+        occluderDepthAt(p,this.opaqueOccluders)>=isometricDepth(spec.point)+.5)continue;
+      live.add(spec.id);
+      let label=this.worldLabels.get(spec.id);
+      if(!label){
+        label=this.add.text(p.x,p.y,spec.text,{fontFamily:'Arial, sans-serif',fontSize:'13px',fontStyle:'bold',
+          color:spec.color,backgroundColor:'#0d1119e8',stroke:'#080b0f',strokeThickness:2,padding:{x:5,y:3}})
+          .setOrigin(.5,1).setDepth(9350);
+        this.worldLabels.set(spec.id,label);
+      }else{
+        if(label.text!==spec.text)label.setText(spec.text);
+        if(label.style.color!==spec.color)label.setColor(spec.color);
+      }
+      rects.push({id:spec.id,x:p.x,y:p.y-label.height/2,width:label.width,height:label.height});
+    }
+    for(const placed of layoutWorldLabels(rects)){
+      const label=this.worldLabels.get(placed.id);
+      label?.setPosition(placed.x,placed.y+placed.height/2).setVisible(true);
+    }
+    for(const [id,label] of this.worldLabels)if(!live.has(id)){label.destroy();this.worldLabels.delete(id);}
+    this.game.canvas.dataset.worldLabels=String(this.worldLabels.size);
+    this.game.canvas.dataset.lootLabels=String([...this.worldLabels.keys()].filter(id=>id.startsWith('loot/')).length);
+  }
+
+  private portalArt(g:Phaser.GameObjects.Graphics,color:number):void {
+    // Solid rim, luminous centre and a ground ring make the usable portal
+    // identifiable even at small scale. Foot remains the original hit target.
+    g.fillStyle(0x101824,.85).fillEllipse(0,0,70,28);
+    g.lineStyle(3,color,.95).strokeEllipse(0,0,62,22);
+    g.fillStyle(0x201f29,1).fillRoundedRect(-27,-58,54,59,16);
+    g.lineStyle(5,0xb5a58c,.95).strokeRoundedRect(-25,-56,50,56,15);
+    g.fillStyle(color,.28).fillRoundedRect(-19,-50,38,49,12);
+    g.lineStyle(3,color,.95).strokeRoundedRect(-19,-50,38,49,12);
+    g.fillStyle(0xe8f5ff,.86).fillEllipse(0,-25,11,37);
+    g.fillStyle(color,.9).fillEllipse(0,-25,20,45);
+    g.fillStyle(0xf0f6ff,.9).fillEllipse(0,-25,7,27);
+  }
+
   private entity(key: string, point: Readonly<Point>, color: number, upright: boolean): void {
     let g = this.actors.get(key);
     if (!g) {
@@ -357,7 +484,9 @@ export class IsometricScene extends Phaser.Scene {
     const p = project(point);
     g.clear().setPosition(p.x, p.y).setDepth(isometricDepth(point) + 0.5);
     g.fillStyle(0x0a1011, 0.55).fillEllipse(0, 0, upright ? 38 : 24, 12);
-    if (upright) {
+    if (key==='INTERACTABLE/crypt-portal'||key.startsWith('INTERACTABLE/dungeon-portal:')) {
+      this.portalArt(g,color);
+    } else if (upright) {
       g.fillStyle(color).fillRoundedRect(-12, -32, 24, 30, 4);
       g.fillStyle(0xd4bea2).fillCircle(0, -36, 8);
     } else {
@@ -461,8 +590,9 @@ export class IsometricScene extends Phaser.Scene {
       const color = missile.type === 'shadow' ? 0xa78bcd
         : missile.type === 'frost' ? 0x7fd6f4 : missile.type === 'poison' ? 0x80d48a
         : missile.type === 'holy' ? 0xf2d887 : 0xe8a25f;
-      this.missiles.fillStyle(color, 0.25).fillCircle(p.x, p.y, 12);
-      this.missiles.fillStyle(color, 0.95).fillCircle(p.x, p.y, 5);
+      this.missiles.fillStyle(color, 0.26).fillCircle(p.x, p.y, 15);
+      this.missiles.fillStyle(color, 0.95).fillCircle(p.x, p.y, 7);
+      this.missiles.fillStyle(0xfff3df,.88).fillCircle(p.x,p.y,3);
     }
   }
 
@@ -489,6 +619,24 @@ export class IsometricScene extends Phaser.Scene {
       g.lineStyle(3,0xffaa78,.95).strokePoints(points,true);
       if(this.impacts.length>=MAX_IMPACT_VISUALS)this.impacts.shift()?.object.destroy();
       this.impacts.push({object:g,position:center,started:this.time.now,duration:1200,rise:0});
+      return;
+    }
+    if(event.type==='cast'||event.type==='warriorImpact'){
+      const style=skillCueStyle(state.classId,event.type==='cast'?event.skillId:event.id);
+      const p=project(event,style.basic?18:10);
+      const g=this.add.graphics().setPosition(p.x,p.y).setDepth(9050);
+      // Cosmetic cues only: never draw an invented damaging footprint.
+      const r=style.basic?12:22;
+      g.fillStyle(style.color,.18).fillCircle(0,0,r+5);
+      g.lineStyle(style.basic?2:3,style.color,.95).strokeCircle(0,0,r);
+      g.lineStyle(2,0xffefd7,.88).strokeCircle(0,0,r*.55);
+      const reduced=shouldReduceMotion(getVisualPreferences(),window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      if(!style.basic&&!reduced)for(let i=0;i<6;i++){
+        const a=i*Math.PI/3;
+        g.fillStyle(style.color,.9).fillCircle(Math.cos(a)*(r+5),Math.sin(a)*(r+5),3);
+      }
+      if(this.impacts.length>=MAX_IMPACT_VISUALS)this.impacts.shift()?.object.destroy();
+      this.impacts.push({object:g,position:p,started:this.time.now,duration:style.duration,rise:0});
       return;
     }
     if (event.type !== 'damageResolved') return;
@@ -521,7 +669,8 @@ export class IsometricScene extends Phaser.Scene {
         if (cue.type === 'impactFlash') {
           const color = cue.tone === 'critical' ? 0xffedaa
             : cue.tone === 'blocked' ? 0x9fbde5 : 0xf1b88b;
-          g.lineStyle(3, color, 0.9).strokeCircle(0, 0, 13);
+          g.fillStyle(color,.24).fillCircle(0,0,16);
+          g.lineStyle(3, color, 0.95).strokeCircle(0, 0, 17);
         } else {
           const count = Math.min(32, cue.count);
           for (let n = 0; n < count; n++) {
@@ -655,6 +804,7 @@ export class IsometricScene extends Phaser.Scene {
       if (!visible.has('ENEMY/' + id)) this.lastEnemyPositions.delete(id);
     }
     this.renderCombat(state);
+    this.updateWorldLabels(state);
     this.updateImpacts();
   }
 }

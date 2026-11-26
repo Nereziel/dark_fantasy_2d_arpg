@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 /**
@@ -210,13 +210,13 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
 
   // Authoritative save must retain stable item identities, exact positions,
   // and the empty equipment socket after a reload (not merely item counts).
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
   // Verify that the asynchronous character restore completed, not just that Load was clicked.
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
-  await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
+  await expect(page.getByTestId('system-menu')).toBeEnabled();
   await page.getByRole('button', { name: 'Inventory (I)' }).click();
   await expect(gear).not.toHaveClass(/has-item/);
   await expect(secondCell).toHaveAttribute('data-item-id', firstId!);
@@ -227,13 +227,13 @@ test('equipped item swaps and exact bag placement persist through real Save/Load
   await expect(gear).toHaveAttribute('data-item-id', secondId!);
   await expect(chosenCell).not.toHaveClass(/occupied/);
   await inventory.getByRole('button', { name: 'Close' }).click();
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
   // Verify that the asynchronous character restore completed, not just that Load was clicked.
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero loaded');
-  await expect(page.locator('[data-quick-action="load"]')).toBeEnabled();
+  await expect(page.getByTestId('system-menu')).toBeEnabled();
   await expect(page.locator('.game-screen')).toBeVisible();
   // Exercise the real, default inventory hotkey after the second reload.
   // Waiting for the live HUD action button to become geometrically stable

@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import {test,expect} from '@playwright/test';
 
 test('Necromancer summons real allies, shows corpse HUD and reloads character-only',async({page})=>{
@@ -20,7 +20,7 @@ test('Necromancer summons real allies, shows corpse HUD and reloads character-on
   await expect(golem).toBeDisabled();
   await page.locator('#game-language').selectOption('cs');
   await expect(page.getByTestId('necromancer-minions')).toContainText('Přisluhovači: 2/5');
-  await page.getByRole('button',{name:'Uložit'}).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Postava uložena');
   await page.reload();
   await continueGame(page);

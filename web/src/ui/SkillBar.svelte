@@ -1,5 +1,6 @@
 <script lang="ts">
   import { _ as t, locale } from 'svelte-i18n';
+  import { untrack } from 'svelte';
   import type { GameBridge } from '../game/bridge/GameBridge';
   import type { GameSnapshot } from '../game/core/types';
   import type { InputBinding } from '../game/input/bindings';
@@ -19,9 +20,33 @@
   import { projectEquippedSkill } from '../game/skills/skillModifiers';
   import { projectTalentBonuses } from '../game/progression/talentTree';
   import { BUILD_PRESET_COUNT, previewBuildPreset } from '../game/progression/buildPresets';
-  let { bridge, view, bindings }: {
+  let { bridge, view, bindings, infoMode = $bindable(false), editRequest = 0 }: {
     bridge: GameBridge; view: GameSnapshot; bindings: readonly InputBinding[];
+    infoMode?: boolean; editRequest?: number;
   } = $props();
+  let skillRoot = $state<HTMLElement>();
+  let hint = $state<{name:string;description:string;shortcut:string;cooldown:string}|null>(null);
+  let appliedRequest = untrack(()=>editRequest);
+  let previousInfo = false;
+  $effect(()=>{ if(previousInfo && !infoMode) hint=null; previousInfo=infoMode; });
+  $effect(() => {
+    if (editRequest !== appliedRequest && !view.paused && view.player.alive) {
+      appliedRequest = editRequest; editorOwner = owner;
+    }
+  });
+  $effect(() => { if (view.paused || !view.player.alive || editing) { infoMode = false; hint = null; } });
+  function showHint(button: HTMLButtonElement): void {
+    hint = { name: button.getAttribute('aria-label') ?? '', description: button.title,
+      shortcut: button.querySelector('.skill-shortcut')?.textContent ?? '',
+      cooldown: button.getAttribute('data-base-cooldown') + 's' };
+  }
+  function outsideHint(event: PointerEvent): void {
+    if (event.target instanceof Node && skillRoot && !skillRoot.contains(event.target)) {
+      infoMode = false; hint = null;
+    }
+  }
+  function toggleInfo(): void { infoMode = !infoMode; hint = null; }
+  function hideHint(): void { if (!infoMode) hint = null; }
   let mageCostDiscount = $derived(projectTalentBonuses(view.talentRanks ?? {}).manaEfficiency);
 
   let layout = $derived(view.hotbarLayout ?? defaultHotbarLayout(view.classId));
@@ -113,7 +138,8 @@
     }
   }
 
-  function activate(id: string): void {
+  function activate(id: string, button: HTMLButtonElement): void {
+    if (infoMode) { showHint(button); return; }
     dispatchHotbarAbility(bridge, id);
   }
 
@@ -123,7 +149,8 @@
   }
 </script>
 
-<div class="skill-ui">
+<svelte:window onpointerdown={outsideHint} />
+<div class="skill-ui" bind:this={skillRoot} data-inspecting={infoMode}>
   <div class="hotbar-controls">
     {#if editing}
       <span class="hotbar-hint">{$locale === 'cs' ? 'Vyber dva sloty nebo přetáhni.' : 'Select two slots or drag.'}</span>
@@ -132,11 +159,11 @@
         cancelDrag();
       }} onkeydown={editorKey}>{$locale === 'cs' ? 'Výchozí' : 'Reset'}</button>
     {/if}
-    <button type="button" data-testid="edit-hotbar" aria-pressed={editing}
+    {#if editing}<button type="button" data-testid="edit-hotbar" aria-pressed={editing}
       disabled={view.paused || !view.player.alive} onclick={toggleEditor}
       onkeydown={editing ? editorKey : undefined}>
       {editing ? ($locale === 'cs' ? 'Hotovo' : 'Done') : ($locale === 'cs' ? 'Upravit schopnosti' : 'Edit skills')}
-    </button>
+    </button>{/if}
   </div>
   {#if editing}
     <div class="hotbar-editor" data-testid="hotbar-editor" role="group"
@@ -189,21 +216,26 @@
       </details>
     {/if}
   {:else}
-  <div class="skill-toolbar" aria-label={$t('combat.skills')}>
+  <div class="skill-row"><div class="skill-toolbar" aria-label={$t('combat.skills')}>
     {#each layout as abilityId (abilityId)}
       {@const route = resolveHotbarAbility(view.classId, abilityId)!.route}
+      <div class="skill-slot" role="presentation" onpointerenter={(event)=>{
+        if(event.pointerType !== 'touch') { const button=event.currentTarget.querySelector('button'); if(button) showHint(button); }
+      }} onpointerleave={hideHint} onfocusin={(event)=>{
+        if(event.target instanceof HTMLButtonElement) showHint(event.target);
+      }} onfocusout={hideHint}>
       {#if route.type === 'cast'}
       {@const slot = route.slot}
       {@const skill = SKILLS[view.classId][slot]}
       {@const remaining = view.cooldowns[slot]}
       <button
         class="skill-button"
-        data-hotbar-ability={abilityId} data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)}
+        data-hotbar-ability={abilityId} data-base-cooldown={skill.cooldown} data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)}
         class:cooldown={remaining > 0}
-        disabled={view.paused || !view.player.alive || remaining > 0 || view.resource + 0.001 < skill.cost}
+        disabled={!infoMode && (view.paused || !view.player.alive || remaining > 0 || view.resource + 0.001 < skill.cost)}
         aria-label={$t('skills.' + skill.id + '.name')}
         title={$t('skills.' + skill.id + '.desc') + ' · ' + skill.cost + ' ' + $t('resource.' + CLASSES[view.classId].resourceId)}
-        onclick={() => activate(skill.id)}
+        onclick={(event) => activate(skill.id, event.currentTarget)}
       >
         <span class="skill-shortcut">{abilityShortcut(skill.id)}</span>
         <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
@@ -220,11 +252,11 @@
           id, ability.radius ?? 0, view.talentRanks ?? {}, view.equipment
         )}
         {@const remaining = view.warriorCooldowns?.[id] ?? 0}
-        <button class="skill-button extra" data-hotbar-ability={abilityId}
+        <button class="skill-button extra" data-hotbar-ability={abilityId} data-base-cooldown={ability.cooldown}
           data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)} class:cooldown={remaining > 0}
-          disabled={view.paused || !view.player.alive || remaining > 0
+          disabled={!infoMode && (view.paused || !view.player.alive || remaining > 0
             || view.warriorAction !== null && view.warriorAction !== undefined
-            || view.resource + 0.001 < ability.rageCost}
+            || view.resource + 0.001 < ability.rageCost)}
           aria-label={$t('skills.' + id + '.name')}
           title={$t('skills.' + id + '.desc') + ' · ' + ability.rageCost + ' ' + $t('resource.rage')
             + (modified.modifierIds.length > 0
@@ -233,7 +265,7 @@
                   ? ' · ' + $t('skillModifiers.pull') + ': ' + modified.pullDistance : '')
                 + (modified.statuses.some(status => status.id === 'bleeding')
                   ? ' · ' + $t('skillModifiers.bleeding') : '') : '')}
-          onclick={() => activate(id)}
+          onclick={(event) => activate(id, event.currentTarget)}
         >
           <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{id === 'warCry' ? '✦' : id === 'groundSlam' ? '✹' : id === 'whirlwind' ? '⟳' : id === 'execute' ? '⚔' : '✧'}</span>
@@ -251,15 +283,15 @@
         {@const skill=PALADIN_EXTRA_SKILLS[id]}
         {@const remaining=view.paladinCooldowns?.[id]??0}
         <button
-          class="skill-button extra" data-hotbar-ability={abilityId}
+          class="skill-button extra" data-hotbar-ability={abilityId} data-base-cooldown={skill.cooldown}
           data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)}
           class:cooldown={remaining>0}
           data-paladin-ability={id}
-          disabled={view.paused || !view.player.alive || remaining>0 ||
-            !!view.classAction || view.resource + 0.001 < skill.cost}
+          disabled={!infoMode && (view.paused || !view.player.alive || remaining>0 ||
+            !!view.classAction || view.resource + 0.001 < skill.cost)}
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.faith')}
-          onclick={() => activate(id)}
+          onclick={(event) => activate(id, event.currentTarget)}
         >
           <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
@@ -275,15 +307,15 @@
         {@const remaining = view.mageCooldowns?.[id] ?? 0}
         {@const actualCost = Math.max(1, Math.ceil(skill.cost * (1 - mageCostDiscount)))}
         <button
-          class="skill-button extra" data-hotbar-ability={abilityId}
+          class="skill-button extra" data-hotbar-ability={abilityId} data-base-cooldown={skill.cooldown}
           data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)}
           class:cooldown={remaining > 0}
           data-mage-ability={id}
-          disabled={view.paused || !view.player.alive || remaining > 0 ||
-            !!view.classAction || view.resource + 0.001 < actualCost}
+          disabled={!infoMode && (view.paused || !view.player.alive || remaining > 0 ||
+            !!view.classAction || view.resource + 0.001 < actualCost)}
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+actualCost+' '+$t('resource.mana')}
-          onclick={() => activate(id)}
+          onclick={(event) => activate(id, event.currentTarget)}
         >
           <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
@@ -295,15 +327,15 @@
         {@const id = route.id}
         {@const skill=ROGUE_EXTRA_SKILLS[id]}
         {@const remaining=view.rogueCooldowns?.[id]??0}
-        <button class="skill-button extra" data-hotbar-ability={abilityId}
+        <button class="skill-button extra" data-hotbar-ability={abilityId} data-base-cooldown={skill.cooldown}
           data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)} class:cooldown={remaining>0}
           data-rogue-ability={id}
-          disabled={view.paused || !view.player.alive || remaining>0
+          disabled={!infoMode && (view.paused || !view.player.alive || remaining>0
             || !!view.classAction || view.resource+0.001<skill.cost
-            || id==='trap' && (view.rogueTraps?.length??0)>=3}
+            || id==='trap' && (view.rogueTraps?.length??0)>=3)}
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.energy')}
-          onclick={()=>activate(id)}>
+          onclick={(event) => activate(id, event.currentTarget)}>
           <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
@@ -314,15 +346,15 @@
         {@const id = route.id}
         {@const skill = NECRO_EXTRA_SPELLS[id]}
         {@const remaining = view.necroCooldowns?.[id] ?? 0}
-        <button class="skill-button extra" data-hotbar-ability={abilityId}
+        <button class="skill-button extra" data-hotbar-ability={abilityId} data-base-cooldown={skill.cooldown}
           data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)} class:cooldown={remaining>0}
           data-necro-ability={id}
-          disabled={view.paused || !view.player.alive || remaining>0
+          disabled={!infoMode && (view.paused || !view.player.alive || remaining>0
             || !!view.classAction || view.resource + 0.001 < skill.cost
-            || id === 'summonGolem' && (view.summons ?? []).some(a=>a.kind==='golem')}
+            || id === 'summonGolem' && (view.summons ?? []).some(a=>a.kind==='golem'))}
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.essence')}
-          onclick={() => activate(id)}>
+          onclick={(event) => activate(id, event.currentTarget)}>
           <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
@@ -333,15 +365,15 @@
         {@const id = route.id}
         {@const skill = WARLOCK_EXTRA_SPELLS[id]}
         {@const remaining = view.warlockCooldowns?.[id] ?? 0}
-        <button class="skill-button extra" data-hotbar-ability={abilityId}
+        <button class="skill-button extra" data-hotbar-ability={abilityId} data-base-cooldown={skill.cooldown}
           data-hotbar-slot={hotbarInputForAbility(view.classId, abilityId, layout)} class:cooldown={remaining>0}
           data-warlock-ability={id}
-          disabled={view.paused || !view.player.alive || remaining>0
+          disabled={!infoMode && (view.paused || !view.player.alive || remaining>0
             || !!view.classAction || view.resource + 0.001 < skill.cost
-            || id==='demonSummoning' && (view.summons??[]).length>=3}
+            || id==='demonSummoning' && (view.summons??[]).length>=3)}
           aria-label={$t('skills.'+id+'.name')}
           title={$t('skills.'+id+'.desc')+' · '+skill.cost+' '+$t('resource.soul')}
-          onclick={() => activate(id)}>
+          onclick={(event) => activate(id, event.currentTarget)}>
           <span class="skill-shortcut">{abilityShortcut(id)}</span>
           <span class="skill-icon" aria-hidden="true">{skill.icon}</span>
           <span class="skill-title">{$t('skills.'+id+'.name')}</span>
@@ -349,8 +381,18 @@
           {#if remaining>0}<span class="skill-cooldown">{Math.ceil(remaining)}s</span>{/if}
         </button>
       {/if}
+      </div>
     {/each}
+    </div><button type="button" class="skill-info-button" data-testid="skill-info-mode" aria-label={$t('worldLabels.skillInfo')}
+      aria-pressed={infoMode} title={$t('worldLabels.skillInfo')} onclick={toggleInfo}>?</button>
   </div>
+  {#if hint && (infoMode || !view.paused)}
+    <div class="skill-hint" role="tooltip" data-testid="skill-hint">
+      <strong>{hint.name}</strong>
+      <span>{hint.description}</span>
+      <small>{hint.shortcut}{hint.cooldown ? ' · ' + ($locale==='cs'?'Obnova':'Cooldown') + ': ' + hint.cooldown : ''}</small>
+    </div>
+  {/if}
   {/if}
   {#if view.classId === 'WARLOCK'}
     <div class="necro-minions" data-testid="warlock-demons"
@@ -499,6 +541,18 @@
     background:#10151bdd; color:#a9cbbc; font-size:.59rem; }
   .effect-chip.hostile { border-color:#7c4e56; color:#e4a1a0; }
   .necro-minions,.rogue-status { text-align:center; font-size:.6rem; color:#d5c3a5; line-height:1.2; }
+  .hotbar-controls:empty { display:none; }
+  .skill-row { display:flex; gap:4px; min-width:0; align-items:stretch; }
+  .skill-row .skill-toolbar { flex:1 1 auto; width:auto; }
+  .skill-slot { flex:1 1 44px; min-width:44px; max-width:64px; display:flex; }
+  .skill-slot .skill-button,.skill-slot .skill-button.extra { flex:1; width:100%; min-width:44px; height:46px; min-height:44px; padding:12px 2px 3px; }
+  .skill-title,.skill-button.extra .skill-title,.skill-cost { display:none; }
+  .skill-shortcut { left:3px; top:2px; z-index:2; }
+  .skill-info-button { flex:0 0 44px; min-width:44px; min-height:44px; padding:4px; font-weight:bold; border:1px solid #88704e; background:#202732; color:#f0d4a1; border-radius:3px; }
+  .skill-info-button[aria-pressed="true"] { background:#564631; border-color:#e2bc79; }
+  .skill-hint { position:absolute; z-index:25; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); width:min(280px,calc(100vw - 24px)); box-sizing:border-box; background:#141820f8; border:1px solid #a58960; padding:10px; color:#e9dfcb; display:grid; gap:5px; text-align:left; font-size:.8rem; box-shadow:0 5px 18px #000a; pointer-events:none; }
+  .skill-hint strong { color:#f3cf90; font-size:.9rem; }
+  .skill-hint small { color:#c5b393; }
   @media(max-width:1100px) {
     .skill-button,.skill-button.extra { height:60px; padding:15px 2px 3px; }
     .skill-title,.skill-button.extra .skill-title { display:none; }

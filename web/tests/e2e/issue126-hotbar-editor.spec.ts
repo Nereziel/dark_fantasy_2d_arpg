@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu, toggleHotbarEditor } from './character-menu';
 // F1 — actual editable hotbar and character save/load. GPL-3.0-only.
 import { test, expect } from '@playwright/test';
 
@@ -16,22 +16,22 @@ test('hotbar supports drag, keyboard activation, reset and per-hero reload', asy
   const original = await slots.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-hotbar-ability')));
   expect(original[1]).toBe('charge');
   expect(original[3]).toBe('warCry');
-  await page.getByTestId('edit-hotbar').click();
+  await toggleHotbarEditor(page);
   const editor = page.getByTestId('hotbar-editor');
   await editor.locator('[data-hotbar-edit-slot="SLOT_1"]').dragTo(editor.locator('[data-hotbar-edit-slot="SLOT_3"]'));
-  await page.getByTestId('edit-hotbar').click();
+  await toggleHotbarEditor(page);
   await expect(slots.nth(1)).toHaveAttribute('data-hotbar-ability', 'warCry');
   await expect(slots.nth(1)).toHaveAttribute('data-hotbar-slot', 'SLOT_1');
   await page.keyboard.press('1');
   await expect(slots.nth(1)).toHaveClass(/cooldown/);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
   await expect(slots.nth(1)).toHaveAttribute('data-hotbar-ability', 'warCry');
-  await page.getByTestId('edit-hotbar').click();
+  await toggleHotbarEditor(page);
   await page.getByTestId('reset-hotbar').click();
-  await page.getByTestId('edit-hotbar').click();
+  await toggleHotbarEditor(page);
   await expect(slots.nth(1)).toHaveAttribute('data-hotbar-ability', 'charge');
 });
 
@@ -44,7 +44,7 @@ test('touch hotbar slot selection fits a 320px viewport without casting', async 
     await openCharacterCreation(page);
     await page.getByRole('button', { name: /Warrior/ }).click();
   await enterWorld(page, 'tap');
-    await page.getByTestId('edit-hotbar').tap();
+    await toggleHotbarEditor(page, 'tap');
     const editor = page.getByTestId('hotbar-editor');
     await expect(editor).toBeVisible();
     const source = editor.locator('[data-hotbar-edit-slot="SLOT_1"]');
@@ -58,7 +58,7 @@ test('touch hotbar slot selection fits a 320px viewport without casting', async 
     expect(box).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(321);
-    await page.getByTestId('edit-hotbar').tap();
+    await toggleHotbarEditor(page, 'tap');
     await expect(page.locator('[data-hotbar-ability="warCry"]')).not.toHaveClass(/cooldown/);
   } finally {
     await context.close();

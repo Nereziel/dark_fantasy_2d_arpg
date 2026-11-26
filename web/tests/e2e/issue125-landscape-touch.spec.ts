@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld } from './character-menu';
+import { openCharacterCreation, enterWorld, openGuideFromMenu } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 /**
@@ -19,6 +19,8 @@ test.describe('Issue #125: landscape touch first-play accessibility', () => {
       await enterWorld(page);
 
       const guide = page.getByTestId('onboarding-guide');
+      await expect(guide).toHaveCount(0);
+      await openGuideFromMenu(page,'tap');
       await expect(guide).toHaveAttribute('data-guide-step', 'warden');
       const guideGeometry = await guide.evaluate(node => {
         const rect = node.getBoundingClientRect();

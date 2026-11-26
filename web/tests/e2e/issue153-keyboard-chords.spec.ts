@@ -15,7 +15,7 @@ test('rebinding Ctrl+M changes map gameplay shortcut and HUD, persisting after r
   await expect(map.locator('code')).toHaveText('Ctrl+M');
   await panel.getByRole('button', { name: 'Back' }).click();
   await page.keyboard.press('Escape');
-  await expect(page.locator('.minimap-overlay button')).toContainText('Ctrl+M');
+  await expect(page.locator('.minimap-caption')).toContainText('Ctrl+M');
   await page.keyboard.press('m');
   await expect(page.getByTestId('world-map-dialog')).toHaveCount(0);
   await page.keyboard.press('Control+m');
@@ -33,7 +33,7 @@ test('rebinding Ctrl+M changes map gameplay shortcut and HUD, persisting after r
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await enterWorld(page);
-  await expect(page.locator('.minimap-overlay button')).toContainText('Ctrl+M');
+  await expect(page.locator('.minimap-caption')).toContainText('Ctrl+M');
   await page.keyboard.press('Control+m');
   await expect(page.getByTestId('world-map-dialog')).toBeVisible();
 });

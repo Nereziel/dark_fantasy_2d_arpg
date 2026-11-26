@@ -7,7 +7,7 @@ test('seven-bus audio settings persist safely and remain usable on mobile', asyn
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await enterWorld(page);
-  await page.locator('.game-header .top-actions .small-button').nth(1).click();
+  await page.locator('.game-hud [data-testid="system-menu"]').click();
   await page.getByTestId('open-visual-settings').click();
 
   const panel = page.getByTestId('visual-settings-dialog');
@@ -34,7 +34,7 @@ test('seven-bus audio settings persist safely and remain usable on mobile', asyn
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
   await enterWorld(page);
-  await page.locator('.game-header .top-actions .small-button').nth(1).click();
+  await page.locator('.game-hud [data-testid="system-menu"]').click();
   await page.getByTestId('open-visual-settings').click();
 
   await expect(page.getByTestId('audio-master')).toHaveValue('5');

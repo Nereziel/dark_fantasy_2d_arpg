@@ -203,7 +203,6 @@ h1 span,.brand-mark span{color:#b88b59}
     font-size:.55rem; display:block; max-width:100%; text-align:center;
     overflow-wrap:anywhere; line-height:1.05;
   }
-  .minimap-overlay button { min-height:44px; }
 }
 @media(max-width:420px){
   .game-header .brand-mark { display:none; }
@@ -240,4 +239,55 @@ html[data-ar-high-contrast="true"] input:focus-visible {
 }
 html[data-ar-high-contrast="true"] .roster-health {
   color:#ffe7bf;
+}
+
+/* Compact player-approved HUD. Preserve a dedicated world row and genuine
+   44px touch targets, with a single scroll rail on very narrow screens. */
+.game-hud.compact-dock { min-height:0; max-height:none; padding:5px 7px; gap:5px; overflow:visible;
+  grid-template-columns:minmax(120px,170px) minmax(0,1fr) minmax(108px,145px); }
+.compact-dock .vital-panel { display:grid; gap:4px; }
+.compact-dock .vital-top { font-size:.68rem; margin:0 0 2px; }
+.compact-dock .health-track { height:9px; }
+.compact-dock .resource-track { height:8px; }
+.compact-dock .hud-details { font-size:.56rem; margin:0; }
+.compact-dock .experience-track { margin-top:0; }
+.compact-dock .hud-actions { grid-template-columns:repeat(3,minmax(32px,1fr)); gap:3px; }
+.compact-dock .hud-actions button { min-height:33px; padding:3px 2px; }
+.compact-dock .hud-actions button[aria-pressed="true"] { border-color:#e2bd79; background:#44392c; }
+.compact-dock .skill-toolbar { overflow-x:auto; overflow-y:hidden; justify-content:flex-start; scrollbar-width:thin; }
+.pause-card { max-height:calc(100dvh - 20px); overflow:auto; }
+.pause-feedback { font-size:.78rem; color:#e0c899; margin:4px 0; }
+@media(max-width:650px) {
+  .game-hud.compact-dock { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto auto; padding:4px 5px; gap:3px; width:calc(100% - 6px); }
+  .compact-dock .vital-panel { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:3px 8px; }
+  .compact-dock .experience-track { grid-column:1/-1; height:2px; }
+  .compact-dock .hud-details { display:none; }
+  .compact-dock .hud-actions { grid-template-columns:repeat(5,minmax(44px,1fr)); }
+  .compact-dock .hud-actions button { min-height:44px; height:44px; }
+  .compact-dock .skill-toolbar { justify-content:flex-start; }
+}
+@media(max-height:480px) and (min-width:651px) {
+  .game-hud.compact-dock { grid-template-columns:minmax(100px,130px) minmax(0,1fr) minmax(140px,150px); }
+  .compact-dock .hud-actions button { min-height:44px; }
+}
+
+/* Health and class energy bracket the icon rail on desktop. On touch, both
+   meters share a single row and the ? control stays outside the scroll rail. */
+.game-hud.compact-dock { grid-template-columns:minmax(110px,155px) minmax(0,1fr) minmax(98px,145px) minmax(105px,130px); }
+.compact-dock .resource-meter { grid-column:3; min-width:0; }
+.compact-dock .hud-actions { grid-column:4; }
+.compact-dock > .experience-track { grid-column:1/-1; height:2px; }
+.system-pause-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.system-pause-heading h2 { margin:0; }
+.system-menu-close { min-width:44px; min-height:44px; font-size:1.25rem; }
+@media(max-width:650px){
+  .game-hud.compact-dock { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:auto auto auto auto; }
+  .compact-dock .vital-panel { grid-column:1; grid-row:1; display:block; }
+  .compact-dock .resource-meter { grid-column:2; grid-row:1; }
+  .compact-dock .skill-ui { grid-column:1/-1; grid-row:2; }
+  .compact-dock .hud-actions { grid-column:1/-1; grid-row:3; }
+  .compact-dock > .experience-track { grid-row:4; }
+}
+@media(max-height:480px) and (min-width:651px){
+  .game-hud.compact-dock { grid-template-columns:minmax(92px,120px) minmax(0,1fr) minmax(80px,110px) minmax(130px,145px); }
 }

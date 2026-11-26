@@ -1,4 +1,4 @@
-import type { Page, Locator } from '@playwright/test';
+import { expect, type Page, type Locator } from '@playwright/test';
 
 /** Use the real character creation workflow, including a valid name. */
 export async function openCharacterCreation(page: Page, name = 'Test hero') {
@@ -29,9 +29,47 @@ export async function enterWorld(page: Page, gesture: Gesture = 'click') {
 }
 
 export async function continueGame(page: Page, gesture: Gesture = 'click') {
+  if (await page.locator('.game-screen').isVisible()) await openSystemMenu(page, gesture);
   await activateAndWait(page, loadCharacterControl(page), gesture);
   // In-game Load (pause dialog) uses the same control helper.
   await page.getByRole('dialog', { name: /^(Paused|Pozastaveno)$/ }).waitFor({
     state: 'hidden', timeout: 15_000
   });
+}
+
+export async function openSystemMenu(page: Page, gesture: Gesture = 'click') {
+  const pause = page.getByRole('dialog', { name: /^(Paused|Pozastaveno|Pauza)$/ });
+  if (!await pause.isVisible()) await page.getByTestId('system-menu')[gesture]({ timeout: 10_000 });
+  await expect(page.getByTestId('pause-save')).toBeVisible();
+}
+
+export async function saveFromMenu(page: Page, gesture: Gesture = 'click') {
+  await openSystemMenu(page, gesture);
+  await page.getByTestId('pause-save')[gesture]({ timeout: 10_000 });
+  await expect(page.locator('.toast[role="status"]')).toContainText(/Hero saved|Postava uložena/, { timeout: 10_000 });
+  await expect(page.getByTestId('pause-save')).toBeEnabled();
+  await page.getByRole('button', { name: /^(Resume|Pokračovat)$/ })[gesture]();
+  await expect(page.getByTestId('pause-save')).toHaveCount(0);
+}
+
+export async function returnToMenu(page: Page, gesture: Gesture = 'click') {
+  await openSystemMenu(page, gesture);
+  await page.getByRole('button', { name: /^(Main menu|Zpět do menu)$/ })[gesture]();
+  await expect(page.locator('.main-menu')).toBeVisible();
+}
+
+export async function toggleHotbarEditor(page: Page, gesture: Gesture = 'click') {
+  if (await page.getByTestId('hotbar-editor').isVisible()) {
+    await page.getByTestId('edit-hotbar')[gesture]();
+  } else {
+    await openSystemMenu(page, gesture);
+    await page.getByTestId('pause-edit-hotbar')[gesture]();
+    await expect(page.getByTestId('hotbar-editor')).toBeVisible();
+  }
+}
+
+export async function openGuideFromMenu(page: Page, gesture: Gesture = 'click') {
+  await openSystemMenu(page,gesture);
+  await page.getByTestId('pause-guide')[gesture]();
+  await expect(page.getByTestId('onboarding-guide')).toBeVisible();
 }

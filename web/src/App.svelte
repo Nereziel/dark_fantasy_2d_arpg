@@ -34,6 +34,7 @@
     DEFAULT_AUDIO_PREFERENCES, type AudioPreferences } from './game/audio/audioPreferences';
   import { WebAudioDirector } from './game/audio/WebAudioDirector';
   import SkillBar from './ui/SkillBar.svelte';
+  import { lootLabelsEnabled, setLootLabelsEnabled } from './game/ui/worldReadability';
   import { shortcutHint } from './game/ui/shortcutHints';
   import OnboardingGuide from './ui/OnboardingGuide.svelte';
   import {
@@ -70,6 +71,9 @@
   // No browser AudioContext is created until an explicit trusted user gesture.
   const audio = new WebAudioDirector();
   let playing = $state(false);
+  let guideVisible = $state(false);
+  const minimapTaps = new CharacterDoubleTap();
+  let minimapTouch: { id:number; x:number; y:number; time:number } | null = null;
   let view: GameSnapshot = $state(bridge.snapshot());
   let liveOnboardingContext = $derived(onboardingContextFromSnapshot(view));
   let onboardingProgress: OnboardingProgress = $state(freshOnboarding());
@@ -112,6 +116,40 @@
   }
   function skipGuide(): void { storeOnboarding(skipOnboarding(onboardingProgress)); }
   function showGuide(): void { storeOnboarding(resumeOnboarding(onboardingProgress)); }
+  function openGuideFromMenu(): void {
+    if (!playing || !view.paused || busy || !view.player.alive) return;
+    guideVisible = true;
+    showGuide();
+    bridge.command({type:'pause', value:false});
+  }
+
+  function insidePassiveMinimap(event:PointerEvent):boolean {
+    if (event.pointerType !== 'touch' || !event.isPrimary || !playing ||
+        modalKind !== '' || view.zone !== 'wilderness') return false;
+    // Pointer capture may retarget pointerup. Check the visible screen point,
+    // not the event's captured target, before treating it as a world tap.
+    if(pointerUiSurface(document.elementFromPoint(event.clientX,event.clientY))!=='canvas')return false;
+    const rect=document.querySelector('[data-minimap="active"]')?.getBoundingClientRect();
+    return !!rect && rect.width>0 && rect.height>0 &&
+      event.clientX>=rect.left && event.clientX<=rect.right &&
+      event.clientY>=rect.top && event.clientY<=rect.bottom;
+  }
+  function resetMinimapTouch():void { minimapTouch=null; minimapTaps.reset(); }
+  // Observe completed primary taps without capturing the canvas. Single
+  // taps remain ordinary movement; a completed second tap opens the map.
+  function minimapPointerDown(event:PointerEvent):void {
+    if(!insidePassiveMinimap(event)){resetMinimapTouch();return;}
+    minimapTouch={id:event.pointerId,x:event.clientX,y:event.clientY,time:performance.now()};
+  }
+  function minimapPointerUp(event:PointerEvent):void {
+    const start=minimapTouch;minimapTouch=null;
+    const now=performance.now();
+    if(!start||start.id!==event.pointerId||!insidePassiveMinimap(event)||
+      now-start.time>450||Math.hypot(event.clientX-start.x,event.clientY-start.y)>18){
+      minimapTaps.reset();return;
+    }
+    if(minimapTaps.tap('minimap',now,event.clientX,event.clientY))openMap();
+  }
   function resetGuide(): void {
     onboardingOrigin = { x: view.player.x, y: view.player.y };
     onboardingStarterEquipmentIds = Object.values(view.equipment)
@@ -239,6 +277,19 @@
   let characterOpen = $state(false);
   let talentsOpen = $state(false);
   let controlsOpen = $state(false);
+  let skillInfoMode = $state(false);
+  let hotbarEditRequest = $state(0);
+  let showLootLabels = $state(lootLabelsEnabled());
+  function toggleLootLabels(): void {
+    showLootLabels = !showLootLabels;
+    setLootLabelsEnabled(showLootLabels);
+  }
+  function editSkillsFromMenu(): void {
+    if (!view.paused || !view.player.alive || busy) return;
+    skillInfoMode = false;
+    bridge.command({ type:'pause', value:false });
+    hotbarEditRequest += 1;
+  }
   let settingsOpen = $state(false);
   let visualPreferences: VisualPreferences = $state({ ...DEFAULT_VISUAL_PREFERENCES });
   let appRoot: HTMLDivElement;
@@ -461,6 +512,9 @@
       if (event.isTrusted) audio.unlock();
     };
     window.addEventListener('pointerdown', unlockAudio, true);
+    window.addEventListener('pointerdown', minimapPointerDown, true);
+    window.addEventListener('pointerup', minimapPointerUp, true);
+    window.addEventListener('pointercancel', resetMinimapTouch, true);
     window.addEventListener('keydown', unlockAudio, true);
     void initializeCatalog();
     try {
@@ -564,6 +618,9 @@
       unsubscribe();
       unsubscribeEvents();
       window.removeEventListener('pointerdown', unlockAudio, true);
+      window.removeEventListener('pointerdown', minimapPointerDown, true);
+      window.removeEventListener('pointerup', minimapPointerUp, true);
+      window.removeEventListener('pointercancel', resetMinimapTouch, true);
       window.removeEventListener('keydown', unlockAudio, true);
       audio.dispose();
       document.removeEventListener('fullscreenchange', syncFullscreenState);
@@ -589,6 +646,7 @@
   }
 
   async function newGame(): Promise<void> {
+    guideVisible=false;
     const name = normalizeCharacterName(newCharacterName);
     if (busy || !menuReady || !creatingCharacter || !name
       || savedCharacters.length >= MAX_SAVED_CHARACTERS) return;
@@ -646,6 +704,7 @@
   }
   async function menu(): Promise<void> {
     if (busy) return;
+    guideVisible=false;
     resetCharacterGesture();
     busy = true;
     talentsOpen = false; controlsOpen = false; settingsOpen = false;
@@ -822,6 +881,9 @@
 
   function handleKeydown(event: KeyboardEvent): void {
     if (!playing) { resetCharacterGesture(); return; }
+    if (skillInfoMode && event.code === 'Escape') {
+      event.preventDefault(); skillInfoMode = false; return;
+    }
     if (settingsOpen) {
       if (event.code === 'Escape') {
         event.preventDefault();
@@ -945,6 +1007,7 @@
     });
   }
   function handleBlur(): void {
+    resetMinimapTouch();
     resetCharacterGesture();
     heldPosition.clear();
   }
@@ -1142,13 +1205,24 @@
           </select>
           <button class="small-button" disabled={view.zone !== 'wilderness' || view.paused}
             onclick={(event) => openMap(event.currentTarget)}>{$t('map.open')}</button>
-          <button class="small-button" disabled={!view.player.alive} onclick={(event) => togglePause(event.currentTarget)}>{view.paused ? $t('menu.resume') : $t('menu.paused')}</button>
-          <button class="small-button" disabled={busy} onclick={menu}>{$t('menu.back')}</button>
+
         </div>
       </header>
 
       <div class="hud-left-column" aria-label="Game information" inert={modalKind !== ''}>
-        <div class="world-guide" aria-live="polite">
+      {#if modalKind === '' && view.player.alive && !view.paused}
+        <NearbyLootPanel {view} {bridge} />
+      {/if}
+      {#if guideVisible && modalKind === '' && view.player.alive && !view.paused}
+        <div class="optional-help">
+          <button type="button" class="help-close" data-testid="close-guide"
+            aria-label={$t('worldLabels.hideGuide')} onclick={()=>{guideVisible=false;}}>×</button>
+        <OnboardingGuide progress={onboardingProgress}
+          context={liveOnboardingContext}
+          bindings={controlBindings} next={advanceOnboarding}
+          skip={skipGuide} show={showGuide} restart={resetGuide}
+          onMap={openMap} onTalents={openTalents} onWarden={talkToWarden} />
+        <details class="control-help"><summary>{$t('bindings.open')}</summary><div class="world-guide" aria-live="polite">
         <div>{$t('controls.move')}</div>
         <div>{$t('controls.attack')}</div>
         <div>{$t('controls.pickup')}</div>
@@ -1164,17 +1238,8 @@
           hold: shortcutHint(controlBindings, 'HOLD_POSITION'),
           menu: shortcutHint(controlBindings, 'MENU')
         } })}</div>
-      </div>
-
-      {#if modalKind === '' && view.player.alive && !view.paused}
-        <NearbyLootPanel {view} {bridge} />
-      {/if}
-      {#if modalKind === '' && view.player.alive && !view.paused}
-        <OnboardingGuide progress={onboardingProgress}
-          context={liveOnboardingContext}
-          bindings={controlBindings} next={advanceOnboarding}
-          skip={skipGuide} show={showGuide} restart={resetGuide}
-          onMap={openMap} onTalents={openTalents} onWarden={talkToWarden} />
+      </div></details>
+        </div>
       {/if}
       <QuestJournal {view} talk={talkToWarden}
         inspectEvidence={() => bridge.command({ type: 'inspectStoryEvidence' })} />
@@ -1212,9 +1277,7 @@
       {#if miniProjection}
         <div class="minimap-overlay" data-minimap="active">
           <WorldMapCanvas projection={miniProjection} compact />
-          <button onclick={(event) => openMap(event.currentTarget)} disabled={view.paused} aria-label={$t('map.open')}>
-            {$t('map.open')} · {shortcutHint(controlBindings, 'MAP')}
-          </button>
+          <div class="minimap-caption">{shortcutHint(controlBindings, 'MAP')} <span class="minimap-touch-hint">· {$t('worldLabels.doubleTapMap')}</span></div>
         </div>
       {/if}
         <WorldEventPanel {view} />
@@ -1259,19 +1322,20 @@
       </aside>
       </div>
       </div>
-      <div class="game-hud" data-testid="combat-dock" inert={modalKind !== ''}>
+      <div class="game-hud compact-dock" data-testid="combat-dock" inert={modalKind !== ''}>
         <div class="vital-panel">
-          <div class="vital-top"><span>{$t('hud.health')}</span><strong>{view.player.health} / {view.player.maxHealth}</strong></div>
+          <div class="health-meter"><div class="vital-top"><span>{$t('hud.health')}</span><strong>{view.player.health} / {view.player.maxHealth}</strong></div>
           <div class="health-track"><div class="health-fill" style:width={`${100 * view.player.health / view.player.maxHealth}%`}></div></div>
           {#if view.shield > 0}
             <div class="vital-top resource-label"><span>{$t('hud.shield')}</span><strong>{view.shield}</strong></div>
           {/if}
-          <div class="vital-top resource-label"><span>{$t('resource.' + CLASSES[view.classId].resourceId)}</span><strong>{Math.round(view.resource)} / {view.stats.maxResource}</strong></div>
-          <div class="health-track resource-track"><div class="resource-fill" style:width={`${100 * view.resource / view.stats.maxResource}%`}></div></div>
-          <div class="hud-details">{#if activeCharacterName}<span class="hero-name">{activeCharacterName}</span>{/if}<span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
-          <div class="experience-track"><div style:width={`${xpRequiredForLevel(view.level) > 0 ? 100 * view.xp / xpRequiredForLevel(view.level) : 100}%`}></div></div>
+          </div>
+<div class="hud-details">{#if activeCharacterName}<span class="hero-name">{activeCharacterName}</span>{/if}<span>{$t('classes.' + view.classId + '.name')} · {$t('hud.level')} {view.level}</span><span>{$t('hud.kills')}: {view.kills} · {$t('hud.gold')}: {view.gold}</span></div>
+
         </div>
-        <SkillBar {bridge} {view} bindings={controlBindings} />
+        <SkillBar {bridge} {view} bindings={controlBindings} bind:infoMode={skillInfoMode} editRequest={hotbarEditRequest} />
+        <div class="resource-meter"><div class="vital-top resource-label"><span>{$t('resource.' + CLASSES[view.classId].resourceId)}</span><strong>{Math.round(view.resource)} / {view.stats.maxResource}</strong></div>
+          <div class="health-track resource-track"><div class="resource-fill" style:width={`${100 * view.resource / view.stats.maxResource}%`}></div></div></div>
         <div class="hud-actions">
           <button onclick={(event) => openInventory(event.currentTarget)} aria-label={$t('inventory.open')} title={$t('inventory.open')}
             data-quick-action="inventory"><span aria-hidden="true">▦</span><span class="quick-key">{shortcutHint(controlBindings, 'INVENTORY')}</span></button>
@@ -1282,11 +1346,14 @@
             title={$t('talents.open')}
             data-quick-action="talents"><span aria-hidden="true">✧</span><span class="quick-key">{shortcutHint(controlBindings, 'TALENTS')}</span>
             {#if (view.talentPoints ?? 0) > 0}<span class="quick-notice">{view.talentPoints}</span>{/if}</button>
-          <button disabled={busy} onclick={save} aria-label={$t('menu.save')} title={$t('menu.save')}
-            data-quick-action="save"><span aria-hidden="true">▣</span></button>
-          <button disabled={busy} onclick={() => load()} aria-label={$t('menu.load')} title={$t('menu.load')}
-            data-quick-action="load"><span aria-hidden="true">↺</span></button>
+          <button type="button" aria-pressed={showLootLabels} onclick={toggleLootLabels}
+            aria-label={$t('worldLabels.toggle')} title={$t('worldLabels.toggle')}
+            data-testid="toggle-loot-labels" data-quick-action="loot-labels"><span aria-hidden="true">◇</span></button>
+          <button type="button" disabled={busy || !view.player.alive} onclick={(event)=>togglePause(event.currentTarget)}
+            aria-label={$t('menu.system')} title={$t('menu.system')}
+            data-testid="system-menu" data-quick-action="menu"><span aria-hidden="true">☰</span></button>
         </div>
+        <div class="experience-track"><div style:width={`${xpRequiredForLevel(view.level) > 0 ? 100 * view.xp / xpRequiredForLevel(view.level) : 100}%`}></div></div>
       </div>
 
       {#if messageKey}
@@ -1436,13 +1503,21 @@
         </div>
       {:else if view.paused}
         <div class="modal-shield">
-          <div class="pause-card" role="dialog" aria-modal="true" aria-label={$t('menu.paused')}>
-            <h2>{$t('menu.paused')}</h2>
-            <button class="primary" onclick={() => togglePause()}>{$t('menu.resume')}</button>
+          <div class="pause-card system-pause-card" role="dialog" aria-modal="true" aria-label={$t('menu.paused')}>
+            <div class="system-pause-heading"><h2>{$t('menu.paused')}</h2><button type="button" disabled={busy} aria-label={$t('visualSettings.close')} class="system-menu-close" onclick={()=>togglePause()}>×</button></div>
+            <button class="primary" disabled={busy} onclick={() => togglePause()}>{$t('menu.resume')}</button>
+            <button class="secondary" data-testid="pause-save" disabled={busy} onclick={save}>{$t('menu.save')}</button>
+            <button class="secondary" data-testid="pause-load" disabled={busy} onclick={() => load()}>{$t('menu.load')}</button>
+            <button class="secondary" data-testid="pause-guide" disabled={busy} onclick={openGuideFromMenu}>{$t('worldLabels.showGuide')}</button>
+            <button class="secondary" data-testid="pause-edit-hotbar" disabled={busy} onclick={editSkillsFromMenu}>{$t('menu.editSkills')}</button>
+            <button class="secondary" aria-pressed={showLootLabels} onclick={toggleLootLabels}>{$t('worldLabels.toggle')}</button>
             <button class="secondary" onclick={(event) => openControls(event.currentTarget)}>{$t('bindings.open')}</button>
             <button class="secondary" data-testid="open-visual-settings"
               onclick={(event) => openVisualSettings(event.currentTarget)}>{$t('visualSettings.open')}</button>
             <button class="secondary" disabled={busy} onclick={menu}>{$t('menu.back')}</button>
+            {#if messageKey === 'status.saving' || messageKey === 'status.saved' || messageKey === 'status.saveError' || messageKey === 'status.emptySave'}
+              <p class="pause-feedback" aria-live="polite">{$t(messageKey)}</p>
+            {/if}
           </div>
         </div>
       {/if}
@@ -1481,7 +1556,20 @@
   }
   .hud-left-column{left:16px;width:clamp(190px,18vw,260px)}
   .hud-right-column{right:16px;width:clamp(180px,18vw,235px)}
-  .hud-left-column > :global(*),.hud-right-column > :global(*){pointer-events:auto}
+  /* Read-only HUD surfaces never intercept the underlying world. Actual
+     buttons retain their normal pointer/keyboard behavior. */
+  .hud-left-column > :global(*),.hud-right-column > :global(*){pointer-events:none}
+  .hud-left-column :global(button),.hud-right-column :global(button),
+  .hud-left-column :global(summary),.hud-right-column :global(summary){pointer-events:auto}
+  .hud-right-column .minimap-overlay :global(*){pointer-events:none}
+  .minimap-caption { text-align:center;color:#d6c6aa;font-size:.64rem;padding:2px; }
+  .minimap-touch-hint{display:none}
+  @media(pointer:coarse){.minimap-touch-hint{display:inline}}
+  .optional-help{position:relative;flex-shrink:0;padding-top:25px}
+  .help-close{position:absolute;right:0;top:0;min-width:32px;min-height:25px;padding:2px 8px}
+  .control-help summary{font-size:.72rem;color:#d9c49d;background:#101923e8;padding:6px;cursor:pointer}
+  .optional-help .world-guide{display:block;position:relative;top:auto;left:auto;max-width:none;font-size:.67rem}
+  @media(pointer:coarse){.help-close{min-width:44px;min-height:44px}.optional-help{padding-top:44px}}
   .hud-left-column :global(.world-guide),
   .hud-left-column :global(.quest-journal),
   .hud-left-column :global(.camp-services),
@@ -1586,13 +1674,6 @@
     background: #0a1019e8;
     border: 1px solid #7d7056;
     box-shadow: 0 10px 28px #0008;
-  }
-  .minimap-overlay button {
-    display: block;
-    width: 100%;
-    font-size: .75rem;
-    padding: 6px 8px;
-    margin-top: 5px;
   }
   .map-shield { z-index: 90; inset: 0; display: grid; place-items: center;
     background: #03070cf2; padding: clamp(6px, 2vw, 22px); overflow: hidden; }

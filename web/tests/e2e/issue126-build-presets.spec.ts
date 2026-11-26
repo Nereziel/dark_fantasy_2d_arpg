@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu, toggleHotbarEditor } from './character-menu';
 // F1 — preset UI round trip on a real touch-width HUD. GPL-3.0-only.
 import { test, expect } from '@playwright/test';
 
@@ -10,7 +10,7 @@ test('build presets retain saved layout and preview without changing talents', a
   await openCharacterCreation(page);
   await page.getByRole('button', { name: /Warrior/ }).click();
   await enterWorld(page);
-  await page.getByTestId('edit-hotbar').click();
+  await toggleHotbarEditor(page);
   const editor = page.getByTestId('hotbar-editor');
   const slot = editor.locator('[data-hotbar-edit-slot="SLOT_1"]');
   await slot.click();
@@ -21,12 +21,12 @@ test('build presets retain saved layout and preview without changing talents', a
   await expect(slot).toHaveAttribute('data-hotbar-edit-ability', 'charge');
   await page.getByTestId('build-preset-apply').click();
   await expect(slot).toHaveAttribute('data-hotbar-edit-ability', 'warCry');
-  await page.getByTestId('edit-hotbar').click();
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await toggleHotbarEditor(page);
+  await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
-  await page.getByTestId('edit-hotbar').click();
+  await toggleHotbarEditor(page);
   await expect(page.getByTestId('build-preset-apply')).toBeEnabled();
   await page.getByTestId('build-preset-clear').click();
   await expect(page.getByTestId('build-preset-apply')).toBeDisabled();

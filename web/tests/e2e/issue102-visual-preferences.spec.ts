@@ -13,7 +13,7 @@ test('visual accessibility preferences persist across reload without changing ga
   await expect(page.locator('.phaser-container canvas')).toBeVisible();
 
   async function openSettings() {
-    await page.locator('.game-header .top-actions .small-button').nth(1).click();
+    await page.locator('.game-hud [data-testid="system-menu"]').click();
     await page.getByTestId('open-visual-settings').click();
     return page.getByTestId('visual-settings-dialog');
   }

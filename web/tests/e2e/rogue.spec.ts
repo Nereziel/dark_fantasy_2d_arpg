@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import {test,expect} from '@playwright/test';
 test('Rogue seven-skill bar, Energy costs, stealth/trap counters and CS/EN reload',async({page})=>{
  await page.goto('./?view=iso');
@@ -23,7 +23,7 @@ test('Rogue seven-skill bar, Energy costs, stealth/trap counters and CS/EN reloa
  await page.locator('#game-language').selectOption('cs');
  await expect(page.getByTestId('rogue-status')).toContainText('Pasti: 0/3');
  await expect(page.locator('[data-rogue-ability="backstab"]')).toHaveAttribute('aria-label','Bodnutí do zad');
- await page.getByRole('button',{name:'Uložit'}).click();
+ await saveFromMenu(page);
  await expect(page.getByRole('status')).toContainText('Postava uložena');
  await page.reload();
  await continueGame(page);

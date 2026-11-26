@@ -75,10 +75,13 @@ export function planBuildingArt(rect:Readonly<IsometricRect>, appearance:Buildin
       const l=lerp(a!,b!,.5-half),r=lerp(a!,b!,.5+half);
       const topL=lerp(d!,c!,.5-half),topR=lerp(d!,c!,.5+half);
       const h=appearance.kind==='mine'?.78:.65;
-      add('detail',[l,r,lerp(r,topR,h+.09),lerp(l,topL,h+.09)],style.trim,false);
+      add('detail',[l,r,lerp(r,topR,h+.09),lerp(l,topL,h+.09)],0xb69b70,false);
       add('door',[lerp(l,r,.08),lerp(l,r,.92),
         lerp(lerp(l,r,.92),lerp(topL,topR,.92),h),
-        lerp(lerp(l,r,.08),lerp(topL,topR,.08),h)],0x1f2020,false);
+        lerp(lerp(l,r,.08),lerp(topL,topR,.08),h)],0x121820,false);
+      // A lit threshold and metal latch separate the opening from masonry.
+      add('detail',[lerp(l,r,.08),lerp(l,r,.92),lerp(lerp(l,r,.92),topR,.05),lerp(lerp(l,r,.08),topL,.05)],0xe2b879,false);
+      if(appearance.kind!=='mine') add('detail',[lerp(lerp(l,r,.72),lerp(topL,topR,.72),.28),lerp(lerp(l,r,.82),lerp(topL,topR,.82),.28),lerp(lerp(l,r,.82),lerp(topL,topR,.82),.36),lerp(lerp(l,r,.72),lerp(topL,topR,.72),.36)],0xc9b17c,false);
     }else{
       const window=(center:number)=>{
         const l=lerp(a!,b!,center-.10),r=lerp(a!,b!,center+.10);

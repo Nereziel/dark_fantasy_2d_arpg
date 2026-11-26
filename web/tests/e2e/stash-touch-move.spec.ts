@@ -1,4 +1,4 @@
-import { openCharacterCreation, enterWorld, continueGame } from './character-menu';
+import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { expect, test } from '@playwright/test';
 
 test.use({ hasTouch: true });
@@ -49,7 +49,7 @@ test('landscape touch stash supports explicit transfer across tabs and back to b
   await expect(stash.locator('[data-stash-bag] [data-item-id]')).toHaveAttribute('data-item-id', id!);
   await stash.getByRole('button', { name: 'Leave' }).tap();
 
-  await page.getByRole('button', { name: 'Save', exact: true }).tap();
+  await saveFromMenu(page, 'tap');
   await expect(page.locator('.toast[role="status"]')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page, 'tap');
