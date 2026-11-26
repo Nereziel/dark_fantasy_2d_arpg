@@ -522,6 +522,12 @@
     mapZoom = Math.max(2, mapZoom);
     mapCenter = { x: view.player.x, y: view.player.y };
   }
+  function focusTrackedQuest():void {
+    const target=fullProjection?.navigationTarget;
+    if(!mapOpen||!target)return;
+    mapZoom=2;
+    mapCenter={...target.position};
+  }
   function resetMapView(): void {
     mapZoom = 1;
     mapCenter = null;
@@ -1331,13 +1337,20 @@
       {/if}
       {#if miniProjection}
         <div class="minimap-overlay" data-minimap="active">
+          <div class="minimap-header">
+            <strong data-testid="minimap-area">{$t(miniProjection.area&&miniProjection.area!=='wilderness'?(miniProjection.area==='crypt'?'dungeon.name':'dungeon.'+miniProjection.area+'Name'):'map.wilderness')}</strong>
+            <span class="minimap-north" aria-hidden="true">↑ N</span>
+          </div>
           <WorldMapCanvas projection={miniProjection} compact />
+          <div class="minimap-caption"><span>{$t('map.minimap')}</span><span>{$t('map.open')} · {shortcutHint(controlBindings, 'MAP')} <span class="minimap-touch-hint">· {$t('worldLabels.doubleTapMap')}</span></span></div>
           {#if tracked}<div class="tracked-quest-summary" data-testid="tracked-quest-summary">
-            <strong>◆ {$t(tracked.titleKey)}</strong>
+            <strong><span aria-hidden="true" class="quest-diamond">◆</span> {$t(tracked.titleKey)}</strong>
             {#if miniProjection.navigationStage==='exit'}<span>{$t('map.questExit')}</span>{:else if miniProjection.navigationStage==='enter'}<span>{$t('map.questEntrance')}</span>{/if}
             <span>{$t(tracked.hintKey??tracked.objectiveKey)}{#if tracked.status==='active' && tracked.goal>1} · {tracked.count}/{tracked.goal}{/if}</span>
+            {#if tracked.status==='active'&&tracked.goal>1}<progress value={tracked.count} max={tracked.goal} aria-label={$t('map.objective')}></progress>{/if}
+            {#if !miniProjection.navigationTarget}<small>{$t('map.unknownQuest')}</small>{/if>
           </div>{/if}
-          <div class="minimap-caption">{shortcutHint(controlBindings, 'MAP')} <span class="minimap-touch-hint">· {$t('worldLabels.doubleTapMap')}</span></div>
+
         </div>
       {/if}
         <WorldEventPanel {view} />
@@ -1471,8 +1484,15 @@
                   aria-label={$t('map.reset')} onclick={resetMapView}>⤢</button>
               </div>
             </div>
-              <MapQuestLog compact entries={quests} trackedId={tracked?.id??null}
-                select={selectTrackedQuest} />
+              <div class="world-map-quests">
+                <MapQuestLog compact entries={quests} trackedId={tracked?.id??null} select={selectTrackedQuest}/>
+                {#if tracked}<section class="map-tracked-details" data-testid="map-tracked-details">
+                  <strong>{$t(tracked.titleKey)}</strong>
+                  <span>{$t(fullProjection.navigationStage==='enter'?'map.questEntrance':fullProjection.navigationStage==='exit'?'map.questExit':tracked.hintKey??tracked.objectiveKey)}</span>
+                  {#if !fullProjection.navigationTarget}<small>{$t('map.unknownQuest')}</small>{/if}
+                  <button type="button" data-testid="map-focus-quest" disabled={!fullProjection.navigationTarget} onclick={focusTrackedQuest}>{$t('map.focusQuest')}</button>
+                </section>{/if}
+              </div>
             </div>
             {#if view.zone==='wilderness'}<div class="world-map-footer">
               <WaypointPanel {view} {bridge} />
@@ -1631,14 +1651,14 @@
     pointer-events:none;
   }
   .hud-left-column{left:16px;width:clamp(190px,18vw,260px)}
-  .hud-right-column{right:16px;width:clamp(180px,18vw,235px)}
+  .hud-right-column{right:16px;width:clamp(205px,19vw,265px)}
   /* Read-only HUD surfaces never intercept the underlying world. Actual
      buttons retain their normal pointer/keyboard behavior. */
   .hud-left-column > :global(*),.hud-right-column > :global(*){pointer-events:none}
   .hud-left-column :global(button),.hud-right-column :global(button),
   .hud-left-column :global(summary),.hud-right-column :global(summary){pointer-events:auto}
   .hud-right-column .minimap-overlay :global(*){pointer-events:none}
-  .minimap-caption { text-align:center;color:#d6c6aa;font-size:.64rem;padding:2px; }
+  .minimap-header,.minimap-caption{display:flex;align-items:center;justify-content:space-between;gap:6px;color:#d6c6aa;font-size:.68rem;padding:4px 2px}.minimap-header strong{font:600 .8rem Georgia,serif;color:#ebd2a1;overflow-wrap:anywhere}.minimap-north{font-size:.66rem;white-space:nowrap;color:#a3b4b6}
   .minimap-touch-hint{display:none}
   @media(pointer:coarse){.minimap-touch-hint{display:inline}}
   .optional-help{position:relative;flex-shrink:0;padding-top:25px}
@@ -1780,7 +1800,9 @@
   .world-map-key { display: flex; flex-wrap: wrap; gap: 4px 11px;
     color: #e1d8c6; font-size: .7rem; }
   .world-map-key span { white-space: nowrap; }
-  .tracked-quest-summary{display:grid;gap:3px;padding:6px 3px;color:#e6d4b1;font-size:.69rem;line-height:1.3;overflow-wrap:anywhere}
+  .tracked-quest-summary{display:grid;gap:5px;padding:9px 5px 4px;border-top:1px solid #564c3b;color:#e6d4b1;font-size:.75rem;line-height:1.35;overflow-wrap:anywhere}
+  .tracked-quest-summary progress{width:100%;height:5px;accent-color:#d9b56e}.tracked-quest-summary small,.map-tracked-details small{color:#c1a87f;font-size:.69rem}.quest-diamond{color:#e9c37b}
+  .world-map-quests{min-width:0;min-height:0;display:flex;flex-direction:column;gap:8px;overflow:auto}.world-map-quests :global(.quest-selector){flex:1;min-height:80px}.map-tracked-details{display:grid;gap:7px;padding:10px;background:#111a24;border:1px solid #6f5a3e;font-size:.75rem;color:#d9c5a3}.map-tracked-details strong{color:#ffe4a2}.map-tracked-details button{min-height:32px;font-size:.72rem}.map-tracked-details button:disabled{opacity:.5}
   .tracked-quest-summary strong{color:#f2d08a;font-size:.75rem}
   .tracked-quest-summary span{color:#c7c4b8}
   .world-map-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,23%);gap:10px;min-height:0;overflow:hidden}

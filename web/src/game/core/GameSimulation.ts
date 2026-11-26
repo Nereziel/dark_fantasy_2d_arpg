@@ -153,6 +153,8 @@ const INVENTORY_SIZE = 24;
 const ENEMY_SEPARATION = 44;
 
 const PICKUP_RANGE = 36;
+const WILDERNESS_REVEAL_RADIUS=180;
+const DUNGEON_REVEAL_RADIUS=145;
 
 function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -452,7 +454,7 @@ export class GameSimulation {
     this.villageSafeZones = villageSanctuaries(world);
     const index = createChunkIndex(world);
     const input = this.mapInput(world);
-    const initial = createMapDiscovery(input, CAMP, 105);
+    const initial = createMapDiscovery(input, CAMP, WILDERNESS_REVEAL_RADIUS);
     if (!initial.ok) throw new Error('Cannot initialize wilderness exploration');
     this.worldIndex = index;
     this.worldFacts = createWorldFactLedger(index, 'hero');
@@ -478,7 +480,7 @@ export class GameSimulation {
   private dungeonMapState():{layout:WorldLayout;input:MapWorldInput;state:MapDiscoveryState}|null{
     if(this.dungeonMap?.layout===this.world)return this.dungeonMap;
     const input:MapWorldInput={seed:this.world.seed,worldInstanceId:'dungeon-'+this.questArea,features:[]};
-    const initial=createMapDiscovery(input,this.player,105);
+    const initial=createMapDiscovery(input,this.player,DUNGEON_REVEAL_RADIUS);
     return initial.ok?{layout:this.world,input,state:initial.value}:null;
   }
   private observedQuestRoute(target:Readonly<Point>,state:MapDiscoveryState):Point[]{
@@ -532,7 +534,7 @@ export class GameSimulation {
       const last=observed.state.lastObservedPosition;
       if(last&&distance(last,this.player)<18)return;
       // Only actual position observations, not the route, reveal dungeon cells.
-      const next=revealAtPosition(observed.state,this.player,105,observed.input);
+      const next=revealAtPosition(observed.state,this.player,DUNGEON_REVEAL_RADIUS,observed.input);
       if(next.ok)this.dungeonMap={...observed,state:next.value};
       return;
     }
@@ -542,8 +544,8 @@ export class GameSimulation {
     const last = previous.lastObservedPosition;
     if (last && distance(last, this.player) < 18) return;
     const next = last && distance(last, this.player) <= 160
-      ? revealTravelSegment(previous, last, this.player, 105, this.mapWorld)
-      : revealAtPosition(previous, this.player, 105, this.mapWorld);
+      ? revealTravelSegment(previous, last, this.player, WILDERNESS_REVEAL_RADIUS, this.mapWorld)
+      : revealAtPosition(previous, this.player, WILDERNESS_REVEAL_RADIUS, this.mapWorld);
     if (!next.ok) return;
     this.mapDiscovery = next.value;
     for (const id of next.value.discoveredLandmarkIds) {
@@ -575,7 +577,7 @@ export class GameSimulation {
         id: beat.questId, status: 'active' as const,
         ...(featureId ? { featureId } : {}),
         ...(beat.questId === 'vesnas_report' ? { position: NPC_POSITIONS[WARDEN_ID] } : {}),
-        presentationKey: 'map.quest'
+        presentationKey: 'quest.actI.'+beat.questId+'.title'
       }];
     });
     if(this.quest.status==='active'){
@@ -583,7 +585,7 @@ export class GameSimulation {
       const enemy=this.aliveEnemies.filter(u=>!u.summoned&&!u.actor.id.startsWith('world-event.')
         &&known.has('fog/'+Math.floor(u.actor.x/80)+'/'+Math.floor(u.actor.y/80)))
         .sort((a,b)=>distance(a.actor,this.player)-distance(b.actor,this.player))[0];
-      if(enemy)hints.push({id:FIRST_QUEST_ID,status:'active',position:{x:enemy.actor.x,y:enemy.actor.y},presentationKey:'quest.ashes.objective'});
+      if(enemy)hints.push({id:FIRST_QUEST_ID,status:'active',position:{x:enemy.actor.x,y:enemy.actor.y},presentationKey:'quest.ashes.title'});
     }
     if (this.quest.status === 'available' || this.quest.status === 'ready') hints.push({
       id:FIRST_QUEST_ID,status:'active',position:{...NPC_POSITIONS[WARDEN_ID]},presentationKey:'quest.ashes.title'

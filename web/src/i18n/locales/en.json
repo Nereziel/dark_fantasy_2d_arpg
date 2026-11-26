@@ -973,6 +973,8 @@
     "optionalEvent": "Wilderness Event"
   },
   "map": {
+    "wilderness": "Wilderness · Act I",
+    "focusQuest": "Focus quest destination",
     "untrack": "Stop tracking",
     "toggleTracking": "Click the tracked quest to stop tracking.",
     "noTracking": "No tracked quest. Click a quest to track it.",
