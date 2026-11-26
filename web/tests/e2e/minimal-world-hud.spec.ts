@@ -13,6 +13,8 @@ test('default HUD is minimal, settings show clear modes and editor is a separate
   await expect(page.getByTestId('loot-label-mode')).toHaveCount(0);
   const canvas=page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toHaveAttribute('data-npc-visuals', /"warden_vesna":"warden"/);
+  await expect(canvas).toHaveAttribute('data-prop-visuals', /"field-chest":"chest"/);
+  await expect(canvas).toHaveAttribute('data-prop-visuals', /"soul-shrine":"shrine"/);
   const looks=JSON.parse((await canvas.getAttribute('data-npc-visuals'))!);
   expect(looks).toMatchObject({warden_vesna:'warden',merchant_bram:'merchant',smith_odan:'smith',
     healer_iva:'healer',potion_vendor_lena:'apothecary',stash_camp:'keeper',waypoint_camp:'waystone',

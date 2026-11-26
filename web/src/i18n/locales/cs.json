@@ -1,5 +1,6 @@
 {
   "worldLabels": {
+    "prop": {"sarcophagus":"Sarkofág","urn":"Rozbitná urna","rune":"Runová pečeť","poisonUrn":"Jedovatá urna"},
     "enemyLevel": "Úr. {level}",
     "enemyRank": {"elite": "Elitní", "boss": "Boss"},"toggle":"Popisky předmětů na zemi","skillInfo":"Informace o schopnostech","portalExit":"Východ","door":"Průchod","doubleTapMap":"Dvojtap","showGuide":"Nápověda a první kroky","hideGuide":"Skrýt nápovědu","collapseQuests":"Sbalit úkoly","expandQuests":"Rozbalit úkoly","questDetails":"Podrobnosti","off":"Vypnuto","on":"Zapnuto","hover":"Při najetí / dotyku","always":"Vždy","npcNames":"Vždy zobrazit jména NPC","highlight":"Zvýraznit vybrané objekty","assistance":"Pomocné seznamy objektů a nepřátel","worldSection":"Svět a HUD","displaySection":"Zobrazení a přístupnost","audioSection":"Zvuk","interact":"Interakce","treasure":"Truhla","breakable":"Rozbitný objekt","trap":"Past","secret":"Prozkoumat","shrine":"Svatyně duší"},
   "village": {

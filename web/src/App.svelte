@@ -1348,7 +1348,7 @@
             {#if miniProjection.navigationStage==='exit'}<span>{$t('map.questExit')}</span>{:else if miniProjection.navigationStage==='enter'}<span>{$t('map.questEntrance')}</span>{/if}
             <span>{$t(tracked.hintKey??tracked.objectiveKey)}{#if tracked.status==='active' && tracked.goal>1} · {tracked.count}/{tracked.goal}{/if}</span>
             {#if tracked.status==='active'&&tracked.goal>1}<progress value={tracked.count} max={tracked.goal} aria-label={$t('map.objective')}></progress>{/if}
-            {#if !miniProjection.navigationTarget}<small>{$t('map.unknownQuest')}</small>{/if>
+            {#if !miniProjection.navigationTarget}<small>{$t('map.unknownQuest')}</small>{/if}
           </div>{/if}
 
         </div>
