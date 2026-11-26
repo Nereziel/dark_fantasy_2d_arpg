@@ -53,6 +53,7 @@
       moveMessage = $locale === 'cs' ? 'Tento předmět nelze přesunout.' : 'This item cannot be moved.';
       return;
     }
+    selectedId = source.id;
     pendingMove = pendingMove?.id === source.id ? null : source;
     moveMessage = '';
   }
@@ -171,7 +172,12 @@
   function name(item: Item): string {
     return itemDisplayName(item, $locale ?? 'en', $t('item.base.' + item.templateId));
   }
-  function inspect(item: Item): void { if (!pendingMove && !dragged) selectedId = item.id; }
+  // Pin the action target on explicit click/tap; crossing another slot with
+  // the mouse must never silently retarget a deposit or withdrawal.
+  function inspect(item: Item): void {
+    if (pendingMove && pendingMove.id !== item.id) cancelPendingMove();
+    selectedId = item.id;
+  }
   function quickTransfer(entry: PreviewEntry): void {
     const { source } = entry;
     if (!liveSource(source)) return;
@@ -300,8 +306,7 @@
                   style:color={RARITIES[item.rarity].color}
                   aria-label={name(item)} aria-pressed={selected?.item.id === item.id} title={name(item)}
                   draggable={!view.itemFlags?.[item.id]?.locked && !view.itemFlags?.[item.id]?.favorite}
-                  onpointerenter={event => { if (event.pointerType === 'mouse') inspect(item); }}
-                  onclick={() => { selectedId = item.id; }}
+                  onclick={() => inspect(item)}
                   ondragstart={event => dragStart(event, { kind: 'bag', index, id: item.id })} ondragend={clearDrag}>
                   <span class="stash-item-ident"><ItemArt {item} /></span>
                   {#if item.upgrades}<small>+{item.upgrades}</small>{/if}
@@ -325,8 +330,8 @@
                 data-stash-cell data-item-id={item.id} data-slot-index={index}
                 style:border-color={RARITIES[item.rarity].color} style:color={RARITIES[item.rarity].color}
                 aria-label={name(item)} aria-pressed={selected?.item.id === item.id} title={name(item)}
-                draggable="true" onpointerenter={event => { if (event.pointerType === 'mouse') inspect(item); }}
-                onclick={() => { selectedId = item.id; }}
+                draggable="true"
+                onclick={() => inspect(item)}
                 ondragstart={event => dragStart(event, { kind: 'stash', tab: activeTab, index, id: item.id })} ondragend={clearDrag}>
                 <span class="stash-item-ident"><ItemArt {item} /></span>
                 {#if item.upgrades}<small>+{item.upgrades}</small>{/if}

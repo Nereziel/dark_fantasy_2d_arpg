@@ -72,7 +72,7 @@
     </header>
     <div class="trade-gold">{$t('hud.gold')}: <strong>{money(view.gold)}</strong></div>
 
-    <div class="trade-body" class:merchant-body={npc === MERCHANT_ID}>
+    <div class="trade-body">
     {#if npc === MERCHANT_ID}
       <div class="trade-columns">
         <section>
