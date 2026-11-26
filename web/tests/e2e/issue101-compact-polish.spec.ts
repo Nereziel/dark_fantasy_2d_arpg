@@ -29,12 +29,16 @@ test('compact HUD exposes skill descriptions and hamburger commands without cast
   await expect(menu.getByRole('button',{name:'Load',exact:true})).toBeVisible();
   await expect(menu.getByRole('button',{name:'Display & accessibility'})).toBeVisible();
   await menu.getByRole('button',{name:'Resume'}).click();
-  const toggle=dock.getByTestId('toggle-loot-labels');
-  await expect(toggle).toHaveAttribute('aria-pressed','true');
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed','false');
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed','true');
+  await dock.getByTestId('system-menu').click();
+  await page.getByTestId('open-visual-settings').click();
+  const mode=page.getByTestId('loot-label-mode');
+  await expect(mode).toHaveValue('always');
+  await mode.selectOption('off');
+  await expect(mode).toHaveValue('off');
+  await mode.selectOption('hover');
+  await expect(mode).toHaveValue('hover');
+  await page.getByTestId('visual-settings-close').click();
+  await page.getByRole('button',{name:'Resume'}).click();
   await expect.poll(async()=>Number(await page.locator('canvas[data-renderer="isometric-preview"]').getAttribute('data-world-labels'))).toBeGreaterThan(0);
 });
 

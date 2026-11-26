@@ -79,7 +79,11 @@ describe('Issue #126 — three optional character build presets', () => {
     }
     expect(game.snapshot()).toEqual(before);
     game.command({ type: 'pause', value: true });
+    const paused = game.snapshot();
     game.command({ type: 'captureBuildPreset', index: 0 });
-    expect(game.character().buildPresets).toBeUndefined();
+    expect(game.character().buildPresets?.[0]?.layout).toEqual(layout);
+    expect(game.snapshot().paused).toBe(true);
+    expect(game.snapshot().player).toEqual(paused.player);
+    expect(game.snapshot().resource).toBe(paused.resource);
   });
 });

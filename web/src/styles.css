@@ -291,3 +291,27 @@ html[data-ar-high-contrast="true"] .roster-health {
 @media(max-height:480px) and (min-width:651px){
   .game-hud.compact-dock { grid-template-columns:minmax(92px,120px) minmax(0,1fr) minmax(80px,110px) minmax(130px,145px); }
 }
+
+/* Explicit grid cells avoid the implicit row/column placement regression. */
+.game-hud.compact-dock { width:min(1100px,calc(100% - 16px)); grid-template-columns:minmax(115px,160px) minmax(0,1fr) minmax(105px,150px) minmax(110px,140px); grid-template-rows:auto 2px; gap:6px; }
+.game-hud.compact-dock > .vital-panel {grid-area:1/1;min-width:0;overflow:hidden}
+.game-hud.compact-dock > .skill-ui {grid-area:1/2;min-width:0;max-width:100%}
+.game-hud.compact-dock > .resource-meter {grid-area:1/3;min-width:0;overflow:hidden}
+.game-hud.compact-dock > .hud-actions {grid-area:1/4;min-width:0}
+.game-hud.compact-dock > .experience-track {grid-area:2/1/3/5;margin:0}
+.compact-dock .vital-top {display:flex;justify-content:space-between;flex-wrap:wrap;line-height:1.15}
+.compact-dock .hud-details {display:flex;flex-wrap:wrap;gap:3px}
+.compact-dock .hud-details span {max-width:100%}
+.game-hud.compact-dock .skill-toolbar {justify-content:flex-start}
+.skill-editor-dialog {width:min(92vw,620px);max-height:90dvh;overflow:auto;padding:16px;background:#141b24;border:1px solid #b39366;box-shadow:0 25px 60px #000}
+.skill-editor-dialog h2 {font-size:1.1rem;color:#ead2aa;margin:0 0 14px}
+@media(max-width:800px){
+ .game-hud.compact-dock {grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto auto 2px;gap:4px;width:calc(100% - 8px)}
+ .game-hud.compact-dock > .vital-panel {grid-area:1/1}
+ .game-hud.compact-dock > .resource-meter {grid-area:1/2}
+ .game-hud.compact-dock > .skill-ui {grid-area:2/1/3/3}
+ .game-hud.compact-dock > .hud-actions {grid-area:3/1/4/3;grid-template-columns:repeat(5,minmax(44px,1fr))}
+ .game-hud.compact-dock > .experience-track {grid-area:4/1/5/3}
+ .game-hud.compact-dock .hud-details {display:none}
+ .game-hud.compact-dock .hud-actions button {min-height:44px}
+}

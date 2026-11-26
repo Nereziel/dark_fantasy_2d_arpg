@@ -2,6 +2,9 @@ import { expect, type Page, type Locator } from '@playwright/test';
 
 /** Use the real character creation workflow, including a valid name. */
 export async function openCharacterCreation(page: Page, name = 'Test hero') {
+  // Existing gameplay suites exercise the optional accessible lists. The
+  // minimal HUD suite clears this preference before entering the world.
+  await page.evaluate(()=>{if(!localStorage.getItem('aether-ruin-world-hud-v2'))localStorage.setItem('aether-ruin-world-hud-v2',JSON.stringify({loot:'always',npcNames:true,highlight:true,assistance:true}));});
   await page.getByTestId('new-character').click({ timeout: 10_000 });
   await page.getByTestId('character-name').fill(name, { timeout: 10_000 });
 }

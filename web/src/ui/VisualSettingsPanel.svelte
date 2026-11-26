@@ -3,12 +3,15 @@
   import type { VisualPreferences, MotionPreference, CameraShakePreference,
     UiScalePreference, PixelFilterPreference } from '../game/ui/visualPreferences';
   import type { AudioPreferences } from '../game/audio/audioPreferences';
+  import type { WorldHudPreferences, LootLabelMode } from '../game/ui/worldReadability';
   import AudioVolumePanel from './AudioVolumePanel.svelte';
 
-  let { preferences, save, audioPreferences, saveAudio,
+  let { preferences, save, worldHud, saveWorldHud, audioPreferences, saveAudio,
     fullscreenSupported, fullscreenActive, fullscreenError,
     toggleFullscreen, close }: {
     preferences: VisualPreferences;
+    worldHud:WorldHudPreferences;
+    saveWorldHud:(next:WorldHudPreferences)=>void;
     save: (next: VisualPreferences) => void;
     audioPreferences: AudioPreferences;
     saveAudio: (next: AudioPreferences) => void;
@@ -32,6 +35,24 @@
       aria-label={$t('visualSettings.close')} onclick={close}>×</button>
   </header>
   <p>{$t('visualSettings.description')}</p>
+  <h3 class="settings-section">{$t('worldLabels.worldSection')}</h3>
+  <div class="setting-rows">
+    <div class="setting-row"><label for="loot-label-mode">{$t('worldLabels.toggle')}</label>
+      <select id="loot-label-mode" data-testid="loot-label-mode" value={worldHud.loot}
+        onchange={e=>saveWorldHud({...worldHud,loot:e.currentTarget.value as LootLabelMode})}>
+        <option value="off">{$t('worldLabels.off')}</option><option value="hover">{$t('worldLabels.hover')}</option><option value="always">{$t('worldLabels.always')}</option>
+      </select>
+    </div>
+    {#each ['npcNames','highlight','assistance'] as key}
+      <label class="setting-toggle"><span>{$t('worldLabels.'+key)}</span>
+        <select data-testid={'world-hud-'+key} value={worldHud[key as 'npcNames'|'highlight'|'assistance']?'on':'off'}
+          onchange={e=>saveWorldHud({...worldHud,[key]:e.currentTarget.value==='on'})}>
+          <option value="off">{$t('worldLabels.off')}</option><option value="on">{$t('worldLabels.on')}</option>
+        </select>
+      </label>
+    {/each}
+  </div>
+  <h3 class="settings-section">{$t('worldLabels.displaySection')}</h3>
   <div class="setting-rows">
     <div class="setting-row">
       <label for="visual-motion">{$t('visualSettings.motion')}</label>
@@ -92,6 +113,7 @@
         onchange={(event) => change({ highContrast: event.currentTarget.checked })} />
     </label>
   </div>
+  <h3 class="settings-section">{$t('worldLabels.audioSection')}</h3>
   <AudioVolumePanel preferences={audioPreferences} save={saveAudio} />
   <footer>
     <button type="button" class="primary" onclick={close}>{$t('visualSettings.close')}</button>
@@ -108,7 +130,8 @@
   h2{margin:0;color:#ebd9b6;font-family:Cinzel,Georgia,serif;font-size:1.22rem}
   p{color:#cfc4b3;font-size:.8rem;line-height:1.5}
   .settings-close{min-width:44px;min-height:44px;font-size:1.5rem;padding:5px}
-  .setting-rows{display:grid;gap:12px;margin:14px 0}
+  .settings-section{font-size:1rem;color:#e9c995;margin:18px 0 6px;padding:8px 0;border-bottom:1px solid #9b825a}
+  .setting-rows{display:grid;gap:6px;margin:8px 0}
   .setting-row,.setting-toggle{
     display:flex;align-items:center;justify-content:space-between;gap:16px;
     min-height:48px;border-bottom:1px solid #44505b;

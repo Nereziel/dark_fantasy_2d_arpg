@@ -4,7 +4,7 @@ import { get } from 'svelte/store';
 import { _ as translate, locale } from 'svelte-i18n';
 import { RARITIES } from '../data/items';
 import { itemDisplayName } from '../items/itemName';
-import { layoutWorldLabels, lootLabelsEnabled, roleMarker, skillCueStyle } from '../ui/worldReadability';
+import { layoutWorldLabels, getWorldHud, worldLabelVisible, roleMarker, skillCueStyle } from '../ui/worldReadability';
 import { occluderDepthAt } from './isometricOcclusion';
 import type { GameBridge } from '../bridge/GameBridge';
 import type { GameEvent, GameSnapshot, Point, ZoneId } from '../core/types';
@@ -62,7 +62,10 @@ export class IsometricScene extends Phaser.Scene {
   private readonly impacts: ImpactVisual[] = [];
   private readonly worldLabels = new Map<string, Phaser.GameObjects.Text>();
   private nextLabelUpdate = 0;
-  private lootLabelState = true;
+  private hudKey = '';
+  private focusedWorldId = '';
+  private focusUntil = 0;
+  private focusRing!: Phaser.GameObjects.Graphics;
   private labelLanguage = '';
   private readonly enemyPresentation = new EnemyPresentation();
   private ground!: IsometricGroundLayer;
@@ -99,6 +102,7 @@ export class IsometricScene extends Phaser.Scene {
     const state = this.bridge.snapshot();
     this.rebuild(state);
     const p = project(state.player);
+    this.focusRing = this.add.graphics().setDepth(9340);
     this.anchor = this.add.graphics().setPosition(p.x, p.y).setVisible(false);
     const bounds = isometricBounds(WORLD_WIDTH, WORLD_HEIGHT, 90, 40, ORIGIN);
     this.cameras.main.setBounds(bounds.x, bounds.y, bounds.width, bounds.height)
@@ -111,7 +115,7 @@ export class IsometricScene extends Phaser.Scene {
     this.input.on('pointerdown', this.click, this);
     this.input.on('pointermove', this.hover, this);
     this.input.on('pointerup', this.release, this);
-    this.input.on('gameout', this.release, this);
+    this.input.on('gameout', this.clearWorldFocus, this);
     const unsubscribe = this.bridge.onEvent(event => this.onImpactEvent(event));
     const onDestroy = () => { unsubscribe(); this.impacts.length = 0; this.enemyPresentation.clear(); };
     this.events.once(Phaser.Scenes.Events.DESTROY, onDestroy);
@@ -123,7 +127,7 @@ export class IsometricScene extends Phaser.Scene {
       this.input.off('pointerdown', this.click, this);
       this.input.off('pointermove', this.hover, this);
       this.input.off('pointerup', this.release, this);
-      this.input.off('gameout', this.release, this);
+      this.input.off('gameout', this.clearWorldFocus, this);
       this.release();
       this.worldLabels.clear();
       this.nextLabelUpdate = 0;
@@ -149,6 +153,7 @@ export class IsometricScene extends Phaser.Scene {
         delete this.game.canvas.dataset.staticLayers;
         delete this.game.canvas.dataset.staticVisibleLayers;
         delete this.game.canvas.dataset.worldLabels;
+        delete this.game.canvas.dataset.focusedWorldObject;
         delete this.game.canvas.dataset.lootLabels;
         this.game.canvas.style.cursor = 'default';
       }
@@ -167,6 +172,8 @@ export class IsometricScene extends Phaser.Scene {
     this.dungeonDecor.clear();
     for (const label of this.worldLabels.values()) label.destroy();
     this.worldLabels.clear();
+    this.focusedWorldId=''; this.focusUntil=0;
+    this.focusRing?.clear();
     this.nextLabelUpdate = 0;
     this.clearImpacts();
     for (const wall of this.walls) wall.destroy();
@@ -332,10 +339,17 @@ export class IsometricScene extends Phaser.Scene {
   }
 
   private release(): void { this.held.release(); }
+  private clearWorldFocus():void {this.release();this.focusedWorldId='';this.focusUntil=0;this.nextLabelUpdate=0;this.focusRing?.clear();}
+  private focusTarget(context: ReturnType<IsometricScene['pick']>['context'], touch:boolean, label:string|null=null):void {
+    const id=label?'loot/'+label:context.kind==='NPC'?'npc/'+context.id:context.kind==='LOOT'?'loot/'+context.id:context.kind==='INTERACTABLE'?'object/'+context.id:'';
+    if(id!==this.focusedWorldId){this.focusedWorldId=id;this.nextLabelUpdate=0;}
+    this.focusUntil=touch?this.time.now+1800:Infinity;
+  }
 
   private hover(pointer: Phaser.Input.Pointer): void {
     const { context, ground, aim } = this.pick(pointer);
     const label = this.lootLabelAt(pointer);
+    this.focusTarget(context,pointer.wasTouch,label);
     this.bridge.setPointerAim(aim, context.kind === 'ENEMY' ? context.id : null);
     const cursors = { move: 'crosshair', hostile: 'crosshair', talk: 'pointer', loot: 'grab',
       interact: 'pointer', blocked: 'not-allowed', ui: 'default' } as const;
@@ -372,6 +386,7 @@ export class IsometricScene extends Phaser.Scene {
       if(loot){this.release();this.bridge.command({type:'pickup',id:loot});return;}
     }
     const { context, ground, aim } = this.pick(pointer);
+    this.focusTarget(context,pointer.wasTouch);
     this.bridge.setPointerAim(aim, context.kind === 'ENEMY' ? context.id : null);
     if (dispatchCombatAction(this.bridge, action, context.kind === 'ENEMY' ? context.id : undefined)) return;
     if (action !== 'PRIMARY' && action !== 'FORCE_MOVE') return;
@@ -395,7 +410,7 @@ export class IsometricScene extends Phaser.Scene {
   }
 
   private lootLabelAt(pointer:Phaser.Input.Pointer):string|null {
-    if(!lootLabelsEnabled()||this.captured())return null;
+    if(getWorldHud().loot==='off'||this.captured())return null;
     const p=this.cameras.main.getWorldPoint(pointer.x,pointer.y);
     const visible=this.bridge.visibleGroundLoot(this.bridge.snapshot());
     for(const drop of visible){
@@ -406,10 +421,12 @@ export class IsometricScene extends Phaser.Scene {
   }
 
   private updateWorldLabels(state:GameSnapshot):void {
-    const labelsOn=lootLabelsEnabled(),language=get(locale)??'en';
-    if(this.time.now<this.nextLabelUpdate&&labelsOn===this.lootLabelState&&language===this.labelLanguage)return;
-    this.nextLabelUpdate=this.time.now+150;
-    this.lootLabelState=labelsOn;this.labelLanguage=language;
+    const prefs=getWorldHud(),language=get(locale)??'en',key=JSON.stringify(prefs);
+    if(this.captured()||this.time.now>this.focusUntil)this.focusedWorldId='';
+    if(this.time.now<this.nextLabelUpdate&&key===this.hudKey&&language===this.labelLanguage)return;
+    this.nextLabelUpdate=this.time.now+100;
+    this.hudKey=key;this.labelLanguage=language;
+    this.focusRing.clear();
     const t=get(translate),camera=this.cameras.main;
     const specs:{id:string;point:Readonly<Point>;elevation:number;text:string;color:string}[]=[];
     if(state.zone==='wilderness'){
@@ -425,9 +442,12 @@ export class IsometricScene extends Phaser.Scene {
     }
     for(const portal of dungeonPortalTargets(state,this.dungeonEntrances)){
       const name=state.zone==='crypt'?t('worldLabels.portalExit'):t(portal.id.endsWith(':mine')?'dungeon.mineName':portal.id.endsWith(':cave')?'dungeon.caveName':'dungeon.name');
-      specs.push({id:'portal/'+portal.id,point:portal.position,elevation:64,text:'◇  '+name,color:'#b9dcff'});
+      specs.push({id:'object/'+portal.id,point:portal.position,elevation:64,text:'◇  '+name,color:'#b9dcff'});
     }
-    if(labelsOn)for(const drop of this.bridge.visibleGroundLoot(state)){
+    for(const obj of state.environmentObjects??[])specs.push({id:'object/'+obj.id,point:obj.position,elevation:25,text:t('environment.objects.'+obj.id.slice(4)),color:'#ecd8af'});
+    for(const obj of state.interactables)specs.push({id:'object/'+obj.id,point:obj.position,elevation:30,text:t(obj.kind==='shrine'?'worldLabels.shrine':'worldLabels.treasure'),color:'#ecd8af'});
+    for(const obj of state.cryptInteractables??[])specs.push({id:'object/'+obj.id,point:obj.position,elevation:26,text:t(obj.capability==='lootContainer'?'worldLabels.treasure':obj.capability==='breakable'?'worldLabels.breakable':obj.capability==='trap'?'worldLabels.trap':'worldLabels.secret'),color:'#ecd8af'});
+    if(prefs.loot!=='off')for(const drop of this.bridge.visibleGroundLoot(state)){
       specs.push({id:'loot/'+drop.id,point:drop,elevation:19,
         text:itemDisplayName(drop.item,language,t('item.base.'+drop.item.templateId)),color:RARITIES[drop.item.rarity].color});
     }
@@ -439,6 +459,12 @@ export class IsometricScene extends Phaser.Scene {
       // Respect opaque walls. No labels above actors/items hidden behind geometry.
       if(occluderDepthAt(foot,this.opaqueOccluders)>=isometricDepth(spec.point)+.5&&
         occluderDepthAt(p,this.opaqueOccluders)>=isometricDepth(spec.point)+.5)continue;
+      const focused=spec.id===this.focusedWorldId;
+      if(focused&&prefs.highlight){
+        this.focusRing.lineStyle(2,0xffd58e,.96).strokeEllipse(foot.x,foot.y,48,24);
+        this.focusRing.fillStyle(0xffd58e,.14).fillEllipse(foot.x,foot.y,48,24);
+      }
+      if(!worldLabelVisible(spec.id.split('/')[0]!,focused,prefs))continue;
       live.add(spec.id);
       let label=this.worldLabels.get(spec.id);
       if(!label){
@@ -458,6 +484,7 @@ export class IsometricScene extends Phaser.Scene {
     }
     for(const [id,label] of this.worldLabels)if(!live.has(id)){label.destroy();this.worldLabels.delete(id);}
     this.game.canvas.dataset.worldLabels=String(this.worldLabels.size);
+    this.game.canvas.dataset.focusedWorldObject=this.focusedWorldId;
     this.game.canvas.dataset.lootLabels=String([...this.worldLabels.keys()].filter(id=>id.startsWith('loot/')).length);
   }
 
