@@ -95,6 +95,11 @@ test('retains character-only save v11 and resumes separate seed-scoped world rec
   await expect(page.locator('.zone-name')).toHaveText('Emberwatch Camp');
   const firstSeed = await page.locator('.game-screen').getAttribute('data-world-seed');
   expect(firstSeed).not.toBeNull();
+  // Optional seeded encounters can add an enemy. Verify the original full
+  // roster rather than assuming every random seed has exactly three.
+  const roster = page.locator('.enemy-roster-title');
+  await expect(roster).toHaveText(/^Enemies · (3\/3|4\/4) · Wave 1$/);
+  const originalRoster = await roster.innerText();
   // New character creation triggers a real IndexedDB autosave, no manual button.
   await expect.poll(async () => page.evaluate(async () => {
     return await new Promise<number | null>((resolve) => {
@@ -129,7 +134,7 @@ test('retains character-only save v11 and resumes separate seed-scoped world rec
   // Wave F world-instance store retains the seed for discovered map and opened chests.
   // The persistent hero record remains strictly character-only format 11.
   expect(secondSeed).toBe(firstSeed);
-  await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
+  await expect(roster).toHaveText(originalRoster);
   await expect(page.locator('.effect-chip')).toHaveCount(0);
 });
 

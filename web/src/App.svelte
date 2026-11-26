@@ -1675,13 +1675,6 @@
     border: 1px solid #7d7056;
     box-shadow: 0 10px 28px #0008;
   }
-  .minimap-overlay button {
-    display: block;
-    width: 100%;
-    font-size: .75rem;
-    padding: 6px 8px;
-    margin-top: 5px;
-  }
   .map-shield { z-index: 90; inset: 0; display: grid; place-items: center;
     background: #03070cf2; padding: clamp(6px, 2vw, 22px); overflow: hidden; }
   .world-map-card {
