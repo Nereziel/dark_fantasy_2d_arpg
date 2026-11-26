@@ -131,6 +131,12 @@ describe('Agent 29 — map discovery, fog of war and pure projections', () => {
     const discovered=ok(revealAtPosition(initialized(),target.position,80,world));
     expect(ok(projectMap(discovered,world,CAMP,hints,options)).navigationTarget?.position).toEqual(target.position);
     expect(ok(projectMap(discovered,world,CAMP,hints,{...options,trackedQuestId:'other'})).navigationTarget).toBeUndefined();
+    const off=ok(projectMap(discovered,world,target.position,hints,{mode:'world',trackedQuestId:null}));
+    expect(off.navigationTarget).toBeUndefined();
+    expect(off.hints).toEqual([]);
+    expect(off.markers.some(m=>m.kind==='quest')).toBe(false);
+    expect(off.markers.some(m=>m.id===target.id)).toBe(true);
+    expect(off.cells).toEqual(ok(projectMap(discovered,world,target.position,hints,{mode:'world'})).cells);
     expect(ok(projectMap(discovered,world,CAMP,[{...hints[0]!,status:'complete'}],options)).navigationTarget).toBeUndefined();
   });
 

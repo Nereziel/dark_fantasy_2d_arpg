@@ -313,13 +313,13 @@
   let journalOpen = $state(false);
   let mapZoom = $state(1);
   let mapCenter: Point | null = $state(null);
-  let selectedQuestId = $state<string|null>(null);
+  let selectedQuestId = $state<string|null|false>(null);
   let quests = $derived(journalEntries(view));
   let tracked = $derived(trackedQuest(quests,selectedQuestId));
-  let miniProjection = $derived(playing && view.player.alive ? bridge.mapProjection('minimap',{trackedQuestId:tracked?.id}) : null);
+  let miniProjection = $derived(playing && view.player.alive ? bridge.mapProjection('minimap',{trackedQuestId:tracked?.id??null}) : null);
   let fullProjection = $derived(mapOpen && view.player.alive
     ? bridge.mapProjection('world', {
-      zoom: mapZoom, trackedQuestId:tracked?.id, ...(mapCenter ? { center: mapCenter } : {})
+      zoom: mapZoom, trackedQuestId:tracked?.id??null, ...(mapCenter ? { center: mapCenter } : {})
     }) : null);
   let controlBindings: InputBinding[] = $state(GAME_BINDINGS.map(binding => ({ ...binding })));
   const controlsStorage = 'aether-ruin-controls-v1';
@@ -490,7 +490,7 @@
     bridge.command({type:'pause',value:false});
   }
   function selectTrackedQuest(id:string):void {
-    selectedQuestId=id;
+    selectedQuestId=tracked?.id===id?false:id;
     if(mapOpen){mapZoom=1;mapCenter=null;}
   }
   function closeMap(): void {
@@ -597,6 +597,7 @@
         bridge.command({ type: 'pause', value: true });
       }
       if (event.type === 'townServiceUsed' && playing) notify('town.serviceSuccess');
+      if (event.type === 'inventoryFull' && playing) notify('inventory.full');
       if (event.type === 'tradeRejected' && playing) notify('trade.error.' + event.reason);
       if (event.type === 'npcDialogue' && playing) {
         rememberModalOrigin();

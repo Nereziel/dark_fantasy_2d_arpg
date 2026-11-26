@@ -94,7 +94,8 @@ export interface MapProjectionOptions {
   readonly zoom?: number;
   /** Optional map camera center, clamped to the world. Never changes discovery. */
   readonly center?: Readonly<Point>;
-  readonly trackedQuestId?: string;
+  /** null explicitly suppresses quest overlays; undefined preserves legacy projection. */
+  readonly trackedQuestId?: string | null;
 }
 
 export interface MapFogCell extends MapViewport {
@@ -614,7 +615,7 @@ export function projectMap(
 
   const hints: MapHiddenQuestHint[] = [];
   let navigationTarget: MapMarker | undefined;
-  for (const hint of questHints) {
+  for (const hint of options.trackedQuestId===null?[]:questHints) {
     const target = hint.featureId !== undefined
       ? (state.discoveredLandmarkIds.includes(hint.featureId)
         ? featureById.get(hint.featureId as WildernessFeature['id'])?.position : undefined)

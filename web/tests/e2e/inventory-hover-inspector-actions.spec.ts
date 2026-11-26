@@ -36,6 +36,16 @@ test('hovered item remains the inspector action target after cursor leaves the b
   // Initially the inspector has selected FIRST. Simply hovering SECOND,
   // then clicking Favorite in the inspector, must favorite SECOND (not FIRST).
   await second.hover();
+  await expect(second).toHaveClass(/selected/);
+  await expect(first).not.toHaveClass(/selected/);
+  await expect(inventory.locator('.bag-slot.selected,.equipment-slot.selected')).toHaveCount(1);
+  await expect(inspector).toHaveAttribute('data-inspected-item-id',secondId!);
+  await first.hover();
+  await expect(first).toHaveClass(/selected/);
+  await expect(second).not.toHaveClass(/selected/);
+  await expect(inspector).toHaveAttribute('data-inspected-item-id',firstId!);
+  await second.hover();
+  await expect(second).toHaveClass(/selected/);
   await expect(inspector.getByRole('button', { name: 'Favorite', exact: true })).toBeVisible();
   await inspector.getByRole('button', { name: 'Favorite', exact: true }).click();
   await expect(first).not.toHaveClass(/favorite/);
@@ -67,6 +77,9 @@ test('hovered item remains the inspector action target after cursor leaves the b
   // and moving to Unequip must not switch the inspector back to SECOND.
   await target.click();
   await gear.hover();
+  await expect(gear).toHaveClass(/selected/);
+  await expect(target).not.toHaveClass(/selected/);
+  await expect(inspector).toHaveAttribute('data-inspected-item-id',firstId!);
   await inspector.getByRole('button', { name: 'Unequip', exact: true }).click();
   await expect(gear).not.toHaveClass(/has-item/);
   await expect(first).toHaveAttribute('data-item-id', firstId!);

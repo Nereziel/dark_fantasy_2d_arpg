@@ -1,5 +1,7 @@
 {
-  "worldLabels": {"toggle":"Ground item labels","skillInfo":"Inspect skills","portalExit":"Exit","door":"Passage","doubleTapMap":"Double-tap","showGuide":"Help & first steps","hideGuide":"Hide help","collapseQuests":"Collapse quests","expandQuests":"Expand quests","questDetails":"Details","off":"Off","on":"On","hover":"On hover / touch focus","always":"Always","npcNames":"Always show NPC names","highlight":"Highlight focused objects","assistance":"Extra interaction and enemy lists","worldSection":"World & HUD","displaySection":"Display & accessibility","audioSection":"Audio","interact":"Interact","treasure":"Treasure chest","breakable":"Breakable object","trap":"Trap","secret":"Inspect","shrine":"Soul shrine"},
+  "worldLabels": {
+    "enemyLevel": "Lv. {level}",
+    "enemyRank": {"elite": "Elite", "boss": "Boss"},"toggle":"Ground item labels","skillInfo":"Inspect skills","portalExit":"Exit","door":"Passage","doubleTapMap":"Double-tap","showGuide":"Help & first steps","hideGuide":"Hide help","collapseQuests":"Collapse quests","expandQuests":"Expand quests","questDetails":"Details","off":"Off","on":"On","hover":"On hover / touch focus","always":"Always","npcNames":"Always show NPC names","highlight":"Highlight focused objects","assistance":"Extra interaction and enemy lists","worldSection":"World & HUD","displaySection":"Display & accessibility","audioSection":"Audio","interact":"Interact","treasure":"Treasure chest","breakable":"Breakable object","trap":"Trap","secret":"Inspect","shrine":"Soul shrine"},
   "village": {
     "services": "Village services",
     "north-village-healer": {
@@ -971,6 +973,9 @@
     "optionalEvent": "Wilderness Event"
   },
   "map": {
+    "untrack": "Stop tracking",
+    "toggleTracking": "Click the tracked quest to stop tracking.",
+    "noTracking": "No tracked quest. Click a quest to track it.",
     "returnToGiver": "Return to the quest giver.",
     "questEntrance": "Reach the dungeon entrance",
     "questExit": "Leave the current dungeon",

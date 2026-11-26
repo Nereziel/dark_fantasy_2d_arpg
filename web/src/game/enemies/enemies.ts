@@ -107,6 +107,8 @@ export function packTypesForWave(wave: number): readonly EnemyType[] {
 
 export interface EnemySnapshot extends ActorSnapshot {
   type: EnemyType;
+  /** Spawn scaling level; optional only for pre-existing transient snapshots. */
+  level?: number;
 }
 
 export interface EnemyIntent extends Point {
@@ -155,7 +157,7 @@ export function createPack(wave: number, level: number, positions: readonly Poin
     return {
       actor: {
         id: `${type}-${wave * PACK_SIZE + index + 1}`,
-        type, x: pos.x, y: pos.y + (wave % 2) * 25,
+        type, level, x: pos.x, y: pos.y + (wave % 2) * 25,
         health: hp, maxHealth: hp, alive: true
       },
       intent: null, cooldown: 0.35 + index * 0.3, effects: [], abilityCooldowns: {}
@@ -197,7 +199,7 @@ export function createCryptPack(stage: 0 | 1, level: number, positions: readonly
     return {
       actor: {
         id: `${type}-${stage * PACK_SIZE + index + 1}`,
-        type, x: point.x, y: point.y,
+        type, level, x: point.x, y: point.y,
         health, maxHealth: health, alive: true
       },
       intent: null, cooldown: 0.65 + index * 0.3, effects: [], abilityCooldowns: {}
@@ -216,7 +218,7 @@ export function createEncounter(kills: number, level: number): EnemySnapshot {
   const y = 520 + (kills % 2) * 65;
   const health = def.health + Math.max(0, level - 1) * 12;
   return {
-    id: `${type}-${kills + 1}`, type, x, y,
+    id: `${type}-${kills + 1}`, type, level, x, y,
     health, maxHealth: health, alive: true
   };
 }

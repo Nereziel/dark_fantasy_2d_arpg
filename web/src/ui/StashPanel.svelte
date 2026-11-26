@@ -79,7 +79,8 @@
   }
   function transferToBag(): void {
     const source = pendingMove;
-    if (!source || source.kind !== 'stash' || !canDropBag()) { moveFailure(); return; }
+    if (!source || source.kind !== 'stash' || !liveSource(source)) { moveFailure(); return; }
+    if (!hasFreeBag) { moveMessage = $t('inventory.full'); return; }
     bridge.command({ type: 'stashWithdraw', tab: source.tab, index: source.index });
     if (!bridge.snapshot().inventory.some(item => item?.id === source.id)) {
       moveFailure();
@@ -123,6 +124,7 @@
     if (valid && source?.kind === 'stash') bridge.command({
       type: 'stashWithdraw', tab: source.tab, index: source.index
     });
+    else if(source?.kind==='stash' && liveSource(source) && !hasFreeBag)moveMessage=$t('inventory.full');
     pendingMove = null;
   }
   function dropIntoTab(event: DragEvent, tab: number): void {
@@ -293,6 +295,7 @@
       <div class="stash-columns">
         <section class="stash-pane">
           <h3>{$t('town.stashBag')} ({view.inventory.filter(Boolean).length}/{view.inventory.length})</h3>
+          {#if !hasFreeBag}<p class="stash-transfer-error" data-testid="stash-bag-full">{$t('inventory.full')}</p>{/if}
           <div class="stash-list" data-stash-bag role="region" aria-label={$t('town.stashBag')}
             class:drop-ready={canDropBag()} class:drop-hover={dropHover === 'bag' && canDropBag()}
             ondragover={(event) => allowDrop(event, 'bag')}

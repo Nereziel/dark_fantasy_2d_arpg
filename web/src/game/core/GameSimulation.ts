@@ -664,7 +664,7 @@ export class GameSimulation {
         const definition=ENEMY_DEFINITIONS[spawn.type];
         const health=definition.health+Math.max(0,this.level-1)*12;
         this.units.push({
-          actor:{id:spawn.id,type:spawn.type,x:spawn.position.x,y:spawn.position.y,
+          actor:{id:spawn.id,type:spawn.type,level:this.level,x:spawn.position.x,y:spawn.position.y,
             health,maxHealth:health,alive:true},
           intent:null,cooldown:0.65+index*0.25,effects:[],abilityCooldowns:{}
         });
@@ -1009,12 +1009,42 @@ export class GameSimulation {
     }
   }
 
-  /** Cache only obstructed basic-attack approaches; direct combat stays unchanged. */
+  /** Moving targets are not static waypoints: don't brake to a crawl just
+   * outside attack reach. Preserve acceleration and collision, never sprint
+   * faster than the character's normal move speed. */
+  private pursueDirect(target:Point,stop:number,speed:number,dt:number):void {
+    const left=distance(this.player,target)-stop;
+    if(left<=0){this.movementSpeed=0;return;}
+    this.autoFollowPlan=null;
+    this.movementSpeed=Math.min(speed,this.movementSpeed+850*dt);
+    moveToward(this.player,target,this.movementSpeed,dt,stop,this.world.obstacles);
+  }
+
+  /** Auto melee attacks can take a short normal-speed step during windup.
+   * Manual attacks, ranged casts, recovery, hold-position and CC stay locked. */
+  private pursueBasicWindup(dt:number):boolean{
+    if(this.holdPosition||this.immobilized||!this.attackTarget)return false;
+    const melee=this.classId==='WARRIOR'||this.classId==='PALADIN'
+      ||(this.classId==='ROGUE'&&!this.rogueRangedWeapon());
+    if(!melee)return false;
+    const action=this.warriorAction?.id==='basicAttack'?this.warriorAction
+      :this.classAction?.kind==='basic'?this.classAction:null;
+    if(!action||action.targetId!==this.attackTarget||action.timeline.phase!=='windup')return false;
+    const target=this.units.find(u=>u.actor.alive&&u.actor.id===action.targetId)?.actor;
+    // Never chase through a wall during a committed swing.
+    if(!target||!canApproachAttackDirectly(this.player,target,40,this.world.obstacles))return false;
+    const haste=getStatusModifiers(this.statusEffects.player).moveSpeed??0;
+    const speed=PLAYER_SPEED*(this.currentStats().moveSpeed/100)*Math.max(.25,Math.min(1.6,1+haste));
+    this.pursueDirect(target,36,speed,dt);
+    return true;
+  }
+
+  /** Cache only obstructed basic-attack approaches. */
   private followAttackApproach(target: EnemySnapshot, range: number, speed: number, dt: number): void {
     if (this.immobilized) { this.movementSpeed = 0; return; }
     if (canApproachAttackDirectly(this.player, target, range, this.world.obstacles)) {
       this.attackApproachPlan = null;
-      this.follow(this.player, target, speed, dt, Math.max(0, range - 4));
+      this.pursueDirect(target, Math.max(0,range-4), speed,dt);
       return;
     }
     const cached = this.attackApproachPlan;
@@ -1167,7 +1197,7 @@ export class GameSimulation {
       if (!def || !state) continue;
       const maxHealth = Math.round(def.baseHealth + Math.max(0, this.level - 1) * 24);
       this.units.push({
-        actor: { id: placement.id, type: def.enemyType, ...marker.position,
+        actor: { id: placement.id, type: def.enemyType, level:this.level, ...marker.position,
           health: maxHealth, maxHealth, alive: true },
         cooldown: 0.9, intent: null, effects: [], abilityCooldowns: {}
       });
@@ -1207,7 +1237,7 @@ export class GameSimulation {
         const index = this.units.length;
         const actorId = 'summon-' + this.wave + '-' + index;
         this.units.push({
-          actor: { id: actorId, type: 'skeleton', x: add.position.x, y: add.position.y,
+          actor: { id: actorId, type: 'skeleton', level:1, x: add.position.x, y: add.position.y,
             health: base.health, maxHealth: base.health, alive: true },
           summoned: true, intent: null, cooldown: 0.8, effects: [], abilityCooldowns: {}
         });
@@ -1349,7 +1379,7 @@ export class GameSimulation {
         const def = ENEMY_DEFINITIONS[action.enemyType];
         const index = this.units.length;
         this.units.push({
-          actor: { id: 'summon-' + this.wave + '-' + index, type: action.enemyType,
+          actor: { id: 'summon-' + this.wave + '-' + index, type: action.enemyType, level:1,
             x: action.point.x, y: action.point.y,
             health: def.health, maxHealth: def.health, alive: true },
           summoned: true, intent: null, cooldown: 0.7, effects: [], abilityCooldowns: {}
@@ -1398,7 +1428,7 @@ export class GameSimulation {
     if (!marker) return;
     const health = 270 + Math.max(0, this.level - 1) * 24;
     this.units.push({
-      actor: { id: 'morrow_gravebound', type: 'wraith',
+      actor: { id: 'morrow_gravebound', type: 'wraith', level:this.level,
         x: marker.position.x, y: marker.position.y,
         health, maxHealth: health, alive: true },
       intent: null, cooldown: 0.85, effects: [], abilityCooldowns: {}
@@ -1770,7 +1800,10 @@ export class GameSimulation {
           : command.type === 'stashMove'
             ? planStashMove(state, command.fromTab, command.index, command.toTab)
             : planStashSort(state, command.tab);
-      if (!plan.ok) return;
+      if (!plan.ok) {
+        if(command.type==='stashWithdraw' && plan.reason==='INVENTORY_FULL')this.events.push({type:'inventoryFull',source:'stash'});
+        return;
+      }
       const sourceTab = command.type === 'stashMove' ? command.fromTab
         : command.type === 'stashWithdraw' ? (command.tab ?? 0) : 0;
       const slots = validStashTab(sourceTab)
@@ -1988,6 +2021,8 @@ export class GameSimulation {
       const selected = this.units.find(unit => unit.actor.id === command.targetId && unit.actor.alive);
       if (!selected) return;
       this.selectedTargetId = selected.actor.id;
+      // Re-clicking the same auto target must not restart its hit frame.
+      if(this.attackTarget===selected.actor.id && (this.warriorAction?.id==='basicAttack'||this.classAction?.kind==='basic'))return;
       this.warriorPending = null;
       this.warriorAction = null;
       this.classAction = null;
@@ -2004,6 +2039,11 @@ export class GameSimulation {
     } else if (command.type === 'pickup') {
       const loot = this.groundLoot.find(item => item.id === command.id);
       if (!loot) return;
+      if (!this.inventory.some(item=>item===null)) {
+        this.pickupTarget=null;
+        this.events.push({type:'inventoryFull',source:'pickup'});
+        return;
+      }
       this.pickupTarget = { id: loot.id,
         path: findPickupPath(this.player, loot, PICKUP_RANGE, this.world.obstacles) };
       this.movePath = [];
@@ -2576,6 +2616,8 @@ export class GameSimulation {
         ? [...this.aliveEnemies].filter(u => distance(this.player, u.actor) <= modifiers.radius + 0.5)
         : hitTarget && distance(this.player, hitTarget.actor) <= (id === 'charge' ? 82 : ability.range) + 0.5
           ? [hitTarget] : [];
+      // Basic swings still need line of sight at the actual impact tick.
+      if(id==='basicAttack' && target && !hasLineOfSight(this.player,target.actor,this.world.obstacles))victims.length=0;
       for (const unit of victims) {
         const power = ability.condition
           && unit.actor.health / unit.actor.maxHealth <= ability.condition.threshold
@@ -4197,6 +4239,7 @@ export class GameSimulation {
     this.tickEffects(dt);
     this.tickCanonicalStatuses(dt);
     this.syncLegacyStatuses();
+    const pursuingWindup=this.pursueBasicWindup(dt);
     this.tickWarriorTimeline();
     this.tickClassTimeline();
     if (this.player.alive) {
@@ -4343,7 +4386,7 @@ export class GameSimulation {
       else this.follow(this.player, object.position, speed, dt, object.reach - 10, true);
     } else if (this.warriorAction?.timeline.movementLocked
       || this.classAction?.timeline.movementLocked) {
-      this.movementSpeed = 0;
+      if(!pursuingWindup)this.movementSpeed = 0;
     } else if (this.warriorPending) {
       const pending = this.warriorPending;
       const target = pending.targetId ? this.units.find(u => u.actor.alive && u.actor.id === pending.targetId) : null;
@@ -4549,7 +4592,7 @@ export class GameSimulation {
       const health = base.health + Math.max(0, this.level - 1) * 12;
       const id = 'summon-' + this.wave + '-' + this.units.length;
       this.units.push({
-        actor: { id, type: 'skeleton', ...position,
+        actor: { id, type: 'skeleton', level:this.level, ...position,
           health, maxHealth: health, alive: true },
         summoned: true, intent: null, cooldown: 1, effects: []
       });
@@ -4716,7 +4759,11 @@ export class GameSimulation {
 
   private collectLoot(loot: GroundItem): void {
     const index = this.inventory.findIndex(item => item === null);
-    if (index < 0) { this.pickupTarget = null; return; }
+    if (index < 0) {
+      this.pickupTarget = null;
+      this.events.push({type:'inventoryFull',source:'pickup'});
+      return;
+    }
     this.inventory[index] = loot.item;
     this.groundLoot = this.groundLoot.filter(item => item.id !== loot.id);
     this.pickupTarget = null;
@@ -5225,6 +5272,7 @@ export class GameSimulation {
       ))
       || !s.enemies.every((unit, index) =>
         !!unit && !!unit.actor && validEnemyType(unit.actor.type)
+        && (unit.actor.level===undefined || (Number.isSafeInteger(unit.actor.level) && unit.actor.level>=1 && unit.actor.level<=100))
         && (s.zone === 'crypt'
           ? (index >= PACK_SIZE ? unit.summoned === true && unit.actor.type === 'skeleton'
             : unit.actor.type === (restoredVisit

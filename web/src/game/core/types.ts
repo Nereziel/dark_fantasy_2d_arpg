@@ -335,6 +335,7 @@ export type GameEvent =
   | { type: 'defeat'; targetId: string; kills: number }
   | { type: 'loot'; id: string }
   | { type: 'pickup'; id: string }
+  | { type: 'inventoryFull'; source: 'pickup' | 'stash' }
   | { type: 'levelUp'; level: number }
   | { type: 'talentSpent'; id: TalentId; rank: number }
   | { type: 'talentsRespecced'; goldSpent: number }
