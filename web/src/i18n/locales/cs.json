@@ -971,6 +971,15 @@
     "optionalEvent": "Událost v pustině"
   },
   "map": {
+    "questLog": "Deník úkolů",
+    "track": "Sledovat",
+    "tracked": "Sledováno",
+    "active": "Aktivní",
+    "ready": "K odevzdání",
+    "available": "Dostupný",
+    "completed": "Dokončený",
+    "noQuests": "Zatím žádné úkoly.",
+    "noLocalMap": "Mapa dungeonu není dostupná. Deník úkolů zůstává přístupný.",
     "title": "Mapa světa",
     "open": "Mapa",
     "close": "Zavřít mapu",

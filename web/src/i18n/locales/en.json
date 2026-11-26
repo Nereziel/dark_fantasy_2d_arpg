@@ -971,6 +971,15 @@
     "optionalEvent": "Wilderness Event"
   },
   "map": {
+    "questLog": "Quest log",
+    "track": "Track",
+    "tracked": "Tracking",
+    "active": "Active",
+    "ready": "Ready to turn in",
+    "available": "Available",
+    "completed": "Completed",
+    "noQuests": "No quests yet.",
+    "noLocalMap": "Dungeon map is unavailable. Quest journal remains accessible.",
     "title": "World Map",
     "open": "Map",
     "close": "Close Map",
