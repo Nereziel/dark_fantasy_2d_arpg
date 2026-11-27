@@ -36,7 +36,11 @@ const REQUIRE_VILLAGES = checkedEnv('SEED_SWEEP_REQUIRE_VILLAGES', 1, 0, 1) === 
 const seeds = Array.from({ length: COUNT }, (_, i) => (START + Math.imul(i, 7919)) >>> 0);
 // Regression: natural Act I evidence-search stall in main CI 45572861430.
 const sample = [0, 1, 2, 3, 42, 99, 2683541248, 0x7fffffff, 0xffffffff];
-const suiteSeeds = [...new Set([...sample, ...seeds])];
+// Reproduced missing playable event slots in CI 45988894581.
+const eventRegressionSeeds = [0,1,245489,411788,1156174,1354149,1686747,1694666,
+  2296510,2494485,2589513,2779569,2866678,3365575,3373494,3840715,3919905,
+  4775157,6343119,6430228,7808134,0xffffffff];
+const suiteSeeds = [...new Set([...sample, ...eventRegressionSeeds, ...seeds])];
 
 type SweepRegion = 'wilderness' | 'crypt' | 'mine' | 'cave';
 function checkedSeed(seed: number, region: SweepRegion, fn: () => void): void {
@@ -103,7 +107,7 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
         if(object.requiresId)expect(environment.some(o=>o.id===object.requiresId)).toBe(true);
       }
       const events=planWorldEvents(seed,layout,features);
-      expect(events.map(e=>e.id),'Incomplete playable event catalog').toEqual(['wild.event.1','wild.event.2']);
+      expect(events.map(e=>e.id),'Incomplete playable event catalog; anchors='+features.filter(f=>f.kind==='event').map(f=>f.id+'@'+f.position.x+','+f.position.y).join(';')).toEqual(['wild.event.1','wild.event.2']);
       for(const event of events){
         criticalPath(seed,'wilderness',event.id,layout.camp,event.position,layout.obstacles);
         expect(event.enemySpawns).toHaveLength(2);
