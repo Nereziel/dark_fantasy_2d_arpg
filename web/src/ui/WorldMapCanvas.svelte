@@ -171,6 +171,7 @@
       {@const quest=marker.kind==='quest'}
       {@const nearRight=marker.position.x+unit*120>projection.viewport.x+projection.viewport.width}
       <g data-map-marker={marker.id} data-marker-kind={marker.kind}
+        data-map-x={marker.position.x} data-map-y={marker.position.y}
         data-tracked-quest={tracked?marker.id.slice(6):undefined}
         transform={`translate(${marker.position.x} ${marker.position.y}) scale(${unit})`}>
         {#if tracked}

@@ -1,6 +1,7 @@
 import { openCharacterCreation, enterWorld } from './character-menu';
 // GPL-3.0-only
 import { test, expect, type Locator } from '@playwright/test';
+import { campMovementTarget, mapMarkerPoint } from './iso-input';
 
 async function assertMapFog(map: Locator, mode: 'mini' | 'world') {
   await expect(map).toBeVisible();
@@ -60,18 +61,17 @@ test('default isometric view boots, accepts a pointer and keeps the map controls
   await expect.poll(async () => Number(await canvas.getAttribute('data-static-visible-layers'))).toBeLessThan(staticTotal);
   await expect(canvas).toHaveAttribute('data-prop-materials', /(?:^|,)ruin(?:,|$)/);
   await expect(canvas).toHaveAttribute('data-prop-materials', /(?:^|,)timber(?:,|$)/);
-  const player = page.locator('[data-minimap="active"] [data-map-marker="player"] circle').first();
+  const player = page.locator('[data-minimap="active"] [data-map-marker="player"]');
   await expect(player).toBeVisible();
-  const initial = { x: Number(await player.getAttribute('cx')), y: Number(await player.getAttribute('cy')) };
-  const bounds = await canvas.boundingBox();
-  expect(bounds).not.toBeNull();
-  // The camera starts on the hero in the protected town clearing. A small
-  // screen-space offset translates to a Cartesian destination away from NPCs.
-  await canvas.click({ position: { x: bounds!.width / 2 + 100, y: bounds!.height / 2 + 30 } });
-  await expect.poll(async () => Math.hypot(
-    Number(await player.getAttribute('cx')) - initial.x,
-    Number(await player.getAttribute('cy')) - initial.y
-  ), { timeout: 6000 }).toBeGreaterThan(20);
+  const initial = await mapMarkerPoint(player);
+  // Choose actual exposed ground, not a fixed screen offset which may hit
+  // a newly rendered prop or a resident body.
+  const target = await campMovementTarget(page,canvas);
+  await page.mouse.click(target.x,target.y);
+  await expect.poll(async () => {
+    const current=await mapMarkerPoint(player);
+    return Math.hypot(current.x-initial.x,current.y-initial.y);
+  }, { timeout: 6000 }).toBeGreaterThan(20);
   await expect(canvas).toHaveAttribute('data-static-layers', String(staticTotal));
   await expect.poll(async () => Number(await canvas.getAttribute('data-static-visible-layers'))).toBeGreaterThan(0);
   await expect.poll(async () => Number(await canvas.getAttribute('data-static-visible-layers'))).toBeLessThan(staticTotal);
