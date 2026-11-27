@@ -9,6 +9,8 @@
  * combine a boss's curated guaranteed rewards and its random roll explicitly.
  */
 import type { RarityId } from '../data/items';
+import { isClassId,type ClassId } from '../data/classes';
+import { classLootBase } from '../items/classWeapons';
 import { ITEM_BASES, type CatalogTemplateId } from '../items/itemCatalog';
 import { validEnemyType, type EnemyType } from '../enemies/enemies';
 
@@ -23,6 +25,8 @@ export type LootTableId =
 export type LootRandomSource = { next(): number };
 
 export interface LootContext {
+  /** Optional smart loot identity; omitted preserves historical generic tables. */
+  classId?: ClassId;
   /** Integer within [1, 1000]. Invalid required values reject the roll. */
   monsterLevel: number;
   playerLevel: number;
@@ -168,6 +172,7 @@ export const LOOT_TABLES: Readonly<Record<LootTableId, readonly LootEntry[]>> =
   });
 
 interface NormalizedContext {
+  classId?: ClassId;
   monsterLevel: number;
   playerLevel: number;
   enemyType?: EnemyType;
@@ -193,6 +198,7 @@ function validLevel(level: unknown): level is number {
  */
 function normalizeContext(input: Readonly<LootContext>): NormalizedContext | null {
   if (!input || typeof input !== 'object') return null;
+  if(input.classId!==undefined&&!isClassId(input.classId))return null;
   if (!validLevel(input.monsterLevel) || !validLevel(input.playerLevel)
     || (input.enemyType !== undefined && !validEnemyType(input.enemyType))) return null;
   if (!ZONES.includes(input.zone) || !ownKey(DIFFICULTY_INDEX, input.difficulty)) return null;
@@ -210,6 +216,7 @@ function normalizeContext(input: Readonly<LootContext>): NormalizedContext | nul
     : 0;
 
   return {
+    ...(input.classId!==undefined?{classId:input.classId}:{}),
     monsterLevel: input.monsterLevel,
     playerLevel: input.playerLevel,
     ...(input.enemyType !== undefined ? { enemyType: input.enemyType } : {}),
@@ -279,7 +286,8 @@ export function eligibleLootEntries(context: Readonly<LootContext>): EligibleLoo
       if (!eligible(entry, normalized) || !Number.isFinite(entry.weight) || entry.weight <= 0) continue;
       const weight = effectiveWeight(entry, normalized);
       if (!Number.isFinite(weight) || weight <= 0) continue;
-      pool.push({ itemBaseId: entry.itemBaseId, rarity: entry.rarity, weight, sourceTableId: tableId });
+      const itemBaseId=normalized.classId?classLootBase(normalized.classId,entry.itemBaseId,itemLevel(normalized)):entry.itemBaseId;
+      pool.push({ itemBaseId, rarity: entry.rarity, weight, sourceTableId: tableId });
     }
   }
   return pool;
@@ -365,5 +373,5 @@ export function bossGuaranteedLoot(context: Readonly<LootContext>): LootRoll[] {
       rarity: 'LEGENDARY', itemLevel: level, tableId: 'boss', guaranteed: true
     });
   }
-  return drops;
+  return normalized.classId?drops.map(roll=>({...roll,itemBaseId:classLootBase(normalized.classId!,roll.itemBaseId,roll.itemLevel)})):drops;
 }
