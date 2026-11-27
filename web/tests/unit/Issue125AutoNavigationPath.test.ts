@@ -8,9 +8,40 @@ import { createCryptPack } from '../../src/game/enemies/enemies';
 import type { Point } from '../../src/game/core/types';
 import { CRYPT_EXIT, CRYPT_GATE, CRYPT_BOSS_POSITIONS } from '../../src/game/world/generator';
 import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../../src/game/world/dungeonRuntime';
-import { ACTOR_RADIUS, canOccupy, findPath, findPickupPath, findAttackApproachPath, hasLineOfSight, moveActor, resolveReachableDestination } from '../../src/game/world/navigation';
+import { ACTOR_RADIUS, canOccupy, findPath, findMovementPath, findPickupPath, findAttackApproachPath, hasLineOfSight, moveActor, resolveReachableDestination } from '../../src/game/world/navigation';
 
 describe('F0 — click-to-interact auto-navigation around solid walls', () => {
+  it('recovers an actual Act I ground route at the reported main CI stall',()=>{
+    const {layout}=buildWilderness(342942136);
+    const from={x:1594.2073051011469,y:940.0000000000009};
+    const requested={x:1110,y:1050};
+    expect(canOccupy(from,ACTOR_RADIUS,layout.obstacles)).toBe(true);
+    const target=resolveReachableDestination(from,requested,ACTOR_RADIUS,layout.obstacles);
+    expect(target).not.toBeNull();
+    expect(Math.hypot(target!.x-from.x,target!.y-from.y)).toBeGreaterThan(100);
+    const route=findMovementPath(from,target!,ACTOR_RADIUS,layout.obstacles);
+    expect(route.length).toBeGreaterThan(0);
+    const actor={...from};
+    for(const point of route){
+      for(let i=0;i<1000&&Math.hypot(actor.x-point.x,actor.y-point.y)>.05;i++)
+        moveActor(actor,point,220/60,ACTOR_RADIUS,layout.obstacles);
+      expect(Math.hypot(actor.x-point.x,actor.y-point.y)).toBeLessThan(.1);
+      expect(canOccupy(actor,ACTOR_RADIUS,layout.obstacles)).toBe(true);
+    }
+    expect(Math.hypot(actor.x-target!.x,actor.y-target!.y)).toBeLessThan(.1);
+  });
+  it('routes out of an off-center start cell without crossing a solid corner',()=>{
+    const walls=[{id:'corner',x:240,y:240,width:100,height:100}];
+    const from={x:222,y:325},goal={x:400,y:300};
+    const path=findMovementPath(from,goal,ACTOR_RADIUS,walls);
+    expect(path.length).toBeGreaterThan(1);
+    const actor={...from};
+    for(const point of path){
+      for(let i=0;i<500&&Math.hypot(actor.x-point.x,actor.y-point.y)>.01;i++)
+        moveActor(actor,point,3,ACTOR_RADIUS,walls);
+      expect(Math.hypot(actor.x-point.x,actor.y-point.y)).toBeLessThan(.1);
+    }
+  });
   it.each([
     { seed: 2683541248, origin: { x: 1174.0370058355718, y: 1059.9999999999989 } },
     { seed: 546989644, origin: { x: 952.2879061573971, y: 913.8677300618763 } }

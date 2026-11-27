@@ -1,7 +1,8 @@
 // GPL-3.0-only — read-only zone routing and observed-cell map presentation.
 import type { Point } from '../core/types';
 import { ACTOR_RADIUS, canOccupy, findPath, type Obstacle } from './navigation';
-import { MAP_CELL_SIZE, projectMap, type MapDiscoveryState, type MapWorldInput,
+import { DUNGEON_TILE_SIZE,type ProceduralDungeonResult } from './proceduralDungeon';
+import { MAP_CELL_SIZE, projectMap, mapCellPainted, type MapDiscoveryState, type MapWorldInput,
   type MapProjection, type MapProjectionOptions, type MapQuestHint, type MapViewport } from './mapDiscovery';
 export type QuestArea='wilderness'|'crypt'|'mine'|'cave';
 export type QuestLeg='enter'|'exit'|'objective';
@@ -51,17 +52,33 @@ export function knownQuestRoute(from:Point,to:Point,obstacles:readonly Obstacle[
   }
   return route.length>1?route:[];
 }
+/** Build the ordinary dungeon silhouette from the canonical tiles. Hidden
+ * rooms and their passages are filled as solid wall, not marked as secret.
+ * Cached by the simulation for the current interior. */
+export function publicDungeonMinimapWalls(dungeon:ProceduralDungeonResult):MapViewport[]{
+  const secret=new Set(dungeon.rooms.filter(r=>r.type==='secret').map(r=>r.id));
+  const hidden=new Set(dungeon.doors.filter(d=>d.kind==='hidden').map(d=>d.id));
+  const solid=dungeon.tiles.filter(t=>t.kind==='wall'||secret.has(t.roomId??'')||hidden.has(t.doorId??''))
+    .sort((a,b)=>a.y-b.y||a.x-b.x);
+  const result:{x:number;y:number;width:number;height:number}[]=[];
+  for(const tile of solid){
+    const last=result.at(-1);
+    if(last&&last.y===tile.y&&last.x+last.width===tile.x)last.width+=DUNGEON_TILE_SIZE;
+    else result.push({x:tile.x,y:tile.y,width:DUNGEON_TILE_SIZE,height:DUNGEON_TILE_SIZE});
+  }
+  return result;
+}
 export function projectDungeonMap(state:MapDiscoveryState,world:MapWorldInput,player:Point,
   obstacles:readonly Obstacle[],hint:MapQuestHint|null,mode:'world'|'minimap',
   options:Pick<MapProjectionOptions,'zoom'|'center'>,area:Exclude<QuestArea,'wilderness'>,
-  route:readonly Point[]=[]):MapProjection|null{
+  route:readonly Point[]=[],localWalls:readonly MapViewport[]=obstacles):MapProjection|null{
   const base=projectMap(state,world,player,hint?[hint]:[],{...options,mode,trackedQuestId:hint?.id});
   if(!base.ok)return null;
   const p=base.value;
   const walls:MapViewport[]=[];
   for(const c of p.cells){
-    if(c.visibility!=='discovered')continue;
-    for(const w of obstacles){
+    if(!mapCellPainted(mode,c))continue;
+    for(const w of mode==='minimap'?localWalls:obstacles){
       const x=Math.max(w.x,c.x),y=Math.max(w.y,c.y);
       const width=Math.min(w.x+w.width,c.x+c.width)-x,height=Math.min(w.y+w.height,c.y+c.height)-y;
       if(width>0&&height>0)walls.push({x,y,width,height});

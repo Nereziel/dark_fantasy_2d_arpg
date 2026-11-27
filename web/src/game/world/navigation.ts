@@ -169,8 +169,7 @@ export function findPath(from: Point, goal: Point, radius = ACTOR_RADIUS, obstac
 
 /** Continuous swept actor square. Sampling alone can miss a short crossing
  * at an expanded obstacle corner; mere boundary contact remains walkable. */
-function pickupSegmentClear(from: Point, to: Point, obstacles: readonly Obstacle[]): boolean {
-  const radius=ACTOR_RADIUS;
+export function movementSegmentClear(from:Point,to:Point,obstacles:readonly Obstacle[],radius=ACTOR_RADIUS):boolean{
   if(!canOccupy(from,radius,obstacles)||!canOccupy(to,radius,obstacles))return false;
   const start=[from.x,from.y],delta=[to.x-from.x,to.y-from.y];
   for(const wall of obstacles){
@@ -191,6 +190,50 @@ function pickupSegmentClear(from: Point, to: Point, obstacles: readonly Obstacle
     if(enter<exit)return false;
   }
   return true;
+}
+
+/** Runtime route: the generation grid is deliberately unchanged. Validate every
+ * segment from the real actor (which need not be at a cell center). If a coarse
+ * path would cross a corner, seed A* from reachable neighboring centers and
+ * connect the exact destination only by an unobstructed swept segment. */
+export function findMovementPath(from:Point,goal:Point,radius=ACTOR_RADIUS,obstacles:readonly Obstacle[]=OBSTACLES):Point[]{
+  if(!canOccupy(from,radius,obstacles)||!canOccupy(goal,radius,obstacles))return [];
+  const clear=(a:Point,b:Point)=>movementSegmentClear(a,b,obstacles,radius);
+  if(clear(from,goal))return [{...goal}];
+  const coarse=findPath(from,goal,radius,obstacles);
+  if(coarse.length&&coarse.every((p,i)=>clear(i===0?from:coarse[i-1]!,p)))return coarse;
+  const count=COLS*ROWS,cost=new Float64Array(count).fill(Infinity),parent=new Int32Array(count).fill(-1);
+  const closed=new Uint8Array(count),frontier=new PathFrontier();
+  const heuristic=(p:Point)=>Math.hypot(p.x-goal.x,p.y-goal.y)/CELL;
+  const [sx,sy]=grid(from);
+  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    const x=sx+dx,y=sy+dy;
+    if(x<0||x>=COLS||y<0||y>=ROWS)continue;
+    const p=center(x,y);if(!clear(from,p))continue;
+    const k=KEY(x,y);cost[k]=Math.hypot(p.x-from.x,p.y-from.y)/CELL;
+    frontier.push({key:k,score:cost[k]!+heuristic(p)});
+  }
+  while(frontier.length){
+    const key=frontier.pop()!.key;if(closed[key])continue;closed[key]=1;
+    const x=key%COLS,y=Math.floor(key/COLS),p=center(x,y);
+    if(heuristic(p)<=2&&clear(p,goal)){
+      const points:Point[]=[];
+      for(let node=key;node>=0;node=parent[node]!)points.push(center(node%COLS,Math.floor(node/COLS)));
+      points.reverse();points.push({...goal});
+      const reduced:Point[]=[];let anchor=from;
+      for(let i=0;i<points.length;i++){
+        if(i===points.length-1||!clear(anchor,points[i+1]!)){reduced.push(points[i]!);anchor=points[i]!;}
+      }
+      return reduced;
+    }
+    for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]] as const){
+      const nx=x+dx,ny=y+dy;if(nx<0||nx>=COLS||ny<0||ny>=ROWS)continue;
+      const k=KEY(nx,ny),next=center(nx,ny),updated=cost[key]!+Math.hypot(dx,dy);
+      if(closed[k]||updated>=cost[k]!||!clear(p,next))continue;
+      cost[k]=updated;parent[k]=key;frontier.push({key:k,score:updated+heuristic(next)});
+    }
+  }
+  return [];
 }
 
 /** Route to a usable reach position even when the exact item coordinate is blocked. */
@@ -215,7 +258,7 @@ export function findPickupPath(
     if (!validGoal(destination)) continue;
     const path = findPath(from, destination, ACTOR_RADIUS, obstacles);
     if (path.length && path.every((point, index) =>
-      pickupSegmentClear(index === 0 ? from : path[index - 1]!, point, obstacles))) return path;
+      movementSegmentClear(index === 0 ? from : path[index - 1]!, point, obstacles))) return path;
   }
 
   // A loot drop can be within reach of a narrow strip at a wall even when
@@ -236,9 +279,9 @@ export function findPickupPath(
   const finish = (point: Point): Point | undefined => {
     if (validGoal(point)) return point;
     return usable.find(goal => Math.hypot(point.x - goal.x, point.y - goal.y) <= CELL * 2
-      && pickupSegmentClear(point, goal, obstacles));
+      && movementSegmentClear(point, goal, obstacles));
   };
-  const direct = usable.find(goal => pickupSegmentClear(from, goal, obstacles));
+  const direct = usable.find(goal => movementSegmentClear(from, goal, obstacles));
   if (direct) return [{ ...direct }];
   const parent = new Int32Array(COLS * ROWS).fill(-2);
   const queue: number[] = [];
@@ -246,7 +289,7 @@ export function findPickupPath(
   const enqueue = (x: number, y: number, previous: number, origin: Point): void => {
     if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return;
     const key = KEY(x, y);
-    if (parent[key] !== -2 || !pickupSegmentClear(origin, center(x, y), obstacles)) return;
+    if (parent[key] !== -2 || !movementSegmentClear(origin, center(x, y), obstacles)) return;
     parent[key] = previous;
     queue.push(key);
   };
@@ -312,7 +355,7 @@ export function resolveReachableDestination(
       || !canOccupy(from, radius, obstacles)) return null;
 
   // Keep an already reachable destination exact rather than snapping it to the grid.
-  if (canOccupy(requested, radius, obstacles) && findPath(from, requested, radius, obstacles).length > 0) {
+  if (canOccupy(requested, radius, obstacles) && findMovementPath(from, requested, radius, obstacles).length > 0) {
     return { ...requested };
   }
 
@@ -364,7 +407,7 @@ export function resolveReachableDestination(
     for (let dx = -1; dx <= 1; dx++) {
       const x = startX + dx, y = startY + dy;
       if (x < 0 || x >= COLS || y < 0 || y >= ROWS || !walkable(x, y)) continue;
-      if (lineClear(from, center(x, y), radius, obstacles)) enqueue(x, y);
+      if (movementSegmentClear(from, center(x, y), obstacles,radius)) enqueue(x, y);
     }
   }
 
@@ -384,12 +427,12 @@ export function resolveReachableDestination(
       const next = KEY(nx, ny);
       if (visited[next] || !walkable(nx, ny)) continue;
       if (dx !== 0 && dy !== 0 && (!walkable(x + dx, y) || !walkable(x, y + dy))) continue;
-      if (!lineClear(here, center(nx, ny), radius, obstacles)) continue;
+      if (!movementSegmentClear(here, center(nx, ny), obstacles,radius)) continue;
       enqueue(nx, ny);
     }
   }
 
-  return canOccupy(best, radius, obstacles) && findPath(from, best, radius, obstacles).length > 0
+  return canOccupy(best, radius, obstacles) && findMovementPath(from, best, radius, obstacles).length > 0
     ? { ...best }
     : null;
 }

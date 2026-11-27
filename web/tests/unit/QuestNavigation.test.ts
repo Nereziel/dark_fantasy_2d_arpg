@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { questTravelLeg, knownQuestRoute, projectDungeonMap } from '../../src/game/world/questNavigation';
+import { questTravelLeg, knownQuestRoute, projectDungeonMap, publicDungeonMinimapWalls } from '../../src/game/world/questNavigation';
 import { createMapDiscovery, revealAtPosition, type MapWorldInput } from '../../src/game/world/mapDiscovery';
+import { generateProceduralDungeon,DUNGEON_TILE_SIZE } from '../../src/game/world/proceduralDungeon';
 import { canOccupy, ACTOR_RADIUS } from '../../src/game/world/navigation';
 import type { Point } from '../../src/game/core/types';
 
@@ -16,6 +17,17 @@ function reveal(points:Point[],radius=80){
   return state;
 }
 describe('zone-aware tracked quest route',()=>{
+  it('treats hidden rooms and passages as solid on the public minimap',()=>{
+    const dungeon=Array.from({length:12},(_,seed)=>generateProceduralDungeon(seed)).find(d=>d.rooms.some(r=>r.type==='secret'))!;
+    expect(dungeon).toBeDefined();
+    const walls=publicDungeonMinimapWalls(dungeon);
+    const solid=(x:number,y:number)=>walls.some(w=>x>=w.x&&x<w.x+w.width&&y>=w.y&&y<w.y+w.height);
+    const secret=new Set(dungeon.rooms.filter(r=>r.type==='secret').map(r=>r.id));
+    const hidden=new Set(dungeon.doors.filter(d=>d.kind==='hidden').map(d=>d.id));
+    for(const tile of dungeon.tiles.filter(t=>t.kind==='floor')){
+      expect(solid(tile.x+DUNGEON_TILE_SIZE/2,tile.y+DUNGEON_TILE_SIZE/2)).toBe(secret.has(tile.roomId??'')||hidden.has(tile.doorId??''));
+    }
+  });
   it('chooses exit, correct entrance or local objective without mixing dungeon identities',()=>{
     expect(questTravelLeg('wilderness','crypt')).toBe('enter');
     expect(questTravelLeg('mine','crypt')).toBe('exit');
@@ -34,13 +46,15 @@ describe('zone-aware tracked quest route',()=>{
       for(let step=0;step<=100;step++)expect(canOccupy({x:a.x+(b.x-a.x)*step/100,y:a.y+(b.y-a.y)*step/100},ACTOR_RADIUS,[wall])).toBe(true);
     }
   });
-  it('never emits the unknown goal or walls behind fog; shows only the known prefix',()=>{
+  it('keeps unknown goals hidden while the minimap displays local walls',()=>{
     const known=reveal([start],40);
     const p=projectDungeonMap(known,world,start,[wall],{id:'boss',status:'active',position:goal},'minimap',{},'crypt');
     expect(p?.navigationTarget).toBeUndefined();
     expect(p?.markers.some(m=>m.id==='quest/boss')).toBe(false);
     expect(p?.markers.some(m=>m.kind==='town')).toBe(false);
-    expect(p?.walls).toEqual([]);
+    expect(p?.walls?.length).toBeGreaterThan(0);
+    const full=projectDungeonMap(known,world,start,[wall],null,'world',{},'crypt');
+    expect(full?.walls).toEqual([]);
     const route=knownQuestRoute(start,goal,[wall],known.revealedCells);
     expect(route.at(-1)).not.toEqual(goal);
     expect(route.every(p=>known.revealedCells.includes('fog/'+Math.floor(p.x/80)+'/'+Math.floor(p.y/80)))).toBe(true);

@@ -29,6 +29,15 @@ describe('Wave F integrated exploration and seed-scoped persistence', () => {
     expect(larger.cells.some(c=>c.visibility==='unexplored')).toBe(true);
     expect(larger.cells.filter(c=>c.visibility==='unexplored').every(c=>c.terrainId===undefined)).toBe(true);
   });
+  it('minimap is a presentation only and never advances world exploration',()=>{
+    const sim=new GameSimulation(42);
+    const before=sim.snapshot().mapDiscovery;
+    const mini=sim.mapProjection('minimap')!;
+    expect(mini.cells.every(c=>!!c.terrainId)).toBe(true);
+    expect(mini.cells.some(c=>c.visibility==='unexplored')).toBe(true);
+    expect(sim.snapshot().mapDiscovery).toEqual(before);
+    expect(sim.mapProjection('world')!.cells.filter(c=>c.visibility==='unexplored').every(c=>!c.terrainId)).toBe(true);
+  });
   it('reveals surroundings only after authoritative player movement', () => {
     const sim = new GameSimulation(42);
     const before = sim.snapshot();

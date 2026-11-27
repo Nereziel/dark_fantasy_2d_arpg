@@ -253,9 +253,6 @@ jobs:
     needs: [build, checks, browser]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-24.04
-    outputs:
-      publish: ${{ needs.build.outputs.publish }}
-      pages_artifact: pages-${{ github.sha }}-${{ github.run_attempt }}
     steps:
       - name: Checkout validation gate
         uses: actions/checkout@v4
@@ -270,32 +267,12 @@ jobs:
           case "$PROFILE" in quick|full) ;; *) echo 'Invalid validation profile' >&2; exit 1 ;; esac
           bash .github/actions/require-validation.sh "$BUILD_RESULT" "$CHECKS_RESULT" "$BROWSER_RESULT"
 
-      - name: Download verified production bundle
-        if: needs.build.outputs.publish == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build.outputs.bundle }}
-          path: web/dist
-
-      - name: Verify Pages base path
-        if: needs.build.outputs.publish == 'true'
-        run: |
-          test -s web/dist/index.html
-          grep -q '/dark_fantasy_2d_arpg/' web/dist/index.html
-
-      # Publish the verified bundle once. Re-running only deploy reuses this
-      # exact job output and never creates a duplicate Pages artifact.
-      - name: Upload verified Pages artifact
-        if: needs.build.outputs.publish == 'true'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          name: pages-${{ github.sha }}-${{ github.run_attempt }}
-          path: web/dist
-          retention-days: 3
-
+  # TEMPORARY PLAYTEST POLICY: publish a successful main build immediately.
+  # All test lanes and strict verify still run and retain their actual status.
+  # Restore the strict release policy by requiring verify in needs and if.
   deploy:
-    needs: verify
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.verify.outputs.publish == 'true'
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.build.result == 'success' && needs.build.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -309,6 +286,29 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Download exact production bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.bundle }}
+          path: web/dist
+
+      - name: Verify Pages base path
+        run: |
+          test -s web/dist/index.html
+          grep -q '/dark_fantasy_2d_arpg/' web/dist/index.html
+
+      - name: Upload playtest Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          name: pages-${{ github.sha }}-${{ github.run_attempt }}
+          path: web/dist
+          retention-days: 3
+
+      - name: Record temporary deployment policy
+        run: |
+          echo '### Playtest deployment: successful build; full validation runs independently.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'A published build is not proof of passing tests or release acceptance.' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
@@ -316,4 +316,4 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
         with:
-          artifact_name: ${{ needs.verify.outputs.pages_artifact }}
+          artifact_name: pages-${{ github.sha }}-${{ github.run_attempt }}

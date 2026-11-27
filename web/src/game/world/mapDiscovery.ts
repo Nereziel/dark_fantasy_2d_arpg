@@ -14,6 +14,8 @@ export const MAP_COLUMNS = Math.ceil(WORLD_WIDTH / MAP_CELL_SIZE);
 export const MAP_ROWS = Math.ceil(WORLD_HEIGHT / MAP_CELL_SIZE);
 export const MAP_CELL_COUNT = MAP_COLUMNS * MAP_ROWS;
 export const MAX_REVEAL_RADIUS = 320;
+export const MINIMAP_WIDTH=600;
+export const MINIMAP_HEIGHT=400;
 /** A verified movement sample must not span an unobserved teleport. */
 export const MAX_TRAVEL_SEGMENT = 160;
 
@@ -101,7 +103,7 @@ export interface MapProjectionOptions {
 export interface MapFogCell extends MapViewport {
   readonly id: FogCellId;
   readonly visibility: FogVisibility;
-  /** Only set for already-discovered cells; never expose unknown terrain. */
+  /** World map: discovered terrain only. Local minimap: all viewport terrain. */
   readonly terrainId?: TerrainId;
 }
 
@@ -549,9 +551,9 @@ export function projectMap(
   }
   const base: MapViewport = options.viewport ?? (mode === 'minimap'
     ? {
-        x: Math.max(0, Math.min(WORLD_WIDTH - 480, playerPosition.x - 240)),
-        y: Math.max(0, Math.min(WORLD_HEIGHT - 320, playerPosition.y - 160)),
-        width: 480, height: 320
+        x: Math.max(0, Math.min(WORLD_WIDTH - MINIMAP_WIDTH, playerPosition.x - MINIMAP_WIDTH/2)),
+        y: Math.max(0, Math.min(WORLD_HEIGHT - MINIMAP_HEIGHT, playerPosition.y - MINIMAP_HEIGHT/2)),
+        width: MINIMAP_WIDTH, height: MINIMAP_HEIGHT
       }
     : { x: 0, y: 0, width: WORLD_WIDTH, height: WORLD_HEIGHT });
   if (!validViewport(base)) return failed('invalidViewport');
@@ -680,21 +682,23 @@ function clipRoadSegment(a: Readonly<Point>, b: Readonly<Point>,
   return { from, to };
 }
 
-/** Pure, non-persistent presentation of real terrain over the discovered fog.
- * The source world remains private to GameSimulation. All geometry leaving the
- * simulator is intersected with observed cells, not merely hidden with SVG CSS.
- * Existing map fingerprints / persisted cell identifiers stay untouched.
- */
+/** Local terrain visibility is deliberately independent of recorded exploration.
+ * Only the minimap may paint the entire local viewport; markers and routes
+ * remain governed by discovery. World map geometry stays discovered-only. */
+export function mapCellPainted(mode:MapProjection['mode'],cell:MapFogCell):boolean{
+  return mode==='minimap'||cell.visibility==='discovered';
+}
+/** Geometry is clipped to painted cells without changing discovery or save data. */
 export function projectVisibleTerrain(
   projection: Readonly<MapProjection>, terrain: Readonly<WildernessTerrainResult>
 ): MapProjection {
-  const visible = projection.cells.filter(cell => cell.visibility === 'discovered');
+  const visible = projection.cells.filter(cell => mapCellPainted(projection.mode,cell));
   if (!visible.length) return Object.freeze({
     ...projection, roads: Object.freeze([] as MapVisibleRoad[])
   });
   const tiles = new Map(terrain.tiles.map(tile => [tile.x + '/' + tile.y, tile]));
   const cells = projection.cells.map(cell => {
-    if (cell.visibility !== 'discovered') return cell;
+    if (!mapCellPainted(projection.mode,cell)) return cell;
     const tile = tiles.get(cell.x + '/' + cell.y);
     if (!tile || tile.width !== cell.width || tile.height !== cell.height) return cell;
     return Object.freeze({ ...cell, terrainId: tile.terrainId });

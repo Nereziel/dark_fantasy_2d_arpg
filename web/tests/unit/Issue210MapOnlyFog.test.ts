@@ -18,13 +18,13 @@ function assertFog(map: MapProjection, known: ReadonlySet<string>, landmarks: Re
   const cells = new Map(map.cells.map(cell => [cell.id, cell]));
   for (const cell of map.cells) {
     expect(cell.visibility).toBe(known.has(cell.id) ? 'discovered' : 'unexplored');
-    if (!known.has(cell.id)) expect(cell.terrainId).toBeUndefined();
+    if (map.mode==='world'&&!known.has(cell.id)) expect(cell.terrainId).toBeUndefined();
     else expect(cell.terrainId).toBeDefined();
   }
   for (const road of map.roads ?? []) {
-    expect(known.has(road.cellId)).toBe(true);
+    if(map.mode==='world')expect(known.has(road.cellId)).toBe(true);
     const cell = cells.get(road.cellId);
-    expect(cell?.visibility).toBe('discovered');
+    if(map.mode==='world')expect(cell?.visibility).toBe('discovered');
     if (!cell) throw new Error('Road outside map cells: ' + road.id);
     for (const point of [road.from, road.to]) {
       expect(point.x).toBeGreaterThanOrEqual(cell.x - 0.001);
@@ -61,7 +61,12 @@ describe('D5.3 — map-only fog on seeded isometric terrain', () => {
     const mini = projectVisibleTerrain(value(projectMap(start, input, CAMP, [], { mode: 'minimap' })), world.terrain);
     assertFog(mini, known, landmarks);
     const fullById = new Map(full.cells.map(cell => [cell.id, cell]));
-    for (const cell of mini.cells) expect(cell).toEqual(fullById.get(cell.id));
+    for (const cell of mini.cells){
+      const fullCell=fullById.get(cell.id)!;
+      expect(cell.visibility).toBe(fullCell.visibility);
+      expect(cell.terrainId).toBeDefined();
+      if(fullCell.visibility==='discovered')expect(cell).toEqual(fullCell);
+    }
 
     const ground = wildernessGroundLayout(world.terrain);
     const origin = { x: 1400, y: 100 };

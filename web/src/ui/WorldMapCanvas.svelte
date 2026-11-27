@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { _ as t } from 'svelte-i18n';
   import { navigationArrow } from '../game/ui/questTracking';
-  import type { MapProjection, MapMarkerKind } from '../game/world/mapDiscovery';
+  import { mapCellPainted, type MapProjection, type MapMarkerKind } from '../game/world/mapDiscovery';
   import type { TerrainId } from '../game/world/wildernessTerrain';
 
   let { projection, compact = false, onPan, onZoom }: {
@@ -111,17 +111,16 @@
 </script>
 
 <div class="map-canvas" class:compact data-map-mode={projection.mode}
-  data-map-zoom={projection.zoom.toFixed(2)} data-map-area={projection.area??'wilderness'}
+  data-fog-policy={compact?'local':'explored'} data-map-zoom={projection.zoom.toFixed(2)} data-map-area={projection.area??'wilderness'}
   data-navigation-stage={projection.navigationStage}>
   <svg bind:this={svgElement}
     viewBox={`${projection.viewport.x} ${projection.viewport.y} ${projection.viewport.width} ${projection.viewport.height}`}
     preserveAspectRatio="xMidYMid meet" role="img" aria-label={$t('map.title')}
     data-map-viewport={`${Math.round(projection.viewport.x)},${Math.round(projection.viewport.y)},${Math.round(projection.viewport.width)},${Math.round(projection.viewport.height)}`}>
     <defs>
-      <!-- Exact known-cell clipping: unlike blur masks, unknown terrain and road
-           geometry are NEVER emitted in SVG, and strokes cannot bleed over fog. -->
+      <!-- World map clips to discovered cells; minimap clips to its local terrain. -->
       <clipPath id={clipId} clipPathUnits="userSpaceOnUse">
-        {#each projection.cells.filter(cell => cell.visibility === 'discovered') as cell (cell.id)}
+        {#each projection.cells.filter(cell => mapCellPainted(projection.mode,cell)) as cell (cell.id)}
           <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height} />
         {/each}
       </clipPath>
@@ -131,18 +130,18 @@
           stroke-width="1.2" opacity=".11" />
       </pattern>
     </defs>
-    <!-- Undiscovered world remains a solid opaque dark field. -->
+    <!-- The full map leaves undiscovered terrain opaque; local minimap fills its viewport. -->
     <rect x={projection.viewport.x} y={projection.viewport.y}
       width={projection.viewport.width} height={projection.viewport.height} fill="#0a1018" />
     {#each projection.cells as cell (cell.id)}
-      {#if cell.visibility === 'discovered'}
+      {#if mapCellPainted(projection.mode,cell)}
         <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height}
           fill={terrainColor(cell.terrainId)} data-terrain-cell={cell.id}
           data-terrain-kind={cell.terrainId ?? 'known'} />
       {/if}
-      <!-- Test-only visibility signal carries no unknown terrain ID. -->
+      <!-- Discovery diagnostics are separate from the local terrain presentation. -->
       <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height}
-        fill="none" stroke="none" data-fog-cell={cell.id} data-fog={cell.visibility} />
+        fill="none" stroke="none" data-map-cell={cell.id} data-fog-cell={compact?undefined:cell.id} data-fog={compact?undefined:cell.visibility} data-discovery={compact?cell.visibility:undefined} />
     {/each}
     <rect x={projection.viewport.x} y={projection.viewport.y}
       width={projection.viewport.width} height={projection.viewport.height}

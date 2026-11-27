@@ -57,6 +57,22 @@ describe('Issue #121 — terrain visibility, stable fog and camera projection', 
       value(revealAtPosition(discovered, CAMP, 160, input)).revealedCells
     );
   });
+  it('shows local minimap terrain without discovering cells or hidden markers',()=>{
+    const state=value(createMapDiscovery(input,CAMP,80));
+    const before=JSON.stringify(state);
+    const hint={id:'hidden',status:'active' as const,position:{x:CAMP.x+220,y:CAMP.y}};
+    const mini=projectVisibleTerrain(value(projectMap(state,input,CAMP,[hint],{mode:'minimap',trackedQuestId:'hidden'})),world.terrain);
+    expect(mini.viewport.width).toBe(600);
+    expect(mini.viewport.height).toBe(400);
+    expect(mini.cells.every(c=>c.terrainId!==undefined)).toBe(true);
+    expect(mini.cells.some(c=>c.visibility==='unexplored')).toBe(true);
+    expect(mini.navigationTarget).toBeUndefined();
+    expect(mini.markers.some(m=>m.kind==='quest')).toBe(false);
+    expect(mini.roads?.every(r=>mini.cells.some(c=>c.id===r.cellId))).toBe(true);
+    expect(JSON.stringify(state)).toBe(before);
+    const full=projectVisibleTerrain(value(projectMap(state,input,CAMP)),world.terrain);
+    expect(full.cells.filter(c=>c.visibility==='unexplored').every(c=>c.terrainId===undefined)).toBe(true);
+  });
   it('zoom/pan is bounded, follows requested map center and cannot reveal POIs', () => {
     const discovered = value(createMapDiscovery(input, CAMP, 160));
     const center = { x: 800, y: 760 };

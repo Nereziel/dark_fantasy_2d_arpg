@@ -75,7 +75,17 @@ test('default isometric view boots, accepts a pointer and keeps the map controls
   await expect(canvas).toHaveAttribute('data-static-layers', String(staticTotal));
   await expect.poll(async () => Number(await canvas.getAttribute('data-static-visible-layers'))).toBeGreaterThan(0);
   await expect.poll(async () => Number(await canvas.getAttribute('data-static-visible-layers'))).toBeLessThan(staticTotal);
-  await assertMapFog(page.locator('[data-minimap="active"] [data-map-mode="minimap"]'), 'mini');
+  const mini=page.locator('[data-minimap="active"] [data-map-mode="minimap"]');
+  await expect(mini).toHaveAttribute('data-fog-policy','local');
+  await expect(mini.locator('[data-fog="unexplored"]')).toHaveCount(0);
+  const local=await mini.evaluate(root=>({
+    cells:root.querySelectorAll('[data-map-cell]').length,
+    terrain:root.querySelectorAll('[data-terrain-cell]').length,
+    unexplored:root.querySelectorAll('[data-discovery="unexplored"]').length
+  }));
+  expect(local.cells).toBeGreaterThan(0);
+  expect(local.terrain).toBe(local.cells);
+  expect(local.unexplored).toBeGreaterThan(0);
   await page.keyboard.press('m');
   const dialog = page.getByTestId('world-map-dialog');
   await expect(dialog).toBeVisible();
