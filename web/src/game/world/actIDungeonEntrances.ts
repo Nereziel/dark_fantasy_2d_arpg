@@ -1,7 +1,8 @@
 // GPL-3.0-only — pure entrance and interior contracts; runtime owns transitions.
 import type { Point } from '../core/types';
 import { CRYPT_GATE } from './generator';
-import { ACTOR_RADIUS, canOccupy, findPath } from './navigation';
+import { ACTOR_RADIUS, canOccupy, findMovementPath } from './navigation';
+import { ACT_I_DUNGEON_ENTRANCE_SPACING } from './wildernessFeatures';
 import { generateProceduralDungeon, type ProceduralDungeonResult } from './proceduralDungeon';
 import type { WildernessRuntimeWorld } from './wildernessRuntime';
 
@@ -35,28 +36,54 @@ export function dungeonInteriorSeed(seed:number,id:unknown):number{
 
 /** Resolve optional entries only from actual final world anchors. No geometry,
  * discovery, combat or world state changes. An unavailable optional entrance
- * is omitted; no unchecked coordinate is substituted.
+ * is omitted only if no compatible pair of actual anchors exists (e.g. an
+ * incomplete fixture); no unchecked coordinate is substituted.
  */
 export function planActIDungeonEntrances(world:WildernessRuntimeWorld):ActIDungeonEntrance[]{
   const {layout}=world;
   if(!validSeed(layout.seed))throw new RangeError('Invalid Act I world seed');
   const reachable=(p:Readonly<Point>)=>canOccupy(p,ACTOR_RADIUS,layout.obstacles)
-    &&findPath(layout.camp,p,ACTOR_RADIUS,layout.obstacles).length>0;
+    &&findMovementPath(layout.camp,p,ACTOR_RADIUS,layout.obstacles).length>0;
   const entries:ActIDungeonEntrance[]=[];
   const append=(id:ActIDungeonId,theme:DungeonTheme,p:Readonly<Point>,sourceId:string,required=false)=>{
-    if(!reachable(p)||entries.some(e=>Math.hypot(e.position.x-p.x,e.position.y-p.y)<96))return false;
+    if(!reachable(p)||entries.some(e=>Math.hypot(e.position.x-p.x,e.position.y-p.y)<ACT_I_DUNGEON_ENTRANCE_SPACING))return false;
     entries.push({id,theme,position:{...p},returnPosition:{...p},sourceId,required,
       interiorSeed:dungeonInteriorSeed(layout.seed,id)});
     return true;
   };
   if(!append('crypt','corrupted_crypt',CRYPT_GATE,'act1.crypt_entrance',true))
     throw new RangeError('Required crypt entrance unreachable');
+  type Anchor={sourceId:string;position:Readonly<Point>};
   const mine=world.structures?.find(s=>s.id==='wild.mine'&&s.kind==='mine');
-  const minePoi=world.features.find(f=>f.id==='wild.poi.2'&&f.kind==='poi');
-  if(!(mine&&append('mine','abandoned_mine',mine.approach,mine.id))&&minePoi)
-    append('mine','abandoned_mine',minePoi.position,minePoi.id);
-  const cave=world.features.find(f=>f.id==='wild.poi.3'&&f.kind==='poi');
-  if(cave)append('cave','forest_cave',cave.position,cave.id);
+  const pois:Anchor[]=world.features.filter(f=>f.kind==='poi')
+    .map(f=>({sourceId:f.id,position:f.position}));
+  const mineStructure:Anchor|undefined=mine?{sourceId:mine.id,position:mine.approach}:undefined;
+  const minePoi=pois.find(p=>p.sourceId==='wild.poi.2');
+  const cavePoi=pois.find(p=>p.sourceId==='wild.poi.3');
+  const ordered=(...groups:(Anchor|undefined)[]):Anchor[]=>{
+    const seen=new Set<string>();
+    return groups.filter((p):p is Anchor=>p!==undefined)
+      .filter(p=>{if(seen.has(p.sourceId))return false;seen.add(p.sourceId);return true;});
+  };
+  const separated=(a:Readonly<Point>,b:Readonly<Point>)=>
+    Math.hypot(a.x-b.x,a.y-b.y)>=ACT_I_DUNGEON_ENTRANCE_SPACING;
+  const legal=(p:Anchor)=>separated(p.position,CRYPT_GATE)&&reachable(p.position);
+  const mineCandidates=ordered(mineStructure,minePoi,...pois.filter(p=>p!==cavePoi),cavePoi).filter(legal);
+  const caveCandidates=ordered(cavePoi,...pois.filter(p=>p!==minePoi),minePoi).filter(legal);
+  // Select the two entrances together. A mine structure must not consume
+  // the only valid cave approach; prefer the authored cave and then mine.
+  for(const cave of caveCandidates){
+    const other=mineCandidates.find(p=>p.sourceId!==cave.sourceId&&separated(p.position,cave.position));
+    if(!other)continue;
+    append('mine','abandoned_mine',other.position,other.sourceId);
+    append('cave','forest_cave',cave.position,cave.sourceId);
+    return entries;
+  }
+  // For a deliberately incomplete fixture, keep only safe authored entries.
+  // The strict runtime-world seed sweep rejects incomplete generated worlds.
+  const fallbackMine=mineCandidates.find(p=>p===mineStructure||p===minePoi);
+  if(fallbackMine)append('mine','abandoned_mine',fallbackMine.position,fallbackMine.sourceId);
+  if(cavePoi)append('cave','forest_cave',cavePoi.position,cavePoi.sourceId);
   return entries;
 }
 
