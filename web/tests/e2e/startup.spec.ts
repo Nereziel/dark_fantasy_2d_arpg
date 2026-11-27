@@ -255,12 +255,16 @@ test('enters a separate procedurally generated crypt, returns to camp and reload
   await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'wilderness');
   await expect(page.locator('.zone-name')).toHaveText('Emberwatch Camp');
   await expect(page.getByRole('button', { name: 'Browse wares' })).toBeVisible();
+  const rosterBefore=await page.locator('.enemy-roster-title').innerText();
+  expect(rosterBefore).toMatch(/[3-6]\/[3-6]/);
   await saveFromMenu(page);
   await expect(page.getByRole('status')).toContainText('Hero saved');
   await page.reload();
   await continueGame(page);
   await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'wilderness');
-  await expect(page.locator('.enemy-roster-title')).toContainText('3/3');
+  await expect(page.locator('.game-screen')).toHaveAttribute('data-world-seed',seed!);
+  await expect(page.locator('.enemy-roster-title')).toHaveText(rosterBefore);
+  await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toHaveAttribute('data-prop-visuals', /"soul-shrine":"shrine"/);
 });
 
 test('opens the derived character sheet, switches locales live, and closes with C or Escape', async ({ page }) => {
