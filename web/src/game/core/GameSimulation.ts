@@ -75,7 +75,7 @@ import { buildCryptWorld, CRYPT_RUNTIME_BOSS_POSITIONS } from '../world/dungeonR
 import { planOptionalDungeonEntry, planOptionalDungeonExit, type OptionalDungeonVisit } from '../world/optionalDungeonVisit';
 import { planActIDungeonEntrances, type ActIDungeonEntrance } from '../world/actIDungeonEntrances';
 import { projectDiscoveredDungeonEntrances } from '../world/dungeonPortalPresentation';
-import { questTravelLeg, knownQuestRoute, projectDungeonMap, type QuestArea } from '../world/questNavigation';
+import { questTravelLeg, knownQuestRoute, projectDungeonMap, publicDungeonMinimapWalls, type QuestArea } from '../world/questNavigation';
 import {optionalDungeonRewardId,validOptionalDungeonRewardIds,type OptionalDungeonRewardId} from '../world/optionalDungeonRewards';
 import {planOptionalDungeonFeatures,optionalDungeonChestProjection,rollOptionalDungeonTreasure} from '../world/optionalDungeonFeatures';
 import {
@@ -100,7 +100,7 @@ import {
   createMapDiscovery, revealAtPosition, revealTravelSegment, activateMapWaypoint,
   validateMapDiscovery, projectMap, projectVisibleTerrain,
   type MapDiscoveryState, type MapWorldInput,
-  type MapProjection, type MapQuestHint, type MapProjectionOptions
+  type MapProjection, type MapQuestHint, type MapProjectionOptions, type MapViewport
 } from '../world/mapDiscovery';
 import {
   nearNpc, nearWarden, isNpcId, NPC_POSITIONS, NPC_INTERACT_RANGE,
@@ -370,6 +370,17 @@ export class GameSimulation {
   private mapWorld: MapWorldInput | null = null;
   private mapDiscovery: MapDiscoveryState | null = null;
   private dungeonMap: {layout:WorldLayout;input:MapWorldInput;state:MapDiscoveryState}|null=null;
+  private dungeonLocalWalls:readonly MapViewport[]|undefined;
+  private dungeonSecretBounds:readonly MapViewport[]=[];
+  private dungeonSecretSeen=false;
+  private prepareDungeonMinimap(dungeon:Parameters<typeof publicDungeonMinimapWalls>[0]|undefined):void{
+    this.dungeonLocalWalls=dungeon?publicDungeonMinimapWalls(dungeon):undefined;
+    this.dungeonSecretBounds=dungeon?.rooms.filter(r=>r.type==='secret').map(r=>r.bounds)??[];
+    this.dungeonSecretSeen=false;
+  }
+  private inSecretRoom():boolean{
+    return this.dungeonSecretBounds.some(b=>this.player.x>=b.x&&this.player.x<b.x+b.width&&this.player.y>=b.y&&this.player.y<b.y+b.height);
+  }
   private questRouteCache: {layout:WorldLayout;from:Point;to:Point;path:Point[]}|null=null;
   /** Renderer-only seed geometry; never included in either persistence contract. */
   private mapTerrain: WildernessRuntimeWorld['terrain'] | null = null;
@@ -522,7 +533,8 @@ export class GameSimulation {
       presentationKey:leg==='exit'?'worldLabels.portalExit':'map.quest'}:null;
     const route=target?this.observedQuestRoute(target,observed.state):[];
     const projection=projectDungeonMap(observed.state,observed.input,this.player,this.world.obstacles,hint,mode,
-      mode==='world'?options:{},area,route);
+      mode==='world'?options:{},area,route,
+      this.dungeonSecretSeen||this.inSecretRoom()?this.world.obstacles:this.dungeonLocalWalls);
     return projection?{...projection,...(leg?{navigationStage:leg}:{})}:null;
   }
   private observeExploration(): void {
@@ -531,6 +543,7 @@ export class GameSimulation {
       const observed=this.dungeonMapState();
       if(!observed)return;
       this.dungeonMap=observed;
+      if(this.inSecretRoom())this.dungeonSecretSeen=true;
       const last=observed.state.lastObservedPosition;
       if(last&&distance(last,this.player)<18)return;
       // Only actual position observations, not the route, reveal dungeon cells.
@@ -555,7 +568,7 @@ export class GameSimulation {
     }
   }
 
-  /** Only discovered areas and markers ever cross into the UI-facing map projection. */
+  /** World map is discovered-only; minimap paints local terrain without awarding discovery. */
   mapProjection(mode: 'world' | 'minimap' = 'world',
     options: Pick<MapProjectionOptions, 'zoom' | 'center' | 'trackedQuestId'> = {}): MapProjection | null {
     if(this.zone==='crypt')return this.dungeonQuestProjection(mode,options);
@@ -1457,6 +1470,7 @@ export class GameSimulation {
     this.world = wilderness.layout;
     this.storyFeatures = wilderness.features;
     this.cryptTheme = null;
+    this.prepareDungeonMinimap(undefined);
     this.player = spawnPlayer(this.classId, this.equipment, checkpoint.position);
     this.refreshHealthLimit();
     this.player.health = this.player.maxHealth;
@@ -4135,6 +4149,7 @@ export class GameSimulation {
     this.world = wilderness?.layout ?? visit?.layout ?? crypt!.layout;
     // Optional prop/trap rewards remain disabled until their separate persistence contract.
     this.cryptTheme = crypt?.theme ?? null;
+    this.prepareDungeonMinimap(visit?.interior??crypt?.dungeon);
     this.storyFeatures = wilderness?.features ?? [];
     const spawn = destination === 'crypt' ? (visit?.interior.playerSpawn ?? CRYPT_EXIT) : (returnPosition ?? CAMP);
     this.player.x = spawn.x;
@@ -5013,7 +5028,8 @@ export class GameSimulation {
     const restoredVisit = entry ? planOptionalDungeonEntry(restoredWilderness, s.dungeonId, {...entry.position,alive:true}) : null;
     if (s.dungeonId && !restoredVisit) return false;
     if (!validOptionalDungeonRewardIds(s.optionalDungeonRewardIds ?? [])) return false;
-    const layout = s.zone === 'crypt' ? (restoredVisit?.layout ?? buildCryptWorld(s.worldSeed).layout) : restoredWilderness.layout;
+    const restoredCrypt=s.zone==='crypt'&&!restoredVisit?buildCryptWorld(s.worldSeed):null;
+    const layout = s.zone === 'crypt' ? (restoredVisit?.layout ?? restoredCrypt!.layout) : restoredWilderness.layout;
     const restoredIndex = restoredWilderness ? createChunkIndex(restoredWilderness) : null;
     const restoredMapWorld = restoredWilderness ? this.mapInput(restoredWilderness) : null;
     const cryptManifest = layout && (s.zone === 'crypt'
@@ -5344,7 +5360,8 @@ export class GameSimulation {
     this.world = layout;
     this.optionalVisit = restoredVisit;
     this.optionalDungeonRewards = new Set(s.optionalDungeonRewardIds ?? []);
-    this.cryptTheme = s.zone === 'crypt' && !restoredVisit ? buildCryptWorld(s.worldSeed).theme : null;
+    this.cryptTheme = restoredCrypt?.theme ?? null;
+    this.prepareDungeonMinimap(restoredVisit?.interior??restoredCrypt?.dungeon);
     this.cryptArmedTraps.clear();
     this.pendingCryptPropId = null;
     this.cryptUsedPropIds.clear();
@@ -5472,6 +5489,7 @@ export class GameSimulation {
     this.optionalVisit = null;
     this.optionalDungeonRewards.clear();
     this.cryptTheme = null;
+    this.prepareDungeonMinimap(undefined);
     this.cryptUsedPropIds.clear();
     this.cryptTriggeredTrapIds.clear();
     this.cryptArmedTraps.clear();
