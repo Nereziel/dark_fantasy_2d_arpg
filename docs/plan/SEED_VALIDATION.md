@@ -12,7 +12,7 @@ From `web/`:
 npm test -- tests/unit/Issue113SeedValidation.test.ts
 ```
 
-By default this checks 24 arithmetic seeds plus well-known boundary values,
+By default this checks 24 arithmetic seeds plus boundary values and the 22 event regression seeds,
 covering the Act I town, NPC services, mandatory story locations, roads, encounters,
 dungeon entrance, exit, guardian rooms and boss path.
 
@@ -52,8 +52,7 @@ forge, building entrances and pedestrian paths. It logs a JSON
 `[Act I village coverage]` report with the total, complete count and missing
 seeds, distinguishing topology from population failure.
 
-Both populated villages are required by default, including the 31-seed PR
-baseline and the seven historical regression seeds. Larger sweeps are strict
+Both populated villages are required by default, including the PR baseline and historical regression seeds. Larger sweeps are strict
 by default as well; use `SEED_SWEEP_REQUIRE_VILLAGES=0` only for diagnostic
 coverage collection (not acceptance). For a larger acceptance sample:
 
@@ -93,3 +92,6 @@ regions have been swept and replayed. No Phaser/Svelte or saved-game schema
 is involved in the seed runner.
 
 The strict content gate requests both authored event slots and the complete environment catalog on every sampled seed. These are acceptance requirements for Act I; a failing seed must be diagnosed, not silently omitted. This sweep validates published manifests and pure travel plans, not natural browser combat or reward collection.
+
+### Event placement regressions (#288)
+The initial strict sweep (45988894581) exposed 22 distinct failing seeds including 20 of the 1000 arithmetic seeds. All are pinned in the normal sweep. The shared event spawn planner preserves the original successful greedy pair, searches alternate pairs and additional bounded offsets only on failure, then the feature planner searches a bounded grid for a playable replacement anchor if needed. Event identity, story optionality, reward tables and random draw sequence remain unchanged. A failed fallback rejects the feature plan rather than publishing an unplayable event; existing runtime safe-layout retry applies. Optional event coordinates and derived world geometry may change for affected seeds. New CI is required to demonstrate coverage.
