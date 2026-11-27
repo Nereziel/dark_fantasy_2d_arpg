@@ -2,6 +2,8 @@
 import type {Point} from '../core/types';
 import {ENEMY_DEFINITIONS,PACK_SIZE,type EnemyType,type EnemyUnit} from './enemies';
 import type {OptionalDungeonId} from '../world/optionalDungeonVisit';
+import type {MonsterAction} from './monsterRuntime';
+import {movementSegmentClear,type Obstacle} from '../world/navigation';
 
 type Stage=0|1;
 const ROSTERS:Readonly<Record<OptionalDungeonId,readonly [readonly EnemyType[],readonly EnemyType[]]>>={
@@ -36,4 +38,22 @@ export function createOptionalDungeonPack(id:OptionalDungeonId,stage:Stage,level
     return {actor:{id:actorId(type,stage,index),type,level,...position,health,maxHealth:health,alive:true},
       intent:null,cooldown:.65+index*.3,effects:[],abilityCooldowns:{}};
   });
+}
+
+/** Only the canonical optional stage-one bosses get these actions. Reuse the
+ * normal enemy intent/cooldown pipeline; no persistent boss state or RNG. */
+const BOSS_ACTIONS:Readonly<Record<OptionalDungeonId,MonsterAction>>={
+  mine:{id:'foremanSlam',kind:'damage',attack:'sweep',range:108,areaRadius:108,windup:1.4,cooldown:6,damage:42},
+  cave:{id:'deepBoarCharge',kind:'damage',attack:'leap',range:190,areaRadius:70,windup:1.2,cooldown:5.5,damage:38}
+};
+
+export function optionalDungeonBossAction(id:OptionalDungeonId|undefined,stage:Stage,actor:string):MonsterAction|undefined{
+  return id&&isOptionalDungeonBoss(id,stage,actor)?{...BOSS_ACTIONS[id]}:undefined;
+}
+
+/** A charge cannot cross a wall even when the locked destination is free. */
+export function canResolveOptionalDungeonBossAction(action:MonsterAction,from:Point,to:Point,obstacles:readonly Obstacle[]):boolean{
+  const distance=Math.hypot(to.x-from.x,to.y-from.y);
+  if(!Number.isFinite(distance)||distance>action.range+0.5)return false;
+  return action.id!=='deepBoarCharge'||movementSegmentClear(from,to,obstacles);
 }
