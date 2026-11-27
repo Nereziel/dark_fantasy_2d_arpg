@@ -1,5 +1,5 @@
 // GPL-3.0-only
-import {describe,expect,it} from 'vitest';
+import {describe,expect,it,vi} from 'vitest';
 import {optionalDungeonBossAction,canResolveOptionalDungeonBossAction} from '../../src/game/enemies/optionalDungeonEncounters';
 import {GameSimulation} from '../../src/game/core/GameSimulation';
 import {buildWilderness} from '../../src/game/world/wildernessRuntime';
@@ -37,7 +37,7 @@ describe('Issue #208 C3.5: optional dungeon boss attacks',()=>{
     const initial=sim.snapshot();
     expect(sim.restore({...initial,player:{...initial.player,...entrance.position}})).toBe(true);
     sim.command({type:'usePortal',dungeonId:id});
-    const internal=sim as unknown as {units:EnemyUnit[];defeatEnemy:(u:EnemyUnit)=>void;updateEnemyAI:(u:EnemyUnit,dt:number)=>void};
+    const internal=sim as unknown as {units:EnemyUnit[];defeatEnemy:(u:EnemyUnit)=>void;updateEnemyAI:(u:EnemyUnit,dt:number)=>void;dealPlayerDamage:(base:number,type:string,sourceId:string)=>boolean};
     for(const unit of [...internal.units])internal.defeatEnemy(unit);
     for(let i=0;i<40&&sim.snapshot().dungeonStage===0;i++)sim.advance(100);
     expect(sim.snapshot().dungeonStage).toBe(1);
@@ -53,7 +53,24 @@ describe('Issue #208 C3.5: optional dungeon boss attacks',()=>{
     const action=optionalDungeonBossAction(id,1,live.actor.id)!;
     expect(live.intent).toMatchObject({abilityId:action.id,pattern:action.attack,total:action.windup});
     expect(live.abilityCooldowns?.[action.id]).toBe(action.cooldown);
-    expect(sim.restore(sim.snapshot())).toBe(true);
+    const warning=sim.snapshot();
+    expect(sim.restore({...warning,enemies:warning.enemies.map((u,i)=>i===0?{...u,intent:{...u.intent!,abilityId:'forgedBossAction'}}:u)})).toBe(false);
+    expect(sim.restore(warning)).toBe(true);
+    const hitSpy=vi.spyOn(internal,'dealPlayerDamage');
+    internal.updateEnemyAI(internal.units[0]!,action.windup+0.01);
+    expect(hitSpy).toHaveBeenCalledWith(action.damage,'physical',live.actor.id);
+    expect(sim.snapshot().enemies[0]!.intent).toBeNull();
+    expect(sim.restore(warning)).toBe(true);
+    const away=Array.from({length:16},(_,i)=>({
+      x:warning.enemies[0]!.intent!.x+150*Math.cos(i*Math.PI/8),
+      y:warning.enemies[0]!.intent!.y+150*Math.sin(i*Math.PI/8)
+    })).find(p=>movementSegmentClear(playerPoint,p,interior.obstacles));
+    expect(away).toBeDefined();
+    expect(sim.restore({...warning,player:{...warning.player,...away!}})).toBe(true);
+    hitSpy.mockClear();
+    internal.updateEnemyAI(internal.units[0]!,action.windup+0.01);
+    expect(hitSpy).not.toHaveBeenCalled();
+    hitSpy.mockRestore();
     expect(sim.snapshot().hollowKing).toBeNull();
   },30000);
 });
