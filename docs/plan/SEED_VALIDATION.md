@@ -37,6 +37,9 @@ single-seed replay command. The harness verifies:
 - Reserved mine/cave POIs, portal separation, unique interior seeds and exact exterior return positions
 - Visible roads with valid endpoints and clear navigation waypoints
 - Dungeon entry/exit, boss and guards, required feature/encounter positions in crypt, mine and cave
+- Complete 15-object environment manifest (including all six shrine blessings and dependent door/lever objects), both playable event anchors and their two enemy spawns, safe paths from camp and event anchor
+- Both waypoint travel directions with activated sources and targets in the same wilderness; no save/runtime activation is simulated
+- One-shot optional-dungeon chest and trap plans with reachable anchors and positive warning duration
 - Generator self-validation and independent path/geometry checks
 - Stable JSON-shaped output on exact seed replay
 - Rejection of NaN, infinities, fractional, negative and out-of-range seeds
@@ -65,7 +68,7 @@ The replay includes the fixed boundary samples as in the original harness.
 ## Extended GitHub Actions sweep
 
 The dedicated `.github/workflows/act1-seed-sweep.yml` workflow runs when
-that workflow changes in a PR, or manually using **Actions → Act I extended
+that workflow or its strict seed test changes in a PR, or manually using **Actions → Act I extended
 seed sweep → Run workflow** after it is merged. It is not added to the
 normal per-PR acceptance job.
 
@@ -88,3 +91,5 @@ Once Acts II–V (#104–#107) are implemented, expand the same harness with
 biome/region/dungeon adapters. Leave Issue #113 open until all mandatory campaign
 regions have been swept and replayed. No Phaser/Svelte or saved-game schema
 is involved in the seed runner.
+
+The strict content gate requests both authored event slots and the complete environment catalog on every sampled seed. These are acceptance requirements for Act I; a failing seed must be diagnosed, not silently omitted. This sweep validates published manifests and pure travel plans, not natural browser combat or reward collection.
