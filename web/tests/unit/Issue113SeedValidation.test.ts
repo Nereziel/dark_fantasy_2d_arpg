@@ -3,6 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildWilderness } from '../../src/game/world/wildernessRuntime';
 import { buildCryptWorld } from '../../src/game/world/dungeonRuntime';
+import { ACT_I_DUNGEON_IDS, buildActIDungeonInterior, planActIDungeonEntrances } from '../../src/game/world/actIDungeonEntrances';
+import { ACT_I_DUNGEON_ENTRANCE_SPACING } from '../../src/game/world/wildernessFeatures';
 import { validateWildernessTerrain, generateWildernessTerrain } from '../../src/game/world/wildernessTerrain';
 import { generateProceduralDungeon, validateProceduralDungeon } from '../../src/game/world/proceduralDungeon';
 import { MANDATORY_FEATURE_IDS } from '../../src/game/world/wildernessFeatures';
@@ -32,7 +34,8 @@ const seeds = Array.from({ length: COUNT }, (_, i) => (START + Math.imul(i, 7919
 const sample = [0, 1, 2, 3, 42, 99, 2683541248, 0x7fffffff, 0xffffffff];
 const suiteSeeds = [...new Set([...sample, ...seeds])];
 
-function checkedSeed(seed: number, region: 'wilderness' | 'crypt', fn: () => void): void {
+type SweepRegion = 'wilderness' | 'crypt' | 'mine' | 'cave';
+function checkedSeed(seed: number, region: SweepRegion, fn: () => void): void {
   try {
     fn();
   } catch (error) {
@@ -45,7 +48,7 @@ function checkedSeed(seed: number, region: 'wilderness' | 'crypt', fn: () => voi
   }
 }
 function criticalPath(
-  seed: number, region: 'wilderness' | 'crypt', id: string,
+  seed: number, region: SweepRegion, id: string,
   start: { x: number; y: number }, point: { x: number; y: number },
   obstacles: readonly { id: string; x: number; y: number; width: number; height: number }[]
 ): void {
@@ -85,6 +88,43 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
       for (const [index, point] of layout.encounterPositions.entries()) {
         criticalPath(seed, 'wilderness', 'encounter-' + index, layout.camp,
           point, layout.obstacles);
+      }
+      // Full Act I must publish all three portals, not just the story crypt.
+      const portals=planActIDungeonEntrances(world);
+      expect(portals.map(p=>p.id), 'Missing Act I dungeon entrance').toEqual([...ACT_I_DUNGEON_IDS]);
+      expect(new Set(portals.map(p=>p.interiorSeed)).size).toBe(3);
+      expect(new Set(portals.map(p=>p.sourceId)).size).toBe(3);
+      const reserved=[CRYPT_GATE,...['wild.poi.2','wild.poi.3'].map(id=>{
+        const feature=features.find(f=>f.id===id&&f.kind==='poi');
+        if(!feature)throw new Error('Missing reserved dungeon POI '+id);
+        return feature.position;
+      })];
+      for(let i=0;i<reserved.length;i++){
+        for(let j=0;j<i;j++)expect(Math.hypot(reserved[i]!.x-reserved[j]!.x,
+          reserved[i]!.y-reserved[j]!.y)).toBeGreaterThanOrEqual(ACT_I_DUNGEON_ENTRANCE_SPACING);
+      }
+      for(const [i,entry] of portals.entries()){
+        expect(entry.returnPosition).toEqual(entry.position);
+        criticalPath(seed,'wilderness','portal-'+entry.id,layout.camp,entry.position,layout.obstacles);
+        for(let j=0;j<i;j++)expect(Math.hypot(entry.position.x-portals[j]!.position.x,
+          entry.position.y-portals[j]!.position.y)).toBeGreaterThanOrEqual(ACT_I_DUNGEON_ENTRANCE_SPACING);
+        if(entry.id==='crypt')continue;
+        const id=entry.id;
+        checkedSeed(seed,id,()=>{
+          const interior=buildActIDungeonInterior(seed,id);
+          expect(interior.seed).toBe(entry.interiorSeed);
+          expect(validateProceduralDungeon(interior).valid).toBe(true);
+          const spawn=interior.playerSpawn, walls=interior.obstacles;
+          criticalPath(seed,id,'exit',spawn,interior.exitPosition,walls);
+          criticalPath(seed,id,'boss',spawn,interior.bossSpawn,walls);
+          for(const [guard,position] of interior.bossGuardSpawns.entries())
+            criticalPath(seed,id,'guard-'+guard,spawn,position,walls);
+          for(const encounter of interior.encounterSpawns)
+            criticalPath(seed,id,encounter.id,spawn,encounter.position,walls);
+          for(const room of interior.rooms)
+            if(room.required&&room.feature)
+              criticalPath(seed,id,room.feature.id,spawn,room.feature.position,walls);
+        });
       }
       const villages=world.villages??[];
       const villageIds=villages.map(v=>v.id);
