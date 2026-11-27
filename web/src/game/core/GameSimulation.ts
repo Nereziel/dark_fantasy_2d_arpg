@@ -53,7 +53,7 @@ import {
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
 import { planEnemyBehavior } from '../enemies/behaviorPlanner';
-import {createOptionalDungeonPack,optionalDungeonRoster,optionalDungeonRewardSlot,isOptionalDungeonBoss} from '../enemies/optionalDungeonEncounters';
+import {createOptionalDungeonPack,optionalDungeonRoster,optionalDungeonRewardSlot,isOptionalDungeonBoss,optionalDungeonBossAction,canStartOptionalBossAttack,resolveOptionalBossImpact} from '../enemies/optionalDungeonEncounters';
 import {
   MINI_BOSS_IDS, getMiniBossDefinition, createMiniBossState, validateMiniBossState,
   stepMiniBoss, planMiniBossDefeat, type MiniBossId, type MiniBossState,
@@ -4034,7 +4034,20 @@ export class GameSimulation {
       if (intent.remaining > 0) return;
       unit.intent = null;
       unit.cooldown = def.cooldown;
+      const bossAction=optionalDungeonBossAction(this.optionalVisit?.identity.dungeonId,this.dungeonStage,actor.id);
+      if(bossAction&&intent.abilityId===bossAction.id){
+        const impact=resolveOptionalBossImpact(bossAction,actor,intent,this.player,this.world.obstacles);
+        if(impact.destination){actor.x=impact.destination.x;actor.y=impact.destination.y;}
+        const hit=impact.hit&&this.dealPlayerDamage(bossAction.damage*(unit.elite?.damageMultiplier??1),'physical',actor.id);
+        this.events.push({type:'enemyAttack',enemyId:actor.id,hit});
+        return;
+      }
       if (intent.pattern === 'leap') {
+        // Optional bosses' ordinary charge also must not cross solid geometry.
+        if(bossAction&&!movementSegmentClear(actor,intent,this.world.obstacles)){
+          this.events.push({type:'enemyAttack',enemyId:actor.id,hit:false});
+          return;
+        }
         // The landing spot is fixed at cast time. Terrain cannot be bypassed.
         if (canOccupy(intent, ACTOR_RADIUS, this.world.obstacles)) {
           actor.x = intent.x;
@@ -4060,6 +4073,12 @@ export class GameSimulation {
       return;
     }
 
+    const bossAction=optionalDungeonBossAction(this.optionalVisit?.identity.dungeonId,this.dungeonStage,actor.id);
+    if(bossAction&&unit.cooldown<=0&&(unit.abilityCooldowns?.[bossAction.id]??0)<=0
+      &&canStartOptionalBossAttack(bossAction,actor,this.player,this.world.obstacles)){
+      this.beginMonsterAttack(unit,bossAction);
+      return;
+    }
     if (this.zone === 'wilderness' && this.wave >= 2) {
       this.updateMonsterTactics(unit, dt);
       return;
@@ -5327,7 +5346,13 @@ export class GameSimulation {
           && typeof unit.elite.deathTriggered === 'boolean'))
         && validIntent(unit.intent)
         && (unit.intent?.abilityId === undefined
-          || monsterAction(unit.actor.type, unit.intent.abilityId) !== undefined)
+          || monsterAction(unit.actor.type, unit.intent.abilityId) !== undefined
+          || (() => {
+            const action=optionalDungeonBossAction(restoredVisit?.identity.dungeonId,s.dungeonStage,unit.actor.id);
+            const intent=unit.intent;
+            return !!action&&!!intent&&intent.abilityId===action.id
+              &&intent.pattern===action.attack&&intent.radius===action.areaRadius&&intent.total===action.windup;
+          })())
         && (unit.intent === null
           || unit.intent.abilityId !== undefined
           || unit.intent.pattern === ENEMY_DEFINITIONS[unit.actor.type].attack)
@@ -5336,7 +5361,9 @@ export class GameSimulation {
           && !Array.isArray(unit.abilityCooldowns)
           && typeof unit.abilityCooldowns === 'object'
           && Object.entries(unit.abilityCooldowns).every(([id, cd]) =>
-            !!monsterAction(unit.actor.type, id) && Number.isFinite(cd) && cd >= 0 && cd <= 30)))
+            (!!monsterAction(unit.actor.type, id)
+              || optionalDungeonBossAction(restoredVisit?.identity.dungeonId,s.dungeonStage,unit.actor.id)?.id===id)
+            && Number.isFinite(cd) && cd >= 0 && cd <= 30)))
         && Array.isArray(unit.effects) && unit.effects.length <= 8
         && unit.effects.every(isActiveEffect))
       || (s.selectedTargetId !== null && (
