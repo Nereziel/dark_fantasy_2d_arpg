@@ -13,6 +13,8 @@ test('default HUD is minimal, settings show clear modes and editor is a separate
   await expect(page.getByTestId('loot-label-mode')).toHaveCount(0);
   const canvas=page.locator('canvas[data-renderer="isometric-preview"]');
   await expect(canvas).toHaveAttribute('data-npc-visuals', /"warden_vesna":"warden"/);
+  await expect(canvas).toHaveAttribute('data-prop-visuals', /"field-chest":"chest"/);
+  await expect(canvas).toHaveAttribute('data-prop-visuals', /"soul-shrine":"shrine"/);
   const looks=JSON.parse((await canvas.getAttribute('data-npc-visuals'))!);
   expect(looks).toMatchObject({warden_vesna:'warden',merchant_bram:'merchant',smith_odan:'smith',
     healer_iva:'healer',potion_vendor_lena:'apothecary',stash_camp:'keeper',waypoint_camp:'waystone',
@@ -70,6 +72,7 @@ test('standalone quest journal, compact map tracking and expiring loading toast'
   await enterWorld(page);
   await expect(page.locator('.quest-journal')).toHaveCount(0);
   await expect(page.getByTestId('tracked-quest-summary')).toContainText(/Ashes/i);
+  await expect(page.getByTestId('minimap-area')).toBeVisible();
   await page.keyboard.press('j');
   const journal=page.getByTestId('quest-journal-dialog');
   await expect(journal).toBeVisible();
@@ -84,7 +87,15 @@ test('standalone quest journal, compact map tracking and expiring loading toast'
   await expect(dialog.getByTestId('quest-detail')).toHaveCount(0);
   await expect(dialog.getByTestId('quest-journal-dialog')).toHaveCount(0);
   await expect(dialog.getByTestId('track-quest-ashes_at_gate')).toHaveAttribute('aria-pressed','true');
-  await expect(dialog.locator('[data-tracked-quest="ashes_at_gate"]')).toHaveCount(1);
+  const trackedMarker=dialog.locator('[data-tracked-quest="ashes_at_gate"]');
+  await expect(trackedMarker).toHaveCount(1);
+  await expect(trackedMarker.locator('[data-quest-symbol]')).toBeVisible();
+  const symbolSize=await trackedMarker.locator('[data-quest-symbol]').boundingBox();
+  expect(symbolSize!.width).toBeGreaterThanOrEqual(16);
+  await expect(dialog.getByTestId('map-focus-quest')).toBeEnabled();
+  await dialog.getByTestId('map-focus-quest').click();
+  const focusedSize=await trackedMarker.locator('[data-quest-symbol]').boundingBox();
+  expect(Math.abs(focusedSize!.width-symbolSize!.width)).toBeLessThan(3);
   await dialog.getByTestId('track-quest-ashes_at_gate').click();
   await expect(dialog.getByTestId('track-quest-ashes_at_gate')).toHaveAttribute('aria-pressed','false');
   await expect(dialog.locator('[data-marker-kind="quest"],[data-quest-route],[data-tracked-quest]')).toHaveCount(0);

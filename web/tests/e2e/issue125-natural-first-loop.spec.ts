@@ -1,7 +1,7 @@
 import { openCharacterCreation, enterWorld, continueGame, saveFromMenu, openGuideFromMenu } from './character-menu';
 import { errors, expect, test, type Locator, type Page } from '@playwright/test';
 import { projectIsometric, unprojectIsometric } from '../../src/game/phaser/isometricProjection';
-import { campMovementTarget } from './iso-input';
+import { campMovementTarget, mapMarkerPoint } from './iso-input';
 
 /** Use read-only renderer diagnostics and actual exposed canvas pixels.
  * All quest targets remain ordinary Cartesian map coordinates. The only
@@ -403,18 +403,15 @@ async function walkToStoryEvidence(page: Page, timeoutMs: number): Promise<void>
         .click({ timeout: 8_000 });
       const map = page.getByTestId('world-map-dialog');
       await expect(map).toBeVisible({ timeout: 8_000 });
-      const marker = map.locator('[data-map-marker="act1.evidence_lead"] circle').first();
+      const marker = map.locator('[data-map-marker="act1.evidence_lead"]');
       if (await marker.count()) {
-        const mx = Number(await marker.getAttribute('cx'));
-        const my = Number(await marker.getAttribute('cy'));
-        if (Number.isFinite(mx) && Number.isFinite(my)) {
-          knownEvidence = { x: mx, y: my };
-          // New visible objective, not the previous survey waypoint.
-          bestDistance = Infinity;
-          stalled = 0;
-          detours = 0;
-          ticks = 0;
-        }
+        // Read the visible marker's world anchor, not its local SVG glyph.
+        // Missing attributes fail immediately instead of becoming Number(null)=0.
+        knownEvidence = await mapMarkerPoint(marker);
+        bestDistance = Infinity;
+        stalled = 0;
+        detours = 0;
+        ticks = 0;
       }
       await map.getByTestId('map-close').click();
       nextMapCheck = Date.now() + 10_000;

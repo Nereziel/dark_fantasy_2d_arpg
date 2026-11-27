@@ -25,6 +25,8 @@ import type { IsometricRect } from './isometricProjection';
 import { wildernessGroundLayout, cryptGroundLayout } from './isometricTerrain';
 import { getTownManifest, townEntry } from '../world/townManifest';
 import { npcVisualPreset, renderNpcTexture, type NpcVisualPreset } from './npcVisuals';
+import { propPreset, propBody, renderPropTexture, decorativeCryptProps, type PropPreset } from './propVisuals';
+import type { CryptProp } from '../world/cryptTheme';
 import type { EnvironmentObjectId } from '../world/environmentInteractions';
 import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, type Obstacle } from '../world/navigation';
 import { contextToCommand, cursorForContext } from '../input/contextResolver';
@@ -81,6 +83,7 @@ export class IsometricScene extends Phaser.Scene {
   private anchor!: Phaser.GameObjects.Graphics;
   private villageResidents: readonly VillageResident[] = [];
   private readonly npcPresets = new Map<string,NpcVisualPreset>();
+  private decorativeProps:readonly CryptProp[]=[];
   private readonly walls: Phaser.GameObjects.Graphics[] = [];
   private readonly wallPaintBounds: (IsometricRect | null)[] = [];
   private readonly occluders: IsometricOccluder[] = [];
@@ -163,6 +166,7 @@ export class IsometricScene extends Phaser.Scene {
         delete this.game.canvas.dataset.npcMarkers;
         delete this.game.canvas.dataset.npcLabels;
         delete this.game.canvas.dataset.npcVisuals;
+        delete this.game.canvas.dataset.propVisuals;
         delete this.game.canvas.dataset.focusedWorldObject;
         delete this.game.canvas.dataset.enemyHover;
         delete this.game.canvas.dataset.lootLabels;
@@ -201,6 +205,7 @@ export class IsometricScene extends Phaser.Scene {
     this.enemyPresentation.clear();
     this.facingMemory.clear();
     this.villageResidents = [];
+    this.decorativeProps=[];
     this.npcPresets.clear();
     const buildings = new Map<string, SettlementStructure>();
     if (state.zone === 'wilderness') {
@@ -216,6 +221,7 @@ export class IsometricScene extends Phaser.Scene {
       const world = buildCryptWorld(dungeonRenderSeed(state));
       this.obstacles = world.layout.obstacles;
       this.ground.rebuild(cryptGroundLayout(world.dungeon,state.dungeonId), ORIGIN);
+      if(!state.dungeonId)this.decorativeProps=decorativeCryptProps(world.theme);
       // Open passages only: never paint or announce a hidden secret entrance.
       for(const door of world.dungeon.doors) {
         if(door.kind!=='open') continue;
@@ -313,17 +319,18 @@ export class IsometricScene extends Phaser.Scene {
 
   private targets(state: GameSnapshot): IsometricTarget[] {
     const ground = { bodyHeight: 0, bodyHalfWidth: 0 };
+    const body=(id:string,eventKey?:string)=>{const preset=propPreset(id,eventKey);return preset?propBody(preset):ground;};
     const actor = { bodyHeight: 42, bodyHalfWidth: 18 };
     const targets: IsometricTarget[] = [
       ...dungeonPortalTargets(state,this.dungeonEntrances).map(p=>({...p,bodyHeight:58,bodyHalfWidth:26})),
       ...(state.storyEvidence?[{kind:'INTERACTABLE' as const,id:'story-evidence',
-        position:state.storyEvidence.position,hitRadius:state.storyEvidence.hitRadius,...ground}]:[]),
+        position:state.storyEvidence.position,hitRadius:state.storyEvidence.hitRadius,...body('story-evidence')}]:[]),
       ...(state.cryptInteractables ?? []).map(p => ({ kind: 'INTERACTABLE' as const,
-        id: p.id, position: p.position, hitRadius: p.hitRadius, ...ground })),
+        id: p.id, position: p.position, hitRadius: p.hitRadius, ...body(p.id,p.eventKey) })),
       ...(state.environmentObjects ?? []).map(p => ({ kind: 'INTERACTABLE' as const,
-        id: p.id, position: p.position, hitRadius: p.hitRadius, ...ground })),
+        id: p.id, position: p.position, hitRadius: p.hitRadius, ...body(p.id) })),
       ...state.interactables.map(p => ({ kind: 'INTERACTABLE' as const,
-        id: p.id, position: p.position, hitRadius: p.hitRadius, ...ground })),
+        id: p.id, position: p.position, hitRadius: p.hitRadius, ...body(p.id) })),
       ...this.bridge.visibleGroundLoot(state).map(p => ({ kind: 'LOOT' as const,
         id: p.id, position: { x: p.x, y: p.y }, hitRadius: 30, ...ground })),
       ...state.enemies.map(({ actor: e }) => ({ kind: 'ENEMY' as const, id: e.id,
@@ -477,11 +484,16 @@ export class IsometricScene extends Phaser.Scene {
       const name=state.zone==='crypt'?t('worldLabels.portalExit'):t(portal.id.endsWith(':mine')?'dungeon.mineName':portal.id.endsWith(':cave')?'dungeon.caveName':'dungeon.name');
       specs.push({id:'object/'+portal.id,point:portal.position,elevation:64,text:'◇  '+name,color:'#b9dcff'});
     }
-    if(state.storyEvidence)specs.push({id:'object/story-evidence',point:state.storyEvidence.position,elevation:25,
+    if(state.storyEvidence)specs.push({id:'object/story-evidence',point:state.storyEvidence.position,elevation:36,
       text:t('quest.actI.inspectEvidence'),color:'#f4d18d'});
-    for(const obj of state.environmentObjects??[])specs.push({id:'object/'+obj.id,point:obj.position,elevation:25,text:t('environment.objects.'+obj.id.slice(4)),color:'#ecd8af'});
-    for(const obj of state.interactables)specs.push({id:'object/'+obj.id,point:obj.position,elevation:30,text:t(obj.kind==='shrine'?'worldLabels.shrine':'worldLabels.treasure'),color:'#ecd8af'});
-    for(const obj of state.cryptInteractables??[])specs.push({id:'object/'+obj.id,point:obj.position,elevation:26,text:t(obj.capability==='lootContainer'?'worldLabels.treasure':obj.capability==='breakable'?'worldLabels.breakable':obj.capability==='trap'?'worldLabels.trap':'worldLabels.secret'),color:'#ecd8af'});
+    for(const obj of state.environmentObjects??[])specs.push({id:'object/'+obj.id,point:obj.position,elevation:(propBody(propPreset(obj.id)??'crate').bodyHeight+9),text:t('environment.objects.'+obj.id.slice(4)),color:'#ecd8af'});
+    for(const obj of state.interactables)specs.push({id:'object/'+obj.id,point:obj.position,elevation:propBody(propPreset(obj.id)??'chest').bodyHeight+9,text:t(obj.kind==='shrine'?'worldLabels.shrine':'worldLabels.treasure'),color:'#ecd8af'});
+    for(const obj of state.cryptInteractables??[]){
+      const preset=propPreset(obj.id,obj.eventKey);
+      const text=preset==='sarcophagus'||preset==='urn'||preset==='rune'||preset==='poisonUrn'
+        ?t('worldLabels.prop.'+preset):t(obj.capability==='lootContainer'?'worldLabels.treasure':obj.capability==='breakable'?'worldLabels.breakable':obj.capability==='trap'?'worldLabels.trap':'worldLabels.secret');
+      specs.push({id:'object/'+obj.id,point:obj.position,elevation:propBody(preset??'crate').bodyHeight+9,text,color:'#ecd8af'});
+    }
     for(const drop of this.bridge.visibleGroundLoot(state)){
       specs.push({id:'loot/'+drop.id,point:drop,elevation:19,
         text:itemDisplayName(drop.item,language,t('item.base.'+drop.item.templateId)),color:RARITIES[drop.item.rarity].color});
@@ -576,6 +588,20 @@ export class IsometricScene extends Phaser.Scene {
       this.polygon(g, [{ x: -12, y: 0 }, { x: 0, y: -9 },
         { x: 12, y: 0 }, { x: 0, y: 9 }], color);
     }
+  }
+
+  private renderProp(key:string,point:Readonly<Point>,preset:PropPreset,interactive:boolean):void {
+    const texture='ar-prop-'+preset+(interactive?'-active':'-decor');
+    if(!this.textures.exists(texture)){
+      const registered=this.textures.addCanvas(texture,renderPropTexture(preset,interactive));
+      if(!registered)throw Error('Unable to register prop texture: '+texture);
+      registered.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+    let sprite=this.sprites.get(key);
+    if(!sprite){sprite=this.add.sprite(0,0,texture).setOrigin(.5,56/64);this.sprites.set(key,sprite);}
+    else if(sprite.texture.key!==texture)sprite.setTexture(texture);
+    const p=project(point);
+    sprite.setPosition(p.x,p.y).setDepth(isometricDepth(point)+.5).setVisible(true);
   }
 
   private renderNpc(id:string,point:Readonly<Point>):NpcVisualPreset {
@@ -844,6 +870,8 @@ export class IsometricScene extends Phaser.Scene {
       action ? action.targetId : state.selectedTargetId, liveEnemy) : undefined;
     this.sprite('hero', state.classId, state.player, pose, frame, aim);
     const npcVisuals:Record<string,NpcVisualPreset>={};
+    const propVisuals:Record<string,PropPreset>={};
+    const cryptEventKeys=new Map((state.cryptInteractables??[]).map(p=>[p.id,p.eventKey]));
     for (const t of this.targets(state)) {
       if (t.alive === false) continue;
       const key = t.kind + '/' + t.id;
@@ -865,11 +893,21 @@ export class IsometricScene extends Phaser.Scene {
       } else if (t.kind === 'NPC') {
         npcVisuals[t.id]=this.renderNpc(t.id,t.position);
       } else {
+        const preset=t.kind==='INTERACTABLE'?propPreset(t.id,cryptEventKeys.get(t.id)):null;
+        if(preset){this.renderProp(key,t.position,preset,true);propVisuals[t.id]=preset;continue;}
         const color = t.id==='story-evidence'?0xe9bf70:t.id==='dungeon-portal:mine'?0xd8af75:t.id==='dungeon-portal:cave'?0x83c3a0
           : t.kind === 'LOOT' ? 0xe2bf67 : 0x8d83bd;
         this.entity(key, t.position, color, t.bodyHeight > 0);
       }
     }
+    for(const decoration of this.decorativeProps){
+      const preset=propPreset(decoration.id);
+      if(!preset)continue;
+      const key='decor/'+decoration.id;visible.add(key);
+      this.renderProp(key,decoration.position,preset,false);
+    }
+    const propDiagnostic=JSON.stringify(propVisuals);
+    if(this.game.canvas.dataset.propVisuals!==propDiagnostic)this.game.canvas.dataset.propVisuals=propDiagnostic;
     // Defeat visuals are renderer-only. They never enter targets(), navigation,
     // collision, health bars or loot selection and expire after a short sequence.
     for (const death of this.enemyPresentation.deaths(this.time.now)) {

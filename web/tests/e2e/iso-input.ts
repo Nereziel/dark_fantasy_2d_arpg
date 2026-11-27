@@ -62,3 +62,14 @@ export async function campMovementTarget(page: Page, canvas: Locator) {
   }
   throw new Error('No exposed camp ground movement target');
 }
+
+/** Coordinates of an already projected map marker, independent of SVG glyph
+ * shape or zoom. Never coerce missing attributes to a fabricated origin. */
+export async function mapMarkerPoint(marker:Locator):Promise<{x:number;y:number}>{
+  return marker.evaluate(node=>{
+    const x=node.getAttribute('data-map-x'),y=node.getAttribute('data-map-y');
+    if(x===null||y===null||!x.trim()||!y.trim()||!Number.isFinite(Number(x))||!Number.isFinite(Number(y)))
+      throw Error('Rendered map marker has no finite world anchor: '+node.getAttribute('data-map-marker'));
+    return {x:Number(x),y:Number(y)};
+  });
+}
