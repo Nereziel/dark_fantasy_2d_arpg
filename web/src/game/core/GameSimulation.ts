@@ -53,7 +53,7 @@ import {
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
 import { planEnemyBehavior } from '../enemies/behaviorPlanner';
-import {createOptionalDungeonPack,optionalDungeonRoster,optionalDungeonRewardSlot,isOptionalDungeonBoss} from '../enemies/optionalDungeonEncounters';
+import {createOptionalDungeonPack,optionalDungeonRoster,optionalDungeonRewardSlot,isOptionalDungeonBoss,optionalDungeonBossAction,canResolveOptionalDungeonBossAction} from '../enemies/optionalDungeonEncounters';
 import {
   MINI_BOSS_IDS, getMiniBossDefinition, createMiniBossState, validateMiniBossState,
   stepMiniBoss, planMiniBossDefeat, type MiniBossId, type MiniBossState,
@@ -4028,26 +4028,34 @@ export class GameSimulation {
       }
       return;
     }
+    const bossAction = optionalDungeonBossAction(this.optionalVisit?.identity.dungeonId,this.dungeonStage,actor.id);
     if (unit.intent) {
       const intent = unit.intent;
       intent.remaining -= dt;
       if (intent.remaining > 0) return;
       unit.intent = null;
       unit.cooldown = def.cooldown;
+      const special = bossAction && intent.abilityId === bossAction.id ? bossAction : undefined;
+      if (special && !canResolveOptionalDungeonBossAction(special,actor,intent,this.world.obstacles)) {
+        this.events.push({ type: 'enemyAttack', enemyId: actor.id, hit: false });
+        return;
+      }
       if (intent.pattern === 'leap') {
-        // The landing spot is fixed at cast time. Terrain cannot be bypassed.
+        // The optional boss charge requires the entire swept segment to be clear.
+        // Other monsters retain their existing landing behavior.
         if (canOccupy(intent, ACTOR_RADIUS, this.world.obstacles)) {
           actor.x = intent.x;
           actor.y = intent.y;
         }
       }
-      const action = intent.abilityId ? monsterAction(actor.type, intent.abilityId) : undefined;
+      const action = special ?? (intent.abilityId ? monsterAction(actor.type, intent.abilityId) : undefined);
       const baseDamage = action ? action.damage : def.baseDamage + this.level * 2;
       if (intent.pattern === 'bolt') {
         this.fireBolt(unit, intent, intent.radius, baseDamage * (unit.elite?.damageMultiplier ?? 1), action);
         return;
       }
       const hit = distance(this.player, intent) <= intent.radius
+        && (!special || hasLineOfSight(actor,this.player,this.world.obstacles))
         && (baseDamage <= 0 || this.dealPlayerDamage(baseDamage * (unit.elite?.damageMultiplier ?? 1),
           intent.pattern === 'leap' && !action ? 'poison' : 'physical', actor.id));
       if (hit && action?.statusId && this.player.alive) {
@@ -4060,6 +4068,13 @@ export class GameSimulation {
       return;
     }
 
+    if (bossAction && unit.cooldown <= 0 && (unit.abilityCooldowns?.[bossAction.id] ?? 0) <= 0
+      && distance(actor,this.player) <= bossAction.range
+      && hasLineOfSight(actor,this.player,this.world.obstacles)
+      && canResolveOptionalDungeonBossAction(bossAction,actor,this.player,this.world.obstacles)) {
+      this.beginMonsterAttack(unit,bossAction);
+      return;
+    }
     if (this.zone === 'wilderness' && this.wave >= 2) {
       this.updateMonsterTactics(unit, dt);
       return;
@@ -5327,7 +5342,13 @@ export class GameSimulation {
           && typeof unit.elite.deathTriggered === 'boolean'))
         && validIntent(unit.intent)
         && (unit.intent?.abilityId === undefined
-          || monsterAction(unit.actor.type, unit.intent.abilityId) !== undefined)
+          || monsterAction(unit.actor.type, unit.intent.abilityId) !== undefined
+          || (() => {
+            const action=optionalDungeonBossAction(restoredVisit?.identity.dungeonId,s.dungeonStage,unit.actor.id);
+            return !!action && unit.intent?.abilityId===action.id && unit.intent.pattern===action.attack
+              && unit.intent.radius===action.areaRadius && unit.intent.total===action.windup
+              && canResolveOptionalDungeonBossAction(action,unit.actor,unit.intent,layout.obstacles);
+          })())
         && (unit.intent === null
           || unit.intent.abilityId !== undefined
           || unit.intent.pattern === ENEMY_DEFINITIONS[unit.actor.type].attack)
@@ -5336,7 +5357,9 @@ export class GameSimulation {
           && !Array.isArray(unit.abilityCooldowns)
           && typeof unit.abilityCooldowns === 'object'
           && Object.entries(unit.abilityCooldowns).every(([id, cd]) =>
-            !!monsterAction(unit.actor.type, id) && Number.isFinite(cd) && cd >= 0 && cd <= 30)))
+            (!!monsterAction(unit.actor.type, id)
+              || optionalDungeonBossAction(restoredVisit?.identity.dungeonId,s.dungeonStage,unit.actor.id)?.id===id)
+            && Number.isFinite(cd) && cd >= 0 && cd <= 30)))
         && Array.isArray(unit.effects) && unit.effects.length <= 8
         && unit.effects.every(isActiveEffect))
       || (s.selectedTargetId !== null && (
