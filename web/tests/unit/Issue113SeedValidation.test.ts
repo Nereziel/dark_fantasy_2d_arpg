@@ -10,6 +10,10 @@ import { generateProceduralDungeon, validateProceduralDungeon } from '../../src/
 import { MANDATORY_FEATURE_IDS } from '../../src/game/world/wildernessFeatures';
 import { CAMP, CRYPT_GATE } from '../../src/game/world/generator';
 import { getTownManifest } from '../../src/game/world/townManifest';
+import { ENVIRONMENT_IDS, SHRINE_BONUSES, planEnvironmentObjects } from '../../src/game/world/environmentInteractions';
+import { planWorldEvents } from '../../src/game/world/worldEvents';
+import { WAYPOINT_IDS, waypointDefinition, planWaypointTravel } from '../../src/game/world/waypointTravel';
+import { planOptionalDungeonFeatures } from '../../src/game/world/optionalDungeonFeatures';
 import { ACTOR_RADIUS, canOccupy, findPath } from '../../src/game/world/navigation';
 
 /**
@@ -89,6 +93,35 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
         criticalPath(seed, 'wilderness', 'encounter-' + index, layout.camp,
           point, layout.obstacles);
       }
+      // Validate published gameplay manifests, not just their underlying POIs.
+      const environment=planEnvironmentObjects(seed,layout,features);
+      expect(environment.map(o=>o.id),'Incomplete environment catalog').toEqual([...ENVIRONMENT_IDS]);
+      expect(environment.filter(o=>o.kind==='shrine').map(o=>o.shrineBonus))
+        .toEqual([...SHRINE_BONUSES]);
+      for(const object of environment){
+        criticalPath(seed,'wilderness',object.id,layout.camp,object.position,layout.obstacles);
+        if(object.requiresId)expect(environment.some(o=>o.id===object.requiresId)).toBe(true);
+      }
+      const events=planWorldEvents(seed,layout,features);
+      expect(events.map(e=>e.id),'Incomplete playable event catalog').toEqual(['wild.event.1','wild.event.2']);
+      for(const event of events){
+        criticalPath(seed,'wilderness',event.id,layout.camp,event.position,layout.obstacles);
+        expect(event.enemySpawns).toHaveLength(2);
+        expect(new Set(event.enemySpawns.map(e=>e.id)).size).toBe(2);
+        for(const spawn of event.enemySpawns){
+          criticalPath(seed,'wilderness',spawn.id,layout.camp,spawn.position,layout.obstacles);
+          criticalPath(seed,'wilderness',spawn.id+'-local',event.position,spawn.position,layout.obstacles);
+        }
+      }
+      for(const from of WAYPOINT_IDS){
+        const source=waypointDefinition(from)!;
+        const to=WAYPOINT_IDS.find(id=>id!==from)!;
+        const target=waypointDefinition(to)!;
+        criticalPath(seed,'wilderness',from,layout.camp,source.position,layout.obstacles);
+        expect(planWaypointTravel({world:layout,zone:'wilderness',
+          player:{...source.position,alive:true},activated:WAYPOINT_IDS},to))
+          .toEqual({from,to,position:target.position});
+      }
       // Full Act I must publish all three portals, not just the story crypt.
       const portals=planActIDungeonEntrances(world);
       expect(portals.map(p=>p.id), 'Missing Act I dungeon entrance').toEqual([...ACT_I_DUNGEON_IDS]);
@@ -117,6 +150,13 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
           const spawn=interior.playerSpawn, walls=interior.obstacles;
           criticalPath(seed,id,'exit',spawn,interior.exitPosition,walls);
           criticalPath(seed,id,'boss',spawn,interior.bossSpawn,walls);
+          const content=planOptionalDungeonFeatures(interior,id);
+          expect(content.chest.oneShot).toBe(true);
+          expect(content.trap.oneShot).toBe(true);
+          expect(content.gold).toBeGreaterThan(0);
+          expect(content.trap.telegraphSeconds).toBeGreaterThan(0);
+          criticalPath(seed,id,content.chest.id,spawn,content.chest.position,walls);
+          criticalPath(seed,id,content.trap.id,spawn,content.trap.trigger.center,walls);
           for(const [guard,position] of interior.bossGuardSpawns.entries())
             criticalPath(seed,id,'guard-'+guard,spawn,position,walls);
           for(const encounter of interior.encounterSpawns)
