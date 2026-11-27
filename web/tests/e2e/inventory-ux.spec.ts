@@ -52,7 +52,7 @@ test('inventory is compact, compares on hover, and drag-drops gear both ways', a
   await modal.getByRole('button', { name: 'Close' }).click();
 });
 
-test('HUD columns and minimap fog stay clear of the seven-skill action bar', async ({ page }) => {
+test('HUD columns and local minimap stay clear of the seven-skill action bar', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
@@ -75,10 +75,21 @@ test('HUD columns and minimap fog stay clear of the seven-skill action bar', asy
     const b=node.getBoundingClientRect();
     return document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.tagName;
   })).toBe('CANVAS');
-  // Exact discovered-only clipping replaces the old blurred fog mask.
+  // #276: the minimap shows local terrain without fog; full-map fog
+  // and undiscovered marker filtering are independently covered by
+  // issue210-isometric-preview.spec.ts and the map presentation tests.
+  const localMap = mini.locator('[data-map-mode="minimap"]');
+  await expect(localMap).toHaveAttribute('data-fog-policy', 'local');
   await expect(mini.locator('svg clipPath')).toHaveCount(1);
   await expect(mini.locator('svg feGaussianBlur')).toHaveCount(0);
-  await expect(mini.locator('[data-fog-cell]').first()).toHaveAttribute('stroke', 'none');
+  await expect(localMap.locator('[data-fog-cell], [data-fog]')).toHaveCount(0);
+  await expect(localMap.locator('[data-map-cell]').first()).toHaveAttribute('stroke', 'none');
+  const localTerrain = await localMap.evaluate(root => ({
+    cells: root.querySelectorAll('[data-map-cell]').length,
+    terrain: root.querySelectorAll('[data-terrain-cell]').length
+  }));
+  expect(localTerrain.cells).toBeGreaterThan(0);
+  expect(localTerrain.terrain).toBe(localTerrain.cells);
   const leftColumn = page.locator('.hud-left-column');
   const rightColumn = page.locator('.hud-right-column');
   const skillbar = page.locator('.skill-ui');

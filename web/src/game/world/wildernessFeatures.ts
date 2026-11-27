@@ -58,7 +58,8 @@ export interface WildernessFeature {
 
 export type FeaturePlanErrorCode =
   | 'INVALID_SEED' | 'INVALID_LAYOUT'
-  | 'UNREACHABLE_MANDATORY' | 'MANDATORY_PLACEMENT_FAILED';
+  | 'UNREACHABLE_MANDATORY' | 'MANDATORY_PLACEMENT_FAILED'
+  | 'DUNGEON_ANCHOR_PLACEMENT_FAILED';
 
 export type FeaturePlanResult =
   | { readonly ok: true; readonly seed: number; readonly features: readonly WildernessFeature[] }
@@ -102,6 +103,9 @@ const MAX_ENCOUNTERS = 128;
 const GRID_STEP = 64;
 const MAX_MANDATORY_CANDIDATES = 256;
 const MAX_OPTIONAL_ATTEMPTS = 96;
+// The mine/cave can be optional to the story, but their exterior anchors
+// must exist in the full Act I world and remain distinct from the crypt.
+export const ACT_I_DUNGEON_ENTRANCE_SPACING = 96;
 
 const error = (code: FeaturePlanErrorCode, featureId?: MandatoryFeatureId): FeaturePlanResult =>
   featureId === undefined ? { ok: false, error: { code } }
@@ -260,7 +264,9 @@ function seededRandom(seed: number): () => number {
  * manifest is plain JSON-compatible data, not a save/world snapshot.
  *
  * Failed mandatory placement returns an error; it never returns a partial plan.
- * Optional placement may omit an entry after MAX_OPTIONAL_ATTEMPTS attempts.
+ * Ordinary optional placement may omit an entry after MAX_OPTIONAL_ATTEMPTS.
+ * The two dungeon POIs instead try a bounded deterministic grid fallback;
+ * if even that fails, reject the feature plan so runtime can retry its layout.
  */
 export function planWildernessFeatures(seed: number, layout: Readonly<WorldLayout>): FeaturePlanResult {
   if (!validSeed(seed)) return error('INVALID_SEED');
@@ -313,27 +319,39 @@ export function planWildernessFeatures(seed: number, layout: Readonly<WorldLayou
 
   for (const variant of variants) {
     for (let index = 0; index < variant.count; index++) {
+      const id: OptionalFeatureId = `wild.${variant.category}.${index + 1}`;
+      const dungeonAnchor = id === 'wild.poi.2' || id === 'wild.poi.3';
+      const acceptable = (position: Point): boolean =>
+        validPosition(position, variant.radius, layout, features, false)
+        && (!dungeonAnchor || features.every(f =>
+          (f.id !== CRYPT.id && f.id !== 'wild.poi.2' && f.id !== 'wild.poi.3')
+          || dist(position, f.position) >= ACT_I_DUNGEON_ENTRANCE_SPACING))
+        && reachable(layout, position);
+      let position: Point | undefined;
+      let lastCandidate: Point = layout.camp;
       for (let attempt = 0; attempt < MAX_OPTIONAL_ATTEMPTS; attempt++) {
-        const position = {
+        lastCandidate = {
           x: Math.round(80 + rng() * (WORLD_WIDTH - 160)),
           y: Math.round(80 + rng() * (WORLD_HEIGHT - 160))
         };
-        if (!validPosition(position, variant.radius, layout, features, false)) continue;
-        if (!reachable(layout, position)) continue;
-        const feature: WildernessFeature = {
-          id: `wild.${variant.category}.${index + 1}`,
-          kind: variant.kind,
-          position,
-          radius: variant.radius,
-          mandatory: false,
-          presentationKey: variant.presentationKey,
-          eventKind: variant.eventKind,
-          visualKey: variant.visualKey
-        };
-        features.push(feature);
-        optionals.push(feature);
+        if (!acceptable(lastCandidate)) continue;
+        position = lastCandidate;
         break;
       }
+      if (!position && dungeonAnchor) {
+        // Keep the seeded preference and use no extra random draws. All
+        // fallback points undergo the same clearance and reachability checks.
+        position = mandatoryCandidates(lastCandidate).find(acceptable);
+        if (!position) return error('DUNGEON_ANCHOR_PLACEMENT_FAILED');
+      }
+      if (!position) continue;
+      const feature: WildernessFeature = {
+        id, kind: variant.kind, position, radius: variant.radius,
+        mandatory: false, presentationKey: variant.presentationKey,
+        eventKind: variant.eventKind, visualKey: variant.visualKey
+      };
+      features.push(feature);
+      optionals.push(feature);
     }
   }
   // Mandatory story order is stable independently of placement/reservation order.

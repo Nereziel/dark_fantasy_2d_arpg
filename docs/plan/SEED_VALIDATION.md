@@ -2,7 +2,7 @@
 
 This is the renderer-free, deterministic seed validation harness for Aether & Ruin.
 It exercises the **actual runtime assembly** in `buildWilderness` and
-`buildCryptWorld`, not copies of the procedural generators.
+`buildCryptWorld`, plus the shared mine/cave entrance and interior planners, not copies of the procedural generators.
 
 ## Quick regression (PR CI)
 
@@ -33,9 +33,10 @@ in modulo-uint32 space; the same command always samples the same seeds.
 Failures report the exact **seed, region and critical target ID**, with a
 single-seed replay command. The harness verifies:
 - Safe camp, all NPC service points and unique obstacle IDs
-- Reachable Act I mandatory quest points, crypt entrance and encounter spawns
+- Reachable Act I mandatory quest points, all three distinct dungeon entrances and encounter spawns
+- Reserved mine/cave POIs, portal separation, unique interior seeds and exact exterior return positions
 - Visible roads with valid endpoints and clear navigation waypoints
-- Dungeon entry/exit, boss and guards, required feature/encounter positions
+- Dungeon entry/exit, boss and guards, required feature/encounter positions in crypt, mine and cave
 - Generator self-validation and independent path/geometry checks
 - Stable JSON-shaped output on exact seed replay
 - Rejection of NaN, infinities, fractional, negative and out-of-range seeds
@@ -75,7 +76,7 @@ in each shard). Fail-fast is disabled so one failing shard does not cancel
 the remaining reports. Logs are uploaded even when a shard fails, with
 seven-day retention; a nonzero test exit remains a failed CI job.
 
-The extended sweep is sampled QA, not exhaustive uint32 validation.
+All three dungeon entrances are required in every sampled generated world, independently of the village diagnostic opt-out. Mine/cave remain optional for story progression, not optional world content. The extended sweep is sampled QA, not exhaustive uint32 validation.
 Wilderness invariant failures are collected per seed before the shard fails.
 The coverage count excludes invariant failures as well as missing villages.
 A successful run requires every shard to finish successfully.
