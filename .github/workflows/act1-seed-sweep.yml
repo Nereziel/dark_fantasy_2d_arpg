@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/act1-seed-sweep.yml'
+      - 'web/tests/unit/Issue113SeedValidation.test.ts'
 
 permissions:
   contents: read
@@ -36,7 +37,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci --prefer-offline --no-audit --no-fund
-      - name: Strict wilderness and all three dungeon validation
+      - name: Strict Act I terrain, content and all three dungeons
         env:
           SEED_SWEEP_START: ${{ matrix.start }}
           SEED_SWEEP_COUNT: '250'
