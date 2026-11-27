@@ -26,7 +26,7 @@ describe('Issue #208 C3.5: optional dungeon boss attacks',()=>{
   it('rejects a charge through a wall even when both endpoints are clear',()=>{
     const action=optionalDungeonBossAction('cave',1,'corruptedBoar-4')!;
     const from={x:200,y:200},to={x:340,y:200};
-    const wall={x:260,y:150,width:20,height:100};
+    const wall={id:'wall',x:260,y:150,width:20,height:100};
     expect(canResolveOptionalDungeonBossAction(action,from,to,[])).toBe(true);
     expect(canResolveOptionalDungeonBossAction(action,from,to,[wall])).toBe(false);
     expect(canResolveOptionalDungeonBossAction(action,from,{x:800,y:200},[])).toBe(false);
