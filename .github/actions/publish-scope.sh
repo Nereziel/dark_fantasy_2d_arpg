@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # GPL-3.0-only. A skipped/failed Pages deployment must not be lost when the
 # next main push contains only tests. Uncertain history favors a full publish
-# AFTER the existing mandatory validation gate, never a validation bypass.
+# of the successfully built artifact. The independent verify gate remains strict.
 set -euo pipefail
 publish() { echo "publish=$1" >> "$GITHUB_OUTPUT"; }
 if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
