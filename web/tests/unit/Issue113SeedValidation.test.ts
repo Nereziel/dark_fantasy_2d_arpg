@@ -8,7 +8,7 @@ import { ACT_I_DUNGEON_ENTRANCE_SPACING } from '../../src/game/world/wildernessF
 import { validateWildernessTerrain, generateWildernessTerrain } from '../../src/game/world/wildernessTerrain';
 import { generateProceduralDungeon, validateProceduralDungeon } from '../../src/game/world/proceduralDungeon';
 import { MANDATORY_FEATURE_IDS } from '../../src/game/world/wildernessFeatures';
-import { CAMP, CRYPT_GATE } from '../../src/game/world/generator';
+import { CAMP, CAMP_RADIUS, CRYPT_GATE } from '../../src/game/world/generator';
 import { getTownManifest } from '../../src/game/world/townManifest';
 import { ENVIRONMENT_IDS, SHRINE_BONUSES, planEnvironmentObjects } from '../../src/game/world/environmentInteractions';
 import { planWorldEvents } from '../../src/game/world/worldEvents';
@@ -110,10 +110,12 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
       expect(events.map(e=>e.id),'Incomplete playable event catalog; anchors='+features.filter(f=>f.kind==='event').map(f=>f.id+'@'+f.position.x+','+f.position.y).join(';')).toEqual(['wild.event.1','wild.event.2']);
       for(const event of events){
         criticalPath(seed,'wilderness',event.id,layout.camp,event.position,layout.obstacles);
+        expect(Math.hypot(event.position.x-CAMP.x,event.position.y-CAMP.y),event.id+' anchor clearance').toBeGreaterThan(CAMP_RADIUS+70);
         expect(event.enemySpawns).toHaveLength(2);
         expect(new Set(event.enemySpawns.map(e=>e.id)).size).toBe(2);
         for(const spawn of event.enemySpawns){
           criticalPath(seed,'wilderness',spawn.id,layout.camp,spawn.position,layout.obstacles);
+          expect(Math.hypot(spawn.position.x-CAMP.x,spawn.position.y-CAMP.y),spawn.id+' spawn clearance').toBeGreaterThan(CAMP_RADIUS+100);
           criticalPath(seed,'wilderness',spawn.id+'-local',event.position,spawn.position,layout.obstacles);
         }
       }
