@@ -1,7 +1,8 @@
 /** Item templates, rarities and affixes ported from the original ItemGenerator. */
 export { deriveStats } from '../stats/deriveStats';
 import type { ClassId } from './classes';
-import { ITEM_BASES, ITEM_RARITIES, WEAPON_TYPES, type WeaponType } from '../items/itemCatalog';
+import { ITEM_BASES, ITEM_RARITIES, WEAPON_TYPES, type WeaponType, type CatalogTemplateId } from '../items/itemCatalog';
+import { classLootBase } from '../items/classWeapons';
 import { rollAffixes, type AffixStat } from '../items/affixGeneration';
 import { isGemId } from '../gems/gemCatalog';
 export type { DerivedStats } from '../stats/deriveStats';
@@ -164,7 +165,7 @@ export function rollItemForBase(
 }
 
 /** Legacy generator API preserved for existing callers and deterministic tests. */
-export function rollItem(killIndex: number, level: number, rng: SeededRng): Item {
+export function rollItem(killIndex: number, level: number, rng: SeededRng, classId?:ClassId): Item {
   const validLevel = Number.isSafeInteger(level) ? Math.min(100, Math.max(1, level)) : 1;
   const available = ITEM_TEMPLATES.filter(template =>
     ITEM_BASES[template.id as keyof typeof ITEM_BASES].requiredLevel <= validLevel);
@@ -173,7 +174,8 @@ export function rollItem(killIndex: number, level: number, rng: SeededRng): Item
   const rarity: RarityId = chance < 0.45 ? 'COMMON' : chance < 0.75 ? 'UNCOMMON'
     : chance < 0.90 ? 'RARE' : chance < 0.98 ? 'EPIC'
       : chance < (validLevel >= 60 ? 0.997 : 1) ? 'LEGENDARY' : 'MYTHIC';
-  return rollItemForBase(template.id, 'loot-' + killIndex, validLevel, rarity, rng)!;
+  const id=classId?classLootBase(classId,template.id as CatalogTemplateId,validLevel):template.id;
+  return rollItemForBase(id, 'loot-' + killIndex, validLevel, rarity, rng,classId)!;
 }
 
 export function isEquipmentSlot(value: unknown): value is EquipmentSlot {

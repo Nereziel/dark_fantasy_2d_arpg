@@ -5,7 +5,8 @@ import {
   planEquip, planUnequip, planUnequipAt, planSwap, planDrop, sortInventory, favoriteOrLockItem,
   type ItemFlags, type InventoryState, type EquipmentRules, type InventoryError
 } from '../inventory/equipmentRules';
-import { ITEM_BASES, WEAPON_TYPES } from '../items/itemCatalog';
+import { ITEM_BASES, WEAPON_TYPES, type CatalogTemplateId } from '../items/itemCatalog';
+import { classLootBase } from '../items/classWeapons';
 import { rollLootTable, bossGuaranteedLoot, type LootContext, type LootRoll } from '../loot/lootTables';
 import { rollEliteModifiers, applyEliteStats, eliteOnHitPlan, eliteOnPeriodicPlan,
   eliteOnDeathPlan, validateEliteSet, type ElitePlannedAction } from '../enemies/eliteModifiers';
@@ -720,7 +721,7 @@ export class GameSimulation {
     }
     this.awardExperience(reward.xp);
     const itemId='world-event-'+this.world.seed+'-'+plan.id.replaceAll('.','_')+'-reward';
-    const item=rollItemForBase(reward.itemBaseId,itemId,this.level,'UNCOMMON',
+    const item=rollItemForBase(classLootBase(this.classId,reward.itemBaseId as CatalogTemplateId,this.level),itemId,this.level,'UNCOMMON',
       new SeededRng((this.world.seed ^ (plan.id==='wild.event.1' ? 0x9c13ab : 0x715de4))>>>0),this.classId);
     let grantedId:string|null=null;
     const ownedIds=new Set([...this.inventory,...this.stash,...this.stashTabs.flat(),
@@ -2099,7 +2100,7 @@ export class GameSimulation {
       }
       this.shield = Math.max(this.shield, Math.round(this.player.maxHealth * 0.3));
     } else {
-      const item = rollItem(this.kills + 101, this.level, this.rng);
+      const item = rollItem(this.kills + 101, this.level, this.rng,this.classId);
       this.groundLoot.push({
         id: 'cache-' + object.id, x: object.position.x, y: object.position.y,
         item: { ...item, id: 'cache-' + object.id + '-item' }
@@ -4755,6 +4756,7 @@ export class GameSimulation {
       }
     }
     const context: LootContext = {
+      classId:this.classId,
       playerLevel: this.level, monsterLevel: this.level, enemyType: unit.actor.type,
       zone: this.zone, isBoss: boss, difficulty: 'normal',
       eliteModifiers: unit.elite?.modifiers ?? [],
