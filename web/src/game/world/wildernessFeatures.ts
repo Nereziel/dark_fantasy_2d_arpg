@@ -6,6 +6,7 @@ import {
 } from './navigation';
 import { WORLD_OBJECTS } from './interactables';
 import { NPC_POSITIONS } from './npcs';
+import { eventSpawnPositions } from './eventSpawnPlacement';
 
 /**
  * Stable IDs independent of seed, locale, save state and render instance.
@@ -59,7 +60,7 @@ export interface WildernessFeature {
 export type FeaturePlanErrorCode =
   | 'INVALID_SEED' | 'INVALID_LAYOUT'
   | 'UNREACHABLE_MANDATORY' | 'MANDATORY_PLACEMENT_FAILED'
-  | 'DUNGEON_ANCHOR_PLACEMENT_FAILED';
+  | 'DUNGEON_ANCHOR_PLACEMENT_FAILED' | 'EVENT_ANCHOR_PLACEMENT_FAILED';
 
 export type FeaturePlanResult =
   | { readonly ok: true; readonly seed: number; readonly features: readonly WildernessFeature[] }
@@ -267,6 +268,7 @@ function seededRandom(seed: number): () => number {
  * Ordinary optional placement may omit an entry after MAX_OPTIONAL_ATTEMPTS.
  * The two dungeon POIs instead try a bounded deterministic grid fallback;
  * if even that fails, reject the feature plan so runtime can retry its layout.
+ * Both event anchors also require a playable spawn pair and bounded fallback.
  */
 export function planWildernessFeatures(seed: number, layout: Readonly<WorldLayout>): FeaturePlanResult {
   if (!validSeed(seed)) return error('INVALID_SEED');
@@ -344,12 +346,23 @@ export function planWildernessFeatures(seed: number, layout: Readonly<WorldLayou
         position = mandatoryCandidates(lastCandidate).find(acceptable);
         if (!position) return error('DUNGEON_ANCHOR_PLACEMENT_FAILED');
       }
-      if (!position) continue;
-      const feature: WildernessFeature = {
-        id, kind: variant.kind, position, radius: variant.radius,
+      const makeOptional = (p: Point): WildernessFeature => ({
+        id, kind: variant.kind, position:p, radius: variant.radius,
         mandatory: false, presentationKey: variant.presentationKey,
         eventKind: variant.eventKind, visualKey: variant.visualKey
-      };
+      });
+      if (variant.category === 'event') {
+        const playable = (p: Point): boolean => eventSpawnPositions(seed,layout,makeOptional(p),features).length===2;
+        // Preserve the existing RNG draw sequence and every playable anchor.
+        // If necessary relocate only this slot, over the same validated geometry.
+        if (!position || !playable(position)) {
+          position = mandatoryCandidates(position ?? lastCandidate)
+            .find(p=>acceptable(p)&&playable(p));
+          if (!position) return error('EVENT_ANCHOR_PLACEMENT_FAILED');
+        }
+      }
+      if (!position) continue;
+      const feature = makeOptional(position);
       features.push(feature);
       optionals.push(feature);
     }
