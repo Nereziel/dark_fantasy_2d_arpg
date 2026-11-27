@@ -25,6 +25,9 @@ const distance=(a:Readonly<Point>,b:Readonly<Point>)=>Math.hypot(a.x-b.x,a.y-b.y
  * This helper assumes a validated layout and finite feature geometry. */
 export function eventSpawnPositions(seed:number,layout:Readonly<WorldLayout>,
   feature:WildernessFeature,all:readonly WildernessFeature[]):Point[]{
+  // The anchor itself must not be inside the camp approach even if its
+  // enemies can stand farther out. Shared by anchor selection and runtime.
+  if(distance(feature.position,CAMP)<=CAMP_RADIUS+70)return [];
   const rotated=worldEventHash(seed ^ 0xa31eab2f,feature.id)%OFFSETS.length;
   const preferred=Array.from({length:OFFSETS.length},(_,i)=>OFFSETS[(rotated+i)%OFFSETS.length]!);
   const safe=(p:Point):boolean=>
