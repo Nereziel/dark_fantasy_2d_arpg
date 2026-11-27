@@ -64,7 +64,7 @@ import { getEnemyArchetype } from '../enemies/archetypeCatalog';
 import { defaultHotbarLayout, validateHotbarLayout } from '../input/hotbarRegistry';
 import { copyBuildPresets, emptyBuildPresets, isBuildPresetIndex, validateBuildPresets,
   type BuildPresetSlots } from '../progression/buildPresets';
-import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, canApproachAttackDirectly, findAttackApproachPath, findPath, findPickupPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
+import { ACTOR_RADIUS, WORLD_WIDTH, WORLD_HEIGHT, canOccupy, canApproachAttackDirectly, findAttackApproachPath, findPath, findMovementPath, movementSegmentClear, findPickupPath, hasLineOfSight, moveActor, resolveReachableDestination, type Obstacle } from '../world/navigation';
 import {
   CAMP, CAMP_RADIUS, CRYPT_GATE, CRYPT_EXIT, CRYPT_BOSS_POSITIONS,
   type WorldLayout
@@ -2022,7 +2022,7 @@ export class GameSimulation {
       this.warriorPending = null;
       this.warriorAction = null;
       this.classAction = null;
-      const route = findPath(this.player, target, ACTOR_RADIUS, this.world.obstacles);
+      const route = findMovementPath(this.player, target, ACTOR_RADIUS, this.world.obstacles);
       if (!route.length) return;
       this.movePath = route;
       this.attackTarget = null;
@@ -4479,7 +4479,10 @@ export class GameSimulation {
     } else if (this.movePath.length) {
       const point = this.movePath[0]!;
       this.follow(this.player, point, speed, dt);
-      if (distance(this.player, point) <= 6) this.movePath.shift();
+      // Never cut a corner simply because the previous waypoint is close.
+      // Continue to its exact position until the next swept segment is clear.
+      if (distance(this.player, point) <= 6 &&
+        (this.movePath.length===1||movementSegmentClear(this.player,this.movePath[1]!,this.world.obstacles)))this.movePath.shift();
     }
 
     this.discoverStoryLocations();
