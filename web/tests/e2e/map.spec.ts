@@ -1,7 +1,7 @@
 import { openCharacterCreation, enterWorld, continueGame, saveFromMenu } from './character-menu';
 import { test, expect } from '@playwright/test';
 
-test('world map and minimap conceal unvisited places, support localization and survive reload', async ({ page }) => {
+test('world map and minimap conceal unvisited places, support localization and initialize a fresh map after reload', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
@@ -28,9 +28,11 @@ test('world map and minimap conceal unvisited places, support localization and s
 
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Mapa světa' })).toHaveCount(0);
+  const seed=await page.locator('.game-screen').getAttribute('data-world-seed');
   await saveFromMenu(page);
   await page.reload();
   await continueGame(page);
+  await expect(page.locator('.game-screen')).not.toHaveAttribute('data-world-seed',seed!);
   await expect(page.locator('[data-minimap="active"]')).toBeVisible();
   await expect(page.locator('[data-map-marker="town.camp"]').first()).toBeVisible();
   await expect(page.locator('[data-marker-kind="optionalPoi"]')).toHaveCount(0);
