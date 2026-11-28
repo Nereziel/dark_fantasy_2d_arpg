@@ -5160,6 +5160,7 @@ export class GameSimulation {
     const finiteZone=restoredPopulation!==null&&s.zone==='wilderness';
     const canonicalCount=finiteZone?restoredPopulation!.population.allUnits().length:PACK_SIZE;
     let restoredCombat:GameSnapshot['wildernessCombat'];
+    if(restoredPopulation&&s.zone==='crypt'&&s.wildernessCombat===undefined)return false;
     if(s.wildernessCombat!==undefined){
       const a=s.wildernessCombat;
       if(!restoredPopulation||s.zone!=='crypt'||!a||!Array.isArray(a.bosses)||a.bosses.length>MINI_BOSS_IDS.length
