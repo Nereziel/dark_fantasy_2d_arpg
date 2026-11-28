@@ -16,7 +16,7 @@
   import { prioritizeCombatRoster } from './game/ui/combatRoster';
   import { CharacterDoubleTap } from './game/ui/characterDoubleTap';
   import { loadGame, saveGame, listCharacters, deleteCharacter, MAX_SAVED_CHARACTERS, type SavedCharacterInfo } from './persistence/SaveRepository';
-  import { loadWorldProgress, saveWorldProgress } from './persistence/WorldProgressRepository';
+  import { saveWorldProgress } from './persistence/WorldProgressRepository';
   import type { WorldSessionProgress } from './game/core/types';
   import { CharacterAutosaver } from './persistence/CharacterAutosaver';
   import { CAMP, CAMP_RADIUS } from './game/world/generator';
@@ -69,7 +69,8 @@
   import { POTION_IDS, POTIONS } from './game/consumables/potionRules';
   import { xpRequiredForLevel } from './game/progression/progressionRules';
 
-  const bridge = new GameBridge();
+  // Explicit playtest opt-in until the existing campaign browser suite is migrated.
+  const bridge = new GameBridge({finitePopulation:new URLSearchParams(window.location.search).get('population')==='finite'});
   // No browser AudioContext is created until an explicit trusted user gesture.
   const audio = new WebAudioDirector();
   let playing = $state(false);
@@ -275,6 +276,7 @@
     try {
       await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
       await deleteCharacter(id);
+      bridge.forgetLiveCharacter(id);
       if (activeSessionId === id) { activeSessionId = null; activeCharacterName = undefined; }
       pendingDeleteId = null;
       await refreshCharacters();
@@ -695,7 +697,7 @@
     try {
       await Promise.all([autosaver.flush(), worldAutosaver.flush()]);
       const id = createCharacterId(window.crypto.randomUUID());
-      bridge.command({ type:'createCharacter', classId:selectedClass, characterId:id });
+      if(!bridge.createLiveCharacter(selectedClass,id))throw Error('Cannot initialize world session');
       activeSessionId = null;
       activeCharacterName = name;
       const world = boundWorldProgress();
@@ -1096,13 +1098,11 @@
       const id = requestedId ?? (playing ? (bridge.character().characterId ?? 'hero')
         : (selectedCharacterId ?? undefined));
       const character = await loadGame(id);
-      const world = character ? await loadWorldProgress(character.characterId ?? 'hero') : null;
-      if (character && bridge.restoreCharacter(character, world?.seed)) {
-        const worldRestored = world ? bridge.restoreWorldProgress(world) : false;
+      if (character && bridge.openLiveCharacter(character)) {
         activeCharacterName = character.characterName;
         activeSessionId = character.characterId ?? 'hero';
         selectedQuestId=null;
-        notify(world && !worldRestored ? 'status.worldRestoreError' : 'status.loaded');
+        notify('status.loaded');
         inventoryOpen = false;
         characterOpen = false;
         talentsOpen = false;
@@ -1115,7 +1115,7 @@
         selectedClass = bridge.snapshot().classId;
         autosaver.prime(characterForSave());
         const currentWorld=boundWorldProgress();
-        if (currentWorld) worldAutosaver.prime(currentWorld);
+        if (currentWorld) await worldAutosaver.saveNow(currentWorld);
         playing = true;
         activateOnboardingForHero();
         selectedCharacterId = bridge.character().characterId ?? 'hero';
