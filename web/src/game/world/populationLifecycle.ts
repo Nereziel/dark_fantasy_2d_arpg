@@ -3,7 +3,14 @@
 // it must never construct, replace, heal or reward a unit.
 import type {Point} from '../core/types';
 import {ENEMY_DEFINITIONS,validEnemyType,type EnemyUnit} from '../enemies/enemies';
-import type {WildernessPopulation,PopulationGroup} from './wildernessPopulation';
+import type {PopulationGroup} from './wildernessPopulation';
+
+/** Common roster contract: quest groups need not have a terrain/chunk assignment. */
+export type PopulationRosterGroup=Pick<PopulationGroup,'id'|'members'>;
+export interface PopulationRoster {
+  readonly seed:number;
+  readonly groups:readonly PopulationRosterGroup[];
+}
 
 export const POPULATION_ACTIVATE_MARGIN=180;
 export const POPULATION_DEACTIVATE_MARGIN=320;
@@ -36,7 +43,7 @@ function distanceToBounds(p:Readonly<Point>,b:PopulationViewport):number{
   return Math.hypot(Math.max(b.minX-p.x,0,p.x-b.maxX),
     Math.max(b.minY-p.y,0,p.y-b.maxY));
 }
-function createGroup(group:PopulationGroup,level:number):RuntimeGroup{
+function createGroup(group:PopulationRosterGroup,level:number):RuntimeGroup{
   return {id:group.id,units:group.members.map((member,index)=>{
     const hp=ENEMY_DEFINITIONS[member.type].health+Math.max(0,level-1)*12;
     return {actor:{id:member.id,type:member.type,level,x:member.spawn.x,y:member.spawn.y,
@@ -52,7 +59,7 @@ export class WildernessPopulationSession {
   readonly seed:number;
   private readonly groups:RuntimeGroup[];
   private active=new Set<string>();
-  constructor(manifest:WildernessPopulation,level:number){
+  constructor(manifest:PopulationRoster,level:number){
     if(!Number.isSafeInteger(manifest.seed)||manifest.seed<0||manifest.seed>0xffffffff
       ||!Number.isSafeInteger(level)||level<1||level>100)
       throw new RangeError('Invalid population identity or level');
@@ -70,9 +77,12 @@ export class WildernessPopulationSession {
     this.seed=manifest.seed;
     this.groups=manifest.groups.map(group=>createGroup(group,level));
   }
+  /** New array containing the original authoritative units, including inactive and dead.
+   * Structural mutations of this array do not alter roster membership. */
+  allUnits():EnemyUnit[]{return this.groups.flatMap(group=>group.units);}
   /** Detached inspection snapshot; never a second mutable roster. */
   snapshot():EnemyUnit[]{
-    return structuredClone(this.groups.flatMap(group=>group.units));
+    return structuredClone(this.allUnits());
   }
   /** Live references for the authoritative simulation, including dead actors
    * in active groups so render/corpse rules may use the original identity. */
