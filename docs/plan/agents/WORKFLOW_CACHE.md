@@ -7,19 +7,19 @@ Cíl: méně runner-minut a méně souběžných strojů, ne skrývání neúsp�
 | Událost | Hosted joby | Rozsah |
 |---|---:|---|
 | Draft PR / iterace | 0 | Cílené testy lokálně |
-| Ready PR / změna ready PR | 1 | `verify`: workflow kontrakty, legacy, typecheck, všechny unit testy, build a skutečný browser smoke |
+| Ready PR / změna ready PR | 8 celkem, max. 6 současně | Build, checks, 4 browser shardy, natural Act I, strict verify |
 | Push do main | 1–2 | Publish scope; build a Pages pouze při potřebě publikace |
-| Ruční quality, mode=full | 1 | Všechny unit a browser testy včetně přirozeného průchodu Aktem I |
+| Ruční quality, mode=full | 8 celkem, max. 6 současně | Všechny unit a browser testy včetně přirozeného průchodu Aktem I |
 | Ruční quality, mode=publish | 1–2 | Obnova Pages, pouze main |
-| Ruční seed sweep | 1 | Čtyři sekvenční dávky po 250 seedech |
+| Ruční seed sweep | 4 | Čtyři paralelní dávky po 250 seedech |
 | Ruční Act I diagnostics | 1 | Zvolený diagnostický rozsah |
 
 - Připrav všechny související změny v draftu. Teprve finální commit označ Ready for review. Neslučuj podle skipped checku: musí existovat skutečný úspěšný job `verify` na aktuálním PR head/merge tree. Při změně headu se ověření opakuje, starý běh se zruší. Bez funkčních Actions se integrace zastavuje; nepřepínej ochranu větve ani neobcházej limity.
-- Automatický smoke (`ci-smoke.spec.ts`) ověřuje vytvoření hrdiny, start hry, izometrický canvas a pohyb. Není náhradou plných E2E. Všechny existující testy zůstávají. Při kritické změně simulace, save, navigace, rendereru nebo před přejímkou etapy spusť `full` jednou na finálním SHA (ne na každém malém PR); pokud není rozpočet, plný test lokálně s doloženým SHA a výsledkem. Nespouštěj redundantní ruční diagnostiku po úspěšném full.
-- `full` používá jeden Chromium worker, žádný automatický retry, komplementární grep běžných scénářů a natural Act I. Žádný test result cache. Ruční běh nepublikuje, i když je spuštěný z main. Fail nebo timeout nejsou úspěch. Původní `validation-scope.sh` a jeho regresní testy jsou zachované jako historický klasifikátor, nikoli jako spouštěč matice.
+- Každý ready PR i ruční `full` spouští kompletní jednotkové i browser testy, včetně natural Act I a `ci-smoke.spec.ts`. Čtyři disjunktní quick shardy a jeden natural shard běží po jediném sdíleném buildu, checks souběžně. Nejvýše šest aktivních runnerů v jednom quality runu (5 browser + checks). `verify` vyžaduje úspěch všech tří závislostí. Neskrývej chyby a nespouštěj další workflow souběžně bez důvodu.
+- Jeden Chromium worker na shard, žádný automatický retry, komplementární grep běžných scénářů a natural Act I. Při prokázané infrastrukturní/flaky chybě použij pouze Re-run failed jobs v rámci retence přesného build artefaktu, ne celý run. Ruční full nepublikuje. Původní `validation-scope.sh` a jeho regresní testy zůstávají jako historický klasifikátor, nikoli spouštěč matice.
 - Zachovej dočasný playtest deploy: `build` na main rozhodne publish scope; při shodném již úspěšně publikovaném stromu se npm instalace, build i deploy přeskočí. Při nejasné historii se nasazení obnoví. `deploy` bere výhradně přesný úspěšný build artifact a ověřuje base path. Žádný PR deploy, žádné opakování kompletních testů po merge. Publikace není přejímka.
-- Npm download cache podle lockfile, nikdy sdílené `node_modules`. Jediná instalace na runner. Jen headless Chromium shell. Úspěšné testy se neukládají jako velké artefakty, failure trace má retenci dva dny. Produkční bundle/Pages artifact má retenci jeden den; po expiraci proveď ruční publish recovery místo použití jiného SHA.
-- Ruční 1000seedová kontrola zachovává všechny čtyři původní disjunktní dávky a povinné kontroly osad; povinná na finálním SHA etapy měnící generování světa. Nemá automatický PR trigger.
+- Npm download cache podle lockfile, nikdy sdílené `node_modules`. Jediná instalace na runner. Jen headless Chromium shell. Úspěšné testy se neukládají jako velké artefakty, failure trace má retenci tři dny. Produkční bundle/Pages artifact má retenci tři dny; po expiraci proveď ruční publish recovery místo použití jiného SHA.
+- Ruční 1000seedová kontrola zachovává všechny čtyři původní paralelní disjunktní dávky a povinné kontroly osad; povinná na finálním SHA etapy měnící generování světa. Nemá automatický PR trigger.
 - Měř skutečné runner-minuty z prvních srovnatelných běhů. Pokud GitHub omezil Actions, správce musí nejdřív znovu povolit workflow v Actions nebo Settings → Actions → General; respektuj případné omezení GitHubu.
 
 ## Lokální agenti
