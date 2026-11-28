@@ -4,6 +4,8 @@
 import type {Point} from '../core/types';
 import {ENEMY_DEFINITIONS,validEnemyType,type EnemyUnit} from '../enemies/enemies';
 import type {PopulationGroup} from './wildernessPopulation';
+import {validatedPopulationUnits} from './populationSnapshot';
+import type {Obstacle} from './navigation';
 
 /** Common roster contract: quest groups need not have a terrain/chunk assignment. */
 export type PopulationRosterGroup=Pick<PopulationGroup,'id'|'members'>;
@@ -83,6 +85,25 @@ export class WildernessPopulationSession {
   /** Detached inspection snapshot; never a second mutable roster. */
   snapshot():EnemyUnit[]{
     return structuredClone(this.allUnits());
+  }
+  /** All-or-nothing restoration into the original roster objects. Recompute
+   * activation from the next viewport; serialized activation is not authority. */
+  restore(raw:unknown,obstacles:readonly Obstacle[]):boolean{
+    const live=this.allUnits();
+    const restored=validatedPopulationUnits(raw,live,obstacles);
+    if(!restored)return false;
+    for(let i=0;i<live.length;i++){
+      const unit=live[i]!,next=restored[i]!;
+      Object.assign(unit.actor,next.actor);
+      unit.cooldown=next.cooldown;unit.intent=next.intent;unit.effects=next.effects;
+      delete unit.summoned;
+      if(next.abilityCooldowns===undefined)delete unit.abilityCooldowns;
+      else unit.abilityCooldowns=next.abilityCooldowns;
+      if(next.elite===undefined)delete unit.elite;
+      else unit.elite=next.elite;
+    }
+    this.active.clear();
+    return true;
   }
   /** Live references for the authoritative simulation, including dead actors
    * in active groups so render/corpse rules may use the original identity. */
