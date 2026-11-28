@@ -53,6 +53,7 @@ import {
   type EnemyIntent, type EnemySnapshot, type EnemyUnit
 } from '../enemies/enemies';
 import { planEnemyBehavior } from '../enemies/behaviorPlanner';
+import { resolveEnemyHome } from '../enemies/enemyHome';
 import {createOptionalDungeonPack,optionalDungeonRoster,optionalDungeonRewardSlot,isOptionalDungeonBoss,optionalDungeonBossAction,canResolveOptionalDungeonBossAction} from '../enemies/optionalDungeonEncounters';
 import {
   MINI_BOSS_IDS, getMiniBossDefinition, createMiniBossState, validateMiniBossState,
@@ -3861,12 +3862,15 @@ export class GameSimulation {
     const def = ENEMY_DEFINITIONS[actor.type];
     const profile = getEnemyArchetype(enemyArchetype(actor.type));
     if (!profile || !actor.alive || !this.player.alive) return;
-    const index = this.units.indexOf(unit);
-    const spawn = this.zone === 'crypt' && this.dungeonStage === 1 && index < PACK_SIZE
-      ? this.dungeonBossPositions[index]
-      : this.world.encounterPositions[index] ?? (unit.summoned ? actor : undefined);
-    if (!spawn) return;
-    const origin = { x: spawn.x, y: spawn.y + (this.wave % 2) * 25 };
+    const home = resolveEnemyHome(unit, {
+      wave: this.wave,
+      positions: this.zone === 'crypt' && this.dungeonStage === 1
+        ? this.dungeonBossPositions : this.world.encounterPositions,
+      crypt: this.zone === 'crypt',
+      events: this.zone === 'wilderness' ? this.worldEventPlans : []
+    });
+    if (!home) return;
+    const {origin, patrolSlot:index} = home;
     const role = enemyArchetype(actor.type);
     const sanctuary = this.inSettlementSafety();
     const target = sanctuary ? null : this.player;
