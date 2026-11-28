@@ -456,13 +456,16 @@ export class GameSimulation {
   startFinitePopulation(sessionId:string):boolean {
     if(this.finiteWilderness||this.zone!=='wilderness'||this.wave!==0
       ||!this.player.alive||distance(this.player,this.world.camp)>1
-      ||this.units.length!==PACK_SIZE||this.units.some(u=>!u.actor.alive||u.actor.health!==u.actor.maxHealth)
+      ||this.units.length<PACK_SIZE||this.units.slice(PACK_SIZE).some(u=>u.actor.id!=='morrow_gravebound')
+      ||this.units.some(u=>!u.actor.alive||u.actor.health!==u.actor.maxHealth)
       ||this.selectedTargetId!==null||this.attackTarget!==null)return false;
     let session:ActIWildernessSession;
     try{session=new ActIWildernessSession(buildWilderness(this.world.seed),this.level,sessionId);}
     catch{return false;}
     this.finiteWilderness=session;
+    const storyBoss=this.units.find(u=>u.actor.id==='morrow_gravebound');
     this.units=session.population.allUnits();
+    if(storyBoss)this.units.push(storyBoss);
     this.seedFiniteElites(session);
     this.respawnTimer=0;
     this.reconcileFiniteStarter();

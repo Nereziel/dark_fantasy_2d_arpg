@@ -1,4 +1,6 @@
 import { GameSimulation } from '../core/GameSimulation';
+import { isCharacterId } from '../creation/characterCreation';
+import type { ClassId } from '../data/classes';
 import type { EquipmentSlot, GroundItem } from '../data/items';
 import { DEFAULT_GROUND_LOOT_FILTER, filterVisibleGroundLoot, normalizeGroundLootFilter,
   type GroundLootFilter } from '../items/groundLootVisibility';
@@ -12,7 +14,50 @@ import type { MapProjection, MapProjectionOptions } from '../world/mapDiscovery'
 
 /** UI-facing presentation adapter; game state is owned by the simulation. */
 export class GameBridge implements GameStateReader {
-  private readonly simulation = new GameSimulation();
+  private simulation = new GameSimulation();
+  private readonly liveCharacters=new Map<string,GameSimulation>();
+  constructor(private readonly sessions:{finitePopulation?:boolean;nextSeed?:()=>number;nextSessionId?:()=>string}={}) {}
+
+  private freshLiveWorld():GameSimulation|null {
+    const seed=(this.sessions.nextSeed??newSessionSeed)();
+    if(!Number.isSafeInteger(seed)||seed<0||seed>0xffffffff)return null;
+    return new GameSimulation(seed);
+  }
+  private selectLiveWorld(id:string,simulation:GameSimulation):boolean {
+    this.liveCharacters.set(id,simulation);
+    this.simulation=simulation;
+    this.pointerWorld=null;this.pointerEnemy=null;
+    this.notificationClock=0;
+    simulation.command({type:'pause',value:false});
+    this.emit();return true;
+  }
+  private prepareFiniteWorld(simulation:GameSimulation):boolean {
+    return !this.sessions.finitePopulation||simulation.startFinitePopulation(
+      (this.sessions.nextSessionId??(()=>crypto.randomUUID()))());
+  }
+  /** New named hero, new instance. Existing live heroes remain frozen. */
+  createLiveCharacter(classId:ClassId,id:string):boolean {
+    if(!isCharacterId(id)||this.liveCharacters.has(id))return false;
+    const simulation=this.freshLiveWorld();
+    if(!simulation)return false;
+    simulation.command({type:'createCharacter',classId,characterId:id,seed:simulation.snapshot().worldSeed});
+    if(simulation.character().characterId!==id||simulation.character().classId!==classId
+      ||!this.prepareFiniteWorld(simulation))return false;
+    return this.selectLiveWorld(id,simulation);
+  }
+  /** Resume only this application's live instance. Disk progress is character
+   * data, never authority for the seed of a newly launched world. */
+  openLiveCharacter(progress:CharacterProgress):boolean {
+    const id=progress?.characterId??'hero';
+    if(!progress||!isCharacterId(id))return false;
+    const live=this.liveCharacters.get(id);
+    if(live)return live.character().classId===progress.classId&&this.selectLiveWorld(id,live);
+    const simulation=this.freshLiveWorld();
+    if(!simulation||!simulation.restoreCharacter(progress,simulation.snapshot().worldSeed)
+      ||!this.prepareFiniteWorld(simulation))return false;
+    return this.selectLiveWorld(id,simulation);
+  }
+  forgetLiveCharacter(id:string):void {this.liveCharacters.delete(id);}
   private readonly listeners = new Set<(state: GameSnapshot) => void>();
   private readonly events = new Set<(event: GameEvent) => void>();
   private notificationClock = 0;

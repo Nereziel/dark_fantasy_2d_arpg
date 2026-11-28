@@ -86,7 +86,7 @@ test('casts a Paladin ability and localizes effects without restarting the game'
   await expect(page.locator('.enemy-roster-title')).toContainText(new RegExp('[34]/[34]'));
 });
 
-test('retains character-only save v11 and resumes separate seed-scoped world record', async ({ page }) => {
+test('retains character-only save v11 and creates a fresh seed-scoped world on reload', async ({ page }) => {
   await page.goto('./?view=iso');
   await page.locator('#menu-language').selectOption('en');
   await openCharacterCreation(page);
@@ -99,7 +99,6 @@ test('retains character-only save v11 and resumes separate seed-scoped world rec
   // roster rather than assuming every random seed has exactly three.
   const roster = page.locator('.enemy-roster-title');
   await expect(roster).toHaveText(/^Enemies · (3\/3|4\/4) · Wave 1$/);
-  const originalRoster = await roster.innerText();
   // New character creation triggers a real IndexedDB autosave, no manual button.
   await expect.poll(async () => page.evaluate(async () => {
     return await new Promise<number | null>((resolve) => {
@@ -131,10 +130,9 @@ test('retains character-only save v11 and resumes separate seed-scoped world rec
   await expect(page.getByText('Rogue · Level 1')).toBeVisible();
   await expect(page.locator('.zone-name')).toHaveText('Emberwatch Camp');
   const secondSeed = await page.locator('.game-screen').getAttribute('data-world-seed');
-  // Wave F world-instance store retains the seed for discovered map and opened chests.
-  // The persistent hero record remains strictly character-only format 11.
-  expect(secondSeed).toBe(firstSeed);
-  await expect(roster).toHaveText(originalRoster);
+  // A new application launch regenerates the world; character v11 persists.
+  expect(secondSeed).not.toBe(firstSeed);
+  await expect(roster).toHaveText(/^Enemies · (3\/3|4\/4) · Wave 1$/);
   await expect(page.locator('.effect-chip')).toHaveCount(0);
 });
 
@@ -262,8 +260,8 @@ test('enters a separate procedurally generated crypt, returns to camp and reload
   await page.reload();
   await continueGame(page);
   await expect(page.locator('.game-screen')).toHaveAttribute('data-zone', 'wilderness');
-  await expect(page.locator('.game-screen')).toHaveAttribute('data-world-seed',seed!);
-  await expect(page.locator('.enemy-roster-title')).toHaveText(rosterBefore);
+  await expect(page.locator('.game-screen')).not.toHaveAttribute('data-world-seed',seed!);
+  await expect(page.locator('.enemy-roster-title')).toHaveText(/^Enemies · (3\/3|4\/4) · Wave 1$/);
   await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toHaveAttribute('data-prop-visuals', /"soul-shrine":"shrine"/);
 });
 
