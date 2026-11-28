@@ -8,7 +8,7 @@ async function create(page: Page, name:string) {
   await enterWorld(page);
   await expect(page.locator('.game-screen')).toBeVisible();
 }
-test('named same-class heroes resume the selected world, not the in-memory default',async({page})=>{
+test('named same-class heroes resume live worlds and regenerate after application reload',async({page})=>{
   // Six world entries plus IndexedDB save/load and a real page reload.
   // Budget the whole scenario separately; individual actions retain their deadlines.
   test.setTimeout(60_000);
@@ -52,11 +52,12 @@ test('named same-class heroes resume the selected world, not the in-memory defau
   await page.reload();
   await page.locator('.saved-character-row').filter({hasText:'Morrow'}).locator('.saved-select').click();
   await continueGame(page);
-  await expect(game).toHaveAttribute('data-world-seed',otherSeed!);
+  await expect(game).not.toHaveAttribute('data-world-seed',otherSeed!);
+  const freshSeed=await game.getAttribute('data-world-seed');
   await expect(page.locator('.hud-details')).toContainText('Morrow');
   await returnToMenu(page);
   await continueGame(page);
-  await expect(game).toHaveAttribute('data-world-seed',otherSeed!);
+  await expect(game).toHaveAttribute('data-world-seed',freshSeed!);
 });
 
 test('Czech mobile creation has a labelled name field and cancel returns to the list',async({page})=>{
