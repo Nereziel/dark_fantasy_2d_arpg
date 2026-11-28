@@ -69,15 +69,18 @@ export function planQuestPopulation(world:WildernessRuntimeWorld,
  * sole authority for objective counters and one-shot quest reward plans.
  * No XP, gold, loot, resurrection or synthetic death is performed here. */
 export function questKillCredits(plan:QuestPopulation,actors:readonly QuestKillActor[],
-  ledger:QuestLedger):string[]{
+  ledger:QuestLedger,sessionId?:string):string[]{
+  if(sessionId!==undefined&&!/^[A-Za-z0-9_-]{1,40}$/.test(sessionId))
+    throw new RangeError('Invalid population session identity');
+  const occurrence=(id:string)=>sessionId===undefined?id:'hunt-'+sessionId+'-'+id;
   const quest=ledger.quests.find(q=>q.questId==='blighted_pack');
   if(quest?.status!=='active')return [];
   const processed=new Set(quest.processedEventIds);
   return plan.members.filter(member=>{
     if(member.type!=='corruptedBoar'||!HUNT_MEMBER_IDS.some(id=>id===member.id)
-      ||processed.has(member.id))return false;
+      ||processed.has(occurrence(member.id)))return false;
     const matches=actors.filter(a=>a.id===member.id);
     return matches.length===1&&matches[0]!.type===member.type
       &&matches[0]!.alive===false&&matches[0]!.health===0;
-  }).map(m=>m.id);
+  }).map(m=>occurrence(m.id));
 }
