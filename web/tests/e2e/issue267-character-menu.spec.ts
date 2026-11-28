@@ -9,6 +9,9 @@ async function create(page: Page, name:string) {
   await expect(page.locator('.game-screen')).toBeVisible();
 }
 test('named same-class heroes resume the selected world, not the in-memory default',async({page})=>{
+  // Six world entries plus IndexedDB save/load and a real page reload.
+  // Budget the whole scenario separately; individual actions retain their deadlines.
+  test.setTimeout(60_000);
   await page.goto('./');
   await page.locator('#menu-language').selectOption('en');
   const next = page.getByTestId('continue-character');
