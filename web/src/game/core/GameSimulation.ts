@@ -463,7 +463,10 @@ export class GameSimulation {
     catch{return false;}
     this.finiteWilderness=session;
     this.units=session.population.allUnits();
+    this.seedFiniteElites(session);
     this.respawnTimer=0;
+    this.reconcileFiniteStarter();
+    this.reconcileFiniteHunt();
     return true;
   }
 
@@ -1194,8 +1197,23 @@ export class GameSimulation {
       );
       if (reward.questId === 'forgotten_graves') this.spawnMorrow();
     }
+    if(previous.status!=='active'&&this.quest.status==='active')this.reconcileFiniteStarter();
     if(previousHunt!=='active'&&this.questStatus('blighted_pack')==='active')this.reconcileFiniteHunt();
     return true;
+  }
+
+  /** Reconcile only canonical finite deaths, including kills before acceptance.
+   * The ledger deduplicates by session and member; no kill rewards are replayed. */
+  private reconcileFiniteStarter():void {
+    if(!this.finiteZone||this.quest.status!=='active')return;
+    const session=this.finiteWilderness!;
+    for(const u of session.population.allUnits()){
+      if(this.quest.status!=='active')break;
+      if(u.actor.alive||u.actor.health!==0)continue;
+      const occurrence='first-'+session.sessionId+'-'+u.actor.id;
+      this.commitQuestTransition(advanceObjective(CAMPAIGN_QUEST_CATALOG,this.actILedger,
+        FIRST_QUEST_ID,'enemy_defeated',occurrence),FIRST_QUEST_ID);
+    }
   }
 
   private reconcileFiniteHunt():void {
@@ -4615,6 +4633,24 @@ export class GameSimulation {
     }
   }
 
+  /** Seed once at world creation, using a separate RNG per group. The two
+   * nearest ordinary groups and the mandatory hunt are protected starter mobs.
+   * Every second remaining group gets one elite; distant elites may have two
+   * modifiers. This is an initial balance policy, not a runtime spawn rule. */
+  private seedFiniteElites(session:ActIWildernessSession):void{
+    const groups=[...session.ordinary.groups].sort((a,b)=>
+      distance(a.anchor,this.world.camp)-distance(b.anchor,this.world.camp)||a.id.localeCompare(b.id));
+    for(let i=2;i<groups.length;i+=2){
+      const group=groups[i]!;
+      let hash=(session.manifest.seed^0x454c4954)>>>0;
+      for(const ch of group.id)hash=Math.imul(hash^ch.charCodeAt(0),16777619)>>>0;
+      const rng=new SeededRng(hash||1);
+      const member=group.members[rng.index(group.members.length)]!;
+      const unit=this.units.find(u=>u.actor.id===member.id);
+      if(unit)this.decorateElite(unit,i>=6?2:1,rng);
+    }
+  }
+
   /** Seeded elites decorate canonical enemies; normal tutorial waves stay unchanged. */
   private seedElitePack(): void {
     const boss = this.zone === 'crypt' && this.dungeonStage === 1;
@@ -4622,7 +4658,12 @@ export class GameSimulation {
     const index = boss ? 0 : this.rng.index(PACK_SIZE);
     const unit = this.units[index];
     if (!unit) return;
-    const ids = rollEliteModifiers({ count: boss || this.wave >= 6 ? 2 : 1 }, this.rng);
+    this.decorateElite(unit,boss||this.wave>=6?2:1,this.rng);
+  }
+
+  private decorateElite(unit:EnemyUnit,count:number,rng:SeededRng):void {
+    if(unit.elite)return;
+    const ids=rollEliteModifiers({count},rng);
     if (!ids || !ids.length) return;
     const base = ENEMY_DEFINITIONS[unit.actor.type];
     const plan = applyEliteStats({ health: unit.actor.maxHealth,
@@ -4665,7 +4706,7 @@ export class GameSimulation {
       }
     }
 
-    for (const unit of [...this.units]) {
+    for (const unit of this.activeCombatUnits()) {
       if (!unit.actor.alive || !unit.elite) continue;
       const start = unit.elite.elapsedSeconds;
       const period = eliteOnPeriodicPlan(unit.elite.modifiers, {
@@ -4833,7 +4874,8 @@ export class GameSimulation {
         * (unit.elite ? 1.75 : 1)));
     }
     if (this.zone === 'wilderness' && !eventEnemy) {
-      this.commitQuestTransition(
+      if(this.finiteZone)this.reconcileFiniteStarter();
+      else this.commitQuestTransition(
         advanceObjective(CAMPAIGN_QUEST_CATALOG, this.actILedger,
           FIRST_QUEST_ID, 'enemy_defeated', 'enemy_' + this.kills), FIRST_QUEST_ID
       );
@@ -4863,7 +4905,8 @@ export class GameSimulation {
     const boss = unit.actor.type === 'crypt_lord'
       || isOptionalDungeonBoss(this.optionalVisit?.identity.dungeonId,this.dungeonStage,unit.actor.id)
       || this.defeatedMiniBossIds.has(unit.actor.id as MiniBossId);
-    if (boss || this.zone === 'crypt' || this.wave >= 2) {
+    if (boss || this.zone === 'crypt' || this.wave >= 2 || (this.finiteZone&&!unit.summoned&&
+      this.finiteWilderness!.population.allUnits().includes(unit))) {
       const rank = boss ? 'boss' : unit.elite ? 'elite' : 'normal';
       const gem = rollCombatGem(this.world.seed, this.kills, rank);
       const nextWallet = gem && grantCombatGem(this.gems, gem);
