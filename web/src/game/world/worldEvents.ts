@@ -8,9 +8,10 @@ import type { Point } from '../core/types';
 import type { EnemyType } from '../enemies/enemies';
 import type { Materials } from '../crafting/craftingRules';
 import type { CatalogTemplateId } from '../items/itemCatalog';
-import { CAMP, CAMP_RADIUS, type WorldLayout } from './generator';
-import { ACTOR_RADIUS, canOccupy, findPath, WORLD_HEIGHT, WORLD_WIDTH } from './navigation';
+import { CAMP, type WorldLayout } from './generator';
+import { ACTOR_RADIUS, canOccupy, WORLD_HEIGHT, WORLD_WIDTH } from './navigation';
 import { MANDATORY_FEATURE_IDS, type WildernessFeature } from './wildernessFeatures';
+import {eventSpawnPositions,worldEventHash} from './eventSpawnPlacement';
 
 export const WORLD_EVENT_KINDS = [
   'banditAmbush', 'demonIncursion', 'caravanDefense', 'cursedShrine',
@@ -87,13 +88,6 @@ const REWARDS: Readonly<Record<WorldEventKind, {
   ritualInterruption:{gold:36,xp:115,materials:{arcane_dust:2},itemBaseId:'wand'},
   treasureAmbush:{gold:60,xp:90,materials:{steel:1},itemBaseId:'belt'}
 });
-const OFFSETS: readonly Readonly<Point>[] = [
-  {x:-32,y:0},{x:32,y:0},{x:0,y:-34},{x:0,y:34},
-  {x:-36,y:-28},{x:36,y:28},{x:36,y:-28},{x:-36,y:28},
-  {x:-56,y:0},{x:56,y:0},{x:0,y:56},{x:0,y:-56},
-  {x:-50,y:42},{x:50,y:-42}
-];
-
 function uint32(seed: unknown): seed is number {
   return typeof seed === 'number' && Number.isSafeInteger(seed)
     && seed >= 0 && seed <= 0xffffffff;
@@ -104,17 +98,6 @@ function point(value: unknown): value is Point {
   return typeof p.x==='number' && Number.isFinite(p.x)
     && typeof p.y==='number' && Number.isFinite(p.y)
     && p.x >= 0 && p.x <= WORLD_WIDTH && p.y >= 0 && p.y <= WORLD_HEIGHT;
-}
-function distance(a: Readonly<Point>,b: Readonly<Point>):number {
-  return Math.hypot(a.x-b.x,a.y-b.y);
-}
-function hash(seed: number, id: string): number {
-  let h=(seed ^ 0x9e3779b9)>>>0;
-  for(const c of id) h=(Math.imul(h ^ c.charCodeAt(0),16777619))>>>0;
-  h^=h>>>16;
-  h=Math.imul(h,0x7feb352d)>>>0;
-  h^=h>>>15;
-  return h>>>0;
 }
 function regionFor(pos: Readonly<Point>):WorldEventRegion {
   return pos.x < 850 ? 'ashenRoad' : pos.x < 1500 ? 'corruptedWilds' : 'graveApproach';
@@ -148,20 +131,6 @@ function validWorld(seed:number,layout:unknown,features:unknown):layout is World
   }
   return MANDATORY_FEATURE_IDS.every(id=>ids.has(id));
 }
-function spawnSafe(position:Point,feature:WildernessFeature,layout:WorldLayout,
-  all: readonly WildernessFeature[],already:readonly WorldEventSpawn[]):boolean {
-  if (!canOccupy(position,ACTOR_RADIUS,layout.obstacles)
-    || distance(position,CAMP)<=CAMP_RADIUS+100
-    || distance(position,feature.position)>75
-    || layout.encounterPositions.some(p=>distance(position,p)<75)
-    || already.some(e=>distance(position,e.position)<ACTOR_RADIUS*2)) return false;
-  if (all.some(f=>f.mandatory
-    && distance(position,f.position)<=f.radius+20)) return false;
-  // A locally reachable spawn can still be inaccessible from the camp
-  // in the authoritative navigation grid. Preserve both route contracts.
-  return findPath(feature.position,position,ACTOR_RADIUS,layout.obstacles).length>0
-    && findPath(layout.camp,position,ACTOR_RADIUS,layout.obstacles).length>0;
-}
 /** Stable per-seed event choices. Invalid layouts return no events, never a risky fallback. */
 export function planWorldEvents(seed:number,layout:Readonly<WorldLayout>,
   features:readonly WildernessFeature[]):WorldEventPlan[] {
@@ -173,19 +142,13 @@ export function planWorldEvents(seed:number,layout:Readonly<WorldLayout>,
   for(const anchor of anchors) {
     const region=regionFor(anchor.position);
     const table=REGION_TABLE[region];
-    const kind=table[hash(seed,anchor.id)%table.length]!;
-    const spawns:WorldEventSpawn[]=[];
-    const rotated=hash(seed ^ 0xa31eab2f,anchor.id)%OFFSETS.length;
-    for(let i=0;i<OFFSETS.length && spawns.length<2;i++) {
-      const offset=OFFSETS[(rotated+i)%OFFSETS.length]!;
-      const position={x:anchor.position.x+offset.x,y:anchor.position.y+offset.y};
-      if (!spawnSafe(position,anchor,layout,features,spawns)) continue;
-      spawns.push({
-        id:'world-event.'+anchor.id+'.'+(spawns.length+1),
-        type:ENEMIES[kind][spawns.length%ENEMIES[kind].length]!,
+    const kind=table[worldEventHash(seed,anchor.id)%table.length]!;
+    const spawns:WorldEventSpawn[]=eventSpawnPositions(seed,layout,anchor,features)
+      .map((position,index)=>({
+        id:'world-event.'+anchor.id+'.'+(index+1),
+        type:ENEMIES[kind][index%ENEMIES[kind].length]!,
         position
-      });
-    }
+      }));
     if(spawns.length<2)continue;
     result.push({id:anchor.id as WorldEventId,kind,region,
       position:{...anchor.position},triggerRadius:WORLD_EVENT_TRIGGER_RADIUS,

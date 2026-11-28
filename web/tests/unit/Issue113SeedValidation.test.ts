@@ -8,8 +8,12 @@ import { ACT_I_DUNGEON_ENTRANCE_SPACING } from '../../src/game/world/wildernessF
 import { validateWildernessTerrain, generateWildernessTerrain } from '../../src/game/world/wildernessTerrain';
 import { generateProceduralDungeon, validateProceduralDungeon } from '../../src/game/world/proceduralDungeon';
 import { MANDATORY_FEATURE_IDS } from '../../src/game/world/wildernessFeatures';
-import { CAMP, CRYPT_GATE } from '../../src/game/world/generator';
+import { CAMP, CAMP_RADIUS, CRYPT_GATE } from '../../src/game/world/generator';
 import { getTownManifest } from '../../src/game/world/townManifest';
+import { ENVIRONMENT_IDS, SHRINE_BONUSES, planEnvironmentObjects } from '../../src/game/world/environmentInteractions';
+import { planWorldEvents } from '../../src/game/world/worldEvents';
+import { WAYPOINT_IDS, waypointDefinition, planWaypointTravel } from '../../src/game/world/waypointTravel';
+import { planOptionalDungeonFeatures } from '../../src/game/world/optionalDungeonFeatures';
 import { ACTOR_RADIUS, canOccupy, findPath } from '../../src/game/world/navigation';
 
 /**
@@ -32,7 +36,11 @@ const REQUIRE_VILLAGES = checkedEnv('SEED_SWEEP_REQUIRE_VILLAGES', 1, 0, 1) === 
 const seeds = Array.from({ length: COUNT }, (_, i) => (START + Math.imul(i, 7919)) >>> 0);
 // Regression: natural Act I evidence-search stall in main CI 45572861430.
 const sample = [0, 1, 2, 3, 42, 99, 2683541248, 0x7fffffff, 0xffffffff];
-const suiteSeeds = [...new Set([...sample, ...seeds])];
+// Reproduced missing playable event slots in CI 45988894581.
+const eventRegressionSeeds = [0,1,245489,411788,1156174,1354149,1686747,1694666,
+  2296510,2494485,2589513,2779569,2866678,3365575,3373494,3840715,3919905,
+  4775157,6343119,6430228,7808134,0xffffffff];
+const suiteSeeds = [...new Set([...sample, ...eventRegressionSeeds, ...seeds])];
 
 type SweepRegion = 'wilderness' | 'crypt' | 'mine' | 'cave';
 function checkedSeed(seed: number, region: SweepRegion, fn: () => void): void {
@@ -89,6 +97,37 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
         criticalPath(seed, 'wilderness', 'encounter-' + index, layout.camp,
           point, layout.obstacles);
       }
+      // Validate published gameplay manifests, not just their underlying POIs.
+      const environment=planEnvironmentObjects(seed,layout,features);
+      expect(environment.map(o=>o.id),'Incomplete environment catalog').toEqual([...ENVIRONMENT_IDS]);
+      expect(environment.filter(o=>o.kind==='shrine').map(o=>o.shrineBonus))
+        .toEqual([...SHRINE_BONUSES]);
+      for(const object of environment){
+        criticalPath(seed,'wilderness',object.id,layout.camp,object.position,layout.obstacles);
+        if(object.requiresId)expect(environment.some(o=>o.id===object.requiresId)).toBe(true);
+      }
+      const events=planWorldEvents(seed,layout,features);
+      expect(events.map(e=>e.id),'Incomplete playable event catalog; anchors='+features.filter(f=>f.kind==='event').map(f=>f.id+'@'+f.position.x+','+f.position.y).join(';')).toEqual(['wild.event.1','wild.event.2']);
+      for(const event of events){
+        criticalPath(seed,'wilderness',event.id,layout.camp,event.position,layout.obstacles);
+        expect(Math.hypot(event.position.x-CAMP.x,event.position.y-CAMP.y),event.id+' anchor clearance').toBeGreaterThan(CAMP_RADIUS+70);
+        expect(event.enemySpawns).toHaveLength(2);
+        expect(new Set(event.enemySpawns.map(e=>e.id)).size).toBe(2);
+        for(const spawn of event.enemySpawns){
+          criticalPath(seed,'wilderness',spawn.id,layout.camp,spawn.position,layout.obstacles);
+          expect(Math.hypot(spawn.position.x-CAMP.x,spawn.position.y-CAMP.y),spawn.id+' spawn clearance').toBeGreaterThan(CAMP_RADIUS+100);
+          criticalPath(seed,'wilderness',spawn.id+'-local',event.position,spawn.position,layout.obstacles);
+        }
+      }
+      for(const from of WAYPOINT_IDS){
+        const source=waypointDefinition(from)!;
+        const to=WAYPOINT_IDS.find(id=>id!==from)!;
+        const target=waypointDefinition(to)!;
+        criticalPath(seed,'wilderness',from,layout.camp,source.position,layout.obstacles);
+        expect(planWaypointTravel({world:layout,zone:'wilderness',
+          player:{...source.position,alive:true},activated:WAYPOINT_IDS},to))
+          .toEqual({from,to,position:target.position});
+      }
       // Full Act I must publish all three portals, not just the story crypt.
       const portals=planActIDungeonEntrances(world);
       expect(portals.map(p=>p.id), 'Missing Act I dungeon entrance').toEqual([...ACT_I_DUNGEON_IDS]);
@@ -117,6 +156,13 @@ describe('Issue #113 — renderer-free Act I procedural seed sweep', () => {
           const spawn=interior.playerSpawn, walls=interior.obstacles;
           criticalPath(seed,id,'exit',spawn,interior.exitPosition,walls);
           criticalPath(seed,id,'boss',spawn,interior.bossSpawn,walls);
+          const content=planOptionalDungeonFeatures(interior,id);
+          expect(content.chest.oneShot).toBe(true);
+          expect(content.trap.oneShot).toBe(true);
+          expect(content.gold).toBeGreaterThan(0);
+          expect(content.trap.telegraphSeconds).toBeGreaterThan(0);
+          criticalPath(seed,id,content.chest.id,spawn,content.chest.position,walls);
+          criticalPath(seed,id,content.trap.id,spawn,content.trap.trigger.center,walls);
           for(const [guard,position] of interior.bossGuardSpawns.entries())
             criticalPath(seed,id,'guard-'+guard,spawn,position,walls);
           for(const encounter of interior.encounterSpawns)
