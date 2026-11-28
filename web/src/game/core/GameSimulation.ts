@@ -1265,6 +1265,15 @@ export class GameSimulation {
     const slots=encounterSlots(this.units,this.wave,this.finiteWilderness?.manifest);
     return this.finiteZone?slots.extra-this.units.filter(u=>!u.summoned&&MINI_BOSS_IDS.includes(u.actor.id as MiniBossId)).length:slots.extra;
   }
+  /** Finite summons use free stable slots, not the current array index. */
+  private nextEnemySummonId():string {
+    if(!this.finiteZone)return 'summon-'+this.wave+'-'+this.units.length;
+    for(let slot=0;slot<2;slot++){
+      const id='summon-0-'+slot;
+      if(!this.units.some(u=>u.actor.id===id))return id;
+    }
+    throw new Error('Finite summon capacity exhausted');
+  }
   /** Distinct optional encounters use existing, seeded reachable wilderness features. */
   private spawnOptionalMiniBosses(): void {
     if (this.zone !== 'wilderness' || !this.player.alive) return;
@@ -1472,9 +1481,8 @@ export class GameSimulation {
         if ((this.zone === 'wilderness' ? this.wildernessExtraSlots >= 2 : this.units.length >= PACK_SIZE + 2)
           || !canOccupy(action.point, ACTOR_RADIUS, this.world.obstacles)) continue;
         const def = ENEMY_DEFINITIONS[action.enemyType];
-        const index = this.units.length;
         this.units.push({
-          actor: { id: 'summon-' + this.wave + '-' + index, type: action.enemyType, level:1,
+          actor: { id: this.nextEnemySummonId(), type: action.enemyType, level:1,
             x: action.point.x, y: action.point.y,
             health: def.health, maxHealth: def.health, alive: true },
           summoned: true, intent: null, cooldown: 0.7, effects: [], abilityCooldowns: {}
@@ -4719,7 +4727,7 @@ export class GameSimulation {
       if (!canOccupy(position, ACTOR_RADIUS, this.world.obstacles)) return;
       const base = ENEMY_DEFINITIONS.skeleton;
       const health = base.health + Math.max(0, this.level - 1) * 12;
-      const id = 'summon-' + this.wave + '-' + this.units.length;
+      const id = this.nextEnemySummonId();
       this.units.push({
         actor: { id, type: 'skeleton', level:this.level, ...position,
           health, maxHealth: health, alive: true },
@@ -5444,7 +5452,8 @@ export class GameSimulation {
       || !s.effects || !Array.isArray(s.effects.player)
       || s.effects.player.length > 8 || !s.effects.player.every(isActiveEffect)
       || !Array.isArray(s.enemies) || s.enemies.length < canonicalCount
-      || (finiteZone && (s.enemies.length > canonicalCount + MINI_BOSS_IDS.length + 2
+      || (finiteZone && (s.enemies.some(u=>!u?.actor)
+        || s.enemies.length > canonicalCount + MINI_BOSS_IDS.length + 2
         || encounterSlots(s.enemies,s.wave,restoredPopulation!.manifest).extra
           -s.enemies.filter(u=>u?.actor&&!u.summoned&&MINI_BOSS_IDS.includes(u.actor.id as MiniBossId)).length>2))
       || (!finiteZone && s.enemies.length > canonicalCount + 2 && (
@@ -5476,8 +5485,9 @@ export class GameSimulation {
         && validActor(unit.actor, index >= canonicalCount
           ? (activeEventPlan?.enemySpawns.some(spawn=>spawn.id===unit.actor.id)
              || (MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId) && s.zone === 'wilderness')
-              ? unit.actor.id : finiteZone && /^summon-0-[0-9]{1,3}$/.test(unit.actor.id)
-                ? unit.actor.id : 'summon-' + s.wave + '-' + index)
+              ? unit.actor.id : finiteZone
+                ? (/^summon-0-[01]$/.test(unit.actor.id)?unit.actor.id:'')
+                : 'summon-' + s.wave + '-' + index)
           : unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && (unit.elite === undefined || (
           validateEliteSet(unit.elite.modifiers) && unit.elite.modifiers.length > 0
