@@ -54,6 +54,7 @@ import {
 } from '../enemies/enemies';
 import { planEnemyBehavior } from '../enemies/behaviorPlanner';
 import { resolveEnemyHome } from '../enemies/enemyHome';
+import { encounterSlots } from '../enemies/encounterSlots';
 import {createOptionalDungeonPack,optionalDungeonRoster,optionalDungeonRewardSlot,isOptionalDungeonBoss,optionalDungeonBossAction,canResolveOptionalDungeonBossAction} from '../enemies/optionalDungeonEncounters';
 import {
   MINI_BOSS_IDS, getMiniBossDefinition, createMiniBossState, validateMiniBossState,
@@ -666,7 +667,7 @@ export class GameSimulation {
   /** Simulation-only spawn at an optional seed-validated event marker. */
   private activateNearbyWorldEvent():void {
     if(this.zone!=='wilderness'||!this.player.alive||this.paused||this.inVillageSafety()
-      ||this.activeWorldEventId||this.units.length!==PACK_SIZE)return;
+      ||this.activeWorldEventId||this.wildernessExtraSlots!==0)return;
     for(const plan of this.worldEventPlans) {
       if(this.worldFacts?.entries.some(fact=>
         fact.kind==='eventCompleted'&&fact.entityId===plan.id)
@@ -1186,6 +1187,11 @@ export class GameSimulation {
   }
 
 
+  /** Legacy extra budget is separate from the canonical roster; the future
+   * session roster can be supplied here without changing event/boss callers. */
+  private get wildernessExtraSlots():number {
+    return encounterSlots(this.units,this.wave).extra;
+  }
   /** Distinct optional encounters use existing, seeded reachable wilderness features. */
   private spawnOptionalMiniBosses(): void {
     if (this.zone !== 'wilderness' || !this.player.alive) return;
@@ -1206,7 +1212,7 @@ export class GameSimulation {
         }
         continue;
       }
-      if (distance(this.player, marker.position) > 320 || this.units.length >= PACK_SIZE + 2
+      if (distance(this.player, marker.position) > 320 || this.wildernessExtraSlots >= 2
         || !canOccupy(marker.position, ACTOR_RADIUS, this.world.obstacles)) continue;
       const def = getMiniBossDefinition(placement.id);
       const state = createMiniBossState(placement.id, placement.id);
@@ -1390,7 +1396,7 @@ export class GameSimulation {
         const hp = resolveHealing(actor.health, actor.maxHealth, 24);
         actor.health = hp.health;
       } else if (action.kind === 'summon') {
-        if (this.units.length >= PACK_SIZE + 2
+        if ((this.zone === 'wilderness' ? this.wildernessExtraSlots >= 2 : this.units.length >= PACK_SIZE + 2)
           || !canOccupy(action.point, ACTOR_RADIUS, this.world.obstacles)) continue;
         const def = ENEMY_DEFINITIONS[action.enemyType];
         const index = this.units.length;
@@ -1418,14 +1424,14 @@ export class GameSimulation {
     // unselected living optional. This is world streaming, NOT a kill: do not
     // record a defeat or grant loot/XP. World-event guards and summons
     // keep their slots and identities when Morrow uses the story reserve.
-    if (this.units.length >= PACK_SIZE + 2 && !this.units.some(unit => unit.summoned)) {
-      const optional = (unit: EnemyUnit, index: number) =>
-        index >= PACK_SIZE && unit.actor.id !== 'morrow_gravebound'
+    if (this.wildernessExtraSlots >= 2 && !this.units.some(unit => unit.summoned)) {
+      const optional = (unit: EnemyUnit) =>
+        !unit.summoned && unit.actor.id !== 'morrow_gravebound'
         && MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId);
-      const dead = this.units.findIndex((unit, index) =>
-        optional(unit, index) && !unit.actor.alive);
-      const unselected = this.units.findIndex((unit, index) =>
-        optional(unit, index) && unit.actor.id !== this.selectedTargetId);
+      const dead = this.units.findIndex(unit =>
+        optional(unit) && !unit.actor.alive);
+      const unselected = this.units.findIndex(unit =>
+        optional(unit) && unit.actor.id !== this.selectedTargetId);
       const anyOptional = this.units.findIndex(optional);
       const retireIndex = dead >= 0 ? dead
         : unselected >= 0 ? unselected : anyOptional;
@@ -1439,7 +1445,7 @@ export class GameSimulation {
         }
       }
     }
-    if (this.units.length > PACK_SIZE + 2) return;
+    if (this.wildernessExtraSlots > 2) return;
     const marker = this.storyFeatures.find(feature => feature.id === 'act1.grave_warden');
     if (!marker) return;
     const health = 270 + Math.max(0, this.level - 1) * 24;
@@ -4622,9 +4628,11 @@ export class GameSimulation {
       });
     } else if (action.kind === 'summon') {
       const active = this.units.filter(other => other.summoned && other.actor.alive).length;
-      if (active >= action.maxActive || this.units.length >= PACK_SIZE + 2) return;
+      if (active >= action.maxActive || (this.zone === 'wilderness'
+        ? this.wildernessExtraSlots >= 2 : this.units.length >= PACK_SIZE + 2)) return;
       const offsets = [{ x: 55, y: 22 }, { x: -55, y: -22 }, { x: 34, y: -48 }];
-      const offset = offsets[this.units.length - PACK_SIZE] ?? offsets[0]!;
+      const offset = offsets[this.zone === 'wilderness'
+        ? this.wildernessExtraSlots : this.units.length - PACK_SIZE] ?? offsets[0]!;
       const position = { x: unit.actor.x + offset.x, y: unit.actor.y + offset.y };
       if (!canOccupy(position, ACTOR_RADIUS, this.world.obstacles)) return;
       const base = ENEMY_DEFINITIONS.skeleton;
