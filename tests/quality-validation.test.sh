@@ -41,3 +41,15 @@ if grep -Fq 'needs.verify' <<< "$deploy"; then
   echo 'ERROR: playtest deployment depends on verify' >&2; exit 1
 fi
 echo 'PASS: one ready-PR runner, manual full, no duplicated main tests, exact main bundle'
+
+# Extended sweep remains complete, but runs serially and only on request.
+sweep="$root/.github/workflows/act1-seed-sweep.yml"
+grep -Fq 'workflow_dispatch:' "$sweep"
+grep -Fq 'SEED_SWEEP_COUNT:' "$sweep"
+grep -Fq 'for start in 0 1979750 3959500 5939250; do' "$sweep"
+grep -Fq "SEED_SWEEP_REQUIRE_VILLAGES: '1'" "$sweep"
+grep -Fq 'set -o pipefail' "$sweep"
+if grep -Eq 'pull_request:|matrix:|continue-on-error:' "$sweep"; then
+  echo 'ERROR: extended sweep must be manual, serial and strict' >&2; exit 1
+fi
+echo 'PASS: all 1000 seeds retained in one manual runner'
