@@ -4,7 +4,7 @@ import {GameSimulation} from '../../src/game/core/GameSimulation';
 import {ActIWildernessSession} from '../../src/game/world/actIWildernessSession';
 import {buildWilderness} from '../../src/game/world/wildernessRuntime';
 import {NPC_POSITIONS} from '../../src/game/world/npcs';
-import {rollCombatGem} from '../../src/game/items/gems';
+import {rollCombatGem} from '../../src/game/gems/gemRules';
 import type {EnemyUnit} from '../../src/game/enemies/enemies';
 
 function start(seed=42,token='progression'){
