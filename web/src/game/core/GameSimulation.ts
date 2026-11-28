@@ -5112,7 +5112,8 @@ export class GameSimulation {
     let restoredPopulation:ActIWildernessSession|null=null;
     if(s.wildernessPopulation!==undefined){
       if(!s.wildernessPopulation||typeof s.wildernessPopulation.sessionId!=='string'
-        ||(this.finiteWilderness&&this.finiteWilderness.sessionId!==s.wildernessPopulation.sessionId))return false;
+        ||(this.finiteWilderness&&(this.finiteWilderness.sessionId!==s.wildernessPopulation.sessionId
+          ||this.finiteWilderness.manifest.seed!==s.worldSeed)))return false;
       try{
         restoredPopulation=new ActIWildernessSession(restoredWilderness,s.level,s.wildernessPopulation.sessionId);
         if(!restoredPopulation.restore(s.wildernessPopulation))return false;
