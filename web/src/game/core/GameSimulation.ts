@@ -347,6 +347,7 @@ export class GameSimulation {
   private optionalDungeonRewards = new Set<OptionalDungeonRewardId>();
   private units: EnemyUnit[] = createPack(0, 1);
   private finiteWilderness: ActIWildernessSession | null = null;
+  private wildernessCombat: GameSnapshot['wildernessCombat'];
   private selectedTargetId: string | null = null;
   private quest: QuestProgress = freshQuest();
   private actILedger: QuestLedger = createCampaignQuestLedger(freshQuest())!;
@@ -471,8 +472,28 @@ export class GameSimulation {
   }
 
   private wildernessUnits():EnemyUnit[]{
-    return this.finiteWilderness?.population.allUnits()
-      ??createPack(0,this.level,this.world.encounterPositions);
+    return this.finiteWilderness
+      ? [...this.finiteWilderness.population.allUnits(),...(this.wildernessCombat?.bosses??[])]
+      : createPack(0,this.level,this.world.encounterPositions);
+  }
+
+  /** Only persistent wilderness actors cross an area boundary. Event guards
+   * and temporary summons retain their explicit encounter reset policy. */
+  private archiveWildernessCombat():void{
+    if(!this.finiteZone)return;
+    const bosses=this.units.filter(u=>!u.summoned&&MINI_BOSS_IDS.includes(u.actor.id as MiniBossId));
+    const ids=new Set([...this.finiteWilderness!.population.allUnits(),...bosses].map(u=>u.actor.id));
+    this.wildernessCombat={bosses,
+      miniBossStates:Object.fromEntries([...this.miniBossStates].filter(([id])=>ids.has(id))),
+      statuses:Object.fromEntries(Object.entries(this.statusEffects.enemies).filter(([id])=>ids.has(id)))};
+  }
+
+  private resumeWildernessCombat():void{
+    if(!this.finiteZone||!this.wildernessCombat)return;
+    this.miniBossStates.clear();
+    for(const [id,state] of Object.entries(this.wildernessCombat.miniBossStates))this.miniBossStates.set(id,state);
+    this.statusEffects.enemies=this.wildernessCombat.statuses;
+    this.wildernessCombat=undefined;
   }
 
   /** Conservative world-space activation; renderer viewport integration is a
@@ -1241,7 +1262,17 @@ export class GameSimulation {
   /** Legacy extra budget is separate from the canonical roster; the future
    * session roster can be supplied here without changing event/boss callers. */
   private get wildernessExtraSlots():number {
-    return encounterSlots(this.units,this.wave,this.finiteWilderness?.manifest).extra;
+    const slots=encounterSlots(this.units,this.wave,this.finiteWilderness?.manifest);
+    return this.finiteZone?slots.extra-this.units.filter(u=>!u.summoned&&MINI_BOSS_IDS.includes(u.actor.id as MiniBossId)).length:slots.extra;
+  }
+  /** Finite summons use free stable slots, not the current array index. */
+  private nextEnemySummonId():string {
+    if(!this.finiteZone)return 'summon-'+this.wave+'-'+this.units.length;
+    for(let slot=0;slot<2;slot++){
+      const id='summon-0-'+slot;
+      if(!this.units.some(u=>u.actor.id===id))return id;
+    }
+    throw new Error('Finite summon capacity exhausted');
   }
   /** Distinct optional encounters use existing, seeded reachable wilderness features. */
   private spawnOptionalMiniBosses(): void {
@@ -1256,14 +1287,14 @@ export class GameSimulation {
       if (!marker || this.defeatedMiniBossIds.has(placement.id)) continue;
       const unit = this.units.find(value => value.actor.id === placement.id);
       if (unit) {
-        if (distance(this.player, unit.actor) > 650) {
+        if (!this.finiteZone && distance(this.player, unit.actor) > 650) {
           // Evict unengaged offscreen unique AI without converting it into a kill.
           this.units = this.units.filter(value => value !== unit);
           this.miniBossStates.delete(placement.id);
         }
         continue;
       }
-      if (distance(this.player, marker.position) > 320 || this.wildernessExtraSlots >= 2
+      if (distance(this.player, marker.position) > 320 || (!this.finiteZone && this.wildernessExtraSlots >= 2)
         || !canOccupy(marker.position, ACTOR_RADIUS, this.world.obstacles)) continue;
       const def = getMiniBossDefinition(placement.id);
       const state = createMiniBossState(placement.id, placement.id);
@@ -1450,9 +1481,8 @@ export class GameSimulation {
         if ((this.zone === 'wilderness' ? this.wildernessExtraSlots >= 2 : this.units.length >= PACK_SIZE + 2)
           || !canOccupy(action.point, ACTOR_RADIUS, this.world.obstacles)) continue;
         const def = ENEMY_DEFINITIONS[action.enemyType];
-        const index = this.units.length;
         this.units.push({
-          actor: { id: 'summon-' + this.wave + '-' + index, type: action.enemyType, level:1,
+          actor: { id: this.nextEnemySummonId(), type: action.enemyType, level:1,
             x: action.point.x, y: action.point.y,
             health: def.health, maxHealth: def.health, alive: true },
           summoned: true, intent: null, cooldown: 0.7, effects: [], abilityCooldowns: {}
@@ -1475,7 +1505,7 @@ export class GameSimulation {
     // unselected living optional. This is world streaming, NOT a kill: do not
     // record a defeat or grant loot/XP. World-event guards and summons
     // keep their slots and identities when Morrow uses the story reserve.
-    if (this.wildernessExtraSlots >= 2 && !this.units.some(unit => unit.summoned)) {
+    if (!this.finiteZone && this.wildernessExtraSlots >= 2 && !this.units.some(unit => unit.summoned)) {
       const optional = (unit: EnemyUnit) =>
         !unit.summoned && unit.actor.id !== 'morrow_gravebound'
         && MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId);
@@ -1496,7 +1526,7 @@ export class GameSimulation {
         }
       }
     }
-    if (this.wildernessExtraSlots > 2) return;
+    if (!this.finiteZone && this.wildernessExtraSlots > 2) return;
     const marker = this.storyFeatures.find(feature => feature.id === 'act1.grave_warden');
     if (!marker) return;
     const health = 270 + Math.max(0, this.level - 1) * 24;
@@ -1515,6 +1545,7 @@ export class GameSimulation {
   private respawnPlayer(): void {
     if (this.player.alive) return;
     const fromZone = this.zone;
+    this.archiveWildernessCombat();
     const seed = this.world.seed;
     const wilderness = buildWilderness(seed);
     const checkpoint = this.respawnAt ?? chooseRespawnDestination(
@@ -1599,6 +1630,7 @@ export class GameSimulation {
     }
     this.respawnAt = null;
     this.respawnProtectionSeconds = RESPAWN_PROTECTION_SECONDS;
+    this.resumeWildernessCombat();
     this.spawnMorrow();
     this.observeExploration();
     if (fromZone !== 'wilderness') {
@@ -3846,14 +3878,15 @@ export class GameSimulation {
       this.rogueNextTrapSequence = 1;
       this.eliteQueue = [];
       this.cryptArmedTraps.clear();
-      this.statusEffects = { player: [], enemies: {} };
+      this.statusEffects = { player: [], enemies: this.finiteZone?this.statusEffects.enemies:{} };
       this.potions = { ...this.potions, buffs: { resistance: 0, fury: 0 } };
       this.shrineBlessings=[];
       this.pendingEnvironmentId=null;
       this.effects = emptyEffects();
       for (const unit of this.units) {
+        // Cancel attack windups against the dead hero, not persistent effects.
         unit.intent = null;
-        unit.effects = [];
+        if(!this.finiteZone)unit.effects = [];
       }
       this.events.push({ type: 'playerDeath' });
     }
@@ -4217,6 +4250,7 @@ export class GameSimulation {
     const returnPosition = wilderness && this.optionalVisit
       ? planOptionalDungeonExit(wilderness, this.optionalVisit.identity, this.player) : null;
     if (wilderness && this.optionalVisit && !returnPosition) { this.pendingPortal = false; this.pendingDungeonEntrance = null; return; }
+    this.archiveWildernessCombat();
     this.optionalVisit = destination === 'crypt' ? visit : null;
     this.zone = destination;
     this.dungeonMap=null;this.questRouteCache=null;
@@ -4286,7 +4320,10 @@ export class GameSimulation {
     this.selectedTargetId = null;
     if (destination === 'crypt') {
       if (!this.optionalVisit) this.storyEvent('crypt_descent', 'crypt_gate_entered', 'crypt_entry');
-    } else this.spawnMorrow();
+    } else {
+      this.resumeWildernessCombat();
+      this.spawnMorrow();
+    }
     this.observeExploration();
     this.events.push({ type: 'zoneChanged', zone: destination });
   }
@@ -4690,7 +4727,7 @@ export class GameSimulation {
       if (!canOccupy(position, ACTOR_RADIUS, this.world.obstacles)) return;
       const base = ENEMY_DEFINITIONS.skeleton;
       const health = base.health + Math.max(0, this.level - 1) * 12;
-      const id = 'summon-' + this.wave + '-' + this.units.length;
+      const id = this.nextEnemySummonId();
       this.units.push({
         actor: { id, type: 'skeleton', level:this.level, ...position,
           health, maxHealth: health, alive: true },
@@ -5008,6 +5045,7 @@ export class GameSimulation {
       enemyCooldown: focus.cooldown,
       enemies: this.units.map(cloneUnit),
       ...(this.finiteWilderness?{wildernessPopulation:this.finiteWilderness.snapshot()}:{}),
+      ...(this.wildernessCombat?{wildernessCombat:structuredClone(this.wildernessCombat)}:{}),
       selectedTargetId: this.selectedTargetId,
       wave: this.wave,
       respawnTimer: this.respawnTimer,
@@ -5121,6 +5159,34 @@ export class GameSimulation {
     }else if(this.finiteWilderness)return false;
     const finiteZone=restoredPopulation!==null&&s.zone==='wilderness';
     const canonicalCount=finiteZone?restoredPopulation!.population.allUnits().length:PACK_SIZE;
+    let restoredCombat:GameSnapshot['wildernessCombat'];
+    if(restoredPopulation&&s.zone==='crypt'&&s.wildernessCombat===undefined)return false;
+    if(s.wildernessCombat!==undefined){
+      const a=s.wildernessCombat;
+      if(!restoredPopulation||s.zone!=='crypt'||!a||!Array.isArray(a.bosses)||a.bosses.length>MINI_BOSS_IDS.length
+        ||!a.miniBossStates||typeof a.miniBossStates!=='object'||Array.isArray(a.miniBossStates)
+        ||!a.statuses||typeof a.statuses!=='object'||Array.isArray(a.statuses))return false;
+      const ids=new Set<string>();
+      for(const u of a.bosses){
+        if(!u?.actor||!MINI_BOSS_IDS.includes(u.actor.id as MiniBossId)||ids.has(u.actor.id)
+          ||u.actor.type!==getMiniBossDefinition(u.actor.id)?.enemyType)return false;
+        ids.add(u.actor.id);
+      }
+      const bosses=validatedPopulationUnits(a.bosses,a.bosses,restoredWilderness.layout.obstacles);
+      if(!bosses||Object.keys(a.miniBossStates).length!==bosses.length)return false;
+      for(const u of bosses){
+        const state=a.miniBossStates[u.actor.id];
+        if(!validateMiniBossState(state)||state.bossId!==u.actor.id||state.occurrenceId!==u.actor.id
+          ||(state.stage==='dead')===u.actor.alive)return false;
+      }
+      for(const u of restoredPopulation.population.allUnits())ids.add(u.actor.id);
+      for(const [id,values] of Object.entries(a.statuses)){
+        if(!ids.has(id)||!Array.isArray(values)||values.length>16||!values.every(e=>e
+          &&typeof e.id==='string'&&Object.hasOwn(STATUS_DEFINITIONS,e.id)
+          &&advanceStatuses([e],0).statuses.length===1))return false;
+      }
+      restoredCombat=structuredClone({bosses,miniBossStates:a.miniBossStates,statuses:a.statuses});
+    }
     if(finiteZone){
       if(s.wave!==0||s.respawnTimer!==0||!Array.isArray(s.enemies))return false;
       const canonical=restoredPopulation!.population.allUnits();
@@ -5387,7 +5453,11 @@ export class GameSimulation {
       || !s.effects || !Array.isArray(s.effects.player)
       || s.effects.player.length > 8 || !s.effects.player.every(isActiveEffect)
       || !Array.isArray(s.enemies) || s.enemies.length < canonicalCount
-      || (s.enemies.length > canonicalCount + 2 && (
+      || (finiteZone && (s.enemies.some(u=>!u?.actor)
+        || s.enemies.length > canonicalCount + MINI_BOSS_IDS.length + 2
+        || encounterSlots(s.enemies,s.wave,restoredPopulation!.manifest).extra
+          -s.enemies.filter(u=>u?.actor&&!u.summoned&&MINI_BOSS_IDS.includes(u.actor.id as MiniBossId)).length>2))
+      || (!finiteZone && s.enemies.length > canonicalCount + 2 && (
         s.zone !== 'wilderness' || s.enemies.length !== canonicalCount + 3
         || s.enemies.at(-1)?.actor?.id !== 'morrow_gravebound'
         || s.enemies.slice(0, -1).some(unit => unit?.actor?.id === 'morrow_gravebound')
@@ -5416,7 +5486,9 @@ export class GameSimulation {
         && validActor(unit.actor, index >= canonicalCount
           ? (activeEventPlan?.enemySpawns.some(spawn=>spawn.id===unit.actor.id)
              || (MINI_BOSS_IDS.includes(unit.actor.id as MiniBossId) && s.zone === 'wilderness')
-              ? unit.actor.id : 'summon-' + s.wave + '-' + index)
+              ? unit.actor.id : finiteZone
+                ? (/^summon-0-[01]$/.test(unit.actor.id)?unit.actor.id:'')
+                : 'summon-' + s.wave + '-' + index)
           : unit.actor.type + '-' + (s.wave * PACK_SIZE + index + 1), layout.obstacles)
         && (unit.elite === undefined || (
           validateEliteSet(unit.elite.modifiers) && unit.elite.modifiers.length > 0
@@ -5507,6 +5579,7 @@ export class GameSimulation {
     this.groundLoot = s.groundLoot.map(loot => ({ ...loot, item: cloneItem(loot.item)! }));
     this.player = { ...s.player };
     this.finiteWilderness=restoredPopulation;
+    this.wildernessCombat=restoredCombat;
     this.units=finiteZone?[...restoredPopulation!.population.allUnits(),...s.enemies.slice(canonicalCount).map(cloneUnit)]:s.enemies.map(cloneUnit);
     this.activeWorldEventId = activeEventPlan?.id ?? null;
     this.activatedCheckpointIds.clear();
@@ -5600,6 +5673,7 @@ export class GameSimulation {
 
   reset(classId: ClassId = 'WARRIOR', seed = this.world.seed): void {
     this.finiteWilderness=null;
+    this.wildernessCombat=undefined;
     this.zone = 'wilderness';
     this.optionalVisit = null;
     this.optionalDungeonRewards.clear();
