@@ -2,7 +2,7 @@
 import type {Point} from '../core/types';
 import {PACK_SIZE,type EnemyType} from './enemies';
 import type {WorldEventPlan} from '../world/worldEvents';
-import type {WildernessPopulation} from '../world/wildernessPopulation';
+import type {PopulationRoster} from '../world/populationLifecycle';
 
 interface HomeUnit {
   readonly actor:Readonly<Point>&{readonly id:string;readonly type:EnemyType};
@@ -12,7 +12,7 @@ interface HomeContext {
   readonly wave:number;
   readonly positions:readonly Readonly<Point>[];
   readonly events?:readonly WorldEventPlan[];
-  readonly population?:WildernessPopulation;
+  readonly population?:PopulationRoster;
   /** Legacy crypt positions already include their stage-specific geometry. */
   readonly crypt?:boolean;
 }
