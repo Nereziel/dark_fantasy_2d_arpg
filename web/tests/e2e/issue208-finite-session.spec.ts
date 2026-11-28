@@ -1,0 +1,25 @@
+import {test,expect} from '@playwright/test';
+import {openCharacterCreation,enterWorld,returnToMenu,continueGame} from './character-menu';
+test('finite playtest opens a new instance only on application reload',async({page})=>{
+  test.setTimeout(60_000);
+  await page.goto('./?population=finite');
+  await page.locator('#menu-language').selectOption('en');
+  await openCharacterCreation(page,'Finite Session');
+  await enterWorld(page);
+  const game=page.locator('.game-screen');
+  await expect(game).toHaveAttribute('data-population-mode','finite');
+  const seed=await game.getAttribute('data-world-seed');
+  const instance=await game.getAttribute('data-world-session');
+  expect(instance).toMatch(/^[a-z0-9-]+$/);
+  await returnToMenu(page);
+  await continueGame(page);
+  await expect(game).toHaveAttribute('data-world-session',instance!);
+  await expect(game).toHaveAttribute('data-world-seed',seed!);
+  await returnToMenu(page);
+  await page.reload();
+  await continueGame(page);
+  await expect(game).toHaveAttribute('data-population-mode','finite');
+  await expect(game).not.toHaveAttribute('data-world-session',instance!);
+  await expect(game).not.toHaveAttribute('data-world-seed',seed!);
+  await expect(page.locator('.hud-details')).toContainText('Finite Session');
+});
