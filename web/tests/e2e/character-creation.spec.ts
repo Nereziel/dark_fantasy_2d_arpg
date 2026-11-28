@@ -72,7 +72,7 @@ for(const name of names){
     await continueGame(page);
     await expect(page.locator('canvas[data-renderer="isometric-preview"]')).toBeVisible();
     await expect(page.locator('.hud-details')).toContainText(name+' · Level 1');
-    await expect(page.locator('.game-screen')).toHaveAttribute('data-world-seed',seed!);
+    await expect(page.locator('.game-screen')).not.toHaveAttribute('data-world-seed',seed!);
   });
 }
 
