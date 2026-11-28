@@ -69,7 +69,9 @@ export function populationReservations(world:WildernessRuntimeWorld):PopulationR
   for(const object of WORLD_OBJECTS)if(object.zone==='wilderness')reserve(object.position,100);
   for(const entry of planActIDungeonEntrances(world))reserve(entry.position,120);
   for(const position of layout.encounterPositions)reserve(position,85);
-  for(const feature of features)if(feature.kind!=='encounterZone'||feature.mandatory)
+  // Optional encounter anchors 1/2 are occupied by named minibosses.
+  // Reserve their spawn area too; ordinary population may use nearby terrain.
+  for(const feature of features)
     reserve(feature.position,feature.radius+(feature.mandatory?80:55));
   for(const object of planEnvironmentObjects(layout.seed,layout,features))reserve(object.position,85);
   for(const event of planWorldEvents(layout.seed,layout,features)){
