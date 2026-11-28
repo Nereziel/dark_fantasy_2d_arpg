@@ -1,3 +1,4 @@
+import type {PopulationSnapshot} from '../world/populationSnapshot';
 /** Renderer-independent state and command contracts. Language strings are never saved. */
 import type { ClassId } from '../data/classes';
 import type { Equipment, GroundItem, Item, DerivedStats, EquipmentSlot } from '../data/items';
@@ -149,6 +150,8 @@ export interface GameSnapshot {
   enemyIntent: EnemyIntent | null;
   enemyCooldown: number;
   enemies: EnemyUnit[];
+  /** Internal finite wilderness archive, retained while visiting a dungeon. */
+  wildernessPopulation?: PopulationSnapshot;
   selectedTargetId: string | null;
   wave: number;
   respawnTimer: number;
