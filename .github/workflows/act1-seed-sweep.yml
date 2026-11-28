@@ -2,10 +2,6 @@ name: Act I extended seed sweep
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - '.github/workflows/act1-seed-sweep.yml'
-      - 'web/tests/unit/Issue113SeedValidation.test.ts'
 
 permissions:
   contents: read
@@ -46,10 +42,10 @@ jobs:
           set -o pipefail
           npm test -- tests/unit/Issue113SeedValidation.test.ts 2>&1 | tee seed-sweep.log
       - name: Save diagnostic log
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: seed-sweep-${{ matrix.start }}
           path: web/seed-sweep.log
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 3
