@@ -2,10 +2,6 @@ name: Act I extended seed sweep
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - '.github/workflows/act1-seed-sweep.yml'
-      - 'web/tests/unit/Issue113SeedValidation.test.ts'
 
 permissions:
   contents: read
@@ -16,16 +12,9 @@ concurrency:
 
 jobs:
   seed-sweep:
-    name: Seed sweep (${{ matrix.start }})
+    name: Seed sweep (1000 seeds, serial batches)
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      max-parallel: 4
-      matrix:
-        # 1000 distinct seeds in the existing 7919-step sequence.
-        # Each shard also replays the fixed boundary samples.
-        start: [0, 1979750, 3959500, 5939250]
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: web
@@ -39,17 +28,20 @@ jobs:
       - run: npm ci --prefer-offline --no-audit --no-fund
       - name: Strict Act I terrain, content and all three dungeons
         env:
-          SEED_SWEEP_START: ${{ matrix.start }}
           SEED_SWEEP_COUNT: '250'
           SEED_SWEEP_REQUIRE_VILLAGES: '1'
         run: |
           set -o pipefail
-          npm test -- tests/unit/Issue113SeedValidation.test.ts 2>&1 | tee seed-sweep.log
+          # Preserve all four disjoint 250-seed batches, without four runners.
+          for start in 0 1979750 3959500 5939250; do
+            echo "Seed batch start=$start" | tee -a seed-sweep.log
+            SEED_SWEEP_START="$start" npm test -- tests/unit/Issue113SeedValidation.test.ts 2>&1 | tee -a seed-sweep.log
+          done
       - name: Save diagnostic log
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: seed-sweep-${{ matrix.start }}
+          name: seed-sweep-${{ github.run_attempt }}
           path: web/seed-sweep.log
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 2
