@@ -1240,7 +1240,7 @@
       </div>
     </main>
   {:else}
-    <main class="game-screen" data-world-seed={view.worldSeed} data-zone={view.zone} data-dungeon-id={view.dungeonId}
+    <main class="game-screen" data-world-seed={view.worldSeed} data-population-mode={view.wildernessPopulation ? "finite" : "legacy"} data-world-session={view.wildernessPopulation?.sessionId} data-zone={view.zone} data-dungeon-id={view.dungeonId}
       data-player-x={view.player.x} data-player-y={view.player.y}
       data-hold-position={view.holdPosition}>
       <div class="game-play-area">
