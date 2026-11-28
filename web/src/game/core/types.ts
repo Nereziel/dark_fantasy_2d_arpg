@@ -152,6 +152,12 @@ export interface GameSnapshot {
   enemies: EnemyUnit[];
   /** Internal finite wilderness archive, retained while visiting a dungeon. */
   wildernessPopulation?: PopulationSnapshot;
+  /** Frozen wilderness combat state while the finite session is in a dungeon. */
+  wildernessCombat?: {
+    bosses: EnemyUnit[];
+    miniBossStates: Record<string, MiniBossState>;
+    statuses: Record<string, StatusInstance[]>;
+  };
   selectedTargetId: string | null;
   wave: number;
   respawnTimer: number;
