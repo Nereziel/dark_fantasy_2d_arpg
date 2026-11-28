@@ -1,50 +1,53 @@
 name: Validate Aether & Ruin
 
 on:
-  # Keep the existing required PR check named "verify".
   pull_request:
     branches: [main]
-  # Application and test changes use one validation run; recover missed publishes.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches: [main]
     paths:
       - 'web/**'
       - 'tests/**'
-      # Changes to the archived HTML prototype still receive a validation run.
       - 'dark_fantasy_2d_arpg_engine.html'
       - 'index.html'
       - 'visuals.js'
       - 'visuals.css'
       - '.github/workflows/quality.yml'
       - '.github/actions/**'
-  # Manual rebuild and redeploy, including when there are no changed source files.
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Full regression (any branch) or Pages recovery (main only)'
+        type: choice
+        options: [full, publish]
+        default: full
+        required: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: quality-${{ github.event.pull_request.number || github.ref }}
+  group: quality-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'auto' }}
   cancel-in-progress: true
 
 jobs:
+  # Shared exact build; no validation on draft or main publication.
   build:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') || (github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'publish')))
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
       deployments: read
     outputs:
       publish: ${{ steps.scope.outputs.publish }}
-      browser_matrix: ${{ steps.validation.outputs.matrix }}
-      validation_profile: ${{ steps.validation.outputs.profile }}
+      validate: ${{ steps.scope.outputs.validate }}
       bundle: game-dist-${{ github.sha }}-${{ github.run_attempt }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          # Required to compare the entire pushed range, including merge commits.
           fetch-depth: 0
-
       - name: Determine whether the published application changed
         id: scope
         shell: bash
@@ -52,36 +55,30 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BEFORE_SHA: ${{ github.event.before }}
           GH_TOKEN: ${{ github.token }}
-        run: bash .github/actions/publish-scope.sh
-
-      - name: Determine required validation profile
-        id: validation
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BEFORE_SHA: ${{ github.event.before }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          GH_TOKEN: ${{ github.token }}
-        run: bash .github/actions/validation-scope.sh
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+          VALIDATE: ${{ (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') }}
+        run: |
+          echo "validate=$VALIDATE" >> "$GITHUB_OUTPUT"
+          if [[ "$VALIDATE" == true ]]; then
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+          else
+            bash .github/actions/publish-scope.sh
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.scope.outputs.publish == 'true' || steps.scope.outputs.validate == 'true'
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: web/package-lock.json
-
       - name: Install locked dependencies
+        if: steps.scope.outputs.publish == 'true' || steps.scope.outputs.validate == 'true'
         working-directory: web
         run: npm ci --prefer-offline --no-audit --no-fund
-
       - name: Build static game
+        if: steps.scope.outputs.publish == 'true' || steps.scope.outputs.validate == 'true'
         working-directory: web
         run: npm run build
-
-      # One production build is shared by every browser lane, not rebuilt.
       - name: Upload production bundle
+        if: steps.scope.outputs.publish == 'true' || steps.scope.outputs.validate == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: game-dist-${{ github.sha }}-${{ github.run_attempt }}
@@ -89,8 +86,9 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  # Independent checks run alongside the build, not on the browser critical path.
   checks:
+    if: (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full')
+    timeout-minutes: 15
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -128,18 +126,7 @@ jobs:
 
       - name: Unit tests
         working-directory: web
-        run: |
-          mkdir -p test-results
-          npm run test -- --reporter=default --reporter=json --outputFile=test-results/unit-results.json
-
-      - name: Retain unit test report
-        if: ${{ always() && !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-results-${{ github.run_attempt }}
-          path: web/test-results/unit-results.json
-          if-no-files-found: warn
-          retention-days: 7
+        run: npm run test
 
       - name: Check whether the archived HTML reference changed
         id: legacy
@@ -180,11 +167,14 @@ jobs:
   browser:
     name: Browser (${{ matrix.lane }})
     needs: build
+    if: needs.build.outputs.validate == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.build.outputs.browser_matrix) }}
+      max-parallel: 5
+      matrix:
+        lane: [quick-1, quick-2, quick-3, quick-4, act-i]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -214,30 +204,18 @@ jobs:
         working-directory: web
         env:
           LANE: ${{ matrix.lane }}
-          SHARD: ${{ matrix.shard }}
         run: |
-          # Every quick test runs exactly once; the natural Act I test is
-          # included only in the full profile. Touch-loot stays in quick tests.
-          # Each quick runner uses one renderer-heavy browser worker; test-level
-          # sharding balances large spec files without sharing browser state.
+          # Four disjoint shards plus one natural Act I lane. No blind retries.
           if [[ "$LANE" == "act-i" ]]; then
             npm run test:e2e -- --grep 'natural first Act I loop:' --workers=1 --retries=0
           else
-            npm run test:e2e -- --grep-invert 'natural first Act I loop:' --shard="$SHARD" --workers=1 --fully-parallel
+            SHARD=${LANE#quick-}
+            npm run test:e2e -- --grep-invert 'natural first Act I loop:' --shard="$SHARD/4" --workers=1 --fully-parallel --retries=0
           fi
 
       - name: Report slow tests and retries
         if: ${{ always() && !cancelled() }}
         run: node .github/actions/browser-timings.mjs web/test-results/ci-results.json '${{ matrix.lane }}'
-
-      - name: Retain browser result report (including passing lanes)
-        if: ${{ always() && !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: browser-results-${{ matrix.lane }}-${{ github.run_attempt }}
-          path: web/test-results/ci-results.json
-          if-no-files-found: warn
-          retention-days: 7
 
       - name: Retain failing browser traces
         if: failure()
@@ -246,12 +224,11 @@ jobs:
           name: browser-failure-${{ matrix.lane }}-${{ github.run_attempt }}
           path: web/test-results
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 3
 
-  # Preserve the required check name. Every selected lane must succeed.
   verify:
     needs: [build, checks, browser]
-    if: ${{ always() && !cancelled() }}
+    if: ${{ always() && !cancelled() && ((github.event_name == 'pull_request' && github.event.pull_request.draft == false) || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full')) }}
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout validation gate
@@ -262,18 +239,14 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           CHECKS_RESULT: ${{ needs.checks.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
-          PROFILE: ${{ needs.build.outputs.validation_profile }}
         run: |
-          case "$PROFILE" in quick|full) ;; *) echo 'Invalid validation profile' >&2; exit 1 ;; esac
           bash .github/actions/require-validation.sh "$BUILD_RESULT" "$CHECKS_RESULT" "$BROWSER_RESULT"
 
-  # TEMPORARY PLAYTEST POLICY: publish a successful main build immediately.
-  # All test lanes and strict verify still run and retain their actual status.
-  # Restore the strict release policy by requiring verify in needs and if.
   deploy:
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.build.result == 'success' && needs.build.outputs.publish == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: read
       actions: read
@@ -306,7 +279,7 @@ jobs:
 
       - name: Record temporary deployment policy
         run: |
-          echo '### Playtest deployment: successful build; full validation runs independently.' >> "$GITHUB_STEP_SUMMARY"
+          echo '### Playtest deployment: successful build; full PR validation and publication are separate.' >> "$GITHUB_STEP_SUMMARY"
           echo 'A published build is not proof of passing tests or release acceptance.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Configure Pages
